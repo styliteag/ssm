@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	{% block head %}
+	<title>{% block title %}ssh-key-manager{% endblock %}</title>
+	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<link rel="stylesheet" type="text/css" href="/style.css">
+	<script src="https://unpkg.com/htmx.org@2.0.0"></script>
+	{% endblock %}
+</head>
+
+<body>
+	<nav>
+		<a href="/">Overview</a>
+		<a href="/hosts">List hosts</a>
+		<a href="/users">List Users</a>
+		<a href="/keys">List keys</a>
+	</nav>
+
+	{% block body %}
+	<main>
+		{% block content %}
+		{% endblock %}
+	</main>
+	{% endblock %}
+
+	{% block footer %}
+	<footer>
+		<p id="version">v{{ env!("CARGO_PKG_VERSION") }}</p>
+		<a href="https://github.com/styliteag/ssh-key-manager" title="View sourcecode on GitHub">View source code on
+			GitHub</a>
+	</footer>
+	{% endblock %}
+</body>
+
+</html>

@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% match response %}
+ {% when Ok with (host) %}
+  <div id="form_response">
+  Succesfully added host '{{ host }}'
+ {% when Err with (err) %}
+  <div id="form_response" class="error">
+  Couldn't add host: {{ err }}
+{% endmatch %}
+</div>
+
+{% endblock %}

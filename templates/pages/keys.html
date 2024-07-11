@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h3>List of all keys:</h3>
+<table>
+  <tr>
+    <th>Key type</th>
+    <th>Comment</th>
+    <th>Owner</th>
+  </tr>
+  {% for key in keys %}
+  <tr>
+    <td>
+      <details>
+        <summary>{{ key.key_type}}</summary>
+        {{ key.key_base64 }}
+      </details>
+    </td>
+    <td>{% match key.comment %}
+      {% when Some with (comment) %}
+      {{ comment }}
+      {% when None %}
+      <i>No comment</i>
+      {% endmatch %}
+    </td>
+    <td>{% match key.owner %}
+      {% when crate::sshclient::KeyOwner::Host with (host_id) %}
+      <a href="/hosts/by-id/{{ host_id }}">{{ host_id }}</a>
+      {% when crate::sshclient::KeyOwner::User with (user_id) %}
+      <a href="/users/by-id/{{ user_id }}">{{ user_id }}</a>
+      {% when crate::sshclient::KeyOwner::None %}
+      <i>No Owner</i>
+      {% endmatch %}
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}

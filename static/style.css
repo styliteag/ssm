@@ -1,0 +1,31 @@
+table {
+  border: 2px solid rgb(140 140 140);
+}
+
+th,
+td {
+  border: 1px solid rgb(160 160 160);
+}
+
+#form_response {
+  margin: 1vh;
+  padding: 0.2em;
+  padding-left: 1em;
+  background: lightgray;
+  border-left: 5px solid green;
+}
+
+#form_response.error {
+  border-left: 5px solid red;
+}
+
+summary {
+  margin: -0.5em -0.5em 0;
+  padding: 0.5em;
+}
+
+details[open] {
+  border-bottom: 1px solid #aaa;
+  margin-bottom: 0.5em;
+  z-index: 2;
+}

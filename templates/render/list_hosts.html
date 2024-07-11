@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block content %}
+<tr>
+  <th>Host</th>
+  <th>Address</th>
+</tr>
+{% for host in hosts %}
+  <tr>
+    <td><a href="/hosts/{{ host.name }}">{{ host.name }}</a></td>
+    <td>{{ host.addr }}</td>
+  </tr>
+{% endfor %}
+{% endblock %}

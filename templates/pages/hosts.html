@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h3>Add new host</h3>
+<form hx-post="/hosts/add" hx-target="#form_response" hx-swap="outerHTML">
+  <div>
+    <label>Name</label>
+    <input type="text" name="name">
+  </div>
+  <div>
+    <label>Address with port</label>
+    <input type="text" name="addr">
+  </div>
+  <button>Submit</button>
+</form>
+<div id="form_response" style="display:none"></div>
+
+<h3>List of all hosts:</h3>
+<button hx-target="#host_list" hx-trigger="load, click" hx-get="/render/hosts" placeholder="Loading...">Reload</button>
+<table id="host_list"></table>
+{% endblock %}
