@@ -1,31 +1,22 @@
-use async_ssh2_tokio::ServerCheckMethod;
+use crate::{
+    models::{Host, NewHost, NewPublicKey, PublicKey},
+    schema::hosts::dsl::*,
+    sshclient::{ShortHost, SshPublicKey},
+    DbConnection,
+};
 use diesel::associations::HasTable;
 use diesel::dsl::insert_into;
 use diesel::prelude::*;
-use diesel::result::Error;
-use diesel::{QueryDsl, RunQueryDsl, SelectableHelper};
 use log::error;
 
-use crate::{models::*, DbConnection};
-
-use crate::schema::hosts::dsl::*;
-use crate::schema::keys::dsl::*;
-use crate::schema::users::dsl::*;
-use crate::sshclient::{ShortHost, SshPublicKey};
-
-fn query<T>(query_result: Result<T, Error>) -> Result<T, String> {
-    query_result.map_err(|e| {
-        let error = e.to_string();
-        error!("Error trying to execute sql query: {}", error);
-        error
-    })
-}
+use super::query;
 
 impl Host {
     pub fn to_short(&self) -> ShortHost {
         ShortHost {
             name: self.name.to_owned(),
             addr: format!("{}:{}", self.hostname, self.port),
+            user: self.username.to_owned(),
         }
     }
 
@@ -37,6 +28,8 @@ impl Host {
         host: NewHost,
         public_keys: Vec<SshPublicKey>,
     ) -> Result<NewHost, String> {
+        use crate::schema::keys::dsl::*;
+
         let transaction = conn.transaction(|connection| {
             insert_into(hosts)
                 .values(host.clone())
@@ -84,6 +77,8 @@ impl Host {
     }
 
     pub fn get_hostkeys(&self, conn: &mut DbConnection) -> Result<Vec<SshPublicKey>, String> {
+        use crate::schema::keys::dsl::*;
+
         let hostkeys: Result<Vec<PublicKey>, diesel::result::Error> =
             keys.filter(host_id.eq(self.id)).load::<PublicKey>(conn);
         match hostkeys {
@@ -100,6 +95,8 @@ impl Host {
         conn: &mut DbConnection,
         authorized_keys: Vec<SshPublicKey>,
     ) -> Result<(), String> {
+        use crate::schema::keys::dsl::*;
+
         let transaction = conn.transaction(|connection| {
             authorized_keys
                 .iter()
@@ -121,60 +118,5 @@ impl Host {
             Ok(_) => Ok(()),
             Err(e) => Err(e.to_string()),
         }
-    }
-}
-
-impl User {
-    pub fn get_all_users(conn: &mut DbConnection) -> Vec<User> {
-        let db_res = users::table().load::<User>(conn);
-        match db_res {
-            Err(e) => {
-                error!("{}", e.to_string());
-                Vec::new()
-            }
-            Ok(a) => a,
-        }
-    }
-
-    pub fn get_user(conn: &mut DbConnection, user: String) -> Option<User> {
-        let db_res = users::table().filter(username.eq(user)).first::<User>(conn);
-        let res = query(db_res);
-        res.ok()
-    }
-
-    pub fn get_keys(&self, conn: &mut DbConnection) -> Result<Vec<SshPublicKey>, String> {
-        let user_keys: Result<Vec<PublicKey>, diesel::result::Error> =
-            keys.filter(user_id.eq(self.id)).load::<PublicKey>(conn);
-
-        match user_keys {
-            Ok(k) => Ok(k
-                .iter()
-                .map(|key| SshPublicKey::from(key.to_owned()))
-                .collect()),
-            Err(e) => Err(e.to_string()),
-        }
-    }
-}
-
-impl PublicKey {
-    pub fn get_all_keys(conn: &mut DbConnection) -> Vec<PublicKey> {
-        let db_res = keys::table().load::<PublicKey>(conn);
-        match db_res {
-            Err(e) => {
-                error!("{}", e.to_string());
-                Vec::new()
-            }
-            Ok(a) => a,
-        }
-    }
-
-    pub fn get_all_keys_as<T>(conn: &mut DbConnection) -> Vec<T>
-    where
-        T: From<PublicKey>,
-    {
-        PublicKey::get_all_keys(conn)
-            .iter()
-            .map(|key| T::from(key.to_owned()))
-            .collect()
     }
 }
