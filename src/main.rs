@@ -41,8 +41,6 @@ pub struct SshConfig {
     private_key_file: String,
     /// Passphrase for the key
     private_key_passphrase: Option<String>,
-    /// User to login as on remote Systems
-    user: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -95,7 +93,6 @@ async fn main() -> Result<(), std::io::Error> {
             key_file_name: configuration.ssh.private_key_file,
             key_pass: configuration.ssh.private_key_passphrase,
         },
-        configuration.ssh.user,
     ));
 
     info!("Starting ssh-key-manager Server");

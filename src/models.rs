@@ -6,6 +6,7 @@ use diesel::prelude::*;
 pub struct Host {
     pub id: i32,
     pub name: String,
+    pub username: String,
     pub hostname: String,
     pub port: i16,
 }
@@ -16,6 +17,7 @@ pub struct Host {
 pub struct NewHost {
     pub name: String,
     pub hostname: String,
+    pub username: String,
     pub port: i16,
 }
 

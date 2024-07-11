@@ -2,6 +2,7 @@
 CREATE TABLE `hosts`(
 	`id` INTEGER NOT NULL PRIMARY KEY,
 	`name` TEXT NOT NULL,
+	`username` TEXT NOT NULL,
 	`hostname` TEXT NOT NULL,
 	`port` SMALLINT NOT NULL
 );

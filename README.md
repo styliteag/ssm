@@ -37,7 +37,4 @@ private_key_file = '/path/to/your/private_key'
 
 # Optional Passphrase for the given keyh
 private_key_passphrase = 'OptionalPassphrase'
-
-# Which user to try authenticating as (in the future this will be per-host configurable)
-user = 'root'
 ```

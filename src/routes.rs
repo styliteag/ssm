@@ -162,7 +162,11 @@ pub async fn add_host(
 ) -> impl Responder {
     let host = form.0;
     match ssh_client
-        .connect(host.addr, async_ssh2_tokio::ServerCheckMethod::NoCheck)
+        .connect(
+            host.addr,
+            host.user.as_str(),
+            async_ssh2_tokio::ServerCheckMethod::NoCheck,
+        )
         .await
     {
         Ok(client) => {
@@ -183,6 +187,7 @@ pub async fn add_host(
                     name: host.name.to_owned(),
                     // TODO: do this correct
                     hostname: sock.hostname(),
+                    username: host.user,
                     port: sock.port() as i16,
                 },
                 host_keys,

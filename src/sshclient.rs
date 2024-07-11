@@ -110,12 +110,12 @@ impl TryFrom<&str> for SshPublicKey {
 pub struct ShortHost {
     pub name: String,
     pub addr: String,
+    pub user: String,
 }
 
 #[derive(Clone)]
 pub struct SshClient {
     auth: AuthMethod,
-    username: String,
     conn: ConnectionPool,
 }
 
@@ -143,12 +143,8 @@ fn to_connection_err(error: async_ssh2_tokio::Error) -> SshClientError {
 }
 
 impl SshClient {
-    pub fn new(conn: ConnectionPool, auth: AuthMethod, username: String) -> Self {
-        SshClient {
-            auth,
-            username,
-            conn,
-        }
+    pub fn new(conn: ConnectionPool, auth: AuthMethod) -> Self {
+        SshClient { auth, conn }
     }
 
     pub async fn run_command(client: &Client, command: &str) -> Result<String, SshClientError> {
@@ -170,13 +166,14 @@ impl SshClient {
     pub async fn connect(
         &self,
         addr: String,
+        username: &str,
         host_key: ServerCheckMethod,
     ) -> Result<Client, async_ssh2_tokio::Error> {
         info!(
             "Trying to connect to '{}' with host_key '{:?}'",
             addr, host_key
         );
-        Client::connect(addr, &self.username, self.auth.clone(), host_key).await
+        Client::connect(addr, username, self.auth.clone(), host_key).await
     }
 
     pub async fn try_connect(&self, host: &Host) -> Result<Client, SshClientError> {
@@ -189,7 +186,7 @@ impl SshClient {
             match self
                 .connect(
                     host.get_addr(),
-                    // TODO: implement this properly
+                    host.username.as_str(),
                     ServerCheckMethod::PublicKey(key.key_base64),
                 )
                 .await
