@@ -5,9 +5,11 @@ use actix_web::{
     web::{self, Data},
     App, HttpRequest, HttpResponse, HttpServer, Responder,
 };
+use config::Config;
 use diesel::prelude::QueryResult;
 use diesel::{Connection, SqliteConnection};
-use log::{info, warn};
+use log::{error, info, warn};
+use serde::Deserialize;
 use sshclient::SshClient;
 
 use async_ssh2_tokio::AuthMethod::PrivateKeyFile;
@@ -33,6 +35,22 @@ pub enum DbConnection {
 
 pub type ConnectionPool = Pool<ConnectionManager<DbConnection>>;
 
+#[derive(Debug, Deserialize)]
+pub struct SshConfig {
+    /// Path to an OpenSSH Private Key
+    private_key_file: String,
+    /// Passphrase for the key
+    private_key_passphrase: Option<String>,
+    /// User to login as on remote Systems
+    user: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Configuration {
+    ssh: SshConfig,
+    database_url: String,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), std::io::Error> {
     color_eyre::install().expect("Couldn't intall color_eyre");
@@ -45,27 +63,42 @@ async fn main() -> Result<(), std::io::Error> {
     }
     pretty_env_logger::init();
 
-    let database_url = env::var("DATABASE_URL").unwrap_or_else(|_| {
-        let database_url = "sqlite://ssm.db";
-        warn!("No database url set. Falling back to {}", database_url);
-        database_url.to_owned()
-    });
+    // Load configuration
+    let config_path = env::var("CONFIG").unwrap_or(String::from("./config.toml"));
+    let configuration: Configuration = Config::builder()
+        .add_source(config::File::with_name(config_path.as_str()))
+        .add_source(config::Environment::default())
+        .set_default("database_url", String::from("sqlite://ssm.db"))
+        .expect("String::from always returns a String.")
+        .build()
+        .unwrap_or_else(|e| {
+            error!(
+                "Error while reading configuration source: {}",
+                e.to_string()
+            );
+            std::process::exit(3);
+        })
+        .try_deserialize()
+        .unwrap_or_else(|e| {
+            error!("Error while parsing configuration: {}", e.to_string());
+            std::process::exit(3);
+        });
 
-    let manager = ConnectionManager::<DbConnection>::new(database_url);
+    let manager = ConnectionManager::<DbConnection>::new(configuration.database_url);
     let pool: ConnectionPool = Pool::builder()
         .build(manager)
-        .expect("database URL should be valid path to SQLite DB file");
+        .expect("Database URL should be a valid URI");
 
     let ssh_client = Data::new(SshClient::new(
         pool.clone(),
         PrivateKeyFile {
-            key_file_name: "/home/jeidnx/.ssh/stylite-test".to_owned(),
-            key_pass: None,
+            key_file_name: configuration.ssh.private_key_file,
+            key_pass: configuration.ssh.private_key_passphrase,
         },
-        "root".to_owned(),
+        configuration.ssh.user,
     ));
 
-    info!("Starting server");
+    info!("Starting ssh-key-manager Server");
     HttpServer::new(move || {
         App::new()
             .app_data(ssh_client.clone())

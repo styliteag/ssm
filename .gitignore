@@ -3,3 +3,4 @@
 /result-lib
 .direnv
 ssm.db
+config.toml
