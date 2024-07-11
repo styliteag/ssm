@@ -23,7 +23,11 @@ mod sshclient;
 
 #[derive(diesel::MultiConnection)]
 pub enum DbConnection {
+    #[cfg(feature = "postgres")]
     Postgresql(diesel::PgConnection),
+    #[cfg(feature = "mysql")]
+    Mysql(diesel::MysqlConnection),
+
     Sqlite(diesel::SqliteConnection),
 }
 
