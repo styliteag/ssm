@@ -4,7 +4,7 @@
 <h3>User: {{ user.username }}</h3>
 <p> Enabled: {{ user.enabled }}</p>
 <p> SSH Keys:</p>
-<div hx-trigger="load" hx-get="/render/user/list_keys/{{ user.username }}"></div>
+<div hx-trigger="load" hx-get="/render/user/{{ user.username }}/list_keys"></div>
 <!-- TODO: implement me -->
 <!-- <p> Groups:</p> -->
 <!-- <div hx-trigger="load" hx-get="/render/user/list_groups/{{ user.username }}"></div> -->

@@ -5,10 +5,10 @@ mod host;
 mod key;
 mod user;
 
+/// Prints database Errors and returns a generic String
 pub fn query<T>(query_result: Result<T, Error>) -> Result<T, String> {
     query_result.map_err(|e| {
-        let error = e.to_string();
-        error!("Error trying to execute sql query: {}", error);
-        error
+        error!("Encountered a database error: {}", e);
+        String::from("A database error occured. Please consult the logs.")
     })
 }

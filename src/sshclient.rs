@@ -73,12 +73,18 @@ impl From<PublicKey> for SshPublicKey {
     }
 }
 
+impl From<&PublicKey> for SshPublicKey {
+    fn from(value: &PublicKey) -> Self {
+        SshPublicKey::from(value.to_owned())
+    }
+}
+
 impl SshPublicKey {
-    pub fn from_lines(lines: String) -> Vec<SshPublicKey> {
+    pub fn from_lines(lines: &str) -> Vec<Self> {
         lines
             .lines()
             .filter(|line| !line.starts_with('#'))
-            .filter_map(|line| match SshPublicKey::try_from(line) {
+            .filter_map(|line| match Self::try_from(line) {
                 Ok(key) => Some(key),
                 Err(e) => {
                     error!("{}", e);
@@ -99,7 +105,7 @@ impl TryFrom<&str> for SshPublicKey {
 
         Ok(SshPublicKey {
             key_type: key_type_str.to_owned(),
-            key_base64: parts.next().ok_or(KeyParseError::Malformed)?.to_string(),
+            key_base64: parts.next().ok_or(KeyParseError::Malformed)?.to_owned(),
             comment: parts.next().map(String::from),
             owner: KeyOwner::None,
         })
@@ -131,7 +137,7 @@ impl fmt::Display for SshClientError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::DatabaseError(t) | Self::SshError(t) | Self::ExecutionError(t) => {
-                write!(f, "{}", t)
+                write!(f, "{t}")
             }
             Self::NoSuchHost => write!(f, "The host doesn't exist in the database."),
         }
@@ -144,7 +150,7 @@ fn to_connection_err(error: async_ssh2_tokio::Error) -> SshClientError {
 
 impl SshClient {
     pub fn new(conn: ConnectionPool, auth: AuthMethod) -> Self {
-        SshClient { auth, conn }
+        Self { auth, conn }
     }
 
     pub async fn run_command(client: &Client, command: &str) -> Result<String, SshClientError> {
@@ -178,9 +184,9 @@ impl SshClient {
 
     pub async fn try_connect(&self, host: &Host) -> Result<Client, SshClientError> {
         let Ok(host_keys) = host.get_hostkeys(&mut self.conn.get().unwrap()) else {
-            return Err(SshClientError::DatabaseError(
-                "Failed to query host key from database.".to_owned(),
-            ));
+            return Err(SshClientError::DatabaseError(String::from(
+                "Failed to query host key from database.",
+            )));
         };
         for key in host_keys {
             match self
@@ -204,18 +210,13 @@ impl SshClient {
     pub async fn get_hostkeys(&self, client: &Client) -> Result<Vec<SshPublicKey>, SshClientError> {
         let keys = Self::run_command(client, "cat /etc/ssh/ssh_host_*_key.pub").await?;
 
-        Ok(SshPublicKey::from_lines(keys))
+        Ok(SshPublicKey::from_lines(&keys))
     }
     pub async fn get_authorized_keys(
         &self,
-        host: ShortHost,
+        host: Host,
     ) -> Result<Vec<SshPublicKey>, SshClientError> {
-        let maybe_host = Host::get_host(&mut self.conn.get().unwrap(), host.name.clone());
-        let Some(db_host) = maybe_host else {
-            return Err(SshClientError::NoSuchHost);
-        };
-
-        let client = self.try_connect(&db_host).await?;
+        let client = self.try_connect(&host).await?;
 
         // TODO: improve this
         let command_str = "cat ~/.ssh/authorized_keys";
@@ -247,8 +248,7 @@ impl SshClient {
                 SshPublicKey::try_from(auth_line).ok()
             })
             .collect();
-        match db_host.insert_authorized_keys(&mut self.conn.get().unwrap(), authorized_keys.clone())
-        {
+        match host.insert_authorized_keys(&mut self.conn.get().unwrap(), &authorized_keys) {
             Ok(()) => {}
             Err(e) => {
                 error!("{}", e);

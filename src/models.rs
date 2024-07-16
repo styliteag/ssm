@@ -43,6 +43,7 @@ pub struct NewPublicKey {
     pub key_base64: String,
     pub comment: Option<String>,
     pub host_id: Option<i32>,
+    pub user_id: Option<i32>,
 }
 
 #[derive(Queryable, Selectable, Clone)]

@@ -7,7 +7,6 @@ use actix_web::{
 };
 use askama_actix::{Template, TemplateToResponse};
 use async_ssh2_tokio::ToSocketAddrsWithHostname;
-use log::error;
 
 use crate::{
     sshclient::{ShortHost, SshClient, SshPublicKey},
@@ -17,42 +16,30 @@ use crate::{
 use crate::models::*;
 
 #[derive(Template)]
-#[template(path = "pages/404.html")]
-struct NotFoundTemplate {}
-
-#[derive(Template)]
 #[template(path = "error.html")]
-struct ErrorTemplate<'a> {
-    error: &'a str,
+struct ErrorTemplate {
+    error: String,
 }
 
 #[derive(Template)]
 #[template(path = "render/error.html")]
-struct RenderErrorTemplate<'a> {
-    error: &'a str,
+struct RenderErrorTemplate {
+    error: String,
 }
 
 #[derive(Template)]
-#[template(path = "pages/index.html")]
-struct IndexTemplate {}
-
-#[derive(Template)]
-#[template(path = "render/list_hosts.html")]
-struct RenderHostsTemplate {
-    hosts: Vec<ShortHost>,
-}
-
-#[derive(Template)]
-#[template(path = "render/list_keys.html")]
-struct KeyListTemplate {
-    keys: Vec<SshPublicKey>,
-}
+#[template(path = "pages/404.html")]
+struct NotFoundTemplate {}
 
 pub async fn not_found(_req: HttpRequest) -> impl Responder {
     NotFoundTemplate {}
         .customize()
         .with_status(StatusCode::NOT_FOUND)
 }
+
+#[derive(Template)]
+#[template(path = "pages/index.html")]
+struct IndexTemplate {}
 
 #[get("/")]
 pub async fn index() -> impl Responder {
@@ -68,8 +55,10 @@ struct UsersTemplate {
 #[get("/users")]
 pub async fn users(conn: Data<ConnectionPool>) -> impl Responder {
     let mut connection = conn.get().unwrap();
-    UsersTemplate {
-        users: User::get_all_users(&mut connection),
+
+    match User::get_all_users(&mut connection) {
+        Ok(users) => UsersTemplate { users }.to_response(),
+        Err(error) => ErrorTemplate { error }.to_response(),
     }
 }
 
@@ -83,12 +72,18 @@ pub async fn show_user(conn: Data<ConnectionPool>, user: Path<String>) -> impl R
     let mut connection = conn.get().unwrap();
 
     match User::get_user(&mut connection, user.to_string()) {
-        Some(user) => ShowUserTemplate { user }.to_response(),
-        None => NotFoundTemplate {}.to_response(),
+        Ok(user) => ShowUserTemplate { user }.to_response(),
+        Err(error) => ErrorTemplate { error }.to_response(),
     }
 }
 
-#[get("/render/user/list_keys/{username}")]
+#[derive(Template)]
+#[template(path = "render/list_keys.html")]
+struct KeyListTemplate {
+    keys: Vec<SshPublicKey>,
+}
+
+#[get("/render/user/{username}/list_keys")]
 pub async fn render_user_keys(
     conn: Data<ConnectionPool>,
     username: Path<String>,
@@ -96,17 +91,11 @@ pub async fn render_user_keys(
     let mut connection = conn.get().unwrap();
 
     match User::get_user(&mut connection, username.to_string()) {
-        Some(user) => {
-            let keys = user.get_keys(&mut connection).unwrap_or_else(|e| {
-                error!(
-                    "Failed to get keys while trying to render User template {}",
-                    e
-                );
-                Vec::new()
-            });
-            KeyListTemplate { keys }.to_response()
-        }
-        None => NotFoundTemplate {}.to_response(),
+        Ok(user) => match user.get_keys(&mut connection) {
+            Ok(keys) => KeyListTemplate { keys }.to_response(),
+            Err(error) => RenderErrorTemplate { error }.to_response(),
+        },
+        Err(error) => RenderErrorTemplate { error }.to_response(),
     }
 }
 
@@ -129,20 +118,18 @@ struct ShowHostTemplate {
 #[get("/hosts/{name}")]
 pub async fn show_host(conn: Data<ConnectionPool>, host: Path<String>) -> impl Responder {
     let mut connection = conn.get().unwrap();
-    let maybe_host = Host::get_host(&mut connection, host.to_string());
-
-    match maybe_host {
-        Some(host) => {
-            let host_keys = host.get_hostkeys(&mut connection).unwrap_or_else(|e| {
-                error!(
-                    "Failed to get hostkeys while trying to render Host template {}",
-                    e
-                );
-                Vec::new()
-            });
-            ShowHostTemplate { host, host_keys }.to_response()
-        }
-        None => NotFoundTemplate {}.to_response(),
+    match Host::get_host(&mut connection, host.to_string()) {
+        Ok(maybe_host) => match maybe_host {
+            Some(host) => match host.get_hostkeys(&mut connection) {
+                Ok(host_keys) => ShowHostTemplate { host, host_keys }.to_response(),
+                Err(error) => ErrorTemplate { error }.to_response(),
+            },
+            None => ErrorTemplate {
+                error: String::from("Specified host not found."),
+            }
+            .to_response(),
+        },
+        Err(error) => ErrorTemplate { error }.to_response(),
     }
 }
 
@@ -187,7 +174,7 @@ pub async fn add_host(
                     username: host.user,
                     port: sock.port() as i16,
                 },
-                host_keys,
+                &host_keys,
             ) {
                 Ok(host) => AddHostTemplate {
                     response: Ok(host.name),
@@ -201,58 +188,51 @@ pub async fn add_host(
     }
 }
 
+#[derive(Template)]
+#[template(path = "render/list_hosts.html")]
+struct RenderHostsTemplate {
+    hosts: Vec<ShortHost>,
+}
+
 #[get("/render/hosts")]
 pub async fn render_hosts(conn: Data<ConnectionPool>) -> impl Responder {
-    let all_hosts = Host::get_all_hosts(&mut conn.get().expect("error"));
-    RenderHostsTemplate {
-        hosts: all_hosts
-            .iter()
-            .map(|host| host.clone().to_short())
-            .collect(),
+    match Host::get_all_hosts(&mut conn.get().expect("error")) {
+        Ok(all_hosts) => RenderHostsTemplate {
+            hosts: all_hosts.iter().map(Host::to_short).collect(),
+        }
+        .to_response(),
+        Err(error) => RenderErrorTemplate { error }.to_response(),
     }
 }
 
-#[get("/render/host/list_keys/{host}")]
-pub async fn render_host_keys(
-    req: HttpRequest,
-    ssh_client: Data<SshClient>,
-    conn: Data<ConnectionPool>,
-    host: Path<String>,
-) -> impl Responder {
-    // TODO: better variable names
+// #[get("/render/host/{host}/list_keys")]
+// pub async fn render_host_keys(
+//     req: HttpRequest,
+//     conn: Data<ConnectionPool>,
+//     host: Path<String>,
+// ) -> impl Responder {
+//     let mut connection = conn.get().unwrap();
 
-    let maybe_host = Host::get_host(&mut conn.get().unwrap(), host.to_string());
-    let keys = match maybe_host {
-        Some(host) => {
-            ssh_client
-                .get_authorized_keys(host.clone().to_short())
-                .await
-        }
-        // TODO: actually return a correct error
-        None => {
-            return RenderErrorTemplate {
-                error: "Host not found.",
-            }
-            .customize()
-            .with_status(StatusCode::BAD_REQUEST)
-            .respond_to(&req)
-        }
-    };
+//     match Host::get_host(&mut connection, host.to_string()) {
+//         Ok(maybe_host) => match maybe_host {
+//             Some(host) => match host.get_authorized_keys(&mut connection) {
+//                 Ok(keys) => KeyListTemplate { keys }.customize().respond_to(&req),
+//                 Err(error) => RenderErrorTemplate { error }.customize().respond_to(&req),
+//             },
+//             None => RenderErrorTemplate {
+//                 error: String::from("Couldn't find specified host"),
+//             }
+//             .customize()
+//             .with_status(StatusCode::BAD_REQUEST)
+//             .respond_to(&req),
+//         },
 
-    //TODO: Better error handling.
-    match keys {
-        Err(error) => {
-            error!("Error trying to list authorized keys for host '{}'", error);
-            RenderErrorTemplate {
-                error: error.to_string().as_str(),
-            }
-            .customize()
-            .with_status(StatusCode::INTERNAL_SERVER_ERROR)
-            .respond_to(&req)
-        }
-        Ok(keys) => KeyListTemplate { keys }.customize().respond_to(&req),
-    }
-}
+//         Err(error) => RenderErrorTemplate { error }
+//             .customize()
+//             .with_status(StatusCode::INTERNAL_SERVER_ERROR)
+//             .respond_to(&req),
+//     }
+// }
 
 #[derive(Template)]
 #[template(path = "pages/keys.html")]
@@ -262,7 +242,8 @@ struct KeysPageTemplate {
 
 #[get("/keys")]
 pub async fn list_keys(conn: Data<ConnectionPool>) -> impl Responder {
-    let keys = PublicKey::get_all_keys_as::<SshPublicKey>(&mut conn.get().unwrap());
-
-    KeysPageTemplate { keys }
+    match PublicKey::get_all_keys_as::<SshPublicKey>(&mut conn.get().unwrap()) {
+        Ok(keys) => KeysPageTemplate { keys }.to_response(),
+        Err(error) => ErrorTemplate { error }.to_response(),
+    }
 }

@@ -61,7 +61,7 @@ async fn main() -> Result<(), std::io::Error> {
     pretty_env_logger::init();
 
     // Load configuration
-    let config_path = env::var("CONFIG").unwrap_or(String::from("./config.toml"));
+    let config_path = env::var("CONFIG").unwrap_or_else(|_| String::from("./config.toml"));
     let configuration: Configuration = Config::builder()
         .add_source(config::File::with_name(config_path.as_str()))
         .add_source(config::Environment::default())
@@ -107,7 +107,7 @@ async fn main() -> Result<(), std::io::Error> {
             .service(routes::show_host)
             .service(routes::render_hosts)
             .service(routes::add_host)
-            .service(routes::render_host_keys)
+            // .service(routes::render_host_keys)
             .service(routes::list_keys)
             .service(Files::new("/", "./static").use_last_modified(true))
             .default_service(web::to(routes::not_found))
