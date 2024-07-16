@@ -56,7 +56,7 @@ impl Host {
                 })
         });
         match transaction {
-            Ok(_) => Ok(host),
+            Ok(()) => Ok(host),
             Err(e) => Err(e.to_string()),
         }
     }

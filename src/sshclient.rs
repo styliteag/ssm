@@ -38,7 +38,7 @@ impl std::fmt::Display for KeyParseError {
 
 impl std::fmt::Display for SshPublicKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self.comment.to_owned() {
+        match self.comment.clone() {
             Some(c) => write!(
                 f,
                 "Type: {}; Comment: {}; Base64: {}",
@@ -130,9 +130,9 @@ pub enum SshClientError {
 impl fmt::Display for SshClientError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::DatabaseError(t) => write!(f, "{}", t),
-            Self::SshError(t) => write!(f, "{}", t),
-            Self::ExecutionError(t) => write!(f, "{}", t),
+            Self::DatabaseError(t) | Self::SshError(t) | Self::ExecutionError(t) => {
+                write!(f, "{}", t)
+            }
             Self::NoSuchHost => write!(f, "The host doesn't exist in the database."),
         }
     }
@@ -228,7 +228,7 @@ impl SshClient {
             host.name, command_str, command.exit_status
         );
 
-        client.disconnect();
+        let _ = client.disconnect().await;
 
         if command.exit_status != 0 {
             return Err(SshClientError::SshError(String::from(
@@ -249,73 +249,11 @@ impl SshClient {
             .collect();
         match db_host.insert_authorized_keys(&mut self.conn.get().unwrap(), authorized_keys.clone())
         {
-            Ok(_) => {}
+            Ok(()) => {}
             Err(e) => {
-                error!("{}", e.to_string())
+                error!("{}", e);
             }
         };
         Ok(authorized_keys)
     }
-    pub async fn add_key(host: String, public_key: SshPublicKey) -> Result<(), SshClientError> {
-        todo!()
-    }
-    pub async fn remove_key(
-        host: String,
-        key_base64: String,
-    ) -> Result<SshPublicKey, SshClientError> {
-        todo!()
-    }
 }
-
-// pub fn get_authorized_keys(host: String) -> Result<Vec<SshPublicKey>, SshClientError> {
-//     let tcp = TcpStream::connect(host).unwrap();
-//     let mut sess = Session::new().unwrap();
-//     sess.set_tcp_stream(tcp);
-//     sess.handshake().unwrap();
-
-//     if sess.userauth_agent("root").is_err() {
-//         return Err(SshClientError::FailedAuth);
-//     }
-
-//     let mut channel = sess.channel_session().unwrap();
-//     channel.exec("cat ~/.ssh/authorized_keys").unwrap();
-//     let mut s = String::new();
-//     channel.read_to_string(&mut s).unwrap();
-
-//     if channel.wait_close().is_err() {
-//         return Err(SshClientError::FailedExec);
-//     }
-
-//     let keys = s.lines().map(|key| key.try_into().unwrap()).collect();
-
-//     match channel.exit_status() {
-//         Err(e) => Err(SshClientError::FailedGetExitCode),
-//         Ok(exit_code) => match exit_code {
-//             0 => Ok(keys),
-//             _ => Err(SshClientError::FailedExec),
-//         },
-//     }
-// }
-
-// pub fn list_agent_keys() -> Result<String, ()> {
-//     // Almost all APIs require a `Session` to be available
-//     let sess = Session::new().unwrap();
-//     let mut agent = sess.agent().unwrap();
-
-//     // Connect the agent and request a list of identities
-//     agent.connect().unwrap();
-//     agent.list_identities().unwrap();
-
-//     Ok(agent
-//         .identities()
-//         .unwrap()
-//         .iter()
-//         .map(|identity| {
-//             String::from(format!(
-//                 "Comment: {}, Key: {:?}",
-//                 identity.comment(),
-//                 identity.blob()
-//             ))
-//         })
-//         .collect())
-// }

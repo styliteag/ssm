@@ -4,6 +4,9 @@ edition = "2021"
 # If you change the name here, you must also do it in flake.nix (and run `cargo generate-lockfile` afterwards)
 name = "ssh-key-manager"
 version = "0.0.1-alpha"
+description = "Manage all your ssh keys from one interface"
+repository = "https://github.com/styliteag/ssh-key-manager"
+readme = "README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

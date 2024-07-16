@@ -3,12 +3,11 @@ use std::env;
 use actix_files::Files;
 use actix_web::{
     web::{self, Data},
-    App, HttpRequest, HttpResponse, HttpServer, Responder,
+    App, HttpServer,
 };
 use config::Config;
 use diesel::prelude::QueryResult;
-use diesel::{Connection, SqliteConnection};
-use log::{error, info, warn};
+use log::{error, info};
 use serde::Deserialize;
 use sshclient::SshClient;
 

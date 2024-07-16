@@ -2,17 +2,15 @@ use actix_web::{
     get,
     http::StatusCode,
     post,
-    test::{call_and_read_body_json, read_body},
     web::{self, Data, Path},
-    HttpRequest, HttpResponse, Responder,
+    HttpRequest, Responder,
 };
 use askama_actix::{Template, TemplateToResponse};
 use async_ssh2_tokio::ToSocketAddrsWithHostname;
-use log::{error, info};
-use serde::Deserialize;
+use log::error;
 
 use crate::{
-    sshclient::{self, ShortHost, SshClient, SshPublicKey},
+    sshclient::{ShortHost, SshClient, SshPublicKey},
     ConnectionPool,
 };
 
@@ -172,19 +170,18 @@ pub async fn add_host(
         Ok(client) => {
             let Ok(host_keys) = ssh_client.get_hostkeys(&client).await else {
                 return AddHostTemplate {
-                    response: Err("Couldn't get servers public key".to_owned()),
+                    response: Err(String::from("Couldn't get servers public key")),
                 };
             };
 
-            // TODO: prompt user to check host keys validity?
-            dbg!(host_keys.clone());
+            // TODO: prompt user to check host keys validity
             let _ = client.disconnect().await;
 
             let sock = client.get_connection_address();
             match Host::add_host(
                 &mut conn.get().expect("test"),
                 NewHost {
-                    name: host.name.to_owned(),
+                    name: host.name.clone(),
                     // TODO: do this correct
                     hostname: sock.hostname(),
                     username: host.user,
@@ -210,7 +207,7 @@ pub async fn render_hosts(conn: Data<ConnectionPool>) -> impl Responder {
     RenderHostsTemplate {
         hosts: all_hosts
             .iter()
-            .map(|host| host.to_owned().to_short())
+            .map(|host| host.clone().to_short())
             .collect(),
     }
 }
@@ -228,7 +225,7 @@ pub async fn render_host_keys(
     let keys = match maybe_host {
         Some(host) => {
             ssh_client
-                .get_authorized_keys(host.to_owned().to_short())
+                .get_authorized_keys(host.clone().to_short())
                 .await
         }
         // TODO: actually return a correct error

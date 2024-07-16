@@ -2,7 +2,6 @@ use log::error;
 
 use crate::{models::PublicKey, DbConnection};
 use diesel::associations::HasTable;
-use diesel::dsl::insert_into;
 use diesel::prelude::*;
 
 impl PublicKey {
