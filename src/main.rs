@@ -112,7 +112,8 @@ async fn main() -> Result<(), std::io::Error> {
             .service(Files::new("/", "./static").use_last_modified(true))
             .default_service(web::to(routes::not_found))
     })
-    .bind(("127.0.0.1", 8080))?
+    // TODO: make address and port configurable
+    .bind(("0.0.0.0", 8080))?
     .run()
     .await
 }
