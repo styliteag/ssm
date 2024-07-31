@@ -1,4 +1,4 @@
-use std::env;
+use std::{env, path::PathBuf};
 
 use actix_files::Files;
 use actix_web::{
@@ -37,7 +37,7 @@ pub type ConnectionPool = Pool<ConnectionManager<DbConnection>>;
 #[derive(Debug, Deserialize)]
 pub struct SshConfig {
     /// Path to an OpenSSH Private Key
-    private_key_file: String,
+    private_key_file: PathBuf,
     /// Passphrase for the key
     private_key_passphrase: Option<String>,
 }
@@ -89,7 +89,7 @@ async fn main() -> Result<(), std::io::Error> {
     let ssh_client = Data::new(SshClient::new(
         pool.clone(),
         PrivateKeyFile {
-            key_file_name: configuration.ssh.private_key_file,
+            key_file_path: configuration.ssh.private_key_file,
             key_pass: configuration.ssh.private_key_passphrase,
         },
     ));
@@ -104,11 +104,16 @@ async fn main() -> Result<(), std::io::Error> {
             .service(routes::users)
             .service(routes::show_user)
             .service(routes::render_user_keys)
+            .service(routes::add_user)
             .service(routes::show_host)
             .service(routes::render_hosts)
             .service(routes::add_host)
             // .service(routes::render_host_keys)
             .service(routes::list_keys)
+            .service(routes::assign_key_to_user)
+            .service(routes::diff)
+            .service(routes::render_diff)
+            .service(routes::authorize_user)
             .service(Files::new("/", "./static").use_last_modified(true))
             .default_service(web::to(routes::not_found))
     })

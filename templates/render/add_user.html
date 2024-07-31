@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% match response %}
+{% when Ok with (user) %}
+<div id="form_response">
+  Succesfully added user '{{ user }}'
+  {% when Err with (err) %}
+  <div id="form_response" class="error">
+    Couldn't add user: {{ err }}
+    {% endmatch %}
+  </div>
+
+  {% endblock %}

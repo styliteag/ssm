@@ -5,7 +5,7 @@ use log::{error, info, warn};
 use serde::Deserialize;
 
 use crate::{
-    models::{Host, PublicKey},
+    models::{Host, PublicUserKey},
     ConnectionPool,
 };
 
@@ -56,25 +56,19 @@ impl TryFrom<String> for SshPublicKey {
     }
 }
 
-impl From<PublicKey> for SshPublicKey {
-    fn from(value: PublicKey) -> Self {
+impl From<PublicUserKey> for SshPublicKey {
+    fn from(value: PublicUserKey) -> Self {
         SshPublicKey {
             key_type: value.key_type,
             key_base64: value.key_base64,
             comment: value.comment,
-            owner: match value.user_id {
-                Some(user) => KeyOwner::User(user),
-                None => match value.host_id {
-                    Some(host_id) => KeyOwner::Host(host_id),
-                    None => KeyOwner::None,
-                },
-            },
+            owner: KeyOwner::User(value.user_id),
         }
     }
 }
 
-impl From<&PublicKey> for SshPublicKey {
-    fn from(value: &PublicKey) -> Self {
+impl From<&PublicUserKey> for SshPublicKey {
+    fn from(value: &PublicUserKey) -> Self {
         SshPublicKey::from(value.to_owned())
     }
 }
@@ -207,6 +201,13 @@ impl SshClient {
             "Didn't find a matching host key",
         )))
     }
+
+    pub async fn try_disconnect(client: Client) {
+        client.disconnect().await.map_err(|e| {
+            error!("Error trying to disconnect client: {}", e.to_string());
+        });
+    }
+
     pub async fn get_hostkeys(&self, client: &Client) -> Result<Vec<SshPublicKey>, SshClientError> {
         let keys = Self::run_command(client, "cat /etc/ssh/ssh_host_*_key.pub").await?;
 
@@ -214,10 +215,9 @@ impl SshClient {
     }
     pub async fn get_authorized_keys(
         &self,
-        host: Host,
+        client: &Client,
+        host: &Host,
     ) -> Result<Vec<SshPublicKey>, SshClientError> {
-        let client = self.try_connect(&host).await?;
-
         // TODO: improve this
         let command_str = "cat ~/.ssh/authorized_keys";
         let command = client
@@ -228,8 +228,6 @@ impl SshClient {
             "Host {}: Executed command {} with error code {}",
             host.name, command_str, command.exit_status
         );
-
-        let _ = client.disconnect().await;
 
         if command.exit_status != 0 {
             return Err(SshClientError::SshError(String::from(
@@ -248,12 +246,67 @@ impl SshClient {
                 SshPublicKey::try_from(auth_line).ok()
             })
             .collect();
-        match host.insert_authorized_keys(&mut self.conn.get().unwrap(), &authorized_keys) {
-            Ok(()) => {}
-            Err(e) => {
-                error!("{}", e);
-            }
-        };
         Ok(authorized_keys)
     }
+
+    /// Check if the host state matches the supposed database state.
+    pub async fn get_host_diff(&self, host: &Host) -> Result<HostDiff, SshClientError> {
+        let Ok(client) = self.try_connect(host).await else {
+            return Err(SshClientError::SshError(String::from(
+                "Couldn't connect to host",
+            )));
+        };
+
+        let Ok(actual_authorized_keys) = self.get_authorized_keys(&client, host).await else {
+            return Err(SshClientError::DatabaseError(String::from(
+                "Couldn't get keys for this host from the database",
+            )));
+        };
+
+        Self::try_disconnect(client);
+
+        let db_authorized_keys: Vec<(String, Option<String>)> = host
+            .get_authorized_keys(&mut self.conn.get().unwrap())
+            .unwrap()
+            .iter()
+            .map(|(key, options)| (key.key_base64.clone(), options.to_owned()))
+            .collect();
+
+        let mut diff_items = Vec::new();
+
+        for key in actual_authorized_keys {
+            // TODO: also check if options are set correct
+
+            let key_matches = db_authorized_keys
+                .iter()
+                .any(|(db_key, opts)| key.key_base64.eq(db_key));
+
+            if !key_matches {
+                diff_items.push(DiffItem::UnknownKeyOnHost(key))
+            }
+
+            // for try_key in &db_authorized_keys {
+            //     if (key.key_base64 == try_key.key_base64 && try_key.user_id == None) {
+            //         diff_items.push(DiffItem::UnknownKeyOnHost(try_key.to_owned()));
+            //     }
+            // }
+        }
+
+        Ok(HostDiff {
+            host: host.to_owned(),
+            diff: diff_items,
+        })
+    }
+}
+
+#[derive(Clone)]
+pub struct HostDiff {
+    pub host: Host,
+    pub diff: Vec<DiffItem>,
+}
+
+#[derive(Clone)]
+pub enum DiffItem {
+    KeyMissingOnHost(SshPublicKey),
+    UnknownKeyOnHost(SshPublicKey),
 }

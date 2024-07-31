@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h3>Schema diff:</h3>
+<div id="diff" hx-get="/render/diff" hx-trigger="load" >Loading...</div>
+{% endblock %}

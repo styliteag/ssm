@@ -8,7 +8,9 @@
     <th>Comment</th>
     <th>Owner</th>
   </tr>
-  {% for key in keys %}
+  {% for touple in keys.to_owned() %}
+  {% let username = touple.0 %}
+  {% let key = touple.1 %}
   <tr>
     <td>
       <details>
@@ -23,15 +25,7 @@
       <i>No comment</i>
       {% endmatch %}
     </td>
-    <td>{% match key.owner %}
-      {% when crate::sshclient::KeyOwner::Host with (host_id) %}
-      <a href="/hosts/by-id/{{ host_id }}">{{ host_id }}</a>
-      {% when crate::sshclient::KeyOwner::User with (user_id) %}
-      <a href="/users/by-id/{{ user_id }}">{{ user_id }}</a>
-      {% when crate::sshclient::KeyOwner::None %}
-      <i>No Owner</i>
-      {% endmatch %}
-    </td>
+    <td><a href="/users/{{ username }}">{{ username }}</a></td>
   </tr>
   {% endfor %}
 </table>

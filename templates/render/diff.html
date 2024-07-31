@@ -1,0 +1,61 @@
+{%- import "components/macros.html" as macros -%}
+
+{% extends "base.html" %}
+
+{% block content %}
+<h4>Hosts:</h4>
+<ul>
+  {% for host_diff in hosts %}
+  <li>
+    <h5>{{ host_diff.host.name }}</h5>
+    <ul>
+      {% for item in host_diff.diff %}
+      <li>
+        {% match item %}
+        {% when crate::sshclient::DiffItem::UnknownKeyOnHost with (key) %}
+        <details>
+          <summary>
+            There is an unknown key on this host
+          </summary>
+          The following key is not (yet) known:
+
+          <div>
+            {% call macros::public_key(key) %}
+          </div>
+
+          <form hx-post="/user/add_key">
+
+            <input type="hidden" name="key_type" value="{{ key.key_type }}" />
+            <input type="hidden" name="key_base64" value="{{ key.key_base64 }}" />
+
+            {% match key.comment %}
+            {% when Some with (comment) %}
+            <input type="hidden" name="key_comment" value="{{ comment }}" />
+            {% when None %}
+            {% endmatch %}
+
+            <label>Assign this key to a user</label>
+
+            {% call macros::user_selection(users) %}
+            <button>Save</button>
+          </form>
+
+        </details>
+        {% when crate::sshclient::DiffItem::KeyMissingOnHost with (key) %}
+        <details>
+          <summary>
+            A key is missing on this host
+          </summary>
+          The following key should be on this host, but is missing:
+          <pre>{{ key.key_base64 }}</pre>
+
+          <button>Upload key</button>
+        </details>
+        {% endmatch %}
+      </li>
+      {% endfor %}
+    </ul>
+  </li>
+  {% endfor %}
+</ul>
+{% endblock %}

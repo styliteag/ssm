@@ -1,3 +1,5 @@
+{%- import "components/macros.html" as macros -%}
+
 {% extends "base.html" %}
 
 {% block content %}
@@ -5,6 +7,39 @@
 <p> Hostname: {{ host.hostname }}</p>
 <p> Port: {{ host.port }}</p>
 <p> Username: {{ host.username }}</p>
+<p> Allowed users:</p>
+<table>
+  <tr>
+    <th>User</th>
+    <th>Options</th>
+  </tr>
+  {% for user in authorized_users %}
+  <tr>
+    <td><a href="/users/{{ user.0 }}">{{ user.0 }}</a></td>
+    <td>
+      {% match user.1 %}
+      {% when Some with (options) %}
+      <pre>{{ options }}</pre>
+      {% when None %}
+      <i>No options set</i>
+      {% endmatch %}
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+<div>
+  <h3>Add a users to this host</h3>
+  <form hx-post="/hosts/user/authorize">
+    <input type="hidden" name="host_id" value="{{ host.id }}" />
+
+    {% call macros::user_selection(users) %}
+
+    <label>Options</label>
+    <input name="options">
+    <button>Submit</button>
+  </form>
+
+</div>
 <p> Hostkeys:</p>
 <div>
   {% for key in host_keys %}
