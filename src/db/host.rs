@@ -1,3 +1,4 @@
+use crate::schema::host_keys;
 use crate::schema::user_in_host;
 use crate::schema::user_keys;
 use crate::schema::users;
@@ -30,11 +31,9 @@ impl Host {
     /// Adds a new host with corresponding hostkeys to the database
     pub fn add_host(
         conn: &mut DbConnection,
-        host: NewHost,
+        host: &NewHost,
         new_host_keys: &[SshPublicKey],
     ) -> Result<(), String> {
-        use crate::schema::host_keys::dsl::*;
-
         let transaction = conn.transaction(|connection| {
             insert_into(hosts::table)
                 .values(host.clone())
@@ -54,7 +53,7 @@ impl Host {
                     host_id: inserted_host_id,
                 })
                 .try_for_each(|new_key| {
-                    insert_into(host_keys)
+                    insert_into(host_keys::table)
                         .values(new_key)
                         .execute(connection)
                         .map(|_| ())
@@ -122,14 +121,16 @@ impl Host {
     }
 
     pub fn get_hostkeys(&self, conn: &mut DbConnection) -> Result<Vec<HostKey>, String> {
-        use crate::schema::host_keys::dsl::*;
-
-        query(host_keys.filter(host_id.eq(self.id)).load::<HostKey>(conn))
+        query(
+            host_keys::table
+                .filter(host_keys::host_id.eq(self.id))
+                .load::<HostKey>(conn),
+        )
 
         // hostkeys.map(|hostkeys| hostkeys.iter().map(SshPublicKey::from).collect())
     }
 
-    /// Gets all keys that allowed on this server and the associated options
+    /// Gets all keys that are allowed on this server and the associated options
     pub fn get_authorized_keys(
         &self,
         conn: &mut DbConnection,

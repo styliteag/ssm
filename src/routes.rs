@@ -3,7 +3,7 @@ use actix_web::{
     http::StatusCode,
     post,
     web::{self, Data, Path},
-    HttpRequest, HttpResponse, Responder,
+    HttpResponse, Responder,
 };
 use askama_actix::{Template, TemplateToResponse};
 use async_ssh2_tokio::ToSocketAddrsWithHostname;
@@ -16,7 +16,7 @@ use crate::{
     ConnectionPool, DbConnection,
 };
 
-use crate::models::*;
+use crate::models::{Host, HostKey, NewHost, NewPublicUserKey, NewUser, PublicUserKey, User};
 
 #[derive(Template)]
 #[template(path = "error.html")]
@@ -34,7 +34,7 @@ struct RenderErrorTemplate {
 #[template(path = "pages/404.html")]
 struct NotFoundTemplate {}
 
-pub async fn not_found(_req: HttpRequest) -> impl Responder {
+pub async fn not_found() -> impl Responder {
     NotFoundTemplate {}
         .customize()
         .with_status(StatusCode::NOT_FOUND)
@@ -115,13 +115,13 @@ pub async fn assign_key_to_user(
         key_type: form.key_type.clone(),
         key_base64: form.key_base64.clone(),
         user_id: form.user_id,
-        comment: form.key_comment.to_owned(),
+        comment: form.key_comment.clone(),
     };
 
     let res = web::block(move || PublicUserKey::add_key(&mut conn.get().unwrap(), new_key)).await?;
 
     Ok(match res {
-        Ok(_) => HttpResponse::with_body(StatusCode::CREATED, String::from("Added key.")),
+        Ok(()) => HttpResponse::with_body(StatusCode::CREATED, String::from("Added key.")),
         Err(e) => HttpResponse::with_body(StatusCode::INTERNAL_SERVER_ERROR, e),
     })
 }
@@ -282,10 +282,10 @@ pub async fn add_host(
         port,
     };
     let res =
-        web::block(move || Host::add_host(&mut conn.get().unwrap(), new_host, &host_keys)).await?;
+        web::block(move || Host::add_host(&mut conn.get().unwrap(), &new_host, &host_keys)).await?;
 
     Ok(match res {
-        Ok(_) => AddHostTemplate {
+        Ok(()) => AddHostTemplate {
             response: Ok(host.name),
         },
         Err(e) => AddHostTemplate { response: Err(e) },
@@ -409,13 +409,13 @@ pub async fn authorize_user(
             &mut conn.get().unwrap(),
             form.host_id,
             form.user_id,
-            form.options.to_owned(),
+            form.options.clone(),
         )
     })
     .await?;
 
     Ok(match res {
-        Ok(_) => HttpResponse::with_body(StatusCode::OK, String::from("Authorized user.")),
+        Ok(()) => HttpResponse::with_body(StatusCode::OK, String::from("Authorized user.")),
         Err(e) => HttpResponse::with_body(StatusCode::INTERNAL_SERVER_ERROR, e),
     })
 }

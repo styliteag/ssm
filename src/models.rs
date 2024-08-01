@@ -22,7 +22,7 @@ pub struct NewHost {
     pub port: i16,
 }
 
-#[derive(Queryable, Selectable, Associations, Clone)]
+#[derive(Queryable, Selectable, Associations, Clone, Debug)]
 #[diesel(table_name = crate::schema::user_keys)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 #[diesel(belongs_to(User))]
