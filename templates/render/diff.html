@@ -12,7 +12,7 @@
       {% for item in host_diff.diff %}
       <li>
         {% match item %}
-        {% when crate::sshclient::DiffItem::UnknownKeyOnHost with (key) %}
+        {% when crate::sshclient::DiffItem::UnknownKey with (key) %}
         <details>
           <summary>
             There is an unknown key on this host
@@ -41,15 +41,27 @@
           </form>
 
         </details>
-        {% when crate::sshclient::DiffItem::KeyMissingOnHost with (key) %}
+        {% when crate::sshclient::DiffItem::KeyMissing with (key, username) %}
         <details>
           <summary>
-            A key is missing on this host
+            A key owned by <pre>{{username}}</pre> is missing on this host
           </summary>
           The following key should be on this host, but is missing:
+          <pre>{{ key.key_type }}</pre>
           <pre>{{ key.key_base64 }}</pre>
 
           <button>Upload key</button>
+        </details>
+        {% when crate::sshclient::DiffItem::UnauthorizedKey with (key, username) %}
+        <details>
+          <summary>
+            An unauthorized key owned by <a href="/users/{{ username }}">{{ username }}</a> is present on this host
+          </summary>
+          The following key should not be on this host:
+          <pre>{{ key.key_type }}</pre>
+          <pre>{{ key.key_base64 }}</pre>
+
+          <button>Remove key</button>
         </details>
         {% endmatch %}
       </li>

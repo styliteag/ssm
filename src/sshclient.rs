@@ -265,9 +265,14 @@ impl SshClient {
 
         Self::try_disconnect(client);
 
+        let mut connection = self.conn.get().unwrap();
+
+        let db_all_keys = PublicUserKey::get_all_keys_with_username(&mut connection)
+            .map_err(SshClientError::DatabaseError)?;
+
         let db_authorized_keys: Vec<(String, Option<String>)> = host
-            .get_authorized_keys(&mut self.conn.get().unwrap())
-            .unwrap()
+            .get_authorized_keys(&mut connection)
+            .map_err(SshClientError::DatabaseError)?
             .iter()
             .map(|(key, options)| (key.key_base64.clone(), options.to_owned()))
             .collect();
@@ -282,14 +287,21 @@ impl SshClient {
                 .any(|(db_key, opts)| key.key_base64.eq(db_key));
 
             if !key_matches {
-                diff_items.push(DiffItem::UnknownKeyOnHost(key))
+                let known_key = db_all_keys
+                    .iter()
+                    .find(|(_, user_key)| key.key_base64.eq(&user_key.key_base64));
+                match known_key {
+                    Some((username, user_key)) => {
+                        diff_items.push(DiffItem::UnauthorizedKey(
+                            user_key.clone(),
+                            username.clone(),
+                        ));
+                    }
+                    None => {
+                        diff_items.push(DiffItem::UnknownKey(key));
+                    }
+                }
             }
-
-            // for try_key in &db_authorized_keys {
-            //     if (key.key_base64 == try_key.key_base64 && try_key.user_id == None) {
-            //         diff_items.push(DiffItem::UnknownKeyOnHost(try_key.to_owned()));
-            //     }
-            // }
         }
 
         Ok(HostDiff {
@@ -307,6 +319,10 @@ pub struct HostDiff {
 
 #[derive(Clone)]
 pub enum DiffItem {
-    KeyMissingOnHost(SshPublicKey),
-    UnknownKeyOnHost(SshPublicKey),
+    /// A key that is authorized is missing with the Username
+    KeyMissing(PublicUserKey, String),
+    /// A key that is not authorized is present.
+    UnknownKey(SshPublicKey),
+    /// An unauthorized key belonging to a known user is present.
+    UnauthorizedKey(PublicUserKey, String),
 }
