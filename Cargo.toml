@@ -11,8 +11,8 @@ readme = "README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-postgres = [ "diesel/postgres"]
-mysql = [ "diesel/mysql"]
+postgres = [ "diesel/postgres", "diesel_migrations/postgres"]
+mysql = [ "diesel/mysql", "diesel_migrations/mysql"]
 
 [dependencies]
 actix = "0.13.3"
@@ -24,6 +24,7 @@ async-ssh2-tokio = "0.8.10"
 color-eyre = { version = "0.6.3", default-features = false }
 config = { version = "0.14.0", default-features = false, features = [ "toml" ] }
 diesel = { version = "2.2.0", features = ["sqlite", "r2d2"] }
+diesel_migrations = { version = "2.2.0", features = ["sqlite"] }
 futures = "0.3.30"
 log = "0.4.21"
 pretty_env_logger = "0.5.0"

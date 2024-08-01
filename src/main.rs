@@ -16,11 +16,15 @@ use async_ssh2_tokio::AuthMethod::PrivateKeyFile;
 use diesel::r2d2::ConnectionManager;
 use diesel::r2d2::Pool;
 
+use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
+
 mod db;
 mod models;
 mod routes;
 mod schema;
 mod sshclient;
+
+pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!();
 
 #[derive(diesel::MultiConnection)]
 pub enum DbConnection {
@@ -85,6 +89,14 @@ async fn main() -> Result<(), std::io::Error> {
     let pool: ConnectionPool = Pool::builder()
         .build(manager)
         .expect("Database URL should be a valid URI");
+
+    {
+        info!("Trying to run migrations");
+        pool.get()
+            .expect("Cant connect to database.")
+            .run_pending_migrations(MIGRATIONS)
+            .expect("Error while running migrations:");
+    }
 
     let ssh_client = Data::new(SshClient::new(
         pool.clone(),

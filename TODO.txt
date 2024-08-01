@@ -1,6 +1,5 @@
 
 - Support RSA keys for Private Key
 - Bundle HTMX library
-- Embed database migrations in the binary
 - Write an abstraction for form handling
 - Handle all (recoverable) errors
