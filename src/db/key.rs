@@ -30,6 +30,7 @@ impl PublicUserKey {
             .map(|keys| keys.iter().map(|key| T::from(key.to_owned())).collect())
     }
 
+    /// Add a new user key to the db
     pub fn add_key(conn: &mut DbConnection, key: NewPublicUserKey) -> Result<(), String> {
         query_drop(insert_into(user_keys::table).values(key).execute(conn))
     }

@@ -13,7 +13,7 @@ use serde::Deserialize;
 use crate::{
     db::{UserAndOptions, UsernameAndKey},
     sshclient::{HostDiff, ShortHost, SshClient, SshPublicKey},
-    ConnectionPool,
+    ConnectionPool, DbConnection,
 };
 
 use crate::models::*;
@@ -56,13 +56,13 @@ struct UsersTemplate {
 }
 
 #[get("/users")]
-pub async fn users(conn: Data<ConnectionPool>) -> impl Responder {
-    let mut connection = conn.get().unwrap();
+pub async fn users(conn: Data<ConnectionPool>) -> actix_web::Result<impl Responder> {
+    let maybe_users = web::block(move || User::get_all_users(&mut conn.get().unwrap())).await?;
 
-    match User::get_all_users(&mut connection) {
+    Ok(match maybe_users {
         Ok(users) => UsersTemplate { users }.to_response(),
         Err(error) => ErrorTemplate { error }.to_response(),
-    }
+    })
 }
 
 #[derive(Template)]
@@ -71,27 +71,31 @@ struct ShowUserTemplate {
     user: User,
 }
 #[get("/users/{name}")]
-pub async fn show_user(conn: Data<ConnectionPool>, user: Path<String>) -> impl Responder {
-    let mut connection = conn.get().unwrap();
+pub async fn show_user(
+    conn: Data<ConnectionPool>,
+    user: Path<String>,
+) -> actix_web::Result<impl Responder> {
+    let maybe_user =
+        web::block(move || User::get_user(&mut conn.get().unwrap(), user.to_string())).await?;
 
-    match User::get_user(&mut connection, user.to_string()) {
+    Ok(match maybe_user {
         Ok(user) => ShowUserTemplate { user }.to_response(),
         Err(error) => ErrorTemplate { error }.to_response(),
-    }
-}
-
-#[derive(Template)]
-#[template(path = "render/add_user.html")]
-struct AddUserTemplate {
-    response: Result<String, String>,
+    })
 }
 
 #[post("/users/add")]
-pub async fn add_user(conn: Data<ConnectionPool>, form: web::Form<NewUser>) -> impl Responder {
+pub async fn add_user(
+    conn: Data<ConnectionPool>,
+    form: web::Form<NewUser>,
+) -> actix_web::Result<impl Responder> {
     let new_user = form.0;
 
-    let res = User::add_user(&mut conn.get().unwrap(), new_user);
-    AddUserTemplate { response: res }
+    let res = web::block(move || User::add_user(&mut conn.get().unwrap(), new_user)).await?;
+    Ok(match res {
+        Ok(_) => HttpResponse::with_body(StatusCode::CREATED, String::from("Added user.")),
+        Err(e) => HttpResponse::with_body(StatusCode::INTERNAL_SERVER_ERROR, e),
+    })
 }
 
 #[derive(Deserialize)]
@@ -106,28 +110,20 @@ struct AssignKeyForm {
 pub async fn assign_key_to_user(
     conn: Data<ConnectionPool>,
     form: web::Form<AssignKeyForm>,
-) -> impl Responder {
-    dbg!(&form.key_comment);
-    match PublicUserKey::add_key(
-        &mut conn.get().unwrap(),
-        NewPublicUserKey {
-            key_type: form.key_type.clone(),
-            key_base64: form.key_base64.clone(),
-            user_id: form.user_id,
-            comment: form.key_comment.to_owned(),
-        },
-    ) {
-        Ok(_) => HttpResponse::with_body(
-            StatusCode::OK,
-            String::from(
-                "Added
-            key.",
-            ),
-        ),
-        Err(e) => HttpResponse::with_body(StatusCode::INTERNAL_SERVER_ERROR, e),
-    }
+) -> actix_web::Result<impl Responder> {
+    let new_key = NewPublicUserKey {
+        key_type: form.key_type.clone(),
+        key_base64: form.key_base64.clone(),
+        user_id: form.user_id,
+        comment: form.key_comment.to_owned(),
+    };
 
-    //TODO: insert user key and assign user to host
+    let res = web::block(move || PublicUserKey::add_key(&mut conn.get().unwrap(), new_key)).await?;
+
+    Ok(match res {
+        Ok(_) => HttpResponse::with_body(StatusCode::CREATED, String::from("Added key.")),
+        Err(e) => HttpResponse::with_body(StatusCode::INTERNAL_SERVER_ERROR, e),
+    })
 }
 
 #[derive(Template)]
@@ -140,16 +136,19 @@ struct KeyListTemplate {
 pub async fn render_user_keys(
     conn: Data<ConnectionPool>,
     username: Path<String>,
-) -> impl Responder {
-    let mut connection = conn.get().unwrap();
+) -> actix_web::Result<impl Responder> {
+    let maybe_user_keys = web::block(move || {
+        let mut connection = conn.get().unwrap();
+        let user = User::get_user(&mut connection, username.to_string())?;
 
-    match User::get_user(&mut connection, username.to_string()) {
-        Ok(user) => match user.get_keys(&mut connection) {
-            Ok(keys) => KeyListTemplate { keys }.to_response(),
-            Err(error) => RenderErrorTemplate { error }.to_response(),
-        },
+        user.get_keys(&mut connection)
+    })
+    .await?;
+
+    Ok(match maybe_user_keys {
+        Ok(keys) => KeyListTemplate { keys }.to_response(),
         Err(error) => RenderErrorTemplate { error }.to_response(),
-    }
+    })
 }
 
 #[derive(Template)]
@@ -170,32 +169,65 @@ struct ShowHostTemplate {
     users: Vec<User>,
 }
 
-#[get("/hosts/{name}")]
-pub async fn show_host(conn: Data<ConnectionPool>, host: Path<String>) -> impl Responder {
-    let mut connection = conn.get().unwrap();
-    match Host::get_host(&mut connection, host.to_string()) {
-        Ok(maybe_host) => match maybe_host {
-            Some(host) => match host.get_hostkeys(&mut connection) {
-                Ok(host_keys) => {
-                    let authorized_users = host.get_authorized_users(&mut connection).unwrap();
-                    ShowHostTemplate {
-                        host,
-                        users: User::get_all_users(&mut connection).unwrap(),
+type HostData = (Host, Vec<HostKey>, Vec<UserAndOptions>, Vec<User>);
 
-                        host_keys,
-                        authorized_users,
-                    }
-                    .to_response()
+enum HostDataError {
+    HostNotFound,
+    DatabaseError(String),
+}
+
+fn get_all_host_data(conn: &mut DbConnection, host: String) -> Result<HostData, HostDataError> {
+    let maybe_host = Host::get_host(conn, host).map_err(HostDataError::DatabaseError)?;
+
+    let host = match maybe_host {
+        Some(e) => e,
+        None => return Err(HostDataError::HostNotFound),
+    };
+
+    let host_keys = host
+        .get_hostkeys(conn)
+        .map_err(HostDataError::DatabaseError)?;
+
+    let authorized_users = host
+        .get_authorized_users(conn)
+        .map_err(HostDataError::DatabaseError)?;
+
+    let user_list = User::get_all_users(conn).map_err(HostDataError::DatabaseError)?;
+
+    Ok((host, host_keys, authorized_users, user_list))
+}
+
+#[get("/hosts/{name}")]
+pub async fn show_host(
+    conn: Data<ConnectionPool>,
+    host: Path<String>,
+) -> actix_web::Result<impl Responder> {
+    let res =
+        web::block(move || get_all_host_data(&mut conn.get().unwrap(), host.to_string())).await?;
+
+    let (host, host_keys, authorized_users, user_list) = match res {
+        Ok(host_data) => host_data,
+        Err(e) => {
+            return Ok(match e {
+                HostDataError::HostNotFound => HttpResponse::with_body(
+                    StatusCode::NOT_FOUND,
+                    String::from("Host not found on server."),
+                ),
+                HostDataError::DatabaseError(e) => {
+                    HttpResponse::with_body(StatusCode::INTERNAL_SERVER_ERROR, e)
                 }
-                Err(error) => ErrorTemplate { error }.to_response(),
-            },
-            None => ErrorTemplate {
-                error: String::from("Specified host not found."),
             }
-            .to_response(),
-        },
-        Err(error) => ErrorTemplate { error }.to_response(),
+            .map_into_boxed_body())
+        }
+    };
+
+    Ok(ShowHostTemplate {
+        host,
+        host_keys,
+        authorized_users,
+        users: user_list,
     }
+    .to_response())
 }
 
 #[derive(Template)]
@@ -209,9 +241,10 @@ pub async fn add_host(
     conn: Data<ConnectionPool>,
     ssh_client: Data<SshClient>,
     form: web::Form<ShortHost>,
-) -> impl Responder {
+) -> actix_web::Result<impl Responder> {
     let host = form.0;
-    match ssh_client
+
+    let (host_keys, hostname, port) = match ssh_client
         .connect(
             host.addr,
             host.user.as_str(),
@@ -219,41 +252,44 @@ pub async fn add_host(
         )
         .await
     {
-        Ok(client) => {
-            let Ok(host_keys) = ssh_client.get_hostkeys(&client).await else {
-                return AddHostTemplate {
-                    response: Err(String::from("Couldn't get servers public key")),
-                }
-                .to_response();
-            };
+        Ok(client) => match ssh_client.get_hostkeys(&client).await {
+            Ok(keys) => {
+                let sock = client.get_connection_address();
+                let hostname = sock.hostname();
+                let port = sock.port() as i16;
 
-            // TODO: prompt user to check host keys validity
+                SshClient::try_disconnect(client).await;
 
-            let connection = &mut conn.get().unwrap();
-            let sock = client.get_connection_address();
-            match Host::add_host(
-                connection,
-                NewHost {
-                    name: host.name.clone(),
-                    // TODO: do this correct
-                    hostname: sock.hostname(),
-                    username: host.user,
-                    port: sock.port() as i16,
-                },
-                &host_keys,
-            ) {
-                Ok(host) => AddHostTemplate {
-                    response: Ok(host.name),
-                }
-                .to_response(),
-                Err(e) => AddHostTemplate { response: Err(e) }.to_response(),
+                (keys, hostname, port)
             }
+            Err(e) => {
+                return Ok(AddHostTemplate {
+                    response: Err(e.to_string()),
+                })
+            }
+        },
+        Err(e) => {
+            return Ok(AddHostTemplate {
+                response: Err(e.to_string()),
+            })
         }
-        Err(e) => AddHostTemplate {
-            response: Err(e.to_string()),
-        }
-        .to_response(),
-    }
+    };
+
+    let new_host = NewHost {
+        name: host.name.clone(),
+        hostname,
+        username: host.user,
+        port,
+    };
+    let res =
+        web::block(move || Host::add_host(&mut conn.get().unwrap(), new_host, &host_keys)).await?;
+
+    Ok(match res {
+        Ok(_) => AddHostTemplate {
+            response: Ok(host.name),
+        },
+        Err(e) => AddHostTemplate { response: Err(e) },
+    })
 }
 
 #[derive(Template)]
@@ -263,14 +299,16 @@ struct RenderHostsTemplate {
 }
 
 #[get("/render/hosts")]
-pub async fn render_hosts(conn: Data<ConnectionPool>) -> impl Responder {
-    match Host::get_all_hosts(&mut conn.get().expect("error")) {
+pub async fn render_hosts(conn: Data<ConnectionPool>) -> actix_web::Result<impl Responder> {
+    let all_hosts = web::block(move || Host::get_all_hosts(&mut conn.get().unwrap())).await?;
+
+    Ok(match all_hosts {
         Ok(all_hosts) => RenderHostsTemplate {
             hosts: all_hosts.iter().map(Host::to_short).collect(),
         }
         .to_response(),
         Err(error) => RenderErrorTemplate { error }.to_response(),
-    }
+    })
 }
 
 #[derive(Template)]
@@ -280,11 +318,15 @@ struct KeysPageTemplate {
 }
 
 #[get("/keys")]
-pub async fn list_keys(conn: Data<ConnectionPool>) -> impl Responder {
-    match PublicUserKey::get_all_keys_with_username(&mut conn.get().unwrap()) {
+pub async fn list_keys(conn: Data<ConnectionPool>) -> actix_web::Result<impl Responder> {
+    let all_keys =
+        web::block(move || PublicUserKey::get_all_keys_with_username(&mut conn.get().unwrap()))
+            .await?;
+
+    Ok(match all_keys {
         Ok(keys) => KeysPageTemplate { keys }.to_response(),
         Err(error) => ErrorTemplate { error }.to_response(),
-    }
+    })
 }
 
 #[derive(Template)]
@@ -309,41 +351,44 @@ struct RenderDiffTemplate {
 pub async fn render_diff(
     conn: Data<ConnectionPool>,
     ssh_client: Data<SshClient>,
-) -> impl Responder {
+) -> actix_web::Result<impl Responder> {
     use futures::future::join_all;
 
-    let mut connection = conn.get().unwrap();
+    let res = web::block(move || {
+        let mut connection = conn.get().unwrap();
 
-    let user_list = match User::get_all_users(&mut connection) {
-        Ok(u) => u,
-        Err(error) => return RenderErrorTemplate { error }.to_response(),
+        let host_list = Host::get_all_hosts(&mut connection)?;
+        let user_list = User::get_all_users(&mut connection)?;
+
+        Ok((host_list, user_list))
+    })
+    .await?;
+
+    let (host_list, user_list) = match res {
+        Ok(t) => t,
+        Err(error) => return Ok(RenderErrorTemplate { error }.to_response()),
     };
 
-    match Host::get_all_hosts(&mut connection) {
-        Ok(host_list) => {
-            let host_diff_futures = host_list.iter().map(|host| ssh_client.get_host_diff(host));
+    let host_diff_futures = host_list.iter().map(|host| ssh_client.get_host_diff(host));
 
-            let host_diffs = join_all(host_diff_futures)
-                .await
-                .iter()
-                .filter_map(|val| match val {
-                    Ok(e) => Some(e),
-                    Err(e) => {
-                        error!("{}", e.to_string());
-                        None
-                    }
-                })
-                .cloned()
-                .collect();
-
-            RenderDiffTemplate {
-                hosts: host_diffs,
-                users: user_list,
+    let host_diffs = join_all(host_diff_futures)
+        .await
+        .iter()
+        .filter_map(|val| match val {
+            Ok(e) => Some(e),
+            Err(e) => {
+                error!("{}", e.to_string());
+                None
             }
-            .to_response()
-        }
-        Err(error) => RenderErrorTemplate { error }.to_response(),
+        })
+        .cloned()
+        .collect();
+
+    Ok(RenderDiffTemplate {
+        hosts: host_diffs,
+        users: user_list,
     }
+    .to_response())
 }
 
 #[derive(Deserialize)]
@@ -358,14 +403,19 @@ pub async fn authorize_user(
     conn: Data<ConnectionPool>,
 
     form: web::Form<AuthorizeUserForm>,
-) -> impl Responder {
-    match Host::authorize_user(
-        &mut conn.get().unwrap(),
-        form.host_id,
-        form.user_id,
-        form.options.to_owned(),
-    ) {
+) -> actix_web::Result<impl Responder> {
+    let res = web::block(move || {
+        Host::authorize_user(
+            &mut conn.get().unwrap(),
+            form.host_id,
+            form.user_id,
+            form.options.to_owned(),
+        )
+    })
+    .await?;
+
+    Ok(match res {
         Ok(_) => HttpResponse::with_body(StatusCode::OK, String::from("Authorized user.")),
         Err(e) => HttpResponse::with_body(StatusCode::INTERNAL_SERVER_ERROR, e),
-    }
+    })
 }

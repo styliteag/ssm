@@ -34,6 +34,7 @@ impl User {
         })
     }
 
+    /// Add a new user to the Database. Returns the username
     pub fn add_user(conn: &mut DbConnection, user: NewUser) -> Result<String, String> {
         query(insert_into(users::table).values(user.clone()).execute(conn)).map(|_| user.username)
     }

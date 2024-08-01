@@ -32,17 +32,15 @@ impl Host {
         conn: &mut DbConnection,
         host: NewHost,
         new_host_keys: &[SshPublicKey],
-    ) -> Result<Host, String> {
+    ) -> Result<(), String> {
         use crate::schema::host_keys::dsl::*;
 
-        let mut inserted_host_id = -1;
-
-        let transaction = query(conn.transaction(|connection| {
+        let transaction = conn.transaction(|connection| {
             insert_into(hosts::table)
                 .values(host.clone())
                 .execute(connection)?;
 
-            inserted_host_id = hosts::table
+            let inserted_host_id = hosts::table
                 .filter(hosts::name.eq(host.name.clone()))
                 .first::<Self>(connection)?
                 .id;
@@ -61,14 +59,8 @@ impl Host {
                         .execute(connection)
                         .map(|_| ())
                 })
-        }));
-        transaction.map(|_| Host {
-            id: inserted_host_id,
-            name: host.name,
-            username: host.username,
-            hostname: host.hostname,
-            port: host.port,
-        })
+        });
+        query(transaction)
     }
 
     pub fn authorize_user(
