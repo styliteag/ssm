@@ -13,19 +13,19 @@
 
 <body>
 	<nav>
-		<a href="/">Overview</a>
-		<a href="/diff">View diff</a>
-		<a href="/hosts">List hosts</a>
-		<a href="/users">List Users</a>
-		<a href="/keys">List keys</a>
+		<ul>
+			<li><a href="/">Overview</a></li>
+			<li><a href="/hosts">List hosts</a></li>
+			<li><a href="/diff">View diff</a></li>
+			<li><a href="/users">List Users</a></li>
+			<li><a href="/keys">List keys</a></li>
+		</ul>
 	</nav>
 
-	{% block body %}
 	<main>
 		{% block content %}
 		{% endblock %}
 	</main>
-	{% endblock %}
 
 	{% block footer %}
 	<footer>

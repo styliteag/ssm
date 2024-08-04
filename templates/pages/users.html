@@ -1,28 +1,14 @@
+{%- import "components.html" as components -%}
 {% extends "base.html" %}
 
 {% block content %}
-<h3>Add new user</h3>
-<form hx-post="/users/add" hx-target="#form_response" hx-swap="outerHTML">
-  <div>
-    <label>Name</label>
-    <input type="text" name="username">
-  </div>
-  <button>Submit</button>
-</form>
-<div id="form_response" style="display:none"></div>
-
-
 <h3>List of all users:</h3>
-<table>
-  <tr>
-    <th>Username</th>
-    <th>Enabled</th>
-  </tr>
-  {% for user in users %}
-  <tr>
-    <td><a href="/users/{{ user.username }}">{{ user.username }}</a></td>
-    <td>{{ user.enabled }}</td>
-  </tr>
-  {% endfor %}
+<table hx-trigger="load, reload-users from:main" hx-get="/render/users" placeholder="Loading">
 </table>
+<hr>
+{% call components::form_head("/users/add") %}
+<h3>Add new user</h3>
+<label>Name</label>
+<input type="text" name="username">
+{% call components::form_tail("Add user") %}
 {% endblock %}

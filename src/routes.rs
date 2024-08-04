@@ -3,20 +3,57 @@ use actix_web::{
     http::StatusCode,
     post,
     web::{self, Data, Path},
-    HttpResponse, Responder,
+    HttpResponse, HttpResponseBuilder, Responder,
 };
 use askama_actix::{Template, TemplateToResponse};
-use async_ssh2_tokio::ToSocketAddrsWithHostname;
-use log::error;
 use serde::Deserialize;
 
 use crate::{
     db::{UserAndOptions, UsernameAndKey},
-    sshclient::{HostDiff, ShortHost, SshClient, SshPublicKey},
+    sshclient::{ConnectionDetails, HostDiff, SshClient, SshPublicKey},
     ConnectionPool, DbConnection,
 };
 
-use crate::models::{Host, HostKey, NewHost, NewPublicUserKey, NewUser, PublicUserKey, User};
+use crate::models::{Host, NewHost, NewPublicUserKey, NewUser, PublicUserKey, User};
+
+struct Modal {
+    title: String,
+    request_target: String,
+    template: String,
+    button_text: String,
+}
+
+enum FormResponse {
+    /// A successful Response with a message
+    Success(String),
+    /// An error Response with a message
+    Error(String),
+    /// Show a modal to the user
+    Dialog(Modal),
+}
+
+#[derive(Template)]
+#[template(path = "render/form_response.html")]
+struct FormResponseTemplate {
+    res: FormResponse,
+}
+
+/// Build a response to a post request.
+fn return_form_boxed(
+    status_code: StatusCode,
+    trigger: Option<String>,
+    form_response: FormResponse,
+) -> HttpResponse {
+    let mut builder = HttpResponseBuilder::new(status_code);
+    if matches!(form_response, FormResponse::Dialog(_)) {
+        builder.insert_header(("X-MODAL", "open"));
+    };
+    if let Some(trigger_value) = trigger {
+        builder.insert_header((String::from("HX-Trigger"), trigger_value));
+    };
+
+    builder.body(FormResponseTemplate { res: form_response }.to_string())
+}
 
 #[derive(Template)]
 #[template(path = "error.html")]
@@ -51,17 +88,26 @@ pub async fn index() -> impl Responder {
 
 #[derive(Template)]
 #[template(path = "pages/users.html")]
-struct UsersTemplate {
+struct UsersTemplate {}
+
+#[get("/users")]
+pub async fn users_page() -> impl Responder {
+    UsersTemplate {}
+}
+
+#[derive(Template)]
+#[template(path = "render/list_users.html")]
+struct RenderUsersTemplate {
     users: Vec<User>,
 }
 
-#[get("/users")]
-pub async fn users(conn: Data<ConnectionPool>) -> actix_web::Result<impl Responder> {
-    let maybe_users = web::block(move || User::get_all_users(&mut conn.get().unwrap())).await?;
+#[get("/render/users")]
+pub async fn render_users(conn: Data<ConnectionPool>) -> actix_web::Result<impl Responder> {
+    let all_users = web::block(move || User::get_all_users(&mut conn.get().unwrap())).await?;
 
-    Ok(match maybe_users {
-        Ok(users) => UsersTemplate { users }.to_response(),
-        Err(error) => ErrorTemplate { error }.to_response(),
+    Ok(match all_users {
+        Ok(users) => RenderUsersTemplate { users }.to_response(),
+        Err(error) => RenderErrorTemplate { error }.to_response(),
     })
 }
 
@@ -93,9 +139,67 @@ pub async fn add_user(
 
     let res = web::block(move || User::add_user(&mut conn.get().unwrap(), new_user)).await?;
     Ok(match res {
-        Ok(_) => HttpResponse::with_body(StatusCode::CREATED, String::from("Added user.")),
-        Err(e) => HttpResponse::with_body(StatusCode::INTERNAL_SERVER_ERROR, e),
+        Ok(_) => return_form_boxed(
+            StatusCode::CREATED,
+            Some(String::from("reload-users")),
+            FormResponse::Success(String::from("Added user.")),
+        ),
+        Err(e) => return_form_boxed(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            None,
+            FormResponse::Error(e),
+        ),
     })
+}
+
+#[derive(Deserialize)]
+struct DeleteUserForm {
+    username: String,
+    confirm: Option<bool>,
+}
+
+#[derive(Template)]
+#[template(path = "render/delete_user.html")]
+struct DeleteUserResponse {
+    username: String,
+}
+
+#[post("/users/delete")]
+pub async fn delete_user(
+    conn: Data<ConnectionPool>,
+    form: web::Form<DeleteUserForm>,
+) -> actix_web::Result<impl Responder> {
+    let username = form.0.username;
+    let confirmation = form.0.confirm.is_some_and(|c| c);
+
+    if confirmation {
+        let res =
+            web::block(move || User::delete_user(&mut conn.get().unwrap(), username.as_str()))
+                .await?;
+        Ok(match res {
+            Ok(()) => return_form_boxed(
+                StatusCode::OK,
+                None,
+                FormResponse::Success(String::from("Deleted user.")),
+            ),
+            Err(e) => return_form_boxed(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                None,
+                FormResponse::Error(e),
+            ),
+        })
+    } else {
+        Ok(return_form_boxed(
+            StatusCode::OK,
+            None,
+            FormResponse::Dialog(Modal {
+                title: String::from("Are you sure you want to delete this user?"),
+                request_target: String::from("/users/delete"),
+                template: DeleteUserResponse { username }.to_string(),
+                button_text: String::from("Delete"),
+            }),
+        ))
+    }
 }
 
 #[derive(Deserialize)]
@@ -121,8 +225,16 @@ pub async fn assign_key_to_user(
     let res = web::block(move || PublicUserKey::add_key(&mut conn.get().unwrap(), new_key)).await?;
 
     Ok(match res {
-        Ok(()) => HttpResponse::with_body(StatusCode::CREATED, String::from("Added key.")),
-        Err(e) => HttpResponse::with_body(StatusCode::INTERNAL_SERVER_ERROR, e),
+        Ok(()) => return_form_boxed(
+            StatusCode::CREATED,
+            None,
+            FormResponse::Success(String::from("Added key.")),
+        ),
+        Err(e) => return_form_boxed(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            None,
+            FormResponse::Error(e),
+        ),
     })
 }
 
@@ -205,25 +317,27 @@ pub async fn show_host(
     let res =
         web::block(move || get_all_host_data(&mut conn.get().unwrap(), host.to_string())).await?;
 
-    let (host, host_keys, authorized_users, user_list) = match res {
+    let (host, jumphost, authorized_users, user_list) = match res {
         Ok(host_data) => host_data,
         Err(e) => {
             return Ok(match e {
-                HostDataError::HostNotFound => HttpResponse::with_body(
+                HostDataError::HostNotFound => return_form_boxed(
                     StatusCode::NOT_FOUND,
-                    String::from("Host not found on server."),
+                    None,
+                    FormResponse::Error(String::from("Host not found on server.")),
                 ),
-                HostDataError::DatabaseError(e) => {
-                    HttpResponse::with_body(StatusCode::INTERNAL_SERVER_ERROR, e)
-                }
-            }
-            .map_into_boxed_body())
+                HostDataError::DatabaseError(e) => return_form_boxed(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    None,
+                    FormResponse::Error(e),
+                ),
+            })
         }
     };
 
     Ok(ShowHostTemplate {
         host,
-        host_keys,
+        jumphost,
         authorized_users,
         users: user_list,
     }
@@ -231,71 +345,158 @@ pub async fn show_host(
 }
 
 #[derive(Template)]
-#[template(path = "render/add_host.html")]
-struct AddHostTemplate {
-    response: Result<String, String>,
+#[template(path = "render/host_hostkey_response.html")]
+struct HostkeyResponseTemplate {
+    name: String,
+    username: String,
+    hostname: String,
+    port: i32,
+    key_fingerprint: String,
+    jumphost: Option<i32>,
+}
+
+#[derive(Deserialize)]
+struct HostAddForm {
+    name: String,
+    username: String,
+    hostname: String,
+    port: i32,
+    jumphost: Option<i32>,
+    key_fingerprint: Option<String>,
 }
 
 #[post("/hosts/add")]
 pub async fn add_host(
     conn: Data<ConnectionPool>,
     ssh_client: Data<SshClient>,
-    form: web::Form<ShortHost>,
+    form: web::Form<HostAddForm>,
 ) -> actix_web::Result<impl Responder> {
-    let host = form.0;
+    let form = form.0;
 
-    let (host_keys, hostname, port) = match ssh_client
-        .connect(
-            host.addr,
-            host.user.as_str(),
-            async_ssh2_tokio::ServerCheckMethod::NoCheck,
-        )
-        .await
-    {
-        Ok(client) => match ssh_client.get_hostkeys(&client).await {
-            Ok(keys) => {
-                let sock = client.get_connection_address();
-                let hostname = sock.hostname();
-                let port = sock.port() as i16;
-
-                SshClient::try_disconnect(client).await;
-
-                (keys, hostname, port)
+    let cloned_conn = conn.clone();
+    let maybe_jumphost: Option<Host> = if let Some(via) = form.jumphost {
+        match web::block(move || Host::get_host_id(&mut cloned_conn.get().unwrap(), via)).await? {
+            Ok(j) => j,
+            Err(_) => {
+                return Ok(return_form_boxed(
+                    StatusCode::NOT_FOUND,
+                    None,
+                    FormResponse::Error(String::from("Couldn't find jump host")),
+                ));
             }
-            Err(e) => {
-                return Ok(AddHostTemplate {
-                    response: Err(e.to_string()),
-                })
-            }
-        },
-        Err(e) => {
-            return Ok(AddHostTemplate {
-                response: Err(e.to_string()),
-            })
         }
+    } else {
+        None
+    };
+    let address = match ConnectionDetails::new_from_signed(form.hostname.clone(), form.port) {
+        Ok(c) => c,
+        Err(_) => {
+            return Ok(return_form_boxed(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                None,
+                FormResponse::Error(String::from("Invalid port number")),
+            ))
+        }
+    };
+    let Some(key_fingerprint) = form.key_fingerprint else {
+        let connection_res = match maybe_jumphost {
+            Some(via) => ssh_client.get_hostkey_via(via, address).await,
+            None => ssh_client.get_hostkey(address).await,
+        };
+
+        let Ok(key_receiver) = connection_res else {
+            return Ok(return_form_boxed(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                None,
+                FormResponse::Error(String::from("Couldn't connect to host.")),
+            ));
+        };
+
+        let key_fingerprint = match web::block(move || key_receiver.recv()).await? {
+            Ok(key) => key,
+            Err(_) => {
+                return Ok(return_form_boxed(
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    None,
+                    FormResponse::Error(String::from("Connection timed out.")),
+                ))
+            }
+        };
+
+        return Ok(return_form_boxed(
+            StatusCode::OK,
+            None,
+            FormResponse::Dialog(Modal {
+                title: String::from("Please check the hostkey"),
+                request_target: String::from("/hosts/add"),
+                template: HostkeyResponseTemplate {
+                    name: form.name,
+                    username: form.username,
+                    hostname: form.hostname,
+                    port: form.port,
+                    jumphost: form.jumphost,
+                    key_fingerprint,
+                }
+                .to_string(),
+                button_text: String::from("Continue"),
+            }),
+        ));
+    };
+
+    if let Err(error) = {
+        match maybe_jumphost {
+            Some(via) => {
+                ssh_client
+                    .try_authenticate_via(
+                        via,
+                        address,
+                        key_fingerprint.clone(),
+                        form.username.clone(),
+                    )
+                    .await
+            }
+            None => {
+                ssh_client
+                    .try_authenticate(address, key_fingerprint.clone(), form.username.clone())
+                    .await
+            }
+        }
+    } {
+        return Ok(return_form_boxed(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            None,
+            FormResponse::Error(error.to_string()),
+        ));
     };
 
     let new_host = NewHost {
-        name: host.name.clone(),
-        hostname,
-        username: host.user,
-        port,
+        name: form.name.clone(),
+        hostname: form.hostname,
+        port: form.port,
+        username: form.username,
+        key_fingerprint,
+        jump_via: form.jumphost,
     };
-    let res =
-        web::block(move || Host::add_host(&mut conn.get().unwrap(), &new_host, &host_keys)).await?;
+    let res = web::block(move || Host::add_host(&mut conn.get().unwrap(), &new_host)).await?;
 
     Ok(match res {
-        Ok(()) => AddHostTemplate {
-            response: Ok(host.name),
-        },
-        Err(e) => AddHostTemplate { response: Err(e) },
+        Ok(()) => return_form_boxed(
+            StatusCode::CREATED,
+            Some(String::from("reload-hosts")),
+            FormResponse::Success(String::from("Host sucessfully added.")),
+        ),
+        Err(e) => return_form_boxed(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            None,
+            FormResponse::Error(e),
+        ),
     })
 }
 
 #[derive(Template)]
 #[template(path = "render/list_hosts.html")]
 struct RenderHostsTemplate {
-    hosts: Vec<ShortHost>,
+    hosts: Vec<Host>,
 }
 
 #[get("/render/hosts")]
@@ -303,10 +504,7 @@ pub async fn render_hosts(conn: Data<ConnectionPool>) -> actix_web::Result<impl 
     let all_hosts = web::block(move || Host::get_all_hosts(&mut conn.get().unwrap())).await?;
 
     Ok(match all_hosts {
-        Ok(all_hosts) => RenderHostsTemplate {
-            hosts: all_hosts.iter().map(Host::to_short).collect(),
-        }
-        .to_response(),
+        Ok(all_hosts) => RenderHostsTemplate { hosts: all_hosts }.to_response(),
         Err(error) => RenderErrorTemplate { error }.to_response(),
     })
 }
@@ -415,7 +613,15 @@ pub async fn authorize_user(
     .await?;
 
     Ok(match res {
-        Ok(()) => HttpResponse::with_body(StatusCode::OK, String::from("Authorized user.")),
-        Err(e) => HttpResponse::with_body(StatusCode::INTERNAL_SERVER_ERROR, e),
+        Ok(()) => return_form_boxed(
+            StatusCode::OK,
+            None,
+            FormResponse::Success(String::from("Authorized user.")),
+        ),
+        Err(e) => return_form_boxed(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            None,
+            FormResponse::Error(e),
+        ),
     })
 }

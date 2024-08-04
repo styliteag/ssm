@@ -1,25 +1,25 @@
+{%- import "components.html" as components -%}
 {% extends "base.html" %}
 
 {% block content %}
-<h3>Add new host</h3>
-<form hx-post="/hosts/add" hx-target="#form_response" hx-swap="outerHTML">
-  <div>
-    <label>Name</label>
-    <input type="text" name="name">
-  </div>
-  <div>
-    <label>Username to authenticate as</label>
-    <input type="text" name="user">
-  </div>
-  <div>
-    <label>Address with port</label>
-    <input type="text" name="addr">
-  </div>
-  <button>Submit</button>
-</form>
-<div id="form_response" style="display:none"></div>
 
-<h3>List of all hosts:</h3>
-<button hx-target="#host_list" hx-trigger="load, click" hx-get="/render/hosts" placeholder="Loading...">Reload</button>
-<table id="host_list"></table>
+<h3>Hosts</h3>
+<hr>
+<table hx-trigger="load, reload-hosts from:main" hx-get="/render/hosts" placeholder="Loading" hx-swap="innerHTML">
+</table>
+<hr>
+{% call components::form_head("/hosts/add") %}
+<h4>Add a new host</h4>
+<label>Name</label>
+<input required="true" type="text" name="name">
+<label>Username to authenticate as</label>
+<input required="true" type="text" name="username">
+<label>Hostname</label>
+<input required="true" type="text" name="hostname">
+<label>Port</label>
+<input required="true" type="number" name="port" min="1" max="65535">
+<label>Jump via</label>
+<select id="jumphost_selection" name="jumphost">
+</select>
+{% call components::form_tail("Add host") %}
 {% endblock %}

@@ -1,15 +1,17 @@
-{%- import "components/macros.html" as macros -%}
+{%- import "components.html" as components -%}
 
 {% extends "base.html" %}
 
 {% block content %}
 <h4>Hosts:</h4>
 <ul>
-  {% for host_diff in hosts %}
+  {% for host_diff in host_diffs %}
   <li>
+    {% match host_diff.diff %}
+    {% when Ok with (this_diff) %}
     <h5>{{ host_diff.host.name }}</h5>
     <ul>
-      {% for item in host_diff.diff %}
+      {% for item in this_diff %}
       <li>
         {% match item %}
         {% when crate::sshclient::DiffItem::UnknownKey with (key) %}
@@ -20,25 +22,22 @@
           The following key is not (yet) known:
 
           <div>
-            {% call macros::public_key(key) %}
+            {% call components::public_key(key) %}
           </div>
 
-          <form hx-post="/user/add_key">
+          {% call components::form_head("/user/add_key") %}
+          <input type="hidden" name="key_type" value="{{ key.key_type }}" />
+          <input type="hidden" name="key_base64" value="{{ key.key_base64 }}" />
 
-            <input type="hidden" name="key_type" value="{{ key.key_type }}" />
-            <input type="hidden" name="key_base64" value="{{ key.key_base64 }}" />
+          {% match key.comment %}
+          {% when Some with (comment) %}
+          <input type="hidden" name="key_comment" value="{{ comment }}" />
+          {% when None %}
+          {% endmatch %}
 
-            {% match key.comment %}
-            {% when Some with (comment) %}
-            <input type="hidden" name="key_comment" value="{{ comment }}" />
-            {% when None %}
-            {% endmatch %}
-
-            <label>Assign this key to a user</label>
-
-            {% call macros::user_selection(users) %}
-            <button>Save</button>
-          </form>
+          <label>Assign this key to a user</label>
+          {% call components::user_selection(users) %}
+          {% call components::form_tail("Assign") %}
 
         </details>
         {% when crate::sshclient::DiffItem::KeyMissing with (key, username) %}
@@ -67,6 +66,11 @@
       </li>
       {% endfor %}
     </ul>
+    {% when Err with (err) %}
+    <p>Host
+    <pre>{{ host_diff.host.name }} failed with {{ err }}</pre>
+    </p>
+    {% endmatch %}
   </li>
   {% endfor %}
 </ul>

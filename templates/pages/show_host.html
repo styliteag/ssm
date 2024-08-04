@@ -1,13 +1,19 @@
-{%- import "components/macros.html" as macros -%}
+{%- import "components.html" as components -%}
 
 {% extends "base.html" %}
 
 {% block content %}
 <h3>Host: {{ host.name }}</h3>
-<p> Hostname: {{ host.hostname }}</p>
-<p> Port: {{ host.port }}</p>
-<p> Username: {{ host.username }}</p>
-<p> Allowed users:</p>
+<p>Hostname: {{ host.hostname }}</p>
+<p>Port: {{ host.port }}</p>
+<p>Username: {{ host.username }}</p>
+<p>Key fingerprint: {{ host.key_fingerprint }}</p>
+{% match jumphost %}
+{% when Some with (via) %}
+<p>Connecting via: <a href="/hosts/{{ via }}">{{ via }}</a></p>
+{% when None %}
+{% endmatch %}
+<p>Allowed users:</p>
 <table>
   <tr>
     <th>User</th>
@@ -27,25 +33,11 @@
   </tr>
   {% endfor %}
 </table>
-<div>
-  <h3>Add a users to this host</h3>
-  <form hx-post="/hosts/user/authorize">
-    <input type="hidden" name="host_id" value="{{ host.id }}" />
-
-    {% call macros::user_selection(users) %}
-
-    <label>Options</label>
-    <input name="options">
-    <button>Submit</button>
-  </form>
-
-</div>
-<p> Hostkeys:</p>
-<div>
-  {% for key in host_keys %}
-  <p>
-  <pre>{{ key }}</pre>
-  </p>
-  {% endfor %}
-</div>
+{% call components::form_head("/hosts/user/authorize") %}
+<h3>Authorize a user on this host</h3>
+<input type="hidden" name="host_id" value="{{ host.id }}" />
+{% call components::user_selection(users) %}
+<label>Options</label>
+<input name="options">
+{% call components::form_tail("Authorize user") %}
 {% endblock %}

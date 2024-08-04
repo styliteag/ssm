@@ -1,5 +1,4 @@
 
 - Support RSA keys for Private Key
 - Bundle HTMX library
-- Write an abstraction for form handling
 - Handle all (recoverable) errors

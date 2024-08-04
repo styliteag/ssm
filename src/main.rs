@@ -126,7 +126,7 @@ async fn main() -> Result<(), std::io::Error> {
             .service(routes::diff)
             .service(routes::render_diff)
             .service(routes::authorize_user)
-            .service(Files::new("/", "./static").use_last_modified(true))
+            .service(Files::new("/", "./static"))
             .default_service(web::to(routes::not_found))
     })
     // TODO: make address and port configurable

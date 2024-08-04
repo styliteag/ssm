@@ -3,12 +3,19 @@
 {% block content %}
 <tr>
   <th>Host</th>
-  <th>Address</th>
+  <th>Hostname</th>
 </tr>
 {% for host in hosts %}
-  <tr>
-    <td><a href="/hosts/{{ host.name }}">{{ host.name }}</a></td>
-    <td>{{ host.addr }}</td>
-  </tr>
+<tr>
+  <td><a href="/hosts/{{ host.name }}">{{ host.name }}</a></td>
+  <td>{{ host.hostname}}</td>
+</tr>
 {% endfor %}
+
+<select id="jumphost_selection" name="jumphost" hx-swap-oob="true">
+  <option value="">none</option>
+  {% for host in hosts %}
+  <option value="{{ host.id }}">{{ host.name }}</option>
+  {% endfor %}
+</select>
 {% endblock %}
