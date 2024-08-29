@@ -27,9 +27,6 @@ RUN cargo chef prepare --recipe-path recipe.json
 # STAGE 3 - Build the application
 FROM chef AS builder
 
-# Build and install Diesel
-RUN cargo install diesel_cli --no-default-features --features sqlite
-
 COPY --from=planner /app/recipe.json recipe.json
 # Build dependencies - this is the caching Docker layer!
 RUN cargo chef cook --release --recipe-path recipe.json
@@ -44,13 +41,11 @@ WORKDIR /app
 
 RUN apt-get update && apt-get install -y sqlite3 && rm -rf /var/lib/apt/lists/*
 
-COPY start.sh /app/
-COPY --from=builder /app/Cargo.toml /app/
-COPY --from=builder /app/migrations /app/migrations
-COPY --from=builder /app/static /app/static
-COPY --from=builder /usr/local/cargo/bin/diesel           /app/
 COPY --from=builder /app/target/release/ssh-key-manager   /app/
+
+ENV DATABASE_URL=sqlite://ssh-key-manager.sqlite
+ENV "SSH.PRIVATE_KEY_FILE"=/app/id
 
 EXPOSE 8080
 
-CMD ["./start.sh"]
+CMD ["./ssh-key-manager"]

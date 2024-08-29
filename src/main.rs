@@ -1,10 +1,10 @@
 use std::{env, fs, path::PathBuf};
 
-use actix_files::Files;
 use actix_web::{
     web::{self, Data},
     App, HttpServer,
 };
+use actix_web_static_files::ResourceFiles;
 use config::Config;
 use diesel::prelude::QueryResult;
 use log::{error, info};
@@ -22,6 +22,8 @@ mod models;
 mod routes;
 mod schema;
 mod sshclient;
+
+include!(concat!(env!("OUT_DIR"), "/generated.rs"));
 
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!();
 
@@ -65,8 +67,17 @@ async fn main() -> Result<(), std::io::Error> {
 
     // Load configuration
     let config_path = env::var("CONFIG").unwrap_or_else(|_| String::from("./config.toml"));
-    let configuration: Configuration = Config::builder()
-        .add_source(config::File::with_name(config_path.as_str()))
+    let config_builder = Config::builder();
+
+    let config_builder = if std::path::Path::new(&config_path).exists() {
+        info!("Loading config from '{}'", &config_path);
+        config_builder.add_source(config::File::with_name(&config_path))
+    } else {
+        info!("No configuration file found");
+        config_builder
+    };
+
+    let configuration: Configuration = config_builder
         .add_source(config::Environment::default())
         .set_default("database_url", String::from("sqlite://ssm.db"))
         .expect("String::from always returns a String.")
@@ -109,6 +120,8 @@ async fn main() -> Result<(), std::io::Error> {
 
     info!("Starting ssh-key-manager Server");
     HttpServer::new(move || {
+        let generated = generate();
+
         App::new()
             .app_data(ssh_client.clone())
             .app_data(web::Data::new(pool.clone()))
@@ -129,7 +142,7 @@ async fn main() -> Result<(), std::io::Error> {
             .service(routes::diff)
             .service(routes::render_diff)
             .service(routes::authorize_user)
-            .service(Files::new("/", "./static"))
+            .service(ResourceFiles::new("/", generated))
             .default_service(web::to(routes::not_found))
     })
     // TODO: make address and port configurable
