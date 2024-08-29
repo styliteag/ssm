@@ -51,6 +51,7 @@ pub struct SshConfig {
 pub struct Configuration {
     ssh: SshConfig,
     database_url: String,
+    port: u16,
 }
 
 #[tokio::main]
@@ -81,6 +82,8 @@ async fn main() -> Result<(), std::io::Error> {
         .add_source(config::Environment::default())
         .set_default("database_url", String::from("sqlite://ssm.db"))
         .expect("String::from always returns a String.")
+        .set_default("port", 8080)
+        .unwrap()
         .build()
         .unwrap_or_else(|e| {
             error!(
@@ -146,7 +149,7 @@ async fn main() -> Result<(), std::io::Error> {
             .default_service(web::to(routes::not_found))
     })
     // TODO: make address and port configurable
-    .bind(("0.0.0.0", 8080))?
+    .bind(("0.0.0.0", configuration.port))?
     .run()
     .await
 }

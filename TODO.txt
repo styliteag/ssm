@@ -1,7 +1,6 @@
 
 - Bundle HTMX library
 - update readme
-- configurable listening port
 - detect own key and ignore it
 - detect duplicate keys
 - More context for error propagation
