@@ -24,7 +24,13 @@ pub fn query<T>(query_result: Result<T, Error>) -> Result<T, String> {
     })
 }
 
-/// Same thing as query, but drops Ok type
-pub fn query_drop<T>(query_result: Result<T, Error>) -> Result<(), String> {
-    query(query_result).map(|_| ())
+/// Check usize and return an error when no entries were changed. Drops OK type
+pub fn query_drop(query_result: Result<usize, Error>) -> Result<(), String> {
+    match &query_result {
+        Ok(rows) => match rows {
+            0 => Err(String::from("Record not found.")),
+            _ => Ok(()),
+        },
+        Err(_) => query(query_result).map(|_| ()),
+    }
 }

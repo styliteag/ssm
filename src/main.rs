@@ -1,4 +1,4 @@
-use std::{env, path::PathBuf};
+use std::{env, fs, path::PathBuf};
 
 use actix_files::Files;
 use actix_web::{
@@ -11,12 +11,11 @@ use log::{error, info};
 use serde::Deserialize;
 use sshclient::SshClient;
 
-use async_ssh2_tokio::AuthMethod::PrivateKeyFile;
-
 use diesel::r2d2::ConnectionManager;
 use diesel::r2d2::Pool;
 
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
+use russh::keys::decode_secret_key;
 
 mod db;
 mod models;
@@ -98,13 +97,15 @@ async fn main() -> Result<(), std::io::Error> {
             .expect("Error while running migrations:");
     }
 
-    let ssh_client = Data::new(SshClient::new(
-        pool.clone(),
-        PrivateKeyFile {
-            key_file_path: configuration.ssh.private_key_file,
-            key_pass: configuration.ssh.private_key_passphrase,
-        },
-    ));
+    let key = decode_secret_key(
+        fs::read_to_string(configuration.ssh.private_key_file)
+            .expect("Couldn't read private key file")
+            .as_str(),
+        configuration.ssh.private_key_passphrase.as_deref(),
+    )
+    .expect("Couldn't decipher private key");
+
+    let ssh_client = Data::new(SshClient::new(pool.clone(), key));
 
     info!("Starting ssh-key-manager Server");
     HttpServer::new(move || {
@@ -113,10 +114,12 @@ async fn main() -> Result<(), std::io::Error> {
             .app_data(web::Data::new(pool.clone()))
             .service(routes::index)
             .service(routes::hosts)
-            .service(routes::users)
+            .service(routes::users_page)
+            .service(routes::render_users)
             .service(routes::show_user)
             .service(routes::render_user_keys)
             .service(routes::add_user)
+            .service(routes::delete_user)
             .service(routes::show_host)
             .service(routes::render_hosts)
             .service(routes::add_host)

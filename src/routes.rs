@@ -6,6 +6,7 @@ use actix_web::{
     HttpResponse, HttpResponseBuilder, Responder,
 };
 use askama_actix::{Template, TemplateToResponse};
+use log::debug;
 use serde::Deserialize;
 
 use crate::{
@@ -276,12 +277,12 @@ pub async fn hosts() -> impl Responder {
 #[template(path = "pages/show_host.html")]
 struct ShowHostTemplate {
     host: Host,
-    host_keys: Vec<HostKey>,
+    jumphost: Option<String>,
     authorized_users: Vec<UserAndOptions>,
     users: Vec<User>,
 }
 
-type HostData = (Host, Vec<HostKey>, Vec<UserAndOptions>, Vec<User>);
+type HostData = (Host, Option<String>, Vec<UserAndOptions>, Vec<User>);
 
 enum HostDataError {
     HostNotFound,
@@ -289,16 +290,19 @@ enum HostDataError {
 }
 
 fn get_all_host_data(conn: &mut DbConnection, host: String) -> Result<HostData, HostDataError> {
-    let maybe_host = Host::get_host(conn, host).map_err(HostDataError::DatabaseError)?;
+    let maybe_host = Host::get_host_name(conn, host).map_err(HostDataError::DatabaseError)?;
 
-    let host = match maybe_host {
-        Some(e) => e,
-        None => return Err(HostDataError::HostNotFound),
+    let Some(host) = maybe_host else {
+        return Err(HostDataError::HostNotFound);
     };
 
-    let host_keys = host
-        .get_hostkeys(conn)
-        .map_err(HostDataError::DatabaseError)?;
+    let jumphost = if let Some(id) = host.jump_via {
+        Host::get_host_id(conn, id)
+            .map_err(HostDataError::DatabaseError)?
+            .map(|h| h.name)
+    } else {
+        None
+    };
 
     let authorized_users = host
         .get_authorized_users(conn)
@@ -306,7 +310,7 @@ fn get_all_host_data(conn: &mut DbConnection, host: String) -> Result<HostData, 
 
     let user_list = User::get_all_users(conn).map_err(HostDataError::DatabaseError)?;
 
-    Ok((host, host_keys, authorized_users, user_list))
+    Ok((host, jumphost, authorized_users, user_list))
 }
 
 #[get("/hosts/{name}")]
@@ -373,54 +377,62 @@ pub async fn add_host(
 ) -> actix_web::Result<impl Responder> {
     let form = form.0;
 
+    // TODO: better error handling for jumphost
     let cloned_conn = conn.clone();
     let maybe_jumphost: Option<Host> = if let Some(via) = form.jumphost {
-        match web::block(move || Host::get_host_id(&mut cloned_conn.get().unwrap(), via)).await? {
-            Ok(j) => j,
-            Err(_) => {
-                return Ok(return_form_boxed(
-                    StatusCode::NOT_FOUND,
-                    None,
-                    FormResponse::Error(String::from("Couldn't find jump host")),
-                ));
+        if via < 0 {
+            None
+        } else {
+            match web::block(move || Host::get_host_id(&mut cloned_conn.get().unwrap(), via))
+                .await?
+            {
+                Ok(j) => j,
+                Err(_) => {
+                    return Ok(return_form_boxed(
+                        StatusCode::NOT_FOUND,
+                        None,
+                        FormResponse::Error(String::from("Couldn't find jump host")),
+                    ));
+                }
             }
         }
     } else {
         None
     };
-    let address = match ConnectionDetails::new_from_signed(form.hostname.clone(), form.port) {
-        Ok(c) => c,
-        Err(_) => {
-            return Ok(return_form_boxed(
-                StatusCode::UNPROCESSABLE_ENTITY,
-                None,
-                FormResponse::Error(String::from("Invalid port number")),
-            ))
-        }
+    let Ok(address) = ConnectionDetails::new_from_signed(form.hostname.clone(), form.port) else {
+        return Ok(return_form_boxed(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            None,
+            FormResponse::Error(String::from("Invalid port number")),
+        ));
     };
+    debug!(
+        "Trying to connect to {} on port {} via jumphost: {:?}",
+        &address.hostname, &address.port, maybe_jumphost
+    );
     let Some(key_fingerprint) = form.key_fingerprint else {
         let connection_res = match maybe_jumphost {
             Some(via) => ssh_client.get_hostkey_via(via, address).await,
             None => ssh_client.get_hostkey(address).await,
         };
 
-        let Ok(key_receiver) = connection_res else {
-            return Ok(return_form_boxed(
-                StatusCode::UNPROCESSABLE_ENTITY,
-                None,
-                FormResponse::Error(String::from("Couldn't connect to host.")),
-            ));
-        };
-
-        let key_fingerprint = match web::block(move || key_receiver.recv()).await? {
-            Ok(key) => key,
-            Err(_) => {
+        let key_receiver = match connection_res {
+            Ok(r) => r,
+            Err(e) => {
                 return Ok(return_form_boxed(
                     StatusCode::UNPROCESSABLE_ENTITY,
                     None,
-                    FormResponse::Error(String::from("Connection timed out.")),
+                    FormResponse::Error(e.to_string()),
                 ))
             }
+        };
+
+        let Ok(key_fingerprint) = web::block(move || key_receiver.recv()).await? else {
+            return Ok(return_form_boxed(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                None,
+                FormResponse::Error(String::from("Connection timed out.")),
+            ));
         };
 
         return Ok(return_form_boxed(
@@ -445,10 +457,10 @@ pub async fn add_host(
 
     if let Err(error) = {
         match maybe_jumphost {
-            Some(via) => {
+            Some(ref via) => {
                 ssh_client
                     .try_authenticate_via(
-                        via,
+                        via.clone(),
                         address,
                         key_fingerprint.clone(),
                         form.username.clone(),
@@ -475,7 +487,7 @@ pub async fn add_host(
         port: form.port,
         username: form.username,
         key_fingerprint,
-        jump_via: form.jumphost,
+        jump_via: maybe_jumphost.map(|h| Some(h.id)).unwrap_or(None),
     };
     let res = web::block(move || Host::add_host(&mut conn.get().unwrap(), &new_host)).await?;
 
@@ -539,9 +551,9 @@ pub async fn diff() -> impl Responder {
 #[derive(Template)]
 #[template(path = "render/diff.html")]
 struct RenderDiffTemplate {
-    hosts: Vec<HostDiff>,
+    host_diffs: Vec<HostDiff>,
 
-    /// Users to associate keys with them
+    // Users to associate keys with
     users: Vec<User>,
 }
 
@@ -567,23 +579,25 @@ pub async fn render_diff(
         Err(error) => return Ok(RenderErrorTemplate { error }.to_response()),
     };
 
-    let host_diff_futures = host_list.iter().map(|host| ssh_client.get_host_diff(host));
-
-    let host_diffs = join_all(host_diff_futures)
-        .await
+    let host_diff_futures = host_list
         .iter()
-        .filter_map(|val| match val {
-            Ok(e) => Some(e),
-            Err(e) => {
-                error!("{}", e.to_string());
-                None
-            }
-        })
         .cloned()
-        .collect();
+        .map(|host| ssh_client.get_host_diff(host));
+
+    let host_diffs = join_all(host_diff_futures).await;
+    // .iter()
+    // .filter_map(|val| match val {
+    //     Ok(e) => Some(e),
+    //     Err(e) => {
+    //         error!("{}", e.to_string());
+    //         None
+    //     }
+    // })
+    // .cloned()
+    // .collect();
 
     Ok(RenderDiffTemplate {
-        hosts: host_diffs,
+        host_diffs,
         users: user_list,
     }
     .to_response())

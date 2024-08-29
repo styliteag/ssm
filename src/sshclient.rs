@@ -1,8 +1,13 @@
+use async_trait::async_trait;
 use core::fmt;
-
-use async_ssh2_tokio::{AuthMethod, Client, ServerCheckMethod};
-use log::{error, info, warn};
-use serde::Deserialize;
+use futures::future::BoxFuture;
+use futures::AsyncWriteExt;
+use futures::FutureExt;
+use log::debug;
+use log::error;
+use russh::keys::key::{KeyPair, PublicKey};
+use std::sync::mpsc;
+use std::sync::Arc;
 
 use crate::{
     models::{Host, PublicUserKey},
@@ -10,19 +15,10 @@ use crate::{
 };
 
 #[derive(Debug, Clone)]
-pub enum KeyOwner {
-    Host(i32),
-    User(i32),
-    None,
-}
-
-#[derive(Debug, Clone)]
 pub struct SshPublicKey {
     pub key_type: String,
     pub key_base64: String,
     pub comment: Option<String>,
-    /// Owner of the key. Either a Server or a user
-    pub owner: KeyOwner,
 }
 
 #[derive(Debug)]
@@ -62,7 +58,6 @@ impl From<PublicUserKey> for SshPublicKey {
             key_type: value.key_type,
             key_base64: value.key_base64,
             comment: value.comment,
-            owner: KeyOwner::User(value.user_id),
         }
     }
 }
@@ -101,142 +96,345 @@ impl TryFrom<&str> for SshPublicKey {
             key_type: key_type_str.to_owned(),
             key_base64: parts.next().ok_or(KeyParseError::Malformed)?.to_owned(),
             comment: parts.next().map(String::from),
-            owner: KeyOwner::None,
         })
     }
 }
 
-#[derive(Deserialize, Clone, Debug)]
-pub struct ShortHost {
-    pub name: String,
-    pub addr: String,
-    pub user: String,
-}
-
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct SshClient {
-    auth: AuthMethod,
     conn: ConnectionPool,
+    key: Arc<KeyPair>,
+    config: Arc<russh::client::Config>,
 }
 
 #[derive(Debug)]
 pub enum SshClientError {
     DatabaseError(String),
-    SshError(String),
+    SshError(russh::Error),
     ExecutionError(String),
     NoSuchHost,
+    PortCastFailed,
 }
 
 impl fmt::Display for SshClientError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::DatabaseError(t) | Self::SshError(t) | Self::ExecutionError(t) => {
+            Self::DatabaseError(t) | Self::ExecutionError(t) => {
                 write!(f, "{t}")
             }
+            Self::SshError(e) => write!(f, "{e}"),
             Self::NoSuchHost => write!(f, "The host doesn't exist in the database."),
+            Self::PortCastFailed => write!(f, "Couldn't convert an i32 to u32"),
         }
     }
 }
 
-fn to_connection_err(error: async_ssh2_tokio::Error) -> SshClientError {
-    SshClientError::SshError(error.to_string())
+impl From<russh::Error> for SshClientError {
+    fn from(value: russh::Error) -> Self {
+        Self::SshError(value)
+    }
+}
+
+#[derive(Debug)]
+struct SshHandler {
+    hostkey_fingerprint: String,
+}
+
+#[async_trait]
+impl russh::client::Handler for SshHandler {
+    type Error = SshClientError;
+
+    async fn check_server_key(
+        &mut self,
+        server_public_key: &PublicKey,
+    ) -> Result<bool, Self::Error> {
+        Ok(server_public_key
+            .fingerprint()
+            .eq(&self.hostkey_fingerprint))
+    }
+}
+
+enum FirstConnectionState {
+    KeySender(mpsc::Sender<String>),
+    Hostkey(String),
+}
+struct SshFirstConnectionHandler {
+    state: FirstConnectionState,
+}
+
+#[async_trait]
+impl russh::client::Handler for SshFirstConnectionHandler {
+    type Error = SshClientError;
+
+    async fn check_server_key(
+        &mut self,
+        server_public_key: &PublicKey,
+    ) -> Result<bool, Self::Error> {
+        Ok(match &self.state {
+            FirstConnectionState::KeySender(tx) => {
+                tx.send(server_public_key.fingerprint()).map_err(|_| {
+                    SshClientError::ExecutionError(String::from("Failed to send data over mpsc"))
+                })?;
+                false
+            }
+            FirstConnectionState::Hostkey(known_fingerprint) => {
+                server_public_key.fingerprint().eq(known_fingerprint)
+            }
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ConnectionDetails {
+    pub hostname: String,
+    pub port: u32,
+}
+
+impl ConnectionDetails {
+    pub fn new(hostname: String, port: u32) -> Self {
+        Self { hostname, port }
+    }
+    pub fn new_from_signed(hostname: String, port: i32) -> Result<Self, SshClientError> {
+        Ok(Self {
+            hostname,
+            port: port
+                .try_into()
+                .map_err(|_| SshClientError::PortCastFailed)?,
+        })
+    }
+    pub fn into_addr(self) -> String {
+        format!("{}:{}", self.hostname, self.port)
+    }
 }
 
 impl SshClient {
-    pub fn new(conn: ConnectionPool, auth: AuthMethod) -> Self {
-        Self { auth, conn }
+    pub fn new(conn: ConnectionPool, key: KeyPair) -> Self {
+        Self {
+            conn,
+            key: Arc::new(key),
+            config: Arc::new(russh::client::Config::default()),
+        }
     }
 
-    pub async fn run_command(client: &Client, command: &str) -> Result<String, SshClientError> {
-        match client.execute(command).await {
-            Err(e) => Err(SshClientError::ExecutionError(e.to_string())),
-            Ok(result) => {
-                if result.exit_status != 0 {
-                    return Err(SshClientError::ExecutionError(format!(
-                        "Command exited with code {}",
-                        result.exit_status
-                    )));
-                }
+    /// Tries to connect to a host and returns hostkeys to validate
+    pub async fn get_hostkey(
+        &self,
+        target: ConnectionDetails,
+    ) -> Result<mpsc::Receiver<String>, SshClientError> {
+        let (tx, rx) = mpsc::channel();
 
-                Ok(result.stdout)
+        let handler = SshFirstConnectionHandler {
+            state: FirstConnectionState::KeySender(tx),
+        };
+        match russh::client::connect(
+            Arc::new(russh::client::Config::default()),
+            target.into_addr(),
+            handler,
+        )
+        .await
+        {
+            Ok(_) | Err(SshClientError::SshError(russh::Error::UnknownKey)) => Ok(rx),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Tries to connect to a host via a jumphost and returns hostkeys to validate
+    pub async fn get_hostkey_via(
+        &self,
+        host: Host,
+        target: ConnectionDetails,
+    ) -> Result<mpsc::Receiver<String>, SshClientError> {
+        let stream = self.connect_via(host, target).await?;
+
+        let (tx, rx) = mpsc::channel();
+
+        let handler = SshFirstConnectionHandler {
+            state: FirstConnectionState::KeySender(tx),
+        };
+        match russh::client::connect_stream(
+            Arc::new(russh::client::Config::default()),
+            stream,
+            handler,
+        )
+        .await
+        {
+            Ok(_) | Err(SshClientError::SshError(russh::Error::UnknownKey)) => Ok(rx),
+            Err(e) => Err(e),
+        }
+    }
+
+    pub async fn try_authenticate(
+        &self,
+        address: ConnectionDetails,
+        hostkey: String,
+        user: String,
+    ) -> Result<(), SshClientError> {
+        let handler = SshFirstConnectionHandler {
+            state: FirstConnectionState::Hostkey(hostkey),
+        };
+
+        let mut handle =
+            russh::client::connect(self.config.clone(), address.into_addr(), handler).await?;
+
+        if handle
+            .authenticate_publickey(user, self.key.clone())
+            .await?
+        {
+            Ok(())
+        } else {
+            Err(SshClientError::SshError(russh::Error::NotAuthenticated))
+        }
+    }
+
+    pub async fn try_authenticate_via(
+        &self,
+        host: Host,
+        address: ConnectionDetails,
+        hostkey: String,
+        user: String,
+    ) -> Result<(), SshClientError> {
+        let stream = self.connect_via(host, address).await?;
+
+        let handler = SshFirstConnectionHandler {
+            state: FirstConnectionState::Hostkey(hostkey),
+        };
+
+        let mut handle =
+            russh::client::connect_stream(self.config.clone(), stream, handler).await?;
+
+        if handle
+            .authenticate_publickey(user, self.key.clone())
+            .await?
+        {
+            Ok(())
+        } else {
+            Err(SshClientError::SshError(russh::Error::NotAuthenticated))
+        }
+    }
+
+    async fn get_host_from_id(&self, host_id: i32) -> Result<Host, SshClientError> {
+        // TODO: this is blocking the thread
+        Host::get_host_id(&mut self.conn.get().unwrap(), host_id)
+            .map_err(SshClientError::DatabaseError)?
+            .ok_or(SshClientError::NoSuchHost)
+    }
+
+    fn connect(
+        self,
+        host: Host,
+    ) -> BoxFuture<'static, Result<russh::client::Handle<SshHandler>, SshClientError>> {
+        let handler = SshHandler {
+            hostkey_fingerprint: host.key_fingerprint.clone(),
+        };
+
+        async move {
+            let mut handle = match host.jump_via {
+                Some(via) => {
+                    let jump_host = self.get_host_from_id(via).await?;
+                    let stream = self.connect_via(jump_host, host.to_connection()?).await?;
+
+                    russh::client::connect_stream(self.config.clone(), stream, handler).await
+                }
+                None => {
+                    russh::client::connect(
+                        self.config.clone(),
+                        host.to_connection()?.into_addr(),
+                        handler,
+                    )
+                    .await
+                }
+            }?;
+
+            if !handle
+                .authenticate_publickey(host.username.clone(), self.key.clone())
+                .await?
+            {
+                return Err(SshClientError::SshError(russh::Error::NotAuthenticated));
+            };
+
+            Ok(handle)
+        }
+        .boxed()
+    }
+
+    async fn connect_via(
+        &self,
+        via: Host,
+        to: ConnectionDetails,
+    ) -> Result<russh::ChannelStream<russh::client::Msg>, SshClientError> {
+        let jump_handle = self.clone().connect(via).await?;
+
+        debug!("Got handle for jump host targeting {}", to.hostname);
+
+        Ok(jump_handle
+            .channel_open_direct_tcpip(to.hostname, to.port, "127.0.0.1", 0)
+            .await?
+            .into_stream())
+    }
+
+    async fn execute(
+        &self,
+        handle: russh::client::Handle<SshHandler>,
+        command: &str,
+    ) -> Result<(u32, String), SshClientError> {
+        let mut channel = handle.channel_open_session().await?;
+
+        channel.exec(true, command).await?;
+
+        let mut exit_code: Option<u32> = None;
+        let mut out_buf = Vec::new();
+        // let mut err_buf = Vec::new();
+
+        loop {
+            let Some(msg) = channel.wait().await else {
+                break;
+            };
+            match msg {
+                russh::ChannelMsg::Data { ref data } => {
+                    out_buf
+                        .write_all(data)
+                        .await
+                        .expect("couldnt write to out_buf");
+                }
+                russh::ChannelMsg::ExitStatus { exit_status } => {
+                    exit_code = Some(exit_status);
+                }
+                _ => {}
             }
         }
-    }
 
-    pub async fn connect(
-        &self,
-        addr: String,
-        username: &str,
-        host_key: ServerCheckMethod,
-    ) -> Result<Client, async_ssh2_tokio::Error> {
-        info!(
-            "Trying to connect to '{}' with host_key '{:?}'",
-            addr, host_key
-        );
-        Client::connect(addr, username, self.auth.clone(), host_key).await
-    }
-
-    pub async fn try_connect(&self, host: &Host) -> Result<Client, SshClientError> {
-        let Ok(host_keys) = host.get_hostkeys(&mut self.conn.get().unwrap()) else {
-            return Err(SshClientError::DatabaseError(String::from(
-                "Failed to query host key from database.",
-            )));
-        };
-        for key in host_keys {
-            match self
-                .connect(
-                    host.get_addr(),
-                    host.username.as_str(),
-                    ServerCheckMethod::PublicKey(key.key_base64),
-                )
-                .await
-            {
-                Ok(conn) => return Ok(conn),
-                Err(e) => {
-                    warn!("Couldn't connect to host {}", e.to_string());
+        match exit_code {
+            Some(code) => {
+                if code == 0 {
+                    String::from_utf8(out_buf).map_or(
+                        Err(SshClientError::ExecutionError(String::from(
+                            "Couldn't convert command output to utf-8",
+                        ))),
+                        |out_str| Ok((code, out_str)),
+                    )
+                } else {
+                    Err(SshClientError::ExecutionError(String::from(
+                        "Program didn't exit succesfully",
+                    )))
                 }
-            };
+            }
+            None => Err(SshClientError::ExecutionError(String::from(
+                "Program didn't exit cleanly",
+            ))),
         }
-        Err(SshClientError::SshError(String::from(
-            "Didn't find a matching host key",
-        )))
     }
 
-    pub async fn try_disconnect(client: Client) {
-        client.disconnect().await.map_err(|e| {
-            error!("Error trying to disconnect client: {}", e.to_string());
-        });
-    }
-
-    pub async fn get_hostkeys(&self, client: &Client) -> Result<Vec<SshPublicKey>, SshClientError> {
-        let keys = Self::run_command(client, "cat /etc/ssh/ssh_host_*_key.pub").await?;
-
-        Ok(SshPublicKey::from_lines(&keys))
-    }
     pub async fn get_authorized_keys(
         &self,
-        client: &Client,
-        host: &Host,
+        host: Host,
     ) -> Result<Vec<SshPublicKey>, SshClientError> {
+        let handle = self.clone().connect(host).await?;
+
         // TODO: improve this
         let command_str = "cat ~/.ssh/authorized_keys";
-        let command = client
-            .execute(command_str)
-            .await
-            .map_err(to_connection_err)?;
-        info!(
-            "Host {}: Executed command {} with error code {}",
-            host.name, command_str, command.exit_status
-        );
+        let (_exit_code, output) = self.execute(handle, command_str).await?;
 
-        if command.exit_status != 0 {
-            return Err(SshClientError::SshError(String::from(
-                "Command exited with non-zero exit code",
-            )));
-        }
-
-        let authorized_keys: Vec<SshPublicKey> = command
-            .stdout
+        let authorized_keys: Vec<SshPublicKey> = output
             .lines()
             .filter_map(|auth_line| {
                 if auth_line.starts_with('#') {
@@ -250,32 +448,41 @@ impl SshClient {
     }
 
     /// Check if the host state matches the supposed database state.
-    pub async fn get_host_diff(&self, host: &Host) -> Result<HostDiff, SshClientError> {
-        let Ok(client) = self.try_connect(host).await else {
-            return Err(SshClientError::SshError(String::from(
-                "Couldn't connect to host",
-            )));
+    pub async fn get_host_diff(&self, host: Host) -> HostDiff {
+        let Ok(actual_authorized_keys) = self.get_authorized_keys(host.clone()).await else {
+            return HostDiff {
+                host: host.clone(),
+                diff: Err(SshClientError::DatabaseError(String::from(
+                    "Couldn't get keys for this host from the database",
+                ))),
+            };
         };
-
-        let Ok(actual_authorized_keys) = self.get_authorized_keys(&client, host).await else {
-            return Err(SshClientError::DatabaseError(String::from(
-                "Couldn't get keys for this host from the database",
-            )));
-        };
-
-        Self::try_disconnect(client);
 
         let mut connection = self.conn.get().unwrap();
 
-        let db_all_keys = PublicUserKey::get_all_keys_with_username(&mut connection)
-            .map_err(SshClientError::DatabaseError)?;
+        let db_all_keys = match PublicUserKey::get_all_keys_with_username(&mut connection) {
+            Ok(keys) => keys,
+            Err(e) => {
+                return HostDiff {
+                    host: host.clone(),
+                    diff: Err(SshClientError::DatabaseError(e)),
+                }
+            }
+        };
 
-        let db_authorized_keys: Vec<(String, Option<String>)> = host
-            .get_authorized_keys(&mut connection)
-            .map_err(SshClientError::DatabaseError)?
-            .iter()
-            .map(|(key, options)| (key.key_base64.clone(), options.to_owned()))
-            .collect();
+        let db_authorized_keys: Vec<(String, Option<String>)> =
+            match host.get_authorized_keys(&mut connection) {
+                Ok(keys) => keys
+                    .into_iter()
+                    .map(|(key, options)| (key.key_base64, options))
+                    .collect(),
+                Err(e) => {
+                    return HostDiff {
+                        host: host.clone(),
+                        diff: Err(SshClientError::DatabaseError(e)),
+                    }
+                }
+            };
 
         let mut diff_items = Vec::new();
 
@@ -284,7 +491,7 @@ impl SshClient {
 
             let key_matches = db_authorized_keys
                 .iter()
-                .any(|(db_key, opts)| key.key_base64.eq(db_key));
+                .any(|(db_key, _opts)| key.key_base64.eq(db_key));
 
             if !key_matches {
                 let known_key = db_all_keys
@@ -304,17 +511,17 @@ impl SshClient {
             }
         }
 
-        Ok(HostDiff {
-            host: host.to_owned(),
-            diff: diff_items,
-        })
+        HostDiff {
+            host: host.clone(),
+            diff: Ok(diff_items),
+        }
     }
 }
 
-#[derive(Clone)]
+// #[derive(Clone)]
 pub struct HostDiff {
     pub host: Host,
-    pub diff: Vec<DiffItem>,
+    pub diff: Result<Vec<DiffItem>, SshClientError>,
 }
 
 #[derive(Clone)]

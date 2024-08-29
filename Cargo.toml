@@ -1,14 +1,11 @@
 [package]
 authors = ["Jeidnx <jeidnx@domainhier.de>"]
 edition = "2021"
-# If you change the name here, you must also do it in flake.nix (and run `cargo generate-lockfile` afterwards)
 name = "ssh-key-manager"
 version = "0.0.1-alpha"
 description = "Manage all your ssh keys from one interface"
 repository = "https://github.com/styliteag/ssh-key-manager"
 readme = "README.md"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
 postgres = [ "diesel/postgres", "diesel_migrations/postgres"]
@@ -20,7 +17,7 @@ actix-files = "0.6.6"
 actix-web = "4.7.0"
 askama = { version = "0.12.1", features = ["with-actix-web"] }
 askama_actix = "0.14.0"
-async-ssh2-tokio = "0.8.10"
+async-trait = "0.1.81"
 color-eyre = { version = "0.6.3", default-features = false }
 config = { version = "0.14.0", default-features = false, features = [ "toml" ] }
 diesel = { version = "2.2.0", features = ["sqlite", "r2d2"] }
@@ -28,5 +25,6 @@ diesel_migrations = { version = "2.2.0", features = ["sqlite"] }
 futures = "0.3.30"
 log = "0.4.21"
 pretty_env_logger = "0.5.0"
+russh = "0.44.0"
 serde = "1.0.203"
 tokio = { version = "1", features = ["full"] }

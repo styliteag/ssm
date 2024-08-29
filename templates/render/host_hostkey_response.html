@@ -1,0 +1,13 @@
+<input type="hidden" name="name" value="{{ name }}" />
+<input type="hidden" name="username" value="{{ username }}" />
+<input type="hidden" name="hostname" value="{{ hostname }}" />
+<input type="hidden" name="port" value="{{ port}}" />
+<input type="hidden" name="key_fingerprint" value="{{ key_fingerprint }}" />
+{% match jumphost %}
+{% when Some with (via) %}
+<input type="hidden" name="jumphost" value="{{ via}}" />
+{% when None %}
+{% endmatch %}
+<p>The server offered the following hostkey:</p>
+<pre>{{ key_fingerprint }}</pre>
+<i>Does this look correct?</i>

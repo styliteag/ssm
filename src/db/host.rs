@@ -1,11 +1,11 @@
-use crate::schema::host_keys;
+use crate::schema::host;
+use crate::schema::user;
 use crate::schema::user_in_host;
-use crate::schema::user_keys;
-use crate::schema::users;
+use crate::schema::user_key;
+use crate::sshclient::ConnectionDetails;
+use crate::sshclient::SshClientError;
 use crate::{
-    models::{Host, HostKey, NewHost, NewHostKey, PublicUserKey},
-    schema::hosts,
-    sshclient::{ShortHost, SshPublicKey},
+    models::{Host, NewHost, PublicUserKey},
     DbConnection,
 };
 use diesel::dsl::insert_into;
@@ -17,49 +17,18 @@ use super::UserAndOptions;
 use super::UserkeyAndOptions;
 
 impl Host {
-    pub fn to_short(&self) -> ShortHost {
-        ShortHost {
-            name: self.name.clone(),
-            addr: format!("{}:{}", self.hostname, self.port),
-            user: self.username.clone(),
-        }
+    pub fn to_connection(&self) -> Result<ConnectionDetails, SshClientError> {
+        Ok(ConnectionDetails::new(
+            self.hostname.clone(),
+            self.port
+                .try_into()
+                .map_err(|_| SshClientError::PortCastFailed)?,
+        ))
     }
 
-    pub fn get_addr(&self) -> String {
-        format!("{}:{}", self.hostname, self.port)
-    }
-    /// Adds a new host with corresponding hostkeys to the database
-    pub fn add_host(
-        conn: &mut DbConnection,
-        host: &NewHost,
-        new_host_keys: &[SshPublicKey],
-    ) -> Result<(), String> {
-        let transaction = conn.transaction(|connection| {
-            insert_into(hosts::table)
-                .values(host.clone())
-                .execute(connection)?;
-
-            let inserted_host_id = hosts::table
-                .filter(hosts::name.eq(host.name.clone()))
-                .first::<Self>(connection)?
-                .id;
-
-            new_host_keys
-                .iter()
-                .map(|key| NewHostKey {
-                    key_type: key.key_type.clone(),
-                    key_base64: key.key_base64.clone(),
-                    comment: key.comment.clone(),
-                    host_id: inserted_host_id,
-                })
-                .try_for_each(|new_key| {
-                    insert_into(host_keys::table)
-                        .values(new_key)
-                        .execute(connection)
-                        .map(|_| ())
-                })
-        });
-        query(transaction)
+    /// Adds a new host to the database
+    pub fn add_host(conn: &mut DbConnection, host: &NewHost) -> Result<(), String> {
+        query_drop(insert_into(host::table).values(host.clone()).execute(conn))
     }
 
     pub fn authorize_user(
@@ -79,55 +48,43 @@ impl Host {
         )
     }
 
-    pub fn get_authorzed_user_ids(&self, conn: &mut DbConnection) -> Result<Vec<i32>, String> {
-        query(
-            users::table
-                .inner_join(user_in_host::table.inner_join(hosts::table))
-                .select(user_in_host::user_id)
-                .load::<i32>(conn),
-        )
-    }
-
     /// Get authorized Users and associated options
     pub fn get_authorized_users(
         &self,
         conn: &mut DbConnection,
     ) -> Result<Vec<UserAndOptions>, String> {
-        let user_ids = self.get_authorzed_user_ids(conn)?;
+        // let user_ids = self.get_authorized_user_ids(conn)?;
 
         query(
             user_in_host::table
-                .inner_join(users::table)
-                .select((users::username, user_in_host::options))
-                .filter(
-                    user_in_host::host_id
-                        .eq(self.id)
-                        .and(users::id.eq_any(user_ids)),
-                )
+                .inner_join(user::table)
+                .select((user::username, user_in_host::options))
+                .filter(user_in_host::host_id.eq(self.id))
                 .load::<UserAndOptions>(conn),
         )
     }
 
-    pub fn get_host(conn: &mut DbConnection, host: String) -> Result<Option<Self>, String> {
+    /// Get a host from a name
+    pub fn get_host_name(conn: &mut DbConnection, host: String) -> Result<Option<Self>, String> {
         query(
-            hosts::table
-                .filter(hosts::name.eq(host))
+            host::table
+                .filter(host::name.eq(host))
+                .first::<Self>(conn)
+                .optional(),
+        )
+    }
+
+    /// Get a host from an id
+    pub fn get_host_id(conn: &mut DbConnection, host: i32) -> Result<Option<Self>, String> {
+        query(
+            host::table
+                .filter(host::id.eq(host))
                 .first::<Self>(conn)
                 .optional(),
         )
     }
     pub fn get_all_hosts(conn: &mut DbConnection) -> Result<Vec<Self>, String> {
-        query(hosts::table.load::<Self>(conn))
-    }
-
-    pub fn get_hostkeys(&self, conn: &mut DbConnection) -> Result<Vec<HostKey>, String> {
-        query(
-            host_keys::table
-                .filter(host_keys::host_id.eq(self.id))
-                .load::<HostKey>(conn),
-        )
-
-        // hostkeys.map(|hostkeys| hostkeys.iter().map(SshPublicKey::from).collect())
+        query(host::table.load::<Self>(conn))
     }
 
     /// Gets all keys that are allowed on this server and the associated options
@@ -136,8 +93,8 @@ impl Host {
         conn: &mut DbConnection,
     ) -> Result<Vec<UserkeyAndOptions>, String> {
         query(
-            users::table
-                .inner_join(user_keys::table)
+            user::table
+                .inner_join(user_key::table)
                 .inner_join(user_in_host::table)
                 .select((PublicUserKey::as_select(), user_in_host::options))
                 .filter(user_in_host::host_id.eq(self.id))

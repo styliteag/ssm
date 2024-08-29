@@ -13,7 +13,7 @@
 {% endfor %}
 
 <select id="jumphost_selection" name="jumphost" hx-swap-oob="true">
-  <option value="">none</option>
+  <option value="-1">none</option>
   {% for host in hosts %}
   <option value="{{ host.id }}">{{ host.name }}</option>
   {% endfor %}
