@@ -449,26 +449,12 @@ impl SshClient {
 
     /// Check if the host state matches the supposed database state.
     pub async fn get_host_diff(&self, host: Host) -> HostDiff {
-        let Ok(actual_authorized_keys) = self.get_authorized_keys(host.clone()).await else {
-            return HostDiff {
-                host: host.clone(),
-                diff: Err(SshClientError::DatabaseError(String::from(
-                    "Couldn't get keys for this host from the database",
-                ))),
-            };
-        };
+        let actual_authorized_keys = self.get_authorized_keys(host.clone()).await?;
 
         let mut connection = self.conn.get().unwrap();
 
-        let db_all_keys = match PublicUserKey::get_all_keys_with_username(&mut connection) {
-            Ok(keys) => keys,
-            Err(e) => {
-                return HostDiff {
-                    host: host.clone(),
-                    diff: Err(SshClientError::DatabaseError(e)),
-                }
-            }
-        };
+        let db_all_keys = PublicUserKey::get_all_keys_with_username(&mut connection)
+            .map_err(SshClientError::DatabaseError)?;
 
         let db_authorized_keys: Vec<(String, Option<String>)> =
             match host.get_authorized_keys(&mut connection) {
@@ -477,10 +463,7 @@ impl SshClient {
                     .map(|(key, options)| (key.key_base64, options))
                     .collect(),
                 Err(e) => {
-                    return HostDiff {
-                        host: host.clone(),
-                        diff: Err(SshClientError::DatabaseError(e)),
-                    }
+                    return Err(SshClientError::DatabaseError(e));
                 }
             };
 
@@ -488,6 +471,14 @@ impl SshClient {
 
         for key in actual_authorized_keys {
             // TODO: also check if options are set correct
+
+            let is_own_key = key
+                .key_base64
+                .eq(&PublicKeyBase64::public_key_base64(self.key.as_ref()));
+
+            if is_own_key {
+                continue;
+            };
 
             let key_matches = db_authorized_keys
                 .iter()
@@ -511,18 +502,11 @@ impl SshClient {
             }
         }
 
-        HostDiff {
-            host: host.clone(),
-            diff: Ok(diff_items),
-        }
+        Ok(diff_items)
     }
 }
 
-// #[derive(Clone)]
-pub struct HostDiff {
-    pub host: Host,
-    pub diff: Result<Vec<DiffItem>, SshClientError>,
-}
+pub type HostDiff = Result<Vec<DiffItem>, SshClientError>;
 
 #[derive(Clone)]
 pub enum DiffItem {
@@ -532,4 +516,6 @@ pub enum DiffItem {
     UnknownKey(SshPublicKey),
     /// An unauthorized key belonging to a known user is present.
     UnauthorizedKey(PublicUserKey, String),
+    /// There is a duplicate key
+    DuplicateKey(SshPublicKey),
 }

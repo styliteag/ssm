@@ -2,5 +2,12 @@
 
 {% block content %}
 <h3>Schema diff:</h3>
-<div id="diff" hx-get="/render/diff" hx-trigger="load" >Loading...</div>
+<ul>
+  {% for host in hosts %}
+  <li>
+    <h5>{{ host.name }}</h5>
+    <div hx-get="/render/diff/{{ host.name }}" hx-trigger="load">Loading</div>
+  </li>
+  {% endfor %}
+</ul>
 {% endblock %}

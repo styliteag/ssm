@@ -269,7 +269,7 @@ pub async fn render_user_keys(
 struct HostsTemplate {}
 
 #[get("/hosts")]
-pub async fn hosts() -> impl Responder {
+pub async fn hosts_page() -> impl Responder {
     HostsTemplate {}
 }
 
@@ -541,63 +541,93 @@ pub async fn list_keys(conn: Data<ConnectionPool>) -> actix_web::Result<impl Res
 
 #[derive(Template)]
 #[template(path = "pages/diff.html")]
-struct DiffPageTemplate {}
+struct DiffPageTemplate {
+    hosts: Vec<Host>,
+}
 
 #[get("/diff")]
-pub async fn diff() -> impl Responder {
-    DiffPageTemplate {}
+pub async fn diff_page(conn: Data<ConnectionPool>) -> actix_web::Result<impl Responder> {
+    Ok(
+        match web::block(move || Host::get_all_hosts(&mut conn.get().unwrap())).await? {
+            Ok(hosts) => DiffPageTemplate { hosts }.to_response(),
+            Err(error) => ErrorTemplate { error }.to_response(),
+        },
+    )
+}
+
+#[derive(Template)]
+#[template(path = "pages/show_diff.html")]
+struct ShowDiffTemplate {
+    host: Host,
+}
+
+#[get("/diff/{name}")]
+pub async fn show_diff(
+    conn: Data<ConnectionPool>,
+    host_name: Path<String>,
+) -> actix_web::Result<impl Responder> {
+    Ok(
+        match web::block(move || {
+            Host::get_host_name(&mut conn.get().unwrap(), host_name.to_string())
+        })
+        .await?
+        {
+            Ok(host) => {
+                let Some(host) = host else {
+                    return Ok(ErrorTemplate {
+                        error: String::from("Host not found"),
+                    }
+                    .to_response());
+                };
+                ShowDiffTemplate { host }.to_response()
+            }
+            Err(error) => ErrorTemplate { error }.to_response(),
+        },
+    )
 }
 
 #[derive(Template)]
 #[template(path = "render/diff.html")]
 struct RenderDiffTemplate {
-    host_diffs: Vec<HostDiff>,
+    diff: HostDiff,
 
     // Users to associate keys with
     users: Vec<User>,
 }
 
-#[get("/render/diff")]
+#[get("/render/diff/{name}")]
 pub async fn render_diff(
     conn: Data<ConnectionPool>,
     ssh_client: Data<SshClient>,
+    host_name: Path<String>,
 ) -> actix_web::Result<impl Responder> {
-    use futures::future::join_all;
-
     let res = web::block(move || {
         let mut connection = conn.get().unwrap();
 
-        let host_list = Host::get_all_hosts(&mut connection)?;
+        let host_list = Host::get_host_name(&mut connection, host_name.to_string())?;
         let user_list = User::get_all_users(&mut connection)?;
 
         Ok((host_list, user_list))
     })
     .await?;
 
-    let (host_list, user_list) = match res {
-        Ok(t) => t,
+    let (host, user_list) = match res {
+        Ok((maybe_host, users)) => {
+            let Some(host) = maybe_host else {
+                return Ok(RenderErrorTemplate {
+                    error: String::from("No such host."),
+                }
+                .to_response());
+            };
+            (host, users)
+        }
         Err(error) => return Ok(RenderErrorTemplate { error }.to_response()),
     };
 
-    let host_diff_futures = host_list
-        .iter()
-        .cloned()
-        .map(|host| ssh_client.get_host_diff(host));
-
-    let host_diffs = join_all(host_diff_futures).await;
-    // .iter()
-    // .filter_map(|val| match val {
-    //     Ok(e) => Some(e),
-    //     Err(e) => {
-    //         error!("{}", e.to_string());
-    //         None
-    //     }
-    // })
-    // .cloned()
-    // .collect();
+    let diff = ssh_client.get_host_diff(host).await;
 
     Ok(RenderDiffTemplate {
-        host_diffs,
+        diff,
         users: user_list,
     }
     .to_response())

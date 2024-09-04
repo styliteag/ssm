@@ -1,14 +1,12 @@
 
 - Bundle HTMX library
 - update readme
-- detect own key and ignore it
 - detect duplicate keys
 - More context for error propagation
 - Update authorized keys
   - incremental or generate from state?
 - Frontend
   - show which hosts a user can access
-  - host listing seperate diff button
   - authorize user update
   - delete host
   - (diff page) form handling
