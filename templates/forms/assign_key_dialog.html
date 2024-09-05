@@ -1,0 +1,12 @@
+{%- import "components.html" as components -%}
+<input type=hidden name="key_type" value="{{ key.key_type }}" />
+<input type=hidden name="key_base64" value="{{ key.key_base64 }}" />
+{% match key.comment %}
+{% when Some with (comment) %}
+<input type=hidden name="key_comment" value="{{ comment }}" />
+{% when None %}
+{% endmatch %}
+
+{% call components::public_key(key) %}
+{% call components::user_selection(users) %}
+<button>Assign</button>

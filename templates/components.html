@@ -22,79 +22,11 @@
 </select>
 {% endmacro %}
 
-{# TODO: currently this only allows for one form per page #}
 {% macro form_head(target) %}
-<div id="form_boundary">
-  <form hx-post="{{ target }}" hx-swap="none">
-    {% endmacro %}}}
+<form hx-post="{{ target }}" hx-swap="none">
+  {% endmacro %}}}
 
-    {% macro form_tail(message) %}
-    <button id="submit_btn">{{ message }}</button>
-  </form>
-  <aside class="form_response" id="form_response_success" style="display: none"></aside>
-  <aside class="form_response" id="form_response_error" style="display: none"></aside>
-  <dialog id="form_response_dialog">
-  </dialog>
-</div>
-<script>
-  const form = document.querySelector("#form_boundary");
-  const submit_btn = document.querySelector("#submit_btn");
-  const form_response_success = document.querySelector("#form_response_success");
-  const form_response_error = document.querySelector("#form_response_error");
-  const form_response_dialog = document.querySelector("#form_response_dialog");
-
-  function closeModal() {
-    form_response_dialog.close();
-  }
-
-  let timeoutId = -1;
-
-  form.addEventListener("htmx:beforeRequest", (event) => {
-    clearTimeout(timeoutId);
-    const dialog_response_error = document.querySelector("#dialog_response_error");
-    form_response_success.style.display = "none";
-    form_response_error.style.display = "none";
-    if (dialog_response_error) dialog_response_error.style.display = "none";
-    submit_btn.disabled = true;
-  });
-
-  form.addEventListener("htmx:afterRequest", (event) => {
-    console.log(event);
-    const isSuccess = (event.detail.successful === true);
-    const isModalOpen = form_response_dialog.open;
-    const dialog_response_error = document.querySelector("#dialog_response_error");
-    submit_btn.disabled = false;
-
-    timeoutId = setTimeout(() => {
-      form_response_success.style.display = "none";
-      form_response_error.style.display = "none";
-      if (dialog_response_error) dialog_response_error.style.display = "none";
-    }, 5000);
-
-    if (!isSuccess) {
-      if (isModalOpen) {
-        dialog_response_error.innerHTML = event.detail.xhr.response;
-        dialog_response_error.style.display = "inherit";
-      } else {
-        form_response_error.style.display = "inherit";
-        form_response_error.innerHTML = event.detail.xhr.response;
-      }
-      return;
-    }
-
-    const openModal = (event.detail.xhr.getResponseHeader("X-MODAL") === "open");
-
-    if (openModal) {
-      form_response_dialog.innerHTML = event.detail.xhr.response;
-      htmx.process(form_response_dialog);
-      form_response_dialog.showModal();
-      return;
-    }
-
-    form_response_dialog.close();
-
-    form_response_success.style.display = "inherit";
-    form_response_success.innerHTML = event.detail.xhr.response;
-  });
-</script>
+  {% macro form_tail(message) %}
+  <button>{{ message }}</button>
+</form>
 {% endmacro %}

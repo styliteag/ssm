@@ -8,6 +8,6 @@
 <input type="hidden" name="jumphost" value="{{ via}}" />
 {% when None %}
 {% endmatch %}
-<p>The server offered the following hostkey:</p>
-<pre>{{ key_fingerprint }}</pre>
-<i>Does this look correct?</i>
+<p>SHA256 fingerprint of the offered key:</p>
+<code>{{ key_fingerprint }}</code>
+<button>Continue</button>

@@ -18,6 +18,7 @@ use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use russh::keys::decode_secret_key;
 
 mod db;
+mod forms;
 mod models;
 mod routes;
 mod schema;
@@ -139,12 +140,14 @@ async fn main() -> Result<(), std::io::Error> {
             .service(routes::show_host)
             .service(routes::render_hosts)
             .service(routes::add_host)
-            // .service(routes::render_host_keys)
+            .service(routes::remove_key_from_host)
             .service(routes::list_keys)
             .service(routes::assign_key_to_user)
             .service(routes::diff_page)
             .service(routes::show_diff)
             .service(routes::render_diff)
+            .service(routes::assign_key_dialog)
+            .service(routes::remove_key_dialog)
             .service(routes::authorize_user)
             .service(ResourceFiles::new("/", generated).skip_handler_when_not_found())
             .default_service(web::to(routes::not_found))

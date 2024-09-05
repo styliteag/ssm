@@ -1,4 +1,5 @@
 use actix_web::{
+    body::BoxBody,
     get,
     http::StatusCode,
     post,
@@ -11,50 +12,12 @@ use serde::Deserialize;
 
 use crate::{
     db::{UserAndOptions, UsernameAndKey},
+    forms::{FormResponseBuilder, Modal},
     sshclient::{ConnectionDetails, HostDiff, SshClient, SshPublicKey},
     ConnectionPool, DbConnection,
 };
 
 use crate::models::{Host, NewHost, NewPublicUserKey, NewUser, PublicUserKey, User};
-
-struct Modal {
-    title: String,
-    request_target: String,
-    template: String,
-    button_text: String,
-}
-
-enum FormResponse {
-    /// A successful Response with a message
-    Success(String),
-    /// An error Response with a message
-    Error(String),
-    /// Show a modal to the user
-    Dialog(Modal),
-}
-
-#[derive(Template)]
-#[template(path = "render/form_response.html")]
-struct FormResponseTemplate {
-    res: FormResponse,
-}
-
-/// Build a response to a post request.
-fn return_form_boxed(
-    status_code: StatusCode,
-    trigger: Option<String>,
-    form_response: FormResponse,
-) -> HttpResponse {
-    let mut builder = HttpResponseBuilder::new(status_code);
-    if matches!(form_response, FormResponse::Dialog(_)) {
-        builder.insert_header(("X-MODAL", "open"));
-    };
-    if let Some(trigger_value) = trigger {
-        builder.insert_header((String::from("HX-Trigger"), trigger_value));
-    };
-
-    builder.body(FormResponseTemplate { res: form_response }.to_string())
-}
 
 #[derive(Template)]
 #[template(path = "error.html")]
@@ -140,16 +103,9 @@ pub async fn add_user(
 
     let res = web::block(move || User::add_user(&mut conn.get().unwrap(), new_user)).await?;
     Ok(match res {
-        Ok(_) => return_form_boxed(
-            StatusCode::CREATED,
-            Some(String::from("reload-users")),
-            FormResponse::Success(String::from("Added user.")),
-        ),
-        Err(e) => return_form_boxed(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            None,
-            FormResponse::Error(e),
-        ),
+        Ok(_) => FormResponseBuilder::created(String::from("Added user"))
+            .add_trigger(String::from("reload-users")),
+        Err(e) => FormResponseBuilder::error(e),
     })
 }
 
@@ -160,8 +116,8 @@ struct DeleteUserForm {
 }
 
 #[derive(Template)]
-#[template(path = "render/delete_user.html")]
-struct DeleteUserResponse {
+#[template(path = "forms/delete_user_dialog.html")]
+struct DeleteUserDialog {
     username: String,
 }
 
@@ -178,43 +134,100 @@ pub async fn delete_user(
             web::block(move || User::delete_user(&mut conn.get().unwrap(), username.as_str()))
                 .await?;
         Ok(match res {
-            Ok(()) => return_form_boxed(
-                StatusCode::OK,
-                None,
-                FormResponse::Success(String::from("Deleted user.")),
-            ),
-            Err(e) => return_form_boxed(
-                StatusCode::UNPROCESSABLE_ENTITY,
-                None,
-                FormResponse::Error(e),
-            ),
+            Ok(()) => FormResponseBuilder::success(String::from("Deleted user")),
+            Err(e) => FormResponseBuilder::error(e),
         })
     } else {
-        Ok(return_form_boxed(
-            StatusCode::OK,
-            None,
-            FormResponse::Dialog(Modal {
-                title: String::from("Are you sure you want to delete this user?"),
-                request_target: String::from("/users/delete"),
-                template: DeleteUserResponse { username }.to_string(),
-                button_text: String::from("Delete"),
-            }),
-        ))
+        Ok(FormResponseBuilder::dialog(Modal {
+            title: String::from("Are you sure you want to delete this user?"),
+            request_target: String::from("/users/delete"),
+            template: DeleteUserDialog { username }.to_string(),
+        }))
     }
 }
 
+#[derive(Template)]
+#[template(path = "forms/remove_key_dialog.html")]
+struct RemoveKeyDialog {
+    key: SshPublicKey,
+}
+
 #[derive(Deserialize)]
-struct AssignKeyForm {
+struct RemoveKeyDialogForm {
+    host_name: String,
+    #[serde(flatten)]
+    key: SshPublicKey,
+}
+
+#[post("/render/diff/remove_key")]
+pub async fn remove_key_dialog(form: web::Form<RemoveKeyDialogForm>) -> impl Responder {
+    let host_name = form.0.host_name;
+
+    FormResponseBuilder::dialog(Modal {
+        title: format!("Remove this key from '{}'", host_name),
+        request_target: format!("/hosts/{}/remove_key", host_name),
+        template: RemoveKeyDialog { key: form.0.key }.to_string(),
+    })
+}
+
+#[derive(Deserialize)]
+struct RemoveKeyFromHostForm {
+    key_base64: String,
+}
+
+#[post("/hosts/{name}/remove_key")]
+pub async fn remove_key_from_host(
+    conn: Data<ConnectionPool>,
+    ssh_client: Data<SshClient>,
+    host_name: Path<String>,
+    key: web::Form<RemoveKeyFromHostForm>,
+) -> actix_web::Result<impl Responder> {
+    let res = ssh_client
+        .remove_key(host_name.to_string(), key.0.key_base64)
+        .await;
+
+    Ok(match res {
+        Ok(()) => FormResponseBuilder::success(String::from("Removed key from host")),
+        Err(e) => FormResponseBuilder::error(e.to_string()),
+    })
+}
+
+#[derive(Template)]
+#[template(path = "forms/assign_key_dialog.html")]
+struct AssignKeyDialog {
+    key: SshPublicKey,
+    users: Vec<User>,
+}
+
+#[post("/render/diff/assign_key")]
+pub async fn assign_key_dialog(
+    conn: Data<ConnectionPool>,
+    key: web::Form<SshPublicKey>,
+) -> actix_web::Result<impl Responder> {
+    let res = web::block(move || User::get_all_users(&mut conn.get().unwrap())).await?;
+
+    Ok(match res {
+        Ok(users) => FormResponseBuilder::dialog(Modal {
+            title: String::from("Assign this key to a user"),
+            request_target: String::from("/user/assign_key"),
+            template: AssignKeyDialog { key: key.0, users }.to_string(),
+        }),
+        Err(error) => FormResponseBuilder::error(error),
+    })
+}
+
+#[derive(Deserialize)]
+struct AssignKeyDialogForm {
     user_id: i32,
     key_type: String,
     key_base64: String,
     key_comment: Option<String>,
 }
 
-#[post("/user/add_key")]
+#[post("/user/assign_key")]
 pub async fn assign_key_to_user(
     conn: Data<ConnectionPool>,
-    form: web::Form<AssignKeyForm>,
+    form: web::Form<AssignKeyDialogForm>,
 ) -> actix_web::Result<impl Responder> {
     let new_key = NewPublicUserKey {
         key_type: form.key_type.clone(),
@@ -226,16 +239,8 @@ pub async fn assign_key_to_user(
     let res = web::block(move || PublicUserKey::add_key(&mut conn.get().unwrap(), new_key)).await?;
 
     Ok(match res {
-        Ok(()) => return_form_boxed(
-            StatusCode::CREATED,
-            None,
-            FormResponse::Success(String::from("Added key.")),
-        ),
-        Err(e) => return_form_boxed(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            None,
-            FormResponse::Error(e),
-        ),
+        Ok(()) => FormResponseBuilder::created(String::from("Added key")),
+        Err(e) => FormResponseBuilder::error(e),
     })
 }
 
@@ -325,16 +330,10 @@ pub async fn show_host(
         Ok(host_data) => host_data,
         Err(e) => {
             return Ok(match e {
-                HostDataError::HostNotFound => return_form_boxed(
-                    StatusCode::NOT_FOUND,
-                    None,
-                    FormResponse::Error(String::from("Host not found on server.")),
-                ),
-                HostDataError::DatabaseError(e) => return_form_boxed(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    None,
-                    FormResponse::Error(e),
-                ),
+                HostDataError::HostNotFound => {
+                    FormResponseBuilder::not_found(String::from("Host not found")).into_response()
+                }
+                HostDataError::DatabaseError(e) => FormResponseBuilder::error(e).into_response(),
             })
         }
     };
@@ -349,8 +348,8 @@ pub async fn show_host(
 }
 
 #[derive(Template)]
-#[template(path = "render/host_hostkey_response.html")]
-struct HostkeyResponseTemplate {
+#[template(path = "forms/hostkey_dialog.html")]
+struct HostkeyDialog {
     name: String,
     username: String,
     hostname: String,
@@ -388,11 +387,9 @@ pub async fn add_host(
             {
                 Ok(j) => j,
                 Err(_) => {
-                    return Ok(return_form_boxed(
-                        StatusCode::NOT_FOUND,
-                        None,
-                        FormResponse::Error(String::from("Couldn't find jump host")),
-                    ));
+                    return Ok(FormResponseBuilder::not_found(String::from(
+                        "Couldn't find jump host",
+                    )));
                 }
             }
         }
@@ -400,11 +397,9 @@ pub async fn add_host(
         None
     };
     let Ok(address) = ConnectionDetails::new_from_signed(form.hostname.clone(), form.port) else {
-        return Ok(return_form_boxed(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            None,
-            FormResponse::Error(String::from("Invalid port number")),
-        ));
+        return Ok(FormResponseBuilder::error(String::from(
+            "Invalid port number",
+        )));
     };
     debug!(
         "Trying to connect to {} on port {} via jumphost: {:?}",
@@ -418,41 +413,28 @@ pub async fn add_host(
 
         let key_receiver = match connection_res {
             Ok(r) => r,
-            Err(e) => {
-                return Ok(return_form_boxed(
-                    StatusCode::UNPROCESSABLE_ENTITY,
-                    None,
-                    FormResponse::Error(e.to_string()),
-                ))
-            }
+            Err(e) => return Ok(FormResponseBuilder::error(e.to_string())),
         };
 
         let Ok(key_fingerprint) = web::block(move || key_receiver.recv()).await? else {
-            return Ok(return_form_boxed(
-                StatusCode::UNPROCESSABLE_ENTITY,
-                None,
-                FormResponse::Error(String::from("Connection timed out.")),
-            ));
+            return Ok(FormResponseBuilder::error(String::from(
+                "Connection timed out",
+            )));
         };
 
-        return Ok(return_form_boxed(
-            StatusCode::OK,
-            None,
-            FormResponse::Dialog(Modal {
-                title: String::from("Please check the hostkey"),
-                request_target: String::from("/hosts/add"),
-                template: HostkeyResponseTemplate {
-                    name: form.name,
-                    username: form.username,
-                    hostname: form.hostname,
-                    port: form.port,
-                    jumphost: form.jumphost,
-                    key_fingerprint,
-                }
-                .to_string(),
-                button_text: String::from("Continue"),
-            }),
-        ));
+        return Ok(FormResponseBuilder::dialog(Modal {
+            title: String::from("Please check the hostkey"),
+            request_target: String::from("/hosts/add"),
+            template: HostkeyDialog {
+                name: form.name,
+                username: form.username,
+                hostname: form.hostname,
+                port: form.port,
+                jumphost: form.jumphost,
+                key_fingerprint,
+            }
+            .to_string(),
+        }));
     };
 
     if let Err(error) = {
@@ -474,11 +456,7 @@ pub async fn add_host(
             }
         }
     } {
-        return Ok(return_form_boxed(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            None,
-            FormResponse::Error(error.to_string()),
-        ));
+        return Ok(FormResponseBuilder::error(error.to_string()));
     };
 
     let new_host = NewHost {
@@ -492,16 +470,9 @@ pub async fn add_host(
     let res = web::block(move || Host::add_host(&mut conn.get().unwrap(), &new_host)).await?;
 
     Ok(match res {
-        Ok(()) => return_form_boxed(
-            StatusCode::CREATED,
-            Some(String::from("reload-hosts")),
-            FormResponse::Success(String::from("Host sucessfully added.")),
-        ),
-        Err(e) => return_form_boxed(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            None,
-            FormResponse::Error(e),
-        ),
+        Ok(()) => FormResponseBuilder::created(String::from("Added host"))
+            .add_trigger(String::from("reload-hosts")),
+        Err(e) => FormResponseBuilder::error(e),
     })
 }
 
@@ -595,7 +566,7 @@ struct RenderDiffTemplate {
     users: Vec<User>,
 }
 
-#[get("/render/diff/{name}")]
+#[get("/render/host_diff/{host_name}")]
 pub async fn render_diff(
     conn: Data<ConnectionPool>,
     ssh_client: Data<SshClient>,
@@ -657,15 +628,7 @@ pub async fn authorize_user(
     .await?;
 
     Ok(match res {
-        Ok(()) => return_form_boxed(
-            StatusCode::OK,
-            None,
-            FormResponse::Success(String::from("Authorized user.")),
-        ),
-        Err(e) => return_form_boxed(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            None,
-            FormResponse::Error(e),
-        ),
+        Ok(()) => FormResponseBuilder::success(String::from("Authorized user")),
+        Err(e) => FormResponseBuilder::error(e),
     })
 }

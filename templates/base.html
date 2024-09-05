@@ -28,6 +28,11 @@
 	</main>
 
 	{% block footer %}
+	<aside id="snackbar">
+	</aside>
+	<dialog id="form_response_dialog">
+	</dialog>
+	<script src="/forms.js" defer></script>
 	<footer>
 		<p id="version">v{{ env!("CARGO_PKG_VERSION") }}</p>
 		<a href="https://github.com/styliteag/ssh-key-manager" title="View sourcecode on GitHub">View source code on

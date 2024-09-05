@@ -11,8 +11,6 @@
 <!-- <p> Groups:</p> -->
 <!-- <div hx-trigger="load" hx-get="/render/user/list_groups/{{ user.username }}"></div> -->
 
-{% call components::form_head("/users/delete") %}
-<input type="hidden" name="username" value="{{ user.username }}" />
-{% call components::form_tail("Delete user") %}
+<button hx-swap="none" hx-post="/users/delete" hx-vals='{"username": "{{ user.username }}"}'>Delete user</button>
 
 {% endblock %}

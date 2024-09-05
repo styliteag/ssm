@@ -6,6 +6,7 @@ use futures::FutureExt;
 use log::debug;
 use log::error;
 use russh::keys::key::{KeyPair, PublicKey};
+use russh::keys::PublicKeyBase64;
 use std::sync::mpsc;
 use std::sync::Arc;
 
@@ -14,7 +15,7 @@ use crate::{
     ConnectionPool,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Deserialize)]
 pub struct SshPublicKey {
     pub key_type: String,
     pub key_base64: String,
@@ -503,6 +504,14 @@ impl SshClient {
         }
 
         Ok(diff_items)
+    }
+
+    pub async fn remove_key(
+        &self,
+        host_name: String,
+        key_base64: String,
+    ) -> Result<(), SshClientError> {
+        todo!()
     }
 }
 

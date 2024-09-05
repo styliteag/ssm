@@ -2,5 +2,6 @@
 
 {% block content %}
 <h3>Host: {{ host.name }}</h3>
-<div hx-get="/render/diff/{{ host.name }}" hx-trigger="load">Loading</div>
+<div hx-vals='{"host_name": "{{ host.name }}"}' hx-get="/render/host_diff/{{ host.name }}" hx-trigger="load">Loading
+</div>
 {% endblock content %}

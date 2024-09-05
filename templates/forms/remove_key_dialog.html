@@ -1,0 +1,4 @@
+{%- import "components.html" as components -%}
+<input type=hidden name="key_base64" value="{{ key.key_base64 }}" />
+{% call components::public_key(key) %}
+<button>Remove</button>

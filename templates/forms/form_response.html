@@ -1,0 +1,16 @@
+{% match res %}
+{% when crate::forms::FormResponse::Success with (message) %}
+<b>Success:</b><br>
+<i>{{ message }}</i>
+{% when crate::forms::FormResponse::Error with (message) %}
+<b>An error occured:</b><br>
+<i>{{ message }}</i>
+{% when crate::forms::FormResponse::Dialog with (dialog) %}
+<p>{{ dialog.title }}</p>
+<hr>
+<form hx-post="{{ dialog.request_target }}" hx-swap="none">
+  {{ dialog.template|safe }}
+</form>
+<hr>
+<button onClick="closeModal()">Abort</button>
+{% endmatch %}
