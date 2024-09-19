@@ -5,7 +5,6 @@ use crate::schema::user;
 use crate::schema::user_key;
 use crate::{
     models::{NewUser, PublicUserKey, User},
-    sshclient::SshPublicKey,
     DbConnection,
 };
 
@@ -24,17 +23,12 @@ impl User {
         )
     }
 
-    pub fn get_keys(&self, conn: &mut DbConnection) -> Result<Vec<SshPublicKey>, String> {
+    pub fn get_keys(&self, conn: &mut DbConnection) -> Result<Vec<PublicUserKey>, String> {
         query(
             user_key::table
                 .filter(user_key::user_id.eq(self.id))
                 .load::<PublicUserKey>(conn),
         )
-        .map(|k| {
-            k.iter()
-                .map(|key| SshPublicKey::from(key.to_owned()))
-                .collect()
-        })
     }
 
     /// Add a new user to the Database. Returns the username

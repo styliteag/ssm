@@ -5,7 +5,7 @@
 
 <h3>Hosts</h3>
 <hr>
-<table hx-trigger="load, reload-hosts from:main" hx-get="/render/hosts" placeholder="Loading" hx-swap="innerHTML">
+<table hx-trigger="load, reload-hosts from:main" hx-get="/hosts/list.htm" placeholder="Loading" hx-swap="innerHTML">
 </table>
 <hr>
 {% call components::form_head("/hosts/add") %}

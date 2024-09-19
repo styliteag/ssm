@@ -64,3 +64,19 @@ pub struct User {
 pub struct NewUser {
     pub username: String,
 }
+
+impl PublicUserKey {
+    pub fn to_openssh(&self) -> String {
+        match &self.comment {
+            Some(comment) => format!("{} {} {}", self.key_type, self.key_base64, comment),
+            None => format!("{} {}", self.key_type, self.key_base64),
+        }
+    }
+}
+
+impl TryFrom<&PublicUserKey> for ssh_key::public::PublicKey {
+    type Error = String;
+    fn try_from(value: &PublicUserKey) -> Result<Self, Self::Error> {
+        Self::from_openssh(&value.to_openssh()).map_err(|e| e.to_string())
+    }
+}

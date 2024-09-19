@@ -1,0 +1,33 @@
+<table>
+  <tr>
+    <th>Type</th>
+    <th>Comment</th>
+    <th>Fingerprint</th>
+    <th>Actions</th>
+  </tr>
+  {% for (key, maybe_fingerprint) in keys %}
+  <tr>
+    <td>{{ key.key_type }}</td>
+    <td>
+      {% match key.comment %}
+      {% when Some with (comment) %}
+      {{ comment }}
+      {% when None %}
+      <i>No comment</i>
+      {%endmatch %}
+    </td>
+    {% match maybe_fingerprint %}
+    {% when Ok with (fingerprint) %}
+    <td>{{ fingerprint }}</td>
+    {% when Err with (err) %}
+    <td>
+      Something has gone wrong: {{ err }}
+    </td>
+    {%endmatch %}
+    <td>
+      <button>Copy base64</button>
+      <button>Delete</button>
+    </td>
+  </tr>
+  {% endfor %}
+</table>

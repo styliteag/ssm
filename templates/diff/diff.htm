@@ -1,8 +1,5 @@
 {%- import "components.html" as components -%}
 
-{% extends "base.html" %}
-
-{% block content %}
 {% match diff %}
 {% when Ok with (this_diff) %}
 {% if this_diff.is_empty() %}
@@ -42,25 +39,15 @@
         {% call components::public_key(key) %}
       </div>
 
-      <button hx-swap="none" hx-post="/render/diff/assign_key" hx-vals='{
+      <button hx-swap="none" hx-post="/diff/assign_key_dialog" hx-vals='{
         "key_type": "{{ key.key_type }}",
         "key_base64": "{{ key.key_base64 }}"
         {% match key.comment %}
         {% when Some with (comment) %}
-        ,"key_comment": "{{ comment }}"
+        ,"comment": "{{ comment }}"
         {% when None %}
         {% endmatch %}
         }'>Assign this key to a user</button>
-
-      <button hx-swap="none" hx-post="/render/diff/remove_key" hx-vals='{
-        "key_type": "{{ key.key_type }}",
-        "key_base64": "{{ key.key_base64 }}"
-        {% match key.comment %}
-        {% when Some with (comment) %}
-        ,"key_comment": "{{ comment }}"
-        {% when None %}
-        {% endmatch %}
-        }'>Remove this key</button>
     </details>
     {% when crate::sshclient::DiffItem::KeyMissing with (key, username) %}
     <details>
@@ -70,16 +57,6 @@
       The following key should be on this host, but is missing:
       <pre>{{ key.key_type }}</pre>
       <pre>{{ key.key_base64 }}</pre>
-
-      <button hx-swap="none" hx-post="/render/diff/add_key" hx-vals='{
-        "key_type": "{{ key.key_type }}",
-        "key_base64": "{{ key.key_base64 }}"
-        {% match key.comment %}
-        {% when Some with (comment) %}
-        ,"key_comment": "{{ comment }}"
-        {% when None %}
-        {% endmatch %}
-        }'>Add this key</button>
     </details>
     {% when crate::sshclient::DiffItem::UnauthorizedKey with (key, username) %}
     <details>
@@ -89,16 +66,6 @@
       The following key should not be on this host:
       <pre>{{ key.key_type }}</pre>
       <pre>{{ key.key_base64 }}</pre>
-
-      <button hx-swap="none" hx-post="/render/diff/remove_key" hx-vals='{
-        "key_type": "{{ key.key_type }}",
-        "key_base64": "{{ key.key_base64 }}"
-        {% match key.comment %}
-        {% when Some with (comment) %}
-        ,"key_comment": "{{ comment }}"
-        {% when None %}
-        {% endmatch %}
-        }'>Remove this key</button>
     </details>
     {% endmatch %}
   </li>
@@ -108,4 +75,3 @@
 {% when Err with (err) %}
 <p>Error: {{ err }}</p>
 {% endmatch %}
-{% endblock %}

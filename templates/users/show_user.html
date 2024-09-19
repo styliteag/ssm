@@ -6,11 +6,12 @@
 <h3>User: {{ user.username }}</h3>
 <p> Enabled: {{ user.enabled }}</p>
 <p> SSH Keys:</p>
-<div hx-trigger="load" hx-get="/render/user/{{ user.username }}/list_keys"></div>
+<div hx-trigger="load" hx-get="/users/{{ user.username }}/list_keys.htm"></div>
 <!-- TODO: implement me -->
 <!-- <p> Groups:</p> -->
 <!-- <div hx-trigger="load" hx-get="/render/user/list_groups/{{ user.username }}"></div> -->
 
-<button hx-swap="none" hx-post="/users/delete" hx-vals='{"username": "{{ user.username }}"}'>Delete user</button>
+<button hx-confirm="Are you sure you want to delete {{ user.username }}?" hx-swap="none" hx-post="/users/delete"
+  hx-vals='{"username": "{{ user.username }}"}'>Delete user</button>
 
 {% endblock %}

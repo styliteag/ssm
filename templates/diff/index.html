@@ -6,7 +6,7 @@
   {% for host in hosts %}
   <li>
     <h5>{{ host.name }}</h5>
-    <div hx-vals='{"host_name": "{{ host.name }}"}' hx-get="/render/host_diff/{{ host.name }}" hx-trigger="load">
+    <div hx-vals='{"host_name": "{{ host.name }}"}' hx-get="/diff/{{ host.name }}.htm" hx-trigger="load">
       Loading</div>
   </li>
   {% endfor %}

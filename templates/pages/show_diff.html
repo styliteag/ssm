@@ -1,7 +1,0 @@
-{% extends "base.html" %}
-
-{% block content %}
-<h3>Host: {{ host.name }}</h3>
-<div hx-vals='{"host_name": "{{ host.name }}"}' hx-get="/render/host_diff/{{ host.name }}" hx-trigger="load">Loading
-</div>
-{% endblock content %}

@@ -2385,6 +2385,7 @@ dependencies = [
  "rand_core",
  "rsa",
  "sec1",
+ "serde",
  "sha2",
  "signature",
  "ssh-cipher",
@@ -2412,6 +2413,7 @@ dependencies = [
  "pretty_env_logger",
  "russh",
  "serde",
+ "ssh-key",
  "static-files",
  "tokio",
 ]
