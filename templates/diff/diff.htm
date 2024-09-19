@@ -66,6 +66,10 @@
       The following key should not be on this host:
       <pre>{{ key.key_type }}</pre>
       <pre>{{ key.key_base64 }}</pre>
+
+      <button hx-swap="none" hx-post="/diff/authorize_user_dialog" hx-vals='{
+      "username": "{{ username }}"
+      }'>Authorize this user</button>
     </details>
     {% endmatch %}
   </li>

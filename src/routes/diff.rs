@@ -4,6 +4,7 @@ use actix_web::{
     Responder,
 };
 use askama_actix::{Template, TemplateToResponse};
+use serde::Deserialize;
 
 use crate::{
     forms::{FormResponseBuilder, Modal},
@@ -18,7 +19,8 @@ pub fn diff_config(cfg: &mut web::ServiceConfig) {
     cfg.service(diff_page)
         .service(render_diff)
         .service(show_diff)
-        .service(assign_key_dialog);
+        .service(assign_key_dialog)
+        .service(authorize_user_dialog);
 }
 #[derive(Template)]
 #[template(path = "diff/index.html")]
@@ -126,4 +128,54 @@ async fn assign_key_dialog(
         }),
         Err(error) => FormResponseBuilder::error(error),
     })
+}
+
+#[derive(Template)]
+#[template(path = "diff/authorize_user_dialog.htm")]
+struct AuthorizeUserDialog {
+    host: (String, i32),
+    user: (String, i32),
+}
+
+#[derive(Deserialize)]
+struct AuthorizeUserForm {
+    host_name: String,
+    username: String,
+}
+
+#[post("/authorize_user_dialog")]
+async fn authorize_user_dialog(
+    conn: Data<ConnectionPool>,
+    form: web::Form<AuthorizeUserForm>,
+) -> actix_web::Result<impl Responder> {
+    let (user, host) = web::block(move || {
+        let mut connection = conn.get().unwrap();
+
+        let user = User::get_user(&mut connection, form.username.clone());
+        let host = Host::get_host_name(&mut connection, form.host_name.clone());
+        (
+            user.map(|u| (u.username, u.id)),
+            host.map(|h| h.map(|h| (h.name, h.id))),
+        )
+    })
+    .await?;
+
+    let user = match user {
+        Ok(u) => u,
+        Err(error) => return Ok(FormResponseBuilder::error(error)),
+    };
+
+    let host = match host {
+        Ok(h) => match h {
+            Some(h) => h,
+            None => return Ok(FormResponseBuilder::error(String::from("Host not found"))),
+        },
+        Err(error) => return Ok(FormResponseBuilder::error(error)),
+    };
+
+    Ok(FormResponseBuilder::dialog(Modal {
+        title: String::from("Authorize user"),
+        request_target: String::from("/hosts/user/authorize"),
+        template: AuthorizeUserDialog { user, host }.to_string(),
+    }))
 }
