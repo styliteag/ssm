@@ -12,7 +12,7 @@ case "${command}" in
     ;;
   set_authorized_keyfile)
     user="$2"
-    new_keyfile="$3"
+    new_keyfile=$(cat -)
 
     echo "Setting authorized keyfile for user ${user}"
     echo "not implemented"
@@ -24,7 +24,7 @@ case "${command}" in
     exit 1
     ;;
   update)
-    new_script="$2"
+    new_script=$(cat -)
 
     echo "Updating script"
     echo "not implemented"

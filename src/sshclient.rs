@@ -10,6 +10,7 @@ use log::warn;
 use russh::keys::key::{KeyPair, PublicKey};
 use russh::keys::PublicKeyBase64;
 use ssh_key::AuthorizedKeys;
+use std::io::Cursor;
 use std::sync::mpsc;
 use std::sync::Arc;
 use tokio::io::AsyncRead;
@@ -502,7 +503,26 @@ impl SshClient {
         let command_str = command.to_string();
         debug!("Executing bash command {}", &command_str);
 
-        let (exit_code, result) = self.execute(handle, command_str.as_str()).await?;
+        let stdin: Option<String> = match command {
+            BashCommand::SetAuthorizedKeyfile(_, new_keyfile) => Some(new_keyfile),
+            BashCommand::Update(new_script) => Some(new_script),
+
+            BashCommand::GetAuthorizedKeyfile(_)
+            | BashCommand::GetSshUsers
+            | BashCommand::Version => None,
+        };
+
+        let (exit_code, result) = match stdin {
+            Some(stdin) => {
+                self.execute_with_data(
+                    handle,
+                    Cursor::new(stdin.into_bytes()),
+                    command_str.as_str(),
+                )
+                .await
+            }
+            None => self.execute(handle, command_str.as_str()).await,
+        }?;
 
         Ok(match exit_code {
             0 => BashResult::Ok(result),
@@ -561,12 +581,11 @@ impl SshClient {
 
         match exit_code {
             Some(code) => {
-                let output = String::from_utf8(out_buf).map_or(
-                    Err(SshClientError::ExecutionError(String::from(
+                let output = String::from_utf8(out_buf).map_err(|e| {
+                    SshClientError::ExecutionError(String::from(
                         "Couldn't convert command output to utf-8",
-                    ))),
-                    |out_str| Ok(out_str),
-                )?;
+                    ))
+                })?;
 
                 Ok((code, output))
             }
@@ -649,12 +668,13 @@ pub enum DiffItem {
     DuplicateKey(SshPublicKey),
 }
 
+type User = String;
 pub enum BashCommand {
     /// Read the authorized keys for a user
-    GetAuthorizedKeyfile(String),
+    GetAuthorizedKeyfile(User),
 
     /// Set authorized keys for a user
-    SetAuthorizedKeyfile(String, String),
+    SetAuthorizedKeyfile(User, String),
 
     /// Get all users that are allowed to login via SSH
     GetSshUsers,
