@@ -3,12 +3,16 @@ use core::fmt;
 use futures::future::BoxFuture;
 use futures::AsyncWriteExt;
 use futures::FutureExt;
+use futures::TryFutureExt;
 use log::debug;
 use log::error;
+use log::warn;
 use russh::keys::key::{KeyPair, PublicKey};
 use russh::keys::PublicKeyBase64;
+use ssh_key::AuthorizedKeys;
 use std::sync::mpsc;
 use std::sync::Arc;
+use tokio::io::AsyncRead;
 
 use crate::{
     models::{Host, PublicUserKey},
@@ -373,18 +377,167 @@ impl SshClient {
             .into_stream())
     }
 
+    pub async fn get_authorized_keys(
+        self,
+        host: Host,
+    ) -> Result<Vec<(String, Vec<ssh_key::PublicKey>)>, SshClientError> {
+        let handle = self.clone().connect(host).await?;
+
+        let users = self.get_ssh_users(&handle).await?;
+
+        let mut user_vec = Vec::with_capacity(users.len());
+
+        for user in users {
+            let keys = self.get_authorized_keys_for(&handle, user.clone()).await?;
+            user_vec.push((user, keys));
+        }
+
+        Ok(user_vec)
+    }
+
+    async fn get_authorized_keys_for(
+        &self,
+        handle: &russh::client::Handle<SshHandler>,
+        user: String,
+    ) -> Result<Vec<ssh_key::PublicKey>, SshClientError> {
+        let res = self
+            .execute_bash(handle, BashCommand::GetAuthorizedKeyfile(user))
+            .await??;
+
+        let authorized_keys = AuthorizedKeys::new(res.as_str());
+        Ok(authorized_keys
+            .filter_map(|e| match e {
+                Ok(e) => Some(e.public_key().clone()),
+                Err(error) => {
+                    error!("Error parsing authorized_keys: {}", error);
+                    None
+                }
+            })
+            .collect())
+    }
+
+    async fn set_authorized_keys_for(
+        &self,
+        handle: &russh::client::Handle<SshHandler>,
+        user: String,
+        authorized_keys: String,
+    ) -> Result<String, SshClientError> {
+        let res = self
+            .execute_bash(
+                handle,
+                BashCommand::SetAuthorizedKeyfile(user, authorized_keys),
+            )
+            .await??;
+        Ok(res)
+    }
+
+    async fn get_ssh_users(
+        &self,
+        handle: &russh::client::Handle<SshHandler>,
+    ) -> Result<Vec<String>, SshClientError> {
+        let res = self
+            .execute_bash(handle, BashCommand::GetSshUsers)
+            .await??;
+
+        Ok(res.lines().map(std::borrow::ToOwned::to_owned).collect())
+    }
+
+    pub async fn install_script_on_host(&self, host: i32) -> Result<(), SshClientError> {
+        let host = self.get_host_from_id(host).await?;
+        let handle = self.clone().connect(host).await?;
+
+        self.install_script(&handle).await
+    }
+
+    async fn install_script(
+        &self,
+        handle: &russh::client::Handle<SshHandler>,
+    ) -> Result<(), SshClientError> {
+        let script = include_bytes!("./script.sh");
+
+        match self
+            .execute_with_data(
+                handle,
+                &script[..],
+                "cat - > .ssh/ssh-keymanager.sh; chmod +x .ssh/ssh-keymanager.sh",
+            )
+            .await
+        {
+            Ok((code, _)) => {
+                if code != 0 {
+                    Err(SshClientError::ExecutionError(String::from(
+                        "Failed to install script.",
+                    )))
+                } else {
+                    Ok(())
+                }
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    async fn execute_bash(
+        &self,
+        handle: &russh::client::Handle<SshHandler>,
+        command: BashCommand,
+    ) -> Result<BashResult, SshClientError> {
+        let (exit_code, result) = self
+            .execute(handle, BashCommand::Version.to_string().as_str())
+            .await?;
+        if exit_code != 0 || !result.contains("ssh-key-manager") {
+            warn!("Script on host seems to be invalid. Trying to install");
+            match self.install_script(handle).await {
+                Ok(()) => {
+                    debug!("Succesfully installed script")
+                }
+                Err(error) => {
+                    warn!("Failed to install script on host: {}", error);
+                    return Err(SshClientError::ExecutionError(String::from(
+                        "Script not valid",
+                    )));
+                }
+            };
+        }
+
+        let command_str = command.to_string();
+        debug!("Executing bash command {}", &command_str);
+
+        let (exit_code, result) = self.execute(handle, command_str.as_str()).await?;
+
+        Ok(match exit_code {
+            0 => BashResult::Ok(result),
+            _ => BashResult::Err(result),
+        })
+    }
+
     async fn execute(
         &self,
-        handle: russh::client::Handle<SshHandler>,
+        handle: &russh::client::Handle<SshHandler>,
         command: &str,
     ) -> Result<(u32, String), SshClientError> {
+        self.execute_with_data(handle, tokio::io::empty(), command)
+            .await
+    }
+
+    /// Runs a command and returns exit code and std{out/err} merged as a touple
+    async fn execute_with_data<R>(
+        &self,
+        handle: &russh::client::Handle<SshHandler>,
+        data: R,
+        command: &str,
+    ) -> Result<(u32, String), SshClientError>
+    where
+        R: AsyncRead + Unpin,
+    {
         let mut channel = handle.channel_open_session().await?;
 
         channel.exec(true, command).await?;
 
+        channel.data(data).await?;
+        channel.eof().await?;
+
         let mut exit_code: Option<u32> = None;
         let mut out_buf = Vec::new();
-        // let mut err_buf = Vec::new();
 
         loop {
             let Some(msg) = channel.wait().await else {
@@ -400,24 +553,22 @@ impl SshClient {
                 russh::ChannelMsg::ExitStatus { exit_status } => {
                     exit_code = Some(exit_status);
                 }
-                _ => {}
+                _ => {
+                    debug!("Received extra message: {:?}", msg);
+                }
             }
         }
 
         match exit_code {
             Some(code) => {
-                if code == 0 {
-                    String::from_utf8(out_buf).map_or(
-                        Err(SshClientError::ExecutionError(String::from(
-                            "Couldn't convert command output to utf-8",
-                        ))),
-                        |out_str| Ok((code, out_str)),
-                    )
-                } else {
+                let output = String::from_utf8(out_buf).map_or(
                     Err(SshClientError::ExecutionError(String::from(
-                        "Program didn't exit succesfully",
-                    )))
-                }
+                        "Couldn't convert command output to utf-8",
+                    ))),
+                    |out_str| Ok(out_str),
+                )?;
+
+                Ok((code, output))
             }
             None => Err(SshClientError::ExecutionError(String::from(
                 "Program didn't exit cleanly",
@@ -425,93 +576,62 @@ impl SshClient {
         }
     }
 
-    pub async fn get_authorized_keys(
-        &self,
-        host: Host,
-    ) -> Result<Vec<SshPublicKey>, SshClientError> {
-        let handle = self.clone().connect(host).await?;
-
-        // TODO: improve this
-        let command_str = "cat ~/.ssh/authorized_keys";
-        let (_exit_code, output) = self.execute(handle, command_str).await?;
-
-        let authorized_keys: Vec<SshPublicKey> = output
-            .lines()
-            .filter_map(|auth_line| {
-                if auth_line.starts_with('#') {
-                    return None;
-                }
-
-                SshPublicKey::try_from(auth_line).ok()
-            })
-            .collect();
-        Ok(authorized_keys)
-    }
-
     /// Check if the host state matches the supposed database state.
     pub async fn get_host_diff(&self, host: Host) -> HostDiff {
-        let actual_authorized_keys = self.get_authorized_keys(host.clone()).await?;
+        let actual_authorized_keys = self.to_owned().get_authorized_keys(host.clone()).await?;
 
+        //This blocks
         let mut connection = self.conn.get().unwrap();
+        let db_authorized_keys = host.get_authorized_keys(&mut connection)?;
 
         let db_all_keys = PublicUserKey::get_all_keys_with_username(&mut connection)
             .map_err(SshClientError::DatabaseError)?;
 
-        let db_authorized_keys: Vec<(String, Option<String>)> =
-            match host.get_authorized_keys(&mut connection) {
-                Ok(keys) => keys
-                    .into_iter()
-                    .map(|(key, options)| (key.key_base64, options))
-                    .collect(),
-                Err(e) => {
-                    return Err(SshClientError::DatabaseError(e));
-                }
-            };
-
         let mut diff_items = Vec::new();
 
-        for key in actual_authorized_keys {
-            // TODO: also check if options are set correct
-
-            let is_own_key = key
-                .key_base64
-                .eq(&PublicKeyBase64::public_key_base64(self.key.as_ref()));
-
-            if is_own_key {
-                continue;
-            };
-
-            let key_matches = db_authorized_keys
-                .iter()
-                .any(|(db_key, _opts)| key.key_base64.eq(db_key));
-
-            if !key_matches {
-                let known_key = db_all_keys
-                    .iter()
-                    .find(|(_, user_key)| key.key_base64.eq(&user_key.key_base64));
-                match known_key {
-                    Some((username, user_key)) => {
-                        diff_items.push(DiffItem::UnauthorizedKey(
-                            user_key.clone(),
-                            username.clone(),
-                        ));
+        // TODO: implement with users
+        for (_user, keys) in actual_authorized_keys {
+            for key in keys {
+                let key = match SshPublicKey::try_from(key) {
+                    Ok(k) => k,
+                    Err(error) => {
+                        error!("Error converting keys: {}", error);
+                        continue;
                     }
-                    None => {
-                        diff_items.push(DiffItem::UnknownKey(key));
+                };
+                // TODO: also check if options are set correct
+                let is_own_key = key
+                    .key_base64
+                    .eq(&PublicKeyBase64::public_key_base64(self.key.as_ref()));
+
+                if is_own_key {
+                    continue;
+                };
+
+                let key_matches = db_authorized_keys
+                    .iter()
+                    .any(|(db_key, _opts)| key.key_base64.eq(&db_key.key_base64));
+
+                if !key_matches {
+                    let known_key = db_all_keys
+                        .iter()
+                        .find(|(_, user_key)| key.key_base64.eq(&user_key.key_base64));
+                    match known_key {
+                        Some((username, user_key)) => {
+                            diff_items.push(DiffItem::UnauthorizedKey(
+                                user_key.clone(),
+                                username.clone(),
+                            ));
+                        }
+                        None => {
+                            diff_items.push(DiffItem::UnknownKey(key));
+                        }
                     }
                 }
             }
         }
 
         Ok(diff_items)
-    }
-
-    pub async fn remove_key(
-        &self,
-        host_name: String,
-        key_base64: String,
-    ) -> Result<(), SshClientError> {
-        todo!()
     }
 }
 
@@ -527,4 +647,58 @@ pub enum DiffItem {
     UnauthorizedKey(PublicUserKey, String),
     /// There is a duplicate key
     DuplicateKey(SshPublicKey),
+}
+
+pub enum BashCommand {
+    /// Read the authorized keys for a user
+    GetAuthorizedKeyfile(String),
+
+    /// Set authorized keys for a user
+    SetAuthorizedKeyfile(String, String),
+
+    /// Get all users that are allowed to login via SSH
+    GetSshUsers,
+
+    /// Update the bash script on the server
+    Update(String),
+
+    /// Check the script version
+    Version,
+}
+
+impl std::fmt::Display for BashCommand {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, ".ssh/ssh-keymanager.sh ")?;
+        //TODO: some of these should probably be piped in instead of passed as arguments
+        match self {
+            BashCommand::GetAuthorizedKeyfile(user) => write!(f, "get_authorized_keyfile {user}"),
+            BashCommand::SetAuthorizedKeyfile(user, new_keyfile) => {
+                write!(f, "set_authorized_keyfile {user} {new_keyfile}")
+            }
+            BashCommand::GetSshUsers => write!(f, "get_ssh_users"),
+            BashCommand::Update(script) => write!(f, "update_script {script}"),
+            BashCommand::Version => write!(f, "version"),
+        }
+    }
+}
+
+impl From<BashExecError> for SshClientError {
+    fn from(value: BashExecError) -> Self {
+        SshClientError::ExecutionError(value)
+    }
+}
+
+type BashExecError = String;
+type BashExecResponse = String;
+pub type BashResult = Result<BashExecResponse, BashExecError>;
+
+impl TryFrom<ssh_key::PublicKey> for SshPublicKey {
+    type Error = String;
+
+    fn try_from(value: ssh_key::PublicKey) -> Result<Self, Self::Error> {
+        let Ok(key) = value.to_openssh() else {
+            return Err(String::from("Couldn't convert to openssh"));
+        };
+        Self::try_from(key.as_str()).map_err(|e| e.to_string())
+    }
 }

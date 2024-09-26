@@ -1,14 +1,14 @@
 use actix_web::{
-    get,
-    post,
-    web::{self, Data, Path}, Responder,
+    get, post,
+    web::{self, Data, Path},
+    Responder,
 };
 use askama_actix::{Template, TemplateToResponse};
 use log::debug;
 use serde::Deserialize;
 
 use crate::{
-    db::{UserAndOptions},
+    db::UserAndOptions,
     forms::{FormResponseBuilder, Modal},
     routes::RenderErrorTemplate,
     sshclient::{ConnectionDetails, SshClient},
@@ -34,18 +34,11 @@ struct RemoveKeyFromHostForm {
 #[post("/{name}/remove_key")]
 async fn remove_key_from_host(
     conn: Data<ConnectionPool>,
-    ssh_client: Data<SshClient>,
     host_name: Path<String>,
     key: web::Form<RemoveKeyFromHostForm>,
 ) -> actix_web::Result<impl Responder> {
-    let res = ssh_client
-        .remove_key(host_name.to_string(), key.0.key_base64)
-        .await;
-
-    Ok(match res {
-        Ok(()) => FormResponseBuilder::success(String::from("Removed key from host")),
-        Err(e) => FormResponseBuilder::error(e.to_string()),
-    })
+    //TODO: remove key from db
+    Ok(FormResponseBuilder::error(String::from("Not implemented")))
 }
 
 #[derive(Template)]
@@ -55,15 +48,6 @@ struct HostsTemplate {}
 #[get("")]
 async fn hosts_page() -> impl Responder {
     HostsTemplate {}
-}
-
-#[derive(Template)]
-#[template(path = "hosts/show_host.html")]
-struct ShowHostTemplate {
-    host: Host,
-    jumphost: Option<String>,
-    authorized_users: Vec<UserAndOptions>,
-    users: Vec<User>,
 }
 
 type HostData = (Host, Option<String>, Vec<UserAndOptions>, Vec<User>);
@@ -95,6 +79,15 @@ fn get_all_host_data(conn: &mut DbConnection, host: String) -> Result<HostData, 
     let user_list = User::get_all_users(conn).map_err(HostDataError::DatabaseError)?;
 
     Ok((host, jumphost, authorized_users, user_list))
+}
+
+#[derive(Template)]
+#[template(path = "hosts/show_host.html")]
+struct ShowHostTemplate {
+    host: Host,
+    jumphost: Option<String>,
+    authorized_users: Vec<UserAndOptions>,
+    users: Vec<User>,
 }
 
 #[get("/{name}")]
@@ -249,8 +242,13 @@ async fn add_host(
     let res = web::block(move || Host::add_host(&mut conn.get().unwrap(), &new_host)).await?;
 
     Ok(match res {
-        Ok(()) => FormResponseBuilder::created(String::from("Added host"))
-            .add_trigger(String::from("reload-hosts")),
+        Ok(id) => match ssh_client.install_script_on_host(id).await {
+            Ok(()) => FormResponseBuilder::created(String::from("Added host"))
+                .add_trigger(String::from("reload-hosts")),
+            Err(error) => {
+                FormResponseBuilder::error(format!("Failed to install script: {}", error))
+            }
+        },
         Err(e) => FormResponseBuilder::error(e),
     })
 }

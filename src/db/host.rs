@@ -27,8 +27,8 @@ impl Host {
     }
 
     /// Adds a new host to the database
-    pub fn add_host(conn: &mut DbConnection, host: &NewHost) -> Result<(), String> {
-        query_drop(insert_into(host::table).values(host.clone()).execute(conn))
+    pub fn add_host(conn: &mut DbConnection, host: &NewHost) -> Result<i32, String> {
+        query(insert_into(host::table).values(host.clone()).execute(conn)).map(|id| (id as i32))
     }
 
     pub fn authorize_user(
