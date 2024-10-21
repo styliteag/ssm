@@ -13,7 +13,17 @@
 <pre>{{ key.base64 }}</pre>
 {% endmacro %}
 
+{% macro maybe_options(options) %}
+{% match options %}
+{% when Some with (options) %}
+{{ options }}
+{% when None %}
+<i>No options set</i>
+{% endmatch %}
+{% endmacro %}
+
 {% macro basic_user_selection(users, name) %}
+
 <select name="{{ name }}">
   {% for user in users %}
   <option value="{{ user }}">{{ user }}</option>

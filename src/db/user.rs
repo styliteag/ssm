@@ -1,14 +1,14 @@
 use diesel::dsl::insert_into;
 use diesel::{delete, prelude::*};
 
-use crate::schema::user;
 use crate::schema::user_key;
+use crate::schema::{host, user, user_in_host};
 use crate::{
     models::{NewUser, PublicUserKey, User},
     DbConnection,
 };
 
-use super::{query, query_drop};
+use super::{query, query_drop, Authorization};
 
 impl User {
     pub fn get_all_users(conn: &mut DbConnection) -> Result<Vec<Self>, String> {
@@ -44,5 +44,19 @@ impl User {
     /// Delete a user from the Database
     pub fn delete_user(conn: &mut DbConnection, username: &str) -> Result<(), String> {
         query_drop(delete(user::table.filter(user::username.eq(username))).execute(conn))
+    }
+
+    /// Find all hosts this user is authorized on
+    pub fn get_authorizations(
+        &self,
+        conn: &mut DbConnection,
+    ) -> Result<Vec<Authorization>, String> {
+        query(
+            user_in_host::table
+                .inner_join(user::table)
+                .inner_join(host::table)
+                .select((host::name, user_in_host::user, user_in_host::options))
+                .load::<Authorization>(conn),
+        )
     }
 }

@@ -37,6 +37,9 @@ impl From<(PublicUserKey, String, String, Option<String>)> for AllowedUserOnHost
 /// Username and one associated key
 pub type UsernameAndKey = (String, PublicUserKey);
 
+/// A list of allowed hosts for a user: Hostname, User on host, Options
+pub type Authorization = (String, String, Option<String>);
+
 /// Prints database Errors and returns a generic String
 pub fn query<T>(query_result: Result<T, Error>) -> Result<T, String> {
     query_result.map_err(|e| {

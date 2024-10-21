@@ -11,6 +11,24 @@
 <!-- <p> Groups:</p> -->
 <!-- <div hx-trigger="load" hx-get="/render/user/list_groups/{{ user.username }}"></div> -->
 
+<h3>Authorizations:</h3>
+<table>
+  <tr>
+    <th>Host</th>
+    <th>User on host</th>
+    <th>Options</th>
+  </tr>
+  {% for (host, user_on_host, options) in authorizations %}
+  <tr>
+    <td>{{ host }}</td>
+    <td>{{ user_on_host }}</td>
+    <td>{% call components::maybe_options(options) %}
+  </tr>
+  {% endfor %}
+</table>
+
+</table>
+
 <button hx-confirm="Are you sure you want to delete {{ user.username }}?" hx-swap="none" hx-post="/users/delete"
   hx-vals='{"username": "{{ user.username }}"}'>Delete user</button>
 
