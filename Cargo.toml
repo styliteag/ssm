@@ -30,6 +30,7 @@ russh = "0.45.0"
 serde = "1.0.203"
 tokio = { version = "1", features = ["full"] }
 ssh-key = { version = "0.6.6", features = ["alloc", "ed25519", "serde"] }
+ssh-encoding = { version = "0.2.0", features = ["alloc", "base64", "std"] }
 
 [build-dependencies]
 static-files = "0.2.1"

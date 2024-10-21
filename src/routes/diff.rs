@@ -135,12 +135,17 @@ async fn assign_key_dialog(
 struct AuthorizeUserDialog {
     host: (String, i32),
     user: (String, i32),
+    user_on_host: String,
 }
 
 #[derive(Deserialize)]
 struct AuthorizeUserForm {
+    /// Host name in key-manager
     host_name: String,
+    /// Username in key-manager
     username: String,
+    /// Username on the host
+    user_on_host: String,
 }
 
 #[post("/authorize_user_dialog")]
@@ -148,6 +153,7 @@ async fn authorize_user_dialog(
     conn: Data<ConnectionPool>,
     form: web::Form<AuthorizeUserForm>,
 ) -> actix_web::Result<impl Responder> {
+    let user_on_host = form.user_on_host.clone();
     let (user, host) = web::block(move || {
         let mut connection = conn.get().unwrap();
 
@@ -176,6 +182,11 @@ async fn authorize_user_dialog(
     Ok(FormResponseBuilder::dialog(Modal {
         title: String::from("Authorize user"),
         request_target: String::from("/hosts/user/authorize"),
-        template: AuthorizeUserDialog { user, host }.to_string(),
+        template: AuthorizeUserDialog {
+            user,
+            host,
+            user_on_host,
+        }
+        .to_string(),
     }))
 }

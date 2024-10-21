@@ -7,11 +7,32 @@ mod host;
 mod key;
 mod user;
 
-/// Username and ssh options
-pub type UserAndOptions = (String, Option<String>);
+/// Username, user on host and ssh options
+pub type UserAndOptions = (String, String, Option<String>);
 
-/// Publickey and the associated options
-pub type UserkeyAndOptions = (PublicUserKey, Option<String>);
+/// A fictional authorized_key entry for an allowed user
+#[derive(Clone, Debug)]
+pub struct AllowedUserOnHost {
+    /// The Public key
+    pub key: PublicUserKey,
+    /// Which user this entry is for
+    pub user_on_host: String,
+    /// The key-manager username
+    pub username: String,
+    /// Key options, if set
+    pub options: Option<String>,
+}
+
+impl From<(PublicUserKey, String, String, Option<String>)> for AllowedUserOnHost {
+    fn from(value: (PublicUserKey, String, String, Option<String>)) -> Self {
+        AllowedUserOnHost {
+            key: value.0,
+            user_on_host: value.1,
+            username: value.2,
+            options: value.3,
+        }
+    }
+}
 
 /// Username and one associated key
 pub type UsernameAndKey = (String, PublicUserKey);

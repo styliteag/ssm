@@ -1,16 +1,13 @@
 use actix_web::{
     get,
-    web::{self, Data}, Responder,
+    web::{self, Data},
+    Responder,
 };
 use askama_actix::{Template, TemplateToResponse};
 
-use crate::{
-    db::{UsernameAndKey},
-    routes::ErrorTemplate,
-    ConnectionPool,
-};
+use crate::{db::UsernameAndKey, routes::ErrorTemplate, ConnectionPool};
 
-use crate::models::{PublicUserKey};
+use crate::models::PublicUserKey;
 
 pub fn keys_config(cfg: &mut web::ServiceConfig) {
     cfg.service(list_keys);

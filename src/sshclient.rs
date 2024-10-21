@@ -1,3 +1,5 @@
+use actix_web::cookie::time::error::ComponentRange;
+use actix_web::web::Buf;
 use async_trait::async_trait;
 use core::fmt;
 use futures::future::BoxFuture;
@@ -6,11 +8,17 @@ use futures::FutureExt;
 use futures::TryFutureExt;
 use log::debug;
 use log::error;
+use log::info;
 use log::warn;
 use russh::keys::key::{KeyPair, PublicKey};
 use russh::keys::PublicKeyBase64;
-use ssh_key::AuthorizedKeys;
+use ssh_encoding::Base64Writer;
+use ssh_encoding::Encode;
+use ssh_key::authorized_keys::ConfigOpts;
+use ssh_key::authorized_keys::Entry;
+use ssh_key::Algorithm;
 use std::io::Cursor;
+use std::str::FromStr;
 use std::sync::mpsc;
 use std::sync::Arc;
 use tokio::io::AsyncRead;
@@ -24,6 +32,20 @@ use crate::{
 pub struct SshPublicKey {
     pub key_type: String,
     pub key_base64: String,
+    pub comment: Option<String>,
+}
+
+/// Parser error
+type ErrorMsg = String;
+/// The entire line containing the Error
+type Line = String;
+pub type AuthorizedKeyEntry = Result<AuthorizedKey, (ErrorMsg, Line)>;
+
+#[derive(Debug, Clone)]
+pub struct AuthorizedKey {
+    pub options: ConfigOpts,
+    pub algorithm: Algorithm,
+    pub base64: String,
     pub comment: Option<String>,
 }
 
@@ -55,22 +77,6 @@ impl TryFrom<String> for SshPublicKey {
     type Error = KeyParseError;
     fn try_from(value: String) -> Result<Self, KeyParseError> {
         SshPublicKey::try_from(value.as_str())
-    }
-}
-
-impl From<PublicUserKey> for SshPublicKey {
-    fn from(value: PublicUserKey) -> Self {
-        SshPublicKey {
-            key_type: value.key_type,
-            key_base64: value.key_base64,
-            comment: value.comment,
-        }
-    }
-}
-
-impl From<&PublicUserKey> for SshPublicKey {
-    fn from(value: &PublicUserKey) -> Self {
-        SshPublicKey::from(value.to_owned())
     }
 }
 
@@ -381,7 +387,7 @@ impl SshClient {
     pub async fn get_authorized_keys(
         self,
         host: Host,
-    ) -> Result<Vec<(String, Vec<ssh_key::PublicKey>)>, SshClientError> {
+    ) -> Result<Vec<(String, Vec<AuthorizedKeyEntry>)>, SshClientError> {
         let handle = self.clone().connect(host).await?;
 
         let users = self.get_ssh_users(&handle).await?;
@@ -389,7 +395,9 @@ impl SshClient {
         let mut user_vec = Vec::with_capacity(users.len());
 
         for user in users {
+            info!("Loading authorized keys for user: {user}");
             let keys = self.get_authorized_keys_for(&handle, user.clone()).await?;
+            // info!("Loaded Entries: {:?}", keys);
             user_vec.push((user, keys));
         }
 
@@ -400,19 +408,38 @@ impl SshClient {
         &self,
         handle: &russh::client::Handle<SshHandler>,
         user: String,
-    ) -> Result<Vec<ssh_key::PublicKey>, SshClientError> {
+    ) -> Result<Vec<AuthorizedKeyEntry>, SshClientError> {
         let res = self
             .execute_bash(handle, BashCommand::GetAuthorizedKeyfile(user))
             .await??;
 
-        let authorized_keys = AuthorizedKeys::new(res.as_str());
-        Ok(authorized_keys
-            .filter_map(|e| match e {
-                Ok(e) => Some(e.public_key().clone()),
-                Err(error) => {
-                    error!("Error parsing authorized_keys: {}", error);
-                    None
-                }
+        Ok(res
+            .trim()
+            .lines()
+            .map(|line| {
+                Entry::from_str(line)
+                    .map_err(|e| (e.to_string(), line.to_string()))
+                    .map(|key| {
+                        //TODO: allocate a sensible buffer
+                        let mut buf = vec![0u8; 1024];
+                        let mut writer = Base64Writer::new(&mut buf).expect("buffer is too small");
+
+                        let pkey = key.public_key();
+                        let comment = pkey.comment();
+                        pkey.key_data().encode(&mut writer).expect("a");
+                        let b64 = writer.finish().expect("b");
+
+                        AuthorizedKey {
+                            options: key.config_opts().clone(),
+                            algorithm: pkey.algorithm(),
+                            base64: b64.to_string(),
+                            comment: if comment.is_empty() {
+                                None
+                            } else {
+                                Some(comment.to_string())
+                            },
+                        }
+                    })
             })
             .collect())
     }
@@ -430,6 +457,12 @@ impl SshClient {
             )
             .await??;
         Ok(res)
+    }
+
+    pub async fn get_users_on_host(&self, host: Host) -> Result<Vec<String>, SshClientError> {
+        let handle = self.clone().connect(host).await?;
+
+        self.get_ssh_users(&handle).await
     }
 
     async fn get_ssh_users(
@@ -597,75 +630,78 @@ impl SshClient {
 
     /// Check if the host state matches the supposed database state.
     pub async fn get_host_diff(&self, host: Host) -> HostDiff {
-        let actual_authorized_keys = self.to_owned().get_authorized_keys(host.clone()).await?;
+        let actual_authorized_entries = self.to_owned().get_authorized_keys(host.clone()).await?;
 
         //This blocks
         let mut connection = self.conn.get().unwrap();
-        let db_authorized_keys = host.get_authorized_keys(&mut connection)?;
+        let authorized_entries = host.get_authorized_keys(&mut connection)?;
 
-        let db_all_keys = PublicUserKey::get_all_keys_with_username(&mut connection)
-            .map_err(SshClientError::DatabaseError)?;
+        let all_user_keys = PublicUserKey::get_all_keys_with_username(&mut connection)?;
+
+        let own_key_base64 = PublicKeyBase64::public_key_base64(self.key.as_ref());
 
         let mut diff_items = Vec::new();
 
-        // TODO: implement with users
-        for (_user, keys) in actual_authorized_keys {
-            for key in keys {
-                let key = match SshPublicKey::try_from(key) {
+        for (user_on_host, entries) in actual_authorized_entries {
+            let mut this_user_diff = Vec::new();
+
+            'entries: for actual_entry in entries {
+                let actual_entry = match actual_entry {
                     Ok(k) => k,
-                    Err(error) => {
-                        error!("Error converting keys: {}", error);
-                        continue;
+                    Err(e) => {
+                        this_user_diff.push(DiffItem::FaultyKey(e.0, e.1));
+                        continue 'entries;
                     }
                 };
-                // TODO: also check if options are set correct
-                let is_own_key = key
-                    .key_base64
-                    .eq(&PublicKeyBase64::public_key_base64(self.key.as_ref()));
+                // Check if this is the key-manager key
+                if actual_entry.base64.eq(&own_key_base64) {
+                    // TODO: also check if options are set correct
+                    continue 'entries;
+                }
 
-                if is_own_key {
-                    continue;
-                };
+                for entry in &authorized_entries {
+                    if actual_entry.base64.eq(&entry.key.key_base64) {
+                        dbg!(&entry, &actual_entry);
 
-                let key_matches = db_authorized_keys
-                    .iter()
-                    .any(|(db_key, _opts)| key.key_base64.eq(&db_key.key_base64));
-
-                if !key_matches {
-                    let known_key = db_all_keys
-                        .iter()
-                        .find(|(_, user_key)| key.key_base64.eq(&user_key.key_base64));
-                    match known_key {
-                        Some((username, user_key)) => {
-                            diff_items.push(DiffItem::UnauthorizedKey(
-                                user_key.clone(),
-                                username.clone(),
-                            ));
-                        }
-                        None => {
-                            diff_items.push(DiffItem::UnknownKey(key));
+                        if user_on_host.eq(&entry.user_on_host) {
+                            dbg!("true");
+                            continue 'entries;
                         }
                     }
                 }
+
+                for (username, key) in &all_user_keys {
+                    if actual_entry.base64.eq(&key.key_base64) {
+                        this_user_diff
+                            .push(DiffItem::UnauthorizedKey(actual_entry, username.clone()));
+                        continue 'entries;
+                    }
+                }
+
+                this_user_diff.push(DiffItem::UnknownKey(actual_entry))
             }
+            diff_items.push((user_on_host, this_user_diff));
         }
 
         Ok(diff_items)
     }
 }
 
-pub type HostDiff = Result<Vec<DiffItem>, SshClientError>;
+type Username = String;
+pub type HostDiff = Result<Vec<(Username, Vec<DiffItem>)>, SshClientError>;
 
 #[derive(Clone)]
 pub enum DiffItem {
     /// A key that is authorized is missing with the Username
-    KeyMissing(PublicUserKey, String),
+    KeyMissing(AuthorizedKey, String),
     /// A key that is not authorized is present.
-    UnknownKey(SshPublicKey),
+    UnknownKey(AuthorizedKey),
     /// An unauthorized key belonging to a known user is present.
-    UnauthorizedKey(PublicUserKey, String),
+    UnauthorizedKey(AuthorizedKey, String),
     /// There is a duplicate key
-    DuplicateKey(SshPublicKey),
+    DuplicateKey(AuthorizedKey),
+    /// There was an error Parsing this entry,
+    FaultyKey(ErrorMsg, Line),
 }
 
 type User = String;
@@ -712,10 +748,10 @@ type BashExecError = String;
 type BashExecResponse = String;
 pub type BashResult = Result<BashExecResponse, BashExecError>;
 
-impl TryFrom<ssh_key::PublicKey> for SshPublicKey {
+impl TryFrom<&ssh_key::PublicKey> for SshPublicKey {
     type Error = String;
 
-    fn try_from(value: ssh_key::PublicKey) -> Result<Self, Self::Error> {
+    fn try_from(value: &ssh_key::PublicKey) -> Result<Self, Self::Error> {
         let Ok(key) = value.to_openssh() else {
             return Err(String::from("Couldn't convert to openssh"));
         };

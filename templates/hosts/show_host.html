@@ -17,13 +17,15 @@
 <table>
   <tr>
     <th>User</th>
+    <th>User on host</th>
     <th>Options</th>
   </tr>
   {% for user in authorized_users %}
   <tr>
     <td><a href="/users/{{ user.0 }}">{{ user.0 }}</a></td>
+    <td>{{ user.1 }}</td>
     <td>
-      {% match user.1 %}
+      {% match user.2 %}
       {% when Some with (options) %}
       <pre>{{ options }}</pre>
       {% when None %}
@@ -36,7 +38,10 @@
 {% call components::form_head("/hosts/user/authorize") %}
 <h3>Authorize a user on this host</h3>
 <input type="hidden" name="host_id" value="{{ host.id }}" />
+<label>Username</label>
 {% call components::user_selection(users) %}
+<label>User on host</label>
+{% call components::basic_user_selection(users_on_host, "user_on_host") %}
 <label>Options</label>
 <input name="options">
 {% call components::form_tail("Authorize user") %}

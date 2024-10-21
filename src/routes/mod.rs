@@ -6,11 +6,10 @@ mod users;
 use actix_web::{
     get,
     http::StatusCode,
-    web::{self}, Responder,
+    web::{self},
+    Responder,
 };
-use askama_actix::{Template};
-
-
+use askama_actix::Template;
 
 pub fn route_config(cfg: &mut web::ServiceConfig) {
     cfg.service(index)

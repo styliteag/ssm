@@ -13,8 +13,8 @@ use diesel::prelude::*;
 
 use super::query;
 use super::query_drop;
+use super::AllowedUserOnHost;
 use super::UserAndOptions;
-use super::UserkeyAndOptions;
 
 impl Host {
     pub fn to_connection(&self) -> Result<ConnectionDetails, SshClientError> {
@@ -35,6 +35,7 @@ impl Host {
         conn: &mut DbConnection,
         host_id: i32,
         user_id: i32,
+        user_on_host: String,
         options: Option<String>,
     ) -> Result<(), String> {
         query_drop(
@@ -42,6 +43,7 @@ impl Host {
                 .values((
                     user_in_host::host_id.eq(host_id),
                     user_in_host::user_id.eq(user_id),
+                    user_in_host::user.eq(user_on_host),
                     user_in_host::options.eq(options),
                 ))
                 .execute(conn),
@@ -58,7 +60,7 @@ impl Host {
         query(
             user_in_host::table
                 .inner_join(user::table)
-                .select((user::username, user_in_host::options))
+                .select((user::username, user_in_host::user, user_in_host::options))
                 .filter(user_in_host::host_id.eq(self.id))
                 .load::<UserAndOptions>(conn),
         )
@@ -87,18 +89,29 @@ impl Host {
         query(host::table.load::<Self>(conn))
     }
 
-    /// Gets all keys that are allowed on this server and the associated options
+    /// Gets all allowed users allowed on this host
     pub fn get_authorized_keys(
         &self,
         conn: &mut DbConnection,
-    ) -> Result<Vec<UserkeyAndOptions>, String> {
+    ) -> Result<Vec<AllowedUserOnHost>, String> {
         query(
             user::table
                 .inner_join(user_key::table)
                 .inner_join(user_in_host::table)
-                .select((PublicUserKey::as_select(), user_in_host::options))
+                .select((
+                    PublicUserKey::as_select(),
+                    user_in_host::user,
+                    user::username,
+                    user_in_host::options,
+                ))
                 .filter(user_in_host::host_id.eq(self.id))
-                .load::<UserkeyAndOptions>(conn),
+                .load::<(PublicUserKey, String, String, Option<String>)>(conn),
         )
+        .map(|allowed_list| {
+            allowed_list
+                .into_iter()
+                .map(AllowedUserOnHost::from)
+                .collect()
+        })
     }
 }

@@ -1,12 +1,15 @@
 {%- import "components.html" as components -%}
 
 {% match diff %}
-{% when Ok with (this_diff) %}
-{% if this_diff.is_empty() %}
+{% when Ok with (user_diff_list) %}
+{% if user_diff_list.is_empty() %}
 <i>No differences found</i>
 {% else %}
 <ul>
-  {% for item in this_diff %}
+  {% for (username, user_diff) in user_diff_list %}
+  {% if !user_diff.is_empty() %}
+  <h4>{{ username }}:</h4>
+  {% for item in user_diff %}
   <li>
     {% match item %}
     {% when crate::sshclient::DiffItem::DuplicateKey with (key) %}
@@ -18,8 +21,8 @@
       {% call components::public_key(key) %}
 
       <button hx-swap="none" hx-post="/render/diff/deduplicate_key" hx-vals='{
-        "key_type": "{{ key.key_type }}",
-        "key_base64": "{{ key.key_base64 }}"
+        "key_type": "{{ key.algorithm }}",
+        "key_base64": "{{ key.base64 }}"
         {% match key.comment %}
         {% when Some with (comment) %}
         ,"key_comment": "{{ comment }}"
@@ -40,8 +43,8 @@
       </div>
 
       <button hx-swap="none" hx-post="/diff/assign_key_dialog" hx-vals='{
-        "key_type": "{{ key.key_type }}",
-        "key_base64": "{{ key.key_base64 }}"
+        "key_type": "{{ key.algorithm }}",
+        "key_base64": "{{ key.base64 }}"
         {% match key.comment %}
         {% when Some with (comment) %}
         ,"comment": "{{ comment }}"
@@ -55,24 +58,36 @@
         A key owned by <pre>{{username}}</pre> is missing on this host
       </summary>
       The following key should be on this host, but is missing:
-      <pre>{{ key.key_type }}</pre>
-      <pre>{{ key.key_base64 }}</pre>
+      <pre>{{ key.algorithm }}</pre>
+      <pre>{{ key.base64 }}</pre>
     </details>
-    {% when crate::sshclient::DiffItem::UnauthorizedKey with (key, username) %}
+    {% when crate::sshclient::DiffItem::UnauthorizedKey with (key, user) %}
     <details>
       <summary>
-        An unauthorized key owned by <a href="/users/{{ username }}">{{ username }}</a> is present on this host
+        An unauthorized key owned by <a href="/users/{{ user }}">{{ user }}</a> is present on this host
       </summary>
       The following key should not be on this host:
-      <pre>{{ key.key_type }}</pre>
-      <pre>{{ key.key_base64 }}</pre>
+      <pre>{{ key.algorithm }}</pre>
+      <pre>{{ key.base64 }}</pre>
 
       <button hx-swap="none" hx-post="/diff/authorize_user_dialog" hx-vals='{
-      "username": "{{ username }}"
+      "username": "{{ user }}",
+      "user_on_host": "{{ username }}"
       }'>Authorize this user</button>
+    </details>
+    {% when crate::sshclient::DiffItem::FaultyKey with (error, entry) %}
+    <details>
+      <summary>
+        There was an error parsing this line: {{ error }}
+      </summary>
+      The error was in the line
+      <br>
+      <code>{{ entry }}</code>
     </details>
     {% endmatch %}
   </li>
+  {% endfor %}
+  {% endif %}
   {% endfor %}
 </ul>
 {% endif %}

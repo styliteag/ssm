@@ -1,7 +1,7 @@
-{%- import "components.html" as components -%}
-<p>Do you want to authorize '{{ user.0 }}' on '{{ host.0 }}'?</p>
+<p>Do you want to authorize '{{ user.0 }}' to log in as '{{ user_on_host }}' on '{{ host.0 }}'?</p>
 <input type=hidden name="user_id" value="{{ user.1 }}" />
 <input type=hidden name="host_id" value="{{ host.1 }}" />
-<label>Options</label>
+<input type=hidden name="user_on_host" value="{{ user_on_host }}" />
+<label>SSH Options</label>
 <input type=text name="options" />
 <button>Authorize</button>

@@ -1,6 +1,6 @@
 {% macro public_key(key) %}
 <p>Key type:</p>
-<pre>{{ key.key_type }}</pre>
+<pre>{{ key.algorithm }}</pre>
 <p>{% match key.comment %}
   {% when Some with (comment) %}
   Comment:
@@ -10,7 +10,15 @@
 {% endmatch %}
 </p>
 <p>Key Base64</p>
-<pre>{{ key.key_base64 }}</pre>
+<pre>{{ key.base64 }}</pre>
+{% endmacro %}
+
+{% macro basic_user_selection(users, name) %}
+<select name="{{ name }}">
+  {% for user in users %}
+  <option value="{{ user }}">{{ user }}</option>
+  {% endfor %}
+</select>
 {% endmacro %}
 
 {% macro user_selection(users) %}

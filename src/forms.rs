@@ -1,6 +1,9 @@
 use actix_web::{http::StatusCode, HttpResponse, HttpResponseBuilder};
 use askama::Template;
 
+use crate::sshclient::SshClientError;
+
+#[derive(Debug)]
 pub struct Modal {
     /// Title displayed at the top
     pub title: String,
@@ -10,6 +13,7 @@ pub struct Modal {
     pub template: String,
 }
 
+#[derive(Debug)]
 enum FormResponse {
     /// A successful Response with a message
     Success(String),
@@ -19,6 +23,7 @@ enum FormResponse {
     Dialog(Modal),
 }
 
+#[derive(Debug)]
 pub struct FormResponseBuilder {
     triggers: Vec<String>,
     status: StatusCode,
@@ -102,5 +107,11 @@ impl actix_web::Responder for FormResponseBuilder {
 
     fn respond_to(self, _req: &actix_web::HttpRequest) -> HttpResponse<Self::Body> {
         self.into_response()
+    }
+}
+
+impl From<SshClientError> for FormResponseBuilder {
+    fn from(value: SshClientError) -> Self {
+        FormResponseBuilder::error(value.to_string())
     }
 }

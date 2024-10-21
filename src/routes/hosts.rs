@@ -88,11 +88,13 @@ struct ShowHostTemplate {
     jumphost: Option<String>,
     authorized_users: Vec<UserAndOptions>,
     users: Vec<User>,
+    users_on_host: Vec<String>,
 }
 
 #[get("/{name}")]
 async fn show_host(
     conn: Data<ConnectionPool>,
+    ssh_client: Data<SshClient>,
     host: Path<String>,
 ) -> actix_web::Result<impl Responder> {
     let res =
@@ -110,11 +112,17 @@ async fn show_host(
         }
     };
 
+    let ssh_users = match ssh_client.get_users_on_host(host.clone()).await {
+        Ok(users) => users,
+        Err(e) => return Ok(FormResponseBuilder::from(e).into_response()),
+    };
+
     Ok(ShowHostTemplate {
         host,
         jumphost,
         authorized_users,
         users: user_list,
+        users_on_host: ssh_users,
     }
     .to_response())
 }
@@ -272,6 +280,7 @@ async fn render_hosts(conn: Data<ConnectionPool>) -> actix_web::Result<impl Resp
 struct AuthorizeUserForm {
     host_id: i32,
     user_id: i32,
+    user_on_host: String,
     options: Option<String>,
 }
 
@@ -286,6 +295,7 @@ async fn authorize_user(
             &mut conn.get().unwrap(),
             form.host_id,
             form.user_id,
+            form.user_on_host.clone(),
             form.options.clone(),
         )
     })

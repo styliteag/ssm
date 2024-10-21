@@ -19,7 +19,9 @@ CREATE TABLE user_in_host (
 	id INTEGER NOT NULL PRIMARY KEY,
 	host_id INTEGER NOT NULL,
 	user_id INTEGER NOT NULL,
+	user TEXT NOT NULL,
 	options TEXT,
+	UNIQUE(user_id, user),
 	FOREIGN KEY (host_id) REFERENCES hosts(id),
 	FOREIGN KEY (user_id) REFERENCES users(id)
 );
