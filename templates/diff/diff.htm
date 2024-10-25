@@ -55,7 +55,7 @@
     {% when crate::sshclient::DiffItem::KeyMissing with (key, username) %}
     <details>
       <summary>
-        A key owned by <pre>{{username}}</pre> is missing on this host
+        A key owned by <i>{{username}}</i> is missing on this host
       </summary>
       The following key should be on this host, but is missing:
       <pre>{{ key.algorithm }}</pre>

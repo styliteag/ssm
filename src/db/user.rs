@@ -55,6 +55,7 @@ impl User {
             user_in_host::table
                 .inner_join(user::table)
                 .inner_join(host::table)
+                .filter(user::username.eq(&self.username))
                 .select((host::name, user_in_host::user, user_in_host::options))
                 .load::<Authorization>(conn),
         )

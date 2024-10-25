@@ -628,61 +628,72 @@ impl SshClient {
         }
     }
 
-    /// Check if the host state matches the supposed database state.
+    /// Get the difference between the supposed and actual state of the authorized keys
     pub async fn get_host_diff(&self, host: Host) -> HostDiff {
-        let actual_authorized_entries = self.to_owned().get_authorized_keys(host.clone()).await?;
+        let host_authorized_entries = self.to_owned().get_authorized_keys(host.clone()).await?;
 
-        //This blocks
+        // This blocks
         let mut connection = self.conn.get().unwrap();
-        let authorized_entries = host.get_authorized_keys(&mut connection)?;
+
+        let db_authorized_entries = host.get_authorized_keys(&mut connection)?;
 
         let all_user_keys = PublicUserKey::get_all_keys_with_username(&mut connection)?;
-
         let own_key_base64 = PublicKeyBase64::public_key_base64(self.key.as_ref());
 
         let mut diff_items = Vec::new();
+        let mut used_indecies = Vec::new();
 
-        for (user_on_host, entries) in actual_authorized_entries {
+        for (user_on_host, host_entries) in host_authorized_entries {
             let mut this_user_diff = Vec::new();
 
-            'entries: for actual_entry in entries {
-                let actual_entry = match actual_entry {
+            'entries: for host_entry in host_entries {
+                let host_entry = match host_entry {
                     Ok(k) => k,
-                    Err(e) => {
-                        this_user_diff.push(DiffItem::FaultyKey(e.0, e.1));
+                    Err((error, line)) => {
+                        this_user_diff.push(DiffItem::FaultyKey(error, line));
                         continue 'entries;
                     }
                 };
                 // Check if this is the key-manager key
-                if actual_entry.base64.eq(&own_key_base64) {
+                if host_entry.base64.eq(&own_key_base64) {
                     // TODO: also check if options are set correct
                     continue 'entries;
                 }
 
-                for entry in &authorized_entries {
-                    if actual_entry.base64.eq(&entry.key.key_base64) {
-                        dbg!(&entry, &actual_entry);
-
-                        if user_on_host.eq(&entry.user_on_host) {
-                            dbg!("true");
-                            continue 'entries;
+                for (i, db_entry) in db_authorized_entries.iter().enumerate() {
+                    if host_entry.base64.eq(&db_entry.key.key_base64)
+                        && user_on_host.eq(&db_entry.user_on_host)
+                    {
+                        // TODO: check options
+                        match used_indecies.contains(&i) {
+                            true => this_user_diff.push(DiffItem::DuplicateKey(host_entry)),
+                            false => used_indecies.push(i),
                         }
-                    }
-                }
-
-                for (username, key) in &all_user_keys {
-                    if actual_entry.base64.eq(&key.key_base64) {
-                        this_user_diff
-                            .push(DiffItem::UnauthorizedKey(actual_entry, username.clone()));
                         continue 'entries;
                     }
                 }
 
-                this_user_diff.push(DiffItem::UnknownKey(actual_entry))
+                for (username, key) in &all_user_keys {
+                    if host_entry.base64.eq(&key.key_base64) {
+                        this_user_diff
+                            .push(DiffItem::UnauthorizedKey(host_entry, username.clone()));
+                        continue 'entries;
+                    }
+                }
+                this_user_diff.push(DiffItem::UnknownKey(host_entry));
+                continue 'entries;
+            }
+
+            for (i, unused_entry) in db_authorized_entries.iter().enumerate() {
+                if !used_indecies.contains(&i) && unused_entry.user_on_host.eq(&user_on_host) {
+                    this_user_diff.push(DiffItem::KeyMissing(
+                        unused_entry.clone().into(),
+                        unused_entry.username.clone(),
+                    ));
+                }
             }
             diff_items.push((user_on_host, this_user_diff));
         }
-
         Ok(diff_items)
     }
 }

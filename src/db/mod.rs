@@ -1,7 +1,10 @@
+use std::str::FromStr;
+
 use diesel::result::Error;
 use log::error;
+use ssh_key::{authorized_keys::ConfigOpts, Algorithm};
 
-use crate::models::PublicUserKey;
+use crate::{models::PublicUserKey, sshclient::AuthorizedKey};
 
 mod host;
 mod key;
@@ -21,6 +24,22 @@ pub struct AllowedUserOnHost {
     pub username: String,
     /// Key options, if set
     pub options: Option<String>,
+}
+
+impl From<AllowedUserOnHost> for AuthorizedKey {
+    fn from(value: AllowedUserOnHost) -> Self {
+        Self {
+            options: value
+                .options
+                .map(|opts| ConfigOpts::new(opts).ok())
+                .flatten()
+                .expect("Checked on db entry"),
+            algorithm: Algorithm::from_str(value.key.key_type.as_str())
+                .expect("Checked on db entry"),
+            base64: value.key.key_base64,
+            comment: value.key.comment,
+        }
+    }
 }
 
 impl From<(PublicUserKey, String, String, Option<String>)> for AllowedUserOnHost {
