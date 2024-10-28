@@ -18,7 +18,7 @@ function show_response(html, is_success) {
     div.remove();
   }, 5000)
 
-  snackbar.appendChild(div);
+  snackbar.prepend(div);
 }
 
 document.body.addEventListener("htmx:afterRequest", (event) => {

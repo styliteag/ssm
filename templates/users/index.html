@@ -9,6 +9,6 @@
 {% call components::form_head("/users/add") %}
 <h3>Add new user</h3>
 <label>Name</label>
-<input type="text" name="username">
+<input type="text" required=true name="username">
 {% call components::form_tail("Add user") %}
 {% endblock %}

@@ -23,6 +23,7 @@ mod models;
 mod routes;
 mod schema;
 mod sshclient;
+mod templates;
 
 include!(concat!(env!("OUT_DIR"), "/generated.rs"));
 

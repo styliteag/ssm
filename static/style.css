@@ -1,6 +1,11 @@
 * {
-  /* background: white; */
-  /* color: black; */
+  --text-color: black;
+  --text-color-alt: blue;
+  --bg-color: white;
+  --bg-color-alt: lightgrey;
+
+  --bg-color-error: red;
+  --bg-color-success: green;
   margin: 0;
   padding: 0;
 }
@@ -8,15 +13,40 @@
 nav,
 main,
 footer {
-  margin: 0 auto;
+  margin: 1vh auto;
   padding: 2vw 0;
-  max-width: 60vw;
+  max-width: 80vw;
 }
 
-nav>ul {
+body {
+  margin: 1vh 1vw;
+}
+
+nav {
   display: flex;
   justify-content: space-around;
   flex-direction: row;
+  background-color: var(--bg-color-alt);
+}
+
+nav>a {
+  padding: 1vh 0;
+  /* background-color: var(--bg-color-alt); */
+  flex-grow: 1;
+  text-align: center;
+}
+
+a {
+  text-decoration: underline;
+  color: inherit;
+}
+
+a:hover {
+  color: var(--text-color-alt);
+}
+
+h1 {
+  text-align: center;
 }
 
 hr {
@@ -46,24 +76,41 @@ form>label {
 }
 
 code {
-  background-color: lightgrey;
+  background-color: var(--bg-color-alt);
 }
 
 table {
+  table-layout: fixed;
   width: 100%;
-  /* display: flex; */
-  /* flex-flow: row wrap; */
+  border-collapse: collapse;
+  border: 3px solid var(--bg-color-alt);
+}
+
+thead {
+  background-color: var(--bg-color-alt);
+}
+
+tbody tr:nth-child(odd) {
+  background-color: var(--bg-color);
+}
+
+tbody tr:nth-child(even) {
+  background-color: var(--bg-color-alt);
+}
+
+th,
+td {
+  margin: 20px;
+  text-align: center;
 }
 
 #snackbar {
-  position: absolute;
-  z-index: 2;
-  top: 20vh;
+  position: fixed;
+  bottom: 10vh;
   right: 2vw;
   display: flex;
   flex-direction: column-reverse;
   justify-content: flex-start;
-  height: 75vh;
   min-width: 25vw;
   max-width: 800px;
 }
@@ -73,17 +120,19 @@ table {
   border-radius: 15px;
   margin-top: 10px;
   padding: 1em;
-  border: solid 2px;
+  /* border: solid 2px; */
 }
 
 #snackbar>.form_success {
-  border-color: #1fbb1a;
-  background-color: #138421;
+  /* border-color: #1fbb1a; */
+  /* background-color: #138421; */
+  background-color: var(--bg-color-success);
 }
 
 #snackbar>.form_error {
-  border-color: #870606;
-  background-color: #c73223;
+  /* border-color: #870606; */
+  /* background-color: #c73223; */
+  background-color: var(--bg-color-error);
 }
 
 #form_response_dialog::backdrop {

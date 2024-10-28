@@ -3,30 +3,34 @@
 {% block content %}
 <h3>List of all keys:</h3>
 <table>
-  <tr>
-    <th>Key type</th>
-    <th>Comment</th>
-    <th>Owner</th>
-  </tr>
-  {% for touple in keys.to_owned() %}
-  {% let username = touple.0 %}
-  {% let key = touple.1 %}
-  <tr>
-    <td>
-      <details>
-        <summary>{{ key.key_type}}</summary>
-        {{ key.key_base64 }}
-      </details>
-    </td>
-    <td>{% match key.comment %}
-      {% when Some with (comment) %}
-      {{ comment }}
-      {% when None %}
-      <i>No comment</i>
-      {% endmatch %}
-    </td>
-    <td><a href="/users/{{ username }}">{{ username }}</a></td>
-  </tr>
-  {% endfor %}
+  <thead>
+    <tr>
+      <th>Key type</th>
+      <th>Comment</th>
+      <th>Owner</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for touple in keys.to_owned() %}
+    {% let username = touple.0 %}
+    {% let key = touple.1 %}
+    <tr>
+      <td>
+        <details>
+          <summary>{{ key.key_type}}</summary>
+          {{ key.key_base64 }}
+        </details>
+      </td>
+      <td>{% match key.comment %}
+        {% when Some with (comment) %}
+        {{ comment }}
+        {% when None %}
+        <i>No comment</i>
+        {% endmatch %}
+      </td>
+      <td><a href="/users/{{ username }}">{{ username }}</a></td>
+    </tr>
+    {% endfor %}
+  </tbody>
 </table>
 {% endblock %}

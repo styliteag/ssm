@@ -5,29 +5,30 @@
 {% block content %}
 <h3>User: {{ user.username }}</h3>
 <p> Enabled: {{ user.enabled }}</p>
-<p> SSH Keys:</p>
-<div hx-trigger="load" hx-get="/users/{{ user.username }}/list_keys.htm"></div>
 <!-- TODO: implement me -->
 <!-- <p> Groups:</p> -->
 <!-- <div hx-trigger="load" hx-get="/render/user/list_groups/{{ user.username }}"></div> -->
-
 <h3>Authorizations:</h3>
 <table>
-  <tr>
-    <th>Host</th>
-    <th>User on host</th>
-    <th>Options</th>
-  </tr>
-  {% for (host, user_on_host, options) in authorizations %}
-  <tr>
-    <td>{{ host }}</td>
-    <td>{{ user_on_host }}</td>
-    <td>{% call components::maybe_options(options) %}
-  </tr>
-  {% endfor %}
+  <thead>
+    <tr>
+      <th>Host</th>
+      <th>User on host</th>
+      <th>Options</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for (host, user_on_host, options) in authorizations %}
+    <tr>
+      <td>{{ host }}</td>
+      <td>{{ user_on_host }}</td>
+      <td>{% call components::maybe_options(options) %}
+    </tr>
+    {% endfor %}
+  </tbody>
 </table>
-
-</table>
+<h3> SSH Keys:</h3>
+<div hx-trigger="load" hx-get="/users/{{ user.username }}/list_keys.htm"></div>
 
 <button hx-confirm="Are you sure you want to delete {{ user.username }}?" hx-swap="none" hx-post="/users/delete"
   hx-vals='{"username": "{{ user.username }}"}'>Delete user</button>

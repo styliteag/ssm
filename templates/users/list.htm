@@ -1,10 +1,14 @@
-<tr>
-  <th>Username</th>
-  <th>Enabled</th>
-</tr>
-{% for user in users %}
-<tr>
-  <td><a href="/users/{{ user.username }}">{{ user.username }}</a></td>
-  <td>{{ user.enabled }}</td>
-</tr>
-{% endfor %}
+<thead>
+  <tr>
+    <th>Username</th>
+    <th>Enabled</th>
+  </tr>
+</thead>
+<tbody>
+  {% for user in users %}
+  <tr>
+    <td><a href="/users/{{ user.username }}">{{ user.username }}</a></td>
+    <td>{{ user.enabled }}</td>
+  </tr>
+  {% endfor %}
+</tbody>

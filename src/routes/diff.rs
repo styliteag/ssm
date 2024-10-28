@@ -1,3 +1,4 @@
+use crate::templates::AsHTML;
 use actix_web::{
     get, post,
     web::{self, Data, Path},

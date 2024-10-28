@@ -5,44 +5,42 @@
 {% if user_diff_list.is_empty() %}
 <i>No differences found</i>
 {% else %}
-<ul>
-  {% for (username, user_diff) in user_diff_list %}
-  {% if !user_diff.is_empty() %}
-  <h4>{{ username }}:</h4>
-  {% for item in user_diff %}
-  <li>
-    {% match item %}
-    {% when crate::sshclient::DiffItem::DuplicateKey with (key) %}
-    <details>
-      <summary>
-        There is a duplicate key on this host</summary>
-      There are multiple copies of this key:
-
-      {% call components::public_key(key) %}
-
-      <button hx-swap="none" hx-post="/render/diff/deduplicate_key" hx-vals='{
-        "key_type": "{{ key.algorithm }}",
-        "key_base64": "{{ key.base64 }}"
-        {% match key.comment %}
-        {% when Some with (comment) %}
-        ,"key_comment": "{{ comment }}"
-        {% when None %}
-        {% endmatch %}
-        }'>Deduplicate this key</button>
-
-    </details>
-    {% when crate::sshclient::DiffItem::UnknownKey with (key) %}
-    <details>
-      <summary>
-        There is an unknown key on this host
-      </summary>
-      The following key is not (yet) known:
-
-      <div>
-        {% call components::public_key(key) %}
-      </div>
-
-      <button hx-swap="none" hx-post="/diff/assign_key_dialog" hx-vals='{
+{% for (username, user_diff) in user_diff_list %}
+{% if !user_diff.is_empty() %}
+<h4>Differences for user '{{ username }}':</h4>
+<aside>
+  <button hx-swap="none" hx-post="/hosts/gen_authorized_keys" hx-vals='{
+  "user_on_host": "{{ username }}"
+  }'>Generate authorized_keys</button>
+</aside>
+<table>
+  <thead>
+    <tr>
+      <th>Difference</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for item in user_diff %}
+    <tr>
+      <td>
+        {% match item %}
+        {% when crate::sshclient::DiffItem::DuplicateKey with (key) %}
+        <details>
+          <summary>
+            Duplicate key: {% call components::maybe(key.comment, "Key has no comment") %}</summary>
+          <hr>
+          There are multiple copies of this key:
+          {{ key.as_html()|safe }}
+        </details>
+        {% when crate::sshclient::DiffItem::UnknownKey with (key) %}
+        <details>
+          <summary>
+            Unknown key: {% call components::maybe(key.comment, "Key has no comment") %}
+          </summary>
+          <hr>
+          This key is not in the database:
+          {{ key.as_html()|safe }}
+          <button hx-swap="none" hx-post="/diff/assign_key_dialog" hx-vals='{
         "key_type": "{{ key.algorithm }}",
         "key_base64": "{{ key.base64 }}"
         {% match key.comment %}
@@ -51,45 +49,47 @@
         {% when None %}
         {% endmatch %}
         }'>Assign this key to a user</button>
-    </details>
-    {% when crate::sshclient::DiffItem::KeyMissing with (key, username) %}
-    <details>
-      <summary>
-        A key owned by <i>{{username}}</i> is missing on this host
-      </summary>
-      The following key should be on this host, but is missing:
-      <pre>{{ key.algorithm }}</pre>
-      <pre>{{ key.base64 }}</pre>
-    </details>
-    {% when crate::sshclient::DiffItem::UnauthorizedKey with (key, user) %}
-    <details>
-      <summary>
-        An unauthorized key owned by <a href="/users/{{ user }}">{{ user }}</a> is present on this host
-      </summary>
-      The following key should not be on this host:
-      <pre>{{ key.algorithm }}</pre>
-      <pre>{{ key.base64 }}</pre>
-
-      <button hx-swap="none" hx-post="/diff/authorize_user_dialog" hx-vals='{
+        </details>
+        {% when crate::sshclient::DiffItem::KeyMissing with (key, username) %}
+        <details>
+          <summary>
+            Missing key: {% call components::maybe(key.comment, "Key has no comment") %}
+          </summary>
+          <hr>
+          This key, owned by <a href="/users/{{ username }}">{{ username }}</a>, is missing:
+          {{ key.as_html()|safe }}
+        </details>
+        {% when crate::sshclient::DiffItem::UnauthorizedKey with (key, user) %}
+        <details>
+          <summary>
+            Unauthorized key: {% call components::maybe(key.comment, "Key has no comment") %}
+          </summary>
+          <hr>
+          This key, owned by <a href="/users/{{ user }}">{{ user }}</a>, is not authorized on this host:
+          {{ key.as_html()|safe }}
+          <button hx-swap="none" hx-post="/diff/authorize_user_dialog" hx-vals='{
       "username": "{{ user }}",
       "user_on_host": "{{ username }}"
       }'>Authorize this user</button>
-    </details>
-    {% when crate::sshclient::DiffItem::FaultyKey with (error, entry) %}
-    <details>
-      <summary>
-        There was an error parsing this line: {{ error }}
-      </summary>
-      The error was in the line
-      <br>
-      <code>{{ entry }}</code>
-    </details>
-    {% endmatch %}
-  </li>
-  {% endfor %}
-  {% endif %}
-  {% endfor %}
-</ul>
+        </details>
+        {% when crate::sshclient::DiffItem::FaultyKey with (error, entry) %}
+        <details>
+          <summary>
+            Faulty line: {{ error }}
+          </summary>
+          <hr>
+          This line couldn't be parsed:
+          <br>
+          <code>{{ entry }}</code>
+        </details>
+        {% endmatch %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endfor %}
 {% endif %}
 {% when Err with (err) %}
 <p>Error: {{ err }}</p>

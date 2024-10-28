@@ -22,8 +22,16 @@
 {% endmatch %}
 {% endmacro %}
 
-{% macro basic_user_selection(users, name) %}
+{% macro maybe(option, default) %}
+{% match option %}
+{% when Some with (value) %}
+{{ value }}
+{% when None %}
+<i>{{ default }}</i>
+{% endmatch %}
+{% endmacro %}
 
+{% macro basic_user_selection(users, name) %}
 <select name="{{ name }}">
   {% for user in users %}
   <option value="{{ user }}">{{ user }}</option>

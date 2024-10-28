@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use actix_web::{http::StatusCode, HttpResponse, HttpResponseBuilder};
 use askama::Template;
 

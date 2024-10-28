@@ -15,25 +15,29 @@
 {% endmatch %}
 <p>Allowed users:</p>
 <table>
-  <tr>
-    <th>User</th>
-    <th>User on host</th>
-    <th>Options</th>
-  </tr>
-  {% for user in authorized_users %}
-  <tr>
-    <td><a href="/users/{{ user.0 }}">{{ user.0 }}</a></td>
-    <td>{{ user.1 }}</td>
-    <td>
-      {% match user.2 %}
-      {% when Some with (options) %}
-      <pre>{{ options }}</pre>
-      {% when None %}
-      <i>No options set</i>
-      {% endmatch %}
-    </td>
-  </tr>
-  {% endfor %}
+  <thead>
+    <tr>
+      <th>User</th>
+      <th>User on host</th>
+      <th>Options</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for user in authorized_users %}
+    <tr>
+      <td><a href="/users/{{ user.0 }}">{{ user.0 }}</a></td>
+      <td>{{ user.1 }}</td>
+      <td>
+        {% match user.2 %}
+        {% when Some with (options) %}
+        <pre>{{ options }}</pre>
+        {% when None %}
+        <i>No options set</i>
+        {% endmatch %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
 </table>
 {% call components::form_head("/hosts/user/authorize") %}
 <h3>Authorize a user on this host</h3>
