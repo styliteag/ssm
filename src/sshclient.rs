@@ -1,13 +1,9 @@
-use actix_web::cookie::time::error::ComponentRange;
-use actix_web::web::Buf;
 use async_trait::async_trait;
 use core::fmt;
 use futures::future::BoxFuture;
 use futures::AsyncWriteExt;
 use futures::FutureExt;
-use futures::TryFutureExt;
 use log::debug;
-use log::error;
 use log::info;
 use log::warn;
 use russh::keys::key::{KeyPair, PublicKey};
@@ -77,22 +73,6 @@ impl TryFrom<String> for SshPublicKey {
     type Error = KeyParseError;
     fn try_from(value: String) -> Result<Self, KeyParseError> {
         SshPublicKey::try_from(value.as_str())
-    }
-}
-
-impl SshPublicKey {
-    pub fn from_lines(lines: &str) -> Vec<Self> {
-        lines
-            .lines()
-            .filter(|line| !line.starts_with('#'))
-            .filter_map(|line| match Self::try_from(line) {
-                Ok(key) => Some(key),
-                Err(e) => {
-                    error!("{}", e);
-                    None
-                }
-            })
-            .collect()
     }
 }
 
@@ -416,27 +396,29 @@ impl SshClient {
         Ok(res
             .trim()
             .lines()
+            .filter(|line| !line.trim_start().starts_with('#'))
             .map(|line| {
                 Entry::from_str(line)
-                    .map_err(|e| (e.to_string(), line.to_string()))
+                    .map_err(|e| (e.to_string(), line.to_owned()))
                     .map(|key| {
-                        //TODO: allocate a sensible buffer
+                        //TODO: algorithm to estimate size
                         let mut buf = vec![0u8; 1024];
-                        let mut writer = Base64Writer::new(&mut buf).expect("buffer is too small");
+                        let mut writer = Base64Writer::new(&mut buf).expect("buf is non-zero");
 
                         let pkey = key.public_key();
                         let comment = pkey.comment();
-                        pkey.key_data().encode(&mut writer).expect("a");
-                        let b64 = writer.finish().expect("b");
+
+                        pkey.key_data().encode(&mut writer).expect("Buffer overrun");
+                        let b64 = writer.finish().expect("Buffer overrun");
 
                         AuthorizedKey {
                             options: key.config_opts().clone(),
                             algorithm: pkey.algorithm(),
-                            base64: b64.to_string(),
+                            base64: b64.to_owned(),
                             comment: if comment.is_empty() {
                                 None
                             } else {
-                                Some(comment.to_string())
+                                Some(comment.to_owned())
                             },
                         }
                     })
@@ -518,11 +500,12 @@ impl SshClient {
         let (exit_code, result) = self
             .execute(handle, BashCommand::Version.to_string().as_str())
             .await?;
-        if exit_code != 0 || !result.contains("ssh-key-manager") {
+        // TODO: checksums
+        if exit_code != 0 || !result.contains("Secure SSH Manager") {
             warn!("Script on host seems to be invalid. Trying to install");
             match self.install_script(handle).await {
                 Ok(()) => {
-                    debug!("Succesfully installed script")
+                    debug!("Succesfully installed script");
                 }
                 Err(error) => {
                     warn!("Failed to install script on host: {}", error);
@@ -614,7 +597,7 @@ impl SshClient {
 
         match exit_code {
             Some(code) => {
-                let output = String::from_utf8(out_buf).map_err(|e| {
+                let output = String::from_utf8(out_buf).map_err(|_e| {
                     SshClientError::ExecutionError(String::from(
                         "Couldn't convert command output to utf-8",
                     ))
@@ -665,9 +648,10 @@ impl SshClient {
                         && user_on_host.eq(&db_entry.user_on_host)
                     {
                         // TODO: check options
-                        match used_indecies.contains(&i) {
-                            true => this_user_diff.push(DiffItem::DuplicateKey(host_entry)),
-                            false => used_indecies.push(i),
+                        if used_indecies.contains(&i) {
+                            this_user_diff.push(DiffItem::DuplicateKey(host_entry));
+                        } else {
+                            used_indecies.push(i);
                         }
                         continue 'entries;
                     }
@@ -736,15 +720,14 @@ pub enum BashCommand {
 impl std::fmt::Display for BashCommand {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, ".ssh/ssh-keymanager.sh ")?;
-        //TODO: some of these should probably be piped in instead of passed as arguments
         match self {
-            BashCommand::GetAuthorizedKeyfile(user) => write!(f, "get_authorized_keyfile {user}"),
-            BashCommand::SetAuthorizedKeyfile(user, new_keyfile) => {
-                write!(f, "set_authorized_keyfile {user} {new_keyfile}")
+            Self::GetAuthorizedKeyfile(user) => write!(f, "get_authorized_keyfile {user}"),
+            Self::SetAuthorizedKeyfile(user, _new_keyfile) => {
+                write!(f, "set_authorized_keyfile {user}")
             }
-            BashCommand::GetSshUsers => write!(f, "get_ssh_users"),
-            BashCommand::Update(script) => write!(f, "update_script {script}"),
-            BashCommand::Version => write!(f, "version"),
+            Self::GetSshUsers => write!(f, "get_ssh_users"),
+            Self::Update(_script) => write!(f, "update_script"),
+            Self::Version => write!(f, "version"),
         }
     }
 }

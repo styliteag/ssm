@@ -87,7 +87,7 @@ struct ShowHostTemplate {
     host: Host,
     jumphost: Option<String>,
     authorized_users: Vec<UserAndOptions>,
-    users: Vec<User>,
+    user_list: Vec<User>,
     users_on_host: Vec<String>,
 }
 
@@ -121,7 +121,7 @@ async fn show_host(
         host,
         jumphost,
         authorized_users,
-        users: user_list,
+        user_list,
         users_on_host: ssh_users,
     }
     .to_response())
@@ -245,7 +245,7 @@ async fn add_host(
         port: form.port,
         username: form.username,
         key_fingerprint,
-        jump_via: maybe_jumphost.map(|h| Some(h.id)).unwrap_or(None),
+        jump_via: maybe_jumphost.map(|h| h.id),
     };
     let res = web::block(move || Host::add_host(&mut conn.get().unwrap(), &new_host)).await?;
 
@@ -253,9 +253,7 @@ async fn add_host(
         Ok(id) => match ssh_client.install_script_on_host(id).await {
             Ok(()) => FormResponseBuilder::created(String::from("Added host"))
                 .add_trigger(String::from("reload-hosts")),
-            Err(error) => {
-                FormResponseBuilder::error(format!("Failed to install script: {}", error))
-            }
+            Err(error) => FormResponseBuilder::error(format!("Failed to install script: {error}")),
         },
         Err(e) => FormResponseBuilder::error(e),
     })

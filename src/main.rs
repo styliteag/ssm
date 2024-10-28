@@ -85,7 +85,7 @@ async fn main() -> Result<(), std::io::Error> {
         .set_default("database_url", String::from("sqlite://ssm.db"))
         .expect("String::from always returns a String.")
         .set_default("port", 8080)
-        .unwrap()
+        .expect("Is a string")
         .build()
         .unwrap_or_else(|e| {
             error!(
@@ -133,7 +133,7 @@ async fn main() -> Result<(), std::io::Error> {
             .service(ResourceFiles::new("/", generated).skip_handler_when_not_found())
             .configure(routes::route_config)
     })
-    // TODO: make address and port configurable
+    // TODO: make address configurable
     .bind(("0.0.0.0", configuration.port))?
     .run()
     .await

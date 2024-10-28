@@ -184,8 +184,8 @@ async fn authorize_user_dialog(
         title: String::from("Authorize user"),
         request_target: String::from("/hosts/user/authorize"),
         template: AuthorizeUserDialog {
-            user,
             host,
+            user,
             user_on_host,
         }
         .to_string(),

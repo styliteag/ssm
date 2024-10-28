@@ -1,5 +1,3 @@
-use std::fmt::Display;
-
 use actix_web::{http::StatusCode, HttpResponse, HttpResponseBuilder};
 use askama::Template;
 
@@ -79,7 +77,7 @@ impl FormResponseBuilder {
         }
     }
 
-    pub fn set_status(mut self, status: StatusCode) -> Self {
+    pub fn _set_status(mut self, status: StatusCode) -> Self {
         self.status = status;
         self
     }

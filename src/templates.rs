@@ -2,7 +2,7 @@ use askama::Template;
 
 use crate::sshclient::AuthorizedKey;
 
-pub(crate) trait AsHTML {
+pub trait AsHTML {
     fn as_html(&self) -> String;
 }
 

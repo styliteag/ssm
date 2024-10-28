@@ -13,7 +13,7 @@ mod user;
 /// Username, user on host and ssh options
 pub type UserAndOptions = (String, String, Option<String>);
 
-/// A fictional authorized_key entry for an allowed user
+/// A fictional authorized_keys entry for an allowed user
 #[derive(Clone, Debug)]
 pub struct AllowedUserOnHost {
     /// The Public key
@@ -31,8 +31,7 @@ impl From<AllowedUserOnHost> for AuthorizedKey {
         Self {
             options: value
                 .options
-                .map(|opts| ConfigOpts::new(opts).ok())
-                .flatten()
+                .and_then(|opts| ConfigOpts::new(opts).ok())
                 .expect("Checked on db entry"),
             algorithm: Algorithm::from_str(value.key.key_type.as_str())
                 .expect("Checked on db entry"),

@@ -43,7 +43,7 @@
 <h3>Authorize a user on this host</h3>
 <input type="hidden" name="host_id" value="{{ host.id }}" />
 <label>Username</label>
-{% call components::user_selection(users) %}
+{% call components::user_selection(user_list) %}
 <label>User on host</label>
 {% call components::basic_user_selection(users_on_host, "user_on_host") %}
 <label>Options</label>
