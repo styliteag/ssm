@@ -3,6 +3,7 @@ use crate::schema::user;
 use crate::schema::user_in_host;
 use crate::schema::user_key;
 use crate::sshclient::ConnectionDetails;
+use crate::sshclient::SshClient;
 use crate::sshclient::SshClientError;
 use crate::{
     models::{Host, NewHost, PublicUserKey},
@@ -14,6 +15,7 @@ use diesel::prelude::*;
 use super::query;
 use super::query_drop;
 use super::AllowedUserOnHost;
+use super::AuthorizedKeysList;
 use super::UserAndOptions;
 
 impl Host {
@@ -89,11 +91,11 @@ impl Host {
         query(host::table.load::<Self>(conn))
     }
 
-    /// Gets all allowed users allowed on this host
+    /// Gets all allowed users allowed on this host, sorted by user_on_host
     pub fn get_authorized_keys(
         &self,
         conn: &mut DbConnection,
-    ) -> Result<Vec<AllowedUserOnHost>, String> {
+    ) -> Result<AuthorizedKeysList, String> {
         query(
             user::table
                 .inner_join(user_key::table)
@@ -105,6 +107,7 @@ impl Host {
                     user_in_host::options,
                 ))
                 .filter(user_in_host::host_id.eq(self.id))
+                .order(user_in_host::user.desc())
                 .load::<(PublicUserKey, String, String, Option<String>)>(conn),
         )
         .map(|allowed_list| {
@@ -113,5 +116,37 @@ impl Host {
                 .map(AllowedUserOnHost::from)
                 .collect()
         })
+    }
+
+    /// Generate authorized key file for a user on a host. Includes ssm key, if applicable
+    pub fn get_authorized_keys_file_for(
+        &self,
+        ssh_client: &SshClient,
+        conn: &mut DbConnection,
+        user_on_host: &str,
+    ) -> Result<String, String> {
+        let res: Vec<(PublicUserKey, Option<String>)> = query(
+            user::table
+                .inner_join(user_key::table)
+                .inner_join(user_in_host::table)
+                .select((PublicUserKey::as_select(), user_in_host::options))
+                .filter(user_in_host::host_id.eq(self.id))
+                .filter(user_in_host::user.eq(user_on_host))
+                .load::<(PublicUserKey, Option<String>)>(conn),
+        )?;
+
+        let estimated_size = (res.len() + 2) * 150;
+
+        Ok(res.into_iter().fold(
+            String::with_capacity(estimated_size),
+            |buf, (key, options)| {
+                buf + options.unwrap_or(String::new()).as_str() + key.to_openssh().as_str() + "\n"
+            },
+        ) + (if self.username.eq(&user_on_host) {
+            ssh_client.get_own_key_openssh() + "\n"
+        } else {
+            String::new()
+        })
+        .as_str())
     }
 }

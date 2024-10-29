@@ -22,23 +22,9 @@ pub fn hosts_config(cfg: &mut web::ServiceConfig) {
         .service(render_hosts)
         .service(show_host)
         .service(add_host)
-        .service(remove_key_from_host)
-        .service(authorize_user);
-}
-
-#[derive(Deserialize)]
-struct RemoveKeyFromHostForm {
-    key_base64: String,
-}
-
-#[post("/{name}/remove_key")]
-async fn remove_key_from_host(
-    conn: Data<ConnectionPool>,
-    host_name: Path<String>,
-    key: web::Form<RemoveKeyFromHostForm>,
-) -> actix_web::Result<impl Responder> {
-    //TODO: remove key from db
-    Ok(FormResponseBuilder::error(String::from("Not implemented")))
+        .service(authorize_user)
+        .service(gen_authorized_keys)
+        .service(set_authorized_keys);
 }
 
 #[derive(Template)]
@@ -302,5 +288,77 @@ async fn authorize_user(
     Ok(match res {
         Ok(()) => FormResponseBuilder::success(String::from("Authorized user")),
         Err(e) => FormResponseBuilder::error(e),
+    })
+}
+
+#[derive(Deserialize)]
+struct GenAuthorizedKeysForm {
+    host_name: String,
+    user_on_host: String,
+}
+
+#[derive(Template)]
+#[template(path = "hosts/authorized_keyfile_dialog.htm")]
+struct AuthorizedKeyfileDialog {
+    user_on_host: String,
+    authorized_keys: String,
+}
+
+#[post("/gen_authorized_keys")]
+async fn gen_authorized_keys(
+    conn: Data<ConnectionPool>,
+    ssh_client: Data<SshClient>,
+    form: web::Form<GenAuthorizedKeysForm>,
+) -> actix_web::Result<impl Responder> {
+    let host_name = form.host_name.clone();
+    let user_on_host = form.user_on_host.clone();
+    let res = web::block(move || {
+        let mut connection = conn.get().unwrap();
+
+        let host = Host::get_host_name(&mut connection, form.host_name.clone()).ok()?;
+
+        host.and_then(|host| {
+            host.get_authorized_keys_file_for(&ssh_client, &mut connection, &form.user_on_host)
+                .ok()
+        })
+    })
+    .await?;
+    Ok(match res {
+        Some(authorized_keys) => FormResponseBuilder::dialog(Modal {
+            title: format!("Authorized keyfile for '{user_on_host}' on '{host_name}':"),
+            request_target: format!("/hosts/{host_name}/set_authorized_keys"),
+            template: AuthorizedKeyfileDialog {
+                user_on_host,
+                authorized_keys,
+            }
+            .to_string(),
+        }),
+        None => FormResponseBuilder::error(String::from("Couldn't find host")),
+    })
+}
+
+#[derive(Deserialize)]
+struct SetAuthorizedKeysForm {
+    user_on_host: String,
+    authorized_keys: String,
+}
+
+#[post("/{name}/set_authorized_keys")]
+async fn set_authorized_keys(
+    form: web::Form<SetAuthorizedKeysForm>,
+    host: Path<String>,
+    ssh_client: Data<SshClient>,
+) -> actix_web::Result<impl Responder> {
+    let res = ssh_client
+        .set_authorized_keys(
+            host.to_string(),
+            form.user_on_host.clone(),
+            form.authorized_keys.clone(),
+        )
+        .await;
+
+    Ok(match res {
+        Ok(()) => FormResponseBuilder::success(String::from("Applied authorized_keys")),
+        Err(error) => FormResponseBuilder::error(error.to_string()),
     })
 }

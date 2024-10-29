@@ -58,6 +58,9 @@ pub type UsernameAndKey = (String, PublicUserKey);
 /// A list of allowed hosts for a user: Hostname, User on host, Options
 pub type Authorization = (String, String, Option<String>);
 
+/// List of authorized_keys files
+pub type AuthorizedKeysList = Vec<AllowedUserOnHost>;
+
 /// Prints database Errors and returns a generic String
 pub fn query<T>(query_result: Result<T, Error>) -> Result<T, String> {
     query_result.map_err(|e| {

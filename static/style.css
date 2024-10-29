@@ -77,6 +77,21 @@ form>label {
 
 code {
   background-color: var(--bg-color-alt);
+  /* white-space: pre-line; */
+  word-break: break-all;
+}
+
+code>span {
+  display: block;
+  width: 100%;
+}
+
+code>span:nth-child(odd) {
+  background-color: var(--bg-color-alt);
+}
+
+code>span:nth-child(even) {
+  background-color: var(--bg-color);
 }
 
 table {

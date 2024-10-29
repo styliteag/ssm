@@ -208,6 +208,12 @@ impl SshClient {
         }
     }
 
+    pub fn get_own_key_openssh(&self) -> String {
+        let b64 = self.key.public_key_base64();
+        let algo = self.key.name();
+        format!("{algo} {b64} ssm")
+    }
+
     /// Tries to connect to a host and returns hostkeys to validate
     pub async fn get_hostkey(
         &self,
@@ -307,6 +313,12 @@ impl SshClient {
     async fn get_host_from_id(&self, host_id: i32) -> Result<Host, SshClientError> {
         // TODO: this is blocking the thread
         Host::get_host_id(&mut self.conn.get().unwrap(), host_id)
+            .map_err(SshClientError::DatabaseError)?
+            .ok_or(SshClientError::NoSuchHost)
+    }
+    async fn get_host_from_name(&self, host_name: String) -> Result<Host, SshClientError> {
+        // TODO: this is blocking the thread
+        Host::get_host_name(&mut self.conn.get().unwrap(), host_name)
             .map_err(SshClientError::DatabaseError)?
             .ok_or(SshClientError::NoSuchHost)
     }
@@ -426,19 +438,20 @@ impl SshClient {
             .collect())
     }
 
-    async fn set_authorized_keys_for(
+    pub async fn set_authorized_keys(
         &self,
-        handle: &russh::client::Handle<SshHandler>,
-        user: String,
+        host_name: String,
+        user_on_host: String,
         authorized_keys: String,
-    ) -> Result<String, SshClientError> {
-        let res = self
-            .execute_bash(
-                handle,
-                BashCommand::SetAuthorizedKeyfile(user, authorized_keys),
-            )
-            .await??;
-        Ok(res)
+    ) -> Result<(), SshClientError> {
+        let host = self.get_host_from_name(host_name).await?;
+        let handle = self.clone().connect(host).await?;
+        self.execute_bash(
+            &handle,
+            BashCommand::SetAuthorizedKeyfile(user_on_host, authorized_keys),
+        )
+        .await??;
+        Ok(())
     }
 
     pub async fn get_users_on_host(&self, host: Host) -> Result<Vec<String>, SshClientError> {

@@ -1,0 +1,8 @@
+<input type="hidden" name="user_on_host" value="{{ user_on_host }}" />
+<input type="hidden" name="authorized_keys" value="{{ authorized_keys }}" />
+<code>
+  {% for line in authorized_keys.lines() %}
+  <span>{{ line }}</span>
+  {% endfor %}
+</code>
+<button>Apply</button>
