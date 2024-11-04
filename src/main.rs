@@ -1,4 +1,4 @@
-use std::{env, fs, path::PathBuf};
+use std::{env, fs, net::IpAddr, path::PathBuf};
 
 use actix_web::{
     web::{self, Data},
@@ -7,7 +7,7 @@ use actix_web::{
 use actix_web_static_files::ResourceFiles;
 use config::Config;
 use diesel::prelude::QueryResult;
-use log::{error, info};
+use log::info;
 use serde::Deserialize;
 use sshclient::SshClient;
 
@@ -49,11 +49,34 @@ pub struct SshConfig {
     private_key_passphrase: Option<String>,
 }
 
+fn default_database_url() -> String {
+    "sqlite://ssm.db".to_owned()
+}
+
+fn default_listen() -> IpAddr {
+    use core::net::Ipv6Addr;
+    IpAddr::V6(Ipv6Addr::UNSPECIFIED)
+}
+
+fn default_port() -> u16 {
+    8080
+}
+
+fn default_loglevel() -> String {
+    "info".to_owned()
+}
+
 #[derive(Debug, Deserialize)]
 pub struct Configuration {
     ssh: SshConfig,
+    #[serde(default = "default_database_url")]
     database_url: String,
+    #[serde(default = "default_listen")]
+    listen: IpAddr,
+    #[serde(default = "default_port")]
     port: u16,
+    #[serde(default = "default_loglevel")]
+    loglevel: String,
 }
 
 #[tokio::main]
@@ -63,32 +86,28 @@ async fn main() -> Result<(), std::io::Error> {
     if std::env::var("RUST_SPANTRACE").is_err() {
         std::env::set_var("RUST_SPANTRACE", "0");
     }
-    if env::var("RUST_LOG").is_err() {
-        env::set_var("RUST_LOG", "warn");
-    }
-    pretty_env_logger::init();
 
-    // Load configuration
     let config_path = env::var("CONFIG").unwrap_or_else(|_| String::from("./config.toml"));
     let config_builder = Config::builder();
 
-    let config_builder = if std::path::Path::new(&config_path).exists() {
-        info!("Loading config from '{}'", &config_path);
-        config_builder.add_source(config::File::with_name(&config_path))
+    let (config_builder, config_source) = if std::path::Path::new(&config_path).exists() {
+        use config::FileFormat::Toml;
+        (
+            config_builder.add_source(config::File::new(&config_path, Toml).required(false)),
+            format!("Loading configuration from '{}'", &config_path),
+        )
     } else {
-        info!("No configuration file found");
-        config_builder
+        (
+            config_builder,
+            format!("No configuration file found at '{}'", &config_path),
+        )
     };
 
     let configuration: Configuration = config_builder
         .add_source(config::Environment::default())
-        .set_default("database_url", String::from("sqlite://ssm.db"))
-        .expect("String::from always returns a String.")
-        .set_default("port", 8080)
-        .expect("Is a string")
         .build()
         .unwrap_or_else(|e| {
-            error!(
+            println!(
                 "Error while reading configuration source: {}",
                 e.to_string()
             );
@@ -96,9 +115,15 @@ async fn main() -> Result<(), std::io::Error> {
         })
         .try_deserialize()
         .unwrap_or_else(|e| {
-            error!("Error while parsing configuration: {}", e.to_string());
+            println!("Error while parsing configuration: {}", e.to_string());
             std::process::exit(3);
         });
+
+    if env::var("RUST_LOG").is_err() {
+        env::set_var("RUST_LOG", configuration.loglevel);
+    }
+    pretty_env_logger::init();
+    info!("{}", config_source);
 
     let manager = ConnectionManager::<DbConnection>::new(configuration.database_url);
     let pool: ConnectionPool = Pool::builder()
@@ -139,8 +164,7 @@ async fn main() -> Result<(), std::io::Error> {
             .service(ResourceFiles::new("/", generated).skip_handler_when_not_found())
             .configure(routes::route_config)
     })
-    // TODO: make address configurable
-    .bind(("0.0.0.0", configuration.port))?
+    .bind((configuration.listen, configuration.port))?
     .run()
     .await
 }

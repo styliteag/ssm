@@ -34,8 +34,14 @@ Example configuration:
 # Database URL. Defaults to `sqlite://ssm.db`
 database_url = 'postgresql://user@host'
 
+# Webinterface listen address
+listen = "127.0.0.1"
+
 # Webinterface port
 port = 8080
+
+# Loglevel, can be overriden with RUST_LOG environment variable
+loglevel = "info"
 
 [ssh]
 # Path to private key file for authenticating with the Hosts
