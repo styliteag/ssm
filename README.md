@@ -1,7 +1,9 @@
+> [!NOTE]
+> This is pre-release software. Use at your own risk.
+
 # Secure SSH Manager
 
-Manages your ssh keys from a single interface.
-
+Manage your ssh keys from a simple Web UI.
 
 ## Development Setup
 
@@ -11,7 +13,7 @@ Alternatively, you can manually setup the developement environment.
 
 ### Install and setup diesel
 
-```sh
+``` sh
 # Install the diesel cli, you can skip this if you already have it installed
 cargo install diesel_cli --no-default-features --features sqlite
 # Set up the Database. Make sure to have a `DATABASE_URL` in your environment
@@ -27,9 +29,13 @@ Another method is to use environment variables with the same name as the config 
 Environment variables have priority over the toml configuration.
 
 Example configuration:
-```toml
+
+``` toml
 # Database URL. Defaults to `sqlite://ssm.db`
 database_url = 'postgresql://user@host'
+
+# Webinterface port
+port = 8080
 
 [ssh]
 # Path to private key file for authenticating with the Hosts

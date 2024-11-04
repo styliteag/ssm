@@ -3,13 +3,15 @@ authors = ["Jeidnx <jeidnx@domainhier.de>"]
 edition = "2021"
 name = "ssm"
 version = "0.0.1-alpha"
-description = "Manage all your ssh keys from one interface"
+description = "Manage your ssh keys from a simple Web UI"
+keywords = ["ssh"]
 repository = "https://github.com/styliteag/ssm"
 readme = "README.md"
+license = "GPL-3.0"
 
 [features]
-postgres = [ "diesel/postgres", "diesel_migrations/postgres"]
-mysql = [ "diesel/mysql", "diesel_migrations/mysql"]
+postgres = ["diesel/postgres", "diesel_migrations/postgres"]
+mysql = ["diesel/mysql", "diesel_migrations/mysql"]
 
 [dependencies]
 actix = "0.13.3"
@@ -20,7 +22,7 @@ askama = { version = "0.12.1", features = ["with-actix-web"] }
 askama_actix = "0.14.0"
 async-trait = "0.1.81"
 color-eyre = { version = "0.6.3", default-features = false }
-config = { version = "0.14.0", default-features = false, features = [ "toml" ] }
+config = { version = "0.14.0", default-features = false, features = ["toml"] }
 diesel = { version = "2.2.0", features = ["sqlite", "r2d2"] }
 diesel_migrations = { version = "2.2.0", features = ["sqlite"] }
 futures = "0.3.30"
