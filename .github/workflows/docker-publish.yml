@@ -27,6 +27,8 @@ jobs:
       uses: docker/build-push-action@v6
       with:
         push: true
+        cache-from: type=registry,styliteag/ssh-key-manager:latest
+        cache-to: type=inline
         tags: |
           styliteag/ssh-key-manager:latest
           ghcr.io/${{ github.repository }}/ssh-key-manager:latest
