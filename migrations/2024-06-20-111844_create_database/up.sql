@@ -2,11 +2,11 @@ CREATE TABLE host (
 	id INTEGER NOT NULL PRIMARY KEY,
 	name TEXT UNIQUE NOT NULL,
 	username TEXT NOT NULL,
-	hostname TEXT UNIQUE NOT NULL,
+	address TEXT UNIQUE NOT NULL,
 	port INTEGER NOT NULL,
 	key_fingerprint TEXT UNIQUE NOT NULL,
 	jump_via INTEGER,
-	FOREIGN KEY (jump_via) REFERENCES hosts(id)
+	FOREIGN KEY (jump_via) REFERENCES host(id) ON DELETE CASCADE
 );
 
 CREATE TABLE user (
@@ -21,9 +21,9 @@ CREATE TABLE user_in_host (
 	user_id INTEGER NOT NULL,
 	user TEXT NOT NULL,
 	options TEXT,
-	UNIQUE(user_id, user),
-	FOREIGN KEY (host_id) REFERENCES hosts(id),
-	FOREIGN KEY (user_id) REFERENCES users(id)
+	UNIQUE(user_id, host_id, user),
+	FOREIGN KEY (host_id) REFERENCES host(id) ON DELETE CASCADE,
+	FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE
 );
 
 CREATE TABLE user_key (
@@ -32,5 +32,5 @@ CREATE TABLE user_key (
 	key_base64 TEXT UNIQUE NOT NULL,
 	comment TEXT,
 	user_id INTEGER NOT NULL,
-	FOREIGN KEY (user_id) REFERENCES users(id)
+	FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE
 );

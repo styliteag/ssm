@@ -106,10 +106,16 @@ async fn main() -> Result<(), std::io::Error> {
         .expect("Database URL should be a valid URI");
 
     {
+        use diesel::{sql_query, RunQueryDsl};
+
         info!("Trying to run migrations");
-        pool.get()
-            .expect("Cant connect to database.")
-            .run_pending_migrations(MIGRATIONS)
+        let mut conn = pool.get().expect("Cant connect to database");
+
+        sql_query("PRAGMA foreign_keys = on")
+            .execute(&mut conn)
+            .expect("Couldn't activate foreign key support");
+
+        conn.run_pending_migrations(MIGRATIONS)
             .expect("Error while running migrations:");
     }
 

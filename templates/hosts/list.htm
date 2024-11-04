@@ -1,7 +1,7 @@
 <thead>
   <tr>
     <th>Host</th>
-    <th>Hostname</th>
+    <th>Address</th>
     <th>View diff</th>
   </tr>
 </thead>
@@ -9,7 +9,7 @@
   {% for host in hosts %}
   <tr>
     <td><a href="/hosts/{{ host.name }}">{{ host.name }}</a></td>
-    <td>{{ host.hostname}}</td>
+    <td>{{ host.address}}</td>
     <td><a href="/diff/{{ host.name }}">Diff</a></td>
   </tr>
   {% endfor %}

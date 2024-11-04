@@ -118,7 +118,7 @@ async fn show_host(
 struct HostkeyDialog {
     name: String,
     username: String,
-    hostname: String,
+    address: String,
     port: i32,
     key_fingerprint: String,
     jumphost: Option<i32>,
@@ -128,7 +128,7 @@ struct HostkeyDialog {
 struct HostAddForm {
     name: String,
     username: String,
-    hostname: String,
+    address: String,
     port: i32,
     jumphost: Option<i32>,
     key_fingerprint: Option<String>,
@@ -162,7 +162,7 @@ async fn add_host(
     } else {
         None
     };
-    let Ok(address) = ConnectionDetails::new_from_signed(form.hostname.clone(), form.port) else {
+    let Ok(address) = ConnectionDetails::new_from_signed(form.address.clone(), form.port) else {
         return Ok(FormResponseBuilder::error(String::from(
             "Invalid port number",
         )));
@@ -194,7 +194,7 @@ async fn add_host(
             template: HostkeyDialog {
                 name: form.name,
                 username: form.username,
-                hostname: form.hostname,
+                address: form.address,
                 port: form.port,
                 jumphost: form.jumphost,
                 key_fingerprint,
@@ -227,7 +227,7 @@ async fn add_host(
 
     let new_host = NewHost {
         name: form.name.clone(),
-        hostname: form.hostname,
+        address: form.address,
         port: form.port,
         username: form.username,
         key_fingerprint,

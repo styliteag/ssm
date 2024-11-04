@@ -1,19 +1,19 @@
 diesel::table! {
     /// All hosts
     host (id) {
-        /// The unique id
+        /// unique id
         id -> Integer,
-        /// The frienddly name
+        /// display name
         name -> Text,
-        /// The username for ssh connections
+        /// username for ssh connections
         username -> Text,
-        /// The hostname or ip address for ssh connections
-        hostname -> Text,
-        /// The port for ssh connections
+        /// hostname or ip address for ssh connections
+        address -> Text,
+        /// port for ssh connections
         port -> Integer,
-        /// The fingerprint of the hostkey
+        /// fingerprint of the hostkey
         key_fingerprint -> Text,
-        /// The jumphost for ssh connections
+        /// jumphost for ssh connections
         jump_via -> Nullable<Integer>,
     }
 }
@@ -21,11 +21,11 @@ diesel::table! {
 diesel::table! {
     /// All users
     user (id) {
-        /// The unique id
+        /// unique id
         id -> Integer,
-        /// The name of this user
+        /// name of this user
         username -> Text,
-        /// Whether this user is active
+        /// whether this user is active
         enabled -> Bool,
     }
 }
@@ -33,17 +33,17 @@ diesel::table! {
 diesel::joinable!(user_in_host -> host (host_id));
 diesel::joinable!(user_in_host -> user (user_id));
 diesel::table! {
-    /// A user is allowed on a host
+    /// User authorizations
     user_in_host (id) {
-        /// The unique id
+        /// unique id
         id -> Integer,
-        /// The host
+        /// host
         host_id -> Integer,
-        /// The user
+        /// user
         user_id -> Integer,
-        /// The username on the host
+        /// username on the host
         user -> Text,
-        /// The ssh key options
+        /// ssh key options
         options -> Nullable<Text>,
     }
 }
@@ -52,15 +52,15 @@ diesel::joinable!(user_key -> user (user_id));
 diesel::table! {
     /// All user ssh public keys
     user_key (id) {
-        /// The unique id
+        /// unique id
         id -> Integer,
-        /// The ssh key type
+        /// key type
         key_type -> Text,
-        /// The ssh key base64
+        /// base64 encoded public key
         key_base64 -> Text,
-        /// The ssh key comment
+        /// optional comment
         comment -> Nullable<Text>,
-        /// The user this key belongs to
+        /// user this key belongs to
         user_id -> Integer,
     }
 }

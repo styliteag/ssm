@@ -9,7 +9,7 @@ pub struct Host {
     pub id: i32,
     pub name: String,
     pub username: String,
-    pub hostname: String,
+    pub address: String,
     pub port: i32,
     pub key_fingerprint: String,
     pub jump_via: Option<i32>,
@@ -20,7 +20,7 @@ pub struct Host {
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct NewHost {
     pub name: String,
-    pub hostname: String,
+    pub address: String,
     pub port: i32,
     pub username: String,
     pub key_fingerprint: String,

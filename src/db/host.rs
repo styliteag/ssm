@@ -21,7 +21,7 @@ use super::UserAndOptions;
 impl Host {
     pub fn to_connection(&self) -> Result<ConnectionDetails, SshClientError> {
         Ok(ConnectionDetails::new(
-            self.hostname.clone(),
+            self.address.clone(),
             self.port
                 .try_into()
                 .map_err(|_| SshClientError::PortCastFailed)?,
