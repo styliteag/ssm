@@ -27,7 +27,7 @@ jobs:
       uses: docker/build-push-action@v6
       with:
         push: true
-        cache-from: type=registry,styliteag/ssh-key-manager:latest
+        cache-from: type=registry,ref=styliteag/ssh-key-manager:latest
         cache-to: type=inline
         tags: |
           styliteag/ssh-key-manager:latest
