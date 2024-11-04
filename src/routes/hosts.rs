@@ -288,7 +288,8 @@ async fn authorize_user(
     .await?;
 
     Ok(match res {
-        Ok(()) => FormResponseBuilder::success(String::from("Authorized user")),
+        Ok(()) => FormResponseBuilder::success(String::from("Authorized user"))
+            .add_trigger("reloadDiff".to_owned()),
         Err(e) => FormResponseBuilder::error(e),
     })
 }

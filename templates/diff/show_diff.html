@@ -2,6 +2,7 @@
 
 {% block content %}
 <h3>Host: {{ host.name }}</h3>
-<div hx-vals='{"host_name": "{{ host.name }}"}' hx-get="/diff/{{ host.name }}.htm" hx-trigger="load">Loading
+<div hx-vals='{"host_name": "{{ host.name }}"}' hx-get="/diff/{{ host.name }}.htm"
+  hx-trigger="load, reloadDiff from:body">Loading
 </div>
 {% endblock content %}

@@ -177,7 +177,8 @@ async fn assign_key_to_user(
     let res = web::block(move || PublicUserKey::add_key(&mut conn.get().unwrap(), new_key)).await?;
 
     Ok(match res {
-        Ok(()) => FormResponseBuilder::created(String::from("Added key")),
+        Ok(()) => FormResponseBuilder::created(String::from("Added key"))
+            .add_trigger("reloadDiff".to_owned()),
         Err(e) => FormResponseBuilder::error(e),
     })
 }
