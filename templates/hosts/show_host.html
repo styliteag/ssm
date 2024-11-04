@@ -20,20 +20,27 @@
       <th>User</th>
       <th>User on host</th>
       <th>Options</th>
+      <th>Tasks</th>
     </tr>
   </thead>
   <tbody>
     {% for user in authorized_users %}
     <tr>
-      <td><a href="/users/{{ user.0 }}">{{ user.0 }}</a></td>
-      <td>{{ user.1 }}</td>
+      <td><a href="/users/{{ user.1 }}">{{ user.1 }}</a></td>
+      <td>{{ user.2 }}</td>
       <td>
-        {% match user.2 %}
+        {% match user.3 %}
         {% when Some with (options) %}
         <pre>{{ options }}</pre>
         {% when None %}
         <i>No options set</i>
         {% endmatch %}
+      </td>
+      <td>
+        {% let s = format!("\"authorization_id\": {}", user.0) %}
+        {% call components::post("Edit", "/hosts/edit_authorization", s) %}
+        {% call components::post_direct("Delete","Are you sure you want to delete this authorization?",
+        "/hosts/delete_authorization", s) %}
       </td>
     </tr>
     {% endfor %}

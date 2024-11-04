@@ -58,7 +58,10 @@
 {% endmacro %}
 
 {% macro post(name, target, opts) %}
-<button hx-swap="none" hx-post="{{ target }}" hx-vals='{
-  {{ opts }}
-}'>{{ name }}</button>
+<button hx-swap="none" hx-post="{{ target }}" hx-vals='{ {{ opts }} }'>{{ name }}</button>
+{% endmacro %}
+
+{% macro post_direct(name,confirmation, target, opts) %}
+<button hx-confirm="{{ confirmation }}" hx-swap="none" hx-post="{{ target }}" hx-vals='{ {{ opts }} }'>{{ name
+  }}</button>
 {% endmacro %}

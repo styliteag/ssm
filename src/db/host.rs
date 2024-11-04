@@ -62,8 +62,13 @@ impl Host {
         query(
             user_in_host::table
                 .inner_join(user::table)
-                .select((user::username, user_in_host::user, user_in_host::options))
                 .filter(user_in_host::host_id.eq(self.id))
+                .select((
+                    user_in_host::id,
+                    user::username,
+                    user_in_host::user,
+                    user_in_host::options,
+                ))
                 .load::<UserAndOptions>(conn),
         )
     }
@@ -161,5 +166,12 @@ impl Host {
 
     pub fn delete(self, conn: &mut DbConnection) -> Result<usize, String> {
         query(diesel::delete(host::table.filter(host::id.eq(self.id))).execute(conn))
+    }
+
+    pub fn delete_authorization(conn: &mut DbConnection, authorization: i32) -> Result<(), String> {
+        query_drop(
+            diesel::delete(user_in_host::table.filter(user_in_host::id.eq(authorization)))
+                .execute(conn),
+        )
     }
 }

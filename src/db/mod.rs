@@ -11,7 +11,7 @@ mod key;
 mod user;
 
 /// Username, user on host and ssh options
-pub type UserAndOptions = (String, String, Option<String>);
+pub type UserAndOptions = (i32, String, String, Option<String>);
 
 /// A fictional authorized_keys entry for an allowed user
 #[derive(Clone, Debug)]

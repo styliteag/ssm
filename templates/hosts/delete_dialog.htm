@@ -26,10 +26,10 @@
   <tbody>
     {% for user in authorizations %}
     <tr>
-      <td><a href="/users/{{ user.0 }}">{{ user.0 }}</a></td>
-      <td>{{ user.1 }}</td>
+      <td><a href="/users/{{ user.1 }}">{{ user.0 }}</a></td>
+      <td>{{ user.2 }}</td>
       <td>
-        {% match user.2 %}
+        {% match user.3 %}
         {% when Some with (options) %}
         <pre>{{ options }}</pre>
         {% when None %}

@@ -25,7 +25,8 @@ pub fn hosts_config(cfg: &mut web::ServiceConfig) {
         .service(authorize_user)
         .service(gen_authorized_keys)
         .service(set_authorized_keys)
-        .service(delete);
+        .service(delete)
+        .service(delete_authorization);
 }
 
 #[derive(Template)]
@@ -431,5 +432,28 @@ async fn delete(
             .to_string(),
         }),
         None => FormResponseBuilder::error("Couldn't find host".to_owned()),
+    })
+}
+
+#[derive(Deserialize)]
+struct DeleteAuthorizationForm {
+    authorization_id: i32,
+}
+
+#[post("/delete_authorization")]
+async fn delete_authorization(
+    form: web::Form<DeleteAuthorizationForm>,
+    conn: Data<ConnectionPool>,
+) -> actix_web::Result<impl Responder> {
+    let res = web::block(move || {
+        let mut connection = conn.get().unwrap();
+
+        Host::delete_authorization(&mut connection, form.authorization_id)
+    })
+    .await?;
+
+    Ok(match res {
+        Ok(()) => FormResponseBuilder::success("Deleted authorization.".to_owned()),
+        Err(e) => FormResponseBuilder::error(e),
     })
 }

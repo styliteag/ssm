@@ -1,13 +1,10 @@
 {%- import "components.html" as components -%}
 
 {% extends "base.html" %}
-
 {% block content %}
-<h3>User: {{ user.username }}</h3>
+{% let username = user.username.as_str() %}
+<h3>User: {{ username }}</h3>
 <p> Enabled: {{ user.enabled }}</p>
-<!-- TODO: implement me -->
-<!-- <p> Groups:</p> -->
-<!-- <div hx-trigger="load" hx-get="/render/user/list_groups/{{ user.username }}"></div> -->
 <h3>Authorizations:</h3>
 <table>
   <thead>
@@ -29,8 +26,9 @@
 </table>
 <h3> SSH Keys:</h3>
 <div hx-trigger="load" hx-get="/users/{{ user.username }}/list_keys.htm"></div>
-
-<button hx-confirm="Are you sure you want to delete {{ user.username }}?" hx-swap="none" hx-post="/users/delete"
-  hx-vals='{"username": "{{ user.username }}"}'>Delete user</button>
+{% let confirmation = format!("Are you sure you want to delete {}? This will also remove all associated
+authorizations.", username) %}
+{% let opts = format!("\"username\": \"{}\"", username) %}
+{% call components::post_direct("Delete user", confirmation,"/users/delete", opts) %}
 
 {% endblock %}
