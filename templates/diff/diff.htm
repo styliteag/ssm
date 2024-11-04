@@ -17,25 +17,30 @@
   <thead>
     <tr>
       <th>Difference</th>
+      <th>Details</th>
     </tr>
   </thead>
   <tbody>
     {% for item in user_diff %}
     <tr>
+      {% match item %}
+      {% when crate::sshclient::DiffItem::DuplicateKey with (key) %}
+      <td>Duplicate key</td>
       <td>
-        {% match item %}
-        {% when crate::sshclient::DiffItem::DuplicateKey with (key) %}
         <details>
           <summary>
-            Duplicate key: {% call components::maybe(key.comment, "Key has no comment") %}</summary>
+            {% call components::maybe(key.comment, "Key has no comment") %}</summary>
           <hr>
           There are multiple copies of this key:
           {{ key.as_html()|safe }}
         </details>
-        {% when crate::sshclient::DiffItem::UnknownKey with (key) %}
+      </td>
+      {% when crate::sshclient::DiffItem::UnknownKey with (key) %}
+      <td>Unknown key</td>
+      <td>
         <details>
           <summary>
-            Unknown key: {% call components::maybe(key.comment, "Key has no comment") %}
+            {% call components::maybe(key.comment, "Key has no comment") %}
           </summary>
           <hr>
           This key is not in the database:
@@ -50,19 +55,25 @@
         {% endmatch %}
         }'>Assign this key to a user</button>
         </details>
-        {% when crate::sshclient::DiffItem::KeyMissing with (key, username) %}
+      </td>
+      {% when crate::sshclient::DiffItem::KeyMissing with (key, username) %}
+      <td>Missing key</td>
+      <td>
         <details>
           <summary>
-            Missing key: {% call components::maybe(key.comment, "Key has no comment") %}
+            {% call components::maybe(key.comment, "Key has no comment") %}
           </summary>
           <hr>
           This key, owned by <a href="/users/{{ username }}">{{ username }}</a>, is missing:
           {{ key.as_html()|safe }}
         </details>
-        {% when crate::sshclient::DiffItem::UnauthorizedKey with (key, user) %}
+      </td>
+      {% when crate::sshclient::DiffItem::UnauthorizedKey with (key, user) %}
+      <td>Unauthorized key</td>
+      <td>
         <details>
           <summary>
-            Unauthorized key: {% call components::maybe(key.comment, "Key has no comment") %}
+            {% call components::maybe(key.comment, "Key has no comment") %}
           </summary>
           <hr>
           This key, owned by <a href="/users/{{ user }}">{{ user }}</a>, is not authorized on this host:
@@ -72,18 +83,34 @@
       "user_on_host": "{{ username }}"
       }'>Authorize this user</button>
         </details>
-        {% when crate::sshclient::DiffItem::FaultyKey with (error, entry) %}
+      </td>
+      {% when crate::sshclient::DiffItem::FaultyKey with (error, entry) %}
+      <td>Faulty line</td>
+      <td>
         <details>
           <summary>
-            Faulty line: {{ error }}
+            {{ error }}
           </summary>
           <hr>
           This line couldn't be parsed:
           <br>
           <code>{{ entry }}</code>
         </details>
-        {% endmatch %}
       </td>
+      {% when crate::sshclient::DiffItem::PragmaMissing %}
+      <td>Pragma missing</td>
+      <td>
+        <details>
+          <summary>
+            This file is not managed by ssm
+          </summary>
+          <hr>
+          The pragma is not in this file, suggesting that someone has edited it
+          or it was never managed in the first place.
+          <br>
+        </details>
+      </td>
+      {% endmatch %}
     </tr>
     {% endfor %}
   </tbody>
