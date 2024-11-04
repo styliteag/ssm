@@ -488,7 +488,7 @@ impl SshClient {
             .execute_with_data(
                 handle,
                 &script[..],
-                "cat - > .ssh/ssh-keymanager.sh; chmod +x .ssh/ssh-keymanager.sh",
+                "cat - > .ssh/ssm.sh; chmod +x .ssh/ssm.sh",
             )
             .await
         {
@@ -732,7 +732,7 @@ pub enum BashCommand {
 
 impl std::fmt::Display for BashCommand {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, ".ssh/ssh-keymanager.sh ")?;
+        write!(f, ".ssh/ssm.sh ")?;
         match self {
             Self::GetAuthorizedKeyfile(user) => write!(f, "get_authorized_keyfile {user}"),
             Self::SetAuthorizedKeyfile(user, _new_keyfile) => {

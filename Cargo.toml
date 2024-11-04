@@ -1,10 +1,10 @@
 [package]
 authors = ["Jeidnx <jeidnx@domainhier.de>"]
 edition = "2021"
-name = "ssh-key-manager"
+name = "ssm"
 version = "0.0.1-alpha"
 description = "Manage all your ssh keys from one interface"
-repository = "https://github.com/styliteag/ssh-key-manager"
+repository = "https://github.com/styliteag/ssm"
 readme = "README.md"
 
 [features]

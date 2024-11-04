@@ -3,7 +3,7 @@
 
 <head>
 	{% block head %}
-	<title>{% block title %}ssh-key-manager{% endblock %}</title>
+	<title>{% block title %}ssm{% endblock %}</title>
 	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<link rel="stylesheet" type="text/css" href="/style.css">
@@ -12,7 +12,7 @@
 </head>
 
 <body>
-	<h1>SSH-Keymanager</h1>
+	<h1>Secure SSH Manager</h1>
 	<nav>
 		<a href="/">Overview</a>
 		<a href="/hosts">List hosts</a>
@@ -34,7 +34,7 @@
 	<script src="/forms.js" defer></script>
 	<footer>
 		<p id="version">v{{ env!("CARGO_PKG_VERSION") }}</p>
-		<a href="https://github.com/styliteag/ssh-key-manager" title="View sourcecode on GitHub">View source code on
+		<a href="https://github.com/styliteag/ssm" title="View sourcecode on GitHub">View source code on
 			GitHub</a>
 	</footer>
 	{% endblock %}

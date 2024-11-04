@@ -1,7 +1,7 @@
 # SEE https://github.com/LukeMathWalker/cargo-chef
 
 # Build the image with:
-# docker build -t ssh-key-manager .
+# docker build -t ssm .
 # TODO test on ARM
 # TODO test Cross compilation with buildx
 # TODO make musl on ALPINE work
@@ -33,7 +33,7 @@ RUN cargo chef cook --release --recipe-path recipe.json
 
 # Build application
 COPY . .
-RUN cargo build --release --bin ssh-key-manager
+RUN cargo build --release --bin ssm
 
 # STAGE 4 - Final image
 FROM debian:12-slim
@@ -41,11 +41,12 @@ WORKDIR /app
 
 RUN apt-get update && apt-get install -y sqlite3 && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /app/target/release/ssh-key-manager   /app/
+COPY --from=builder /app/target/release/ssm   /app/
 
-ENV DATABASE_URL=sqlite://ssh-key-manager.sqlite
+ENV CONFIG=/app/config.toml
+ENV DATABASE_URL=sqlite:///app/ssm.sqlite
 ENV "SSH.PRIVATE_KEY_FILE"=/app/id
 
 EXPOSE 8080
 
-CMD ["./ssh-key-manager"]
+CMD ["./ssm"]

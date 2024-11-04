@@ -129,7 +129,7 @@ async fn main() -> Result<(), std::io::Error> {
 
     let ssh_client = Data::new(SshClient::new(pool.clone(), key));
 
-    info!("Starting ssh-key-manager Server");
+    info!("Starting Secure SSH Manager");
     HttpServer::new(move || {
         let generated = generate();
 

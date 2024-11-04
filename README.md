@@ -1,4 +1,4 @@
-# ssh-key-manager
+# Secure SSH Manager
 
 Manages your ssh keys from a single interface.
 

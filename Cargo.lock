@@ -2395,7 +2395,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ssh-key-manager"
+name = "ssm"
 version = "0.0.1-alpha"
 dependencies = [
  "actix",
