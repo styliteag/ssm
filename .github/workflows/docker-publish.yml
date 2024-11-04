@@ -24,12 +24,12 @@ jobs:
         # vscode-github-actions: ignore
         password: ${{ secrets.DOCKERHUB_TOKEN }}
     - name: Build and push to Docker Hub
-      uses: docker/build-push-action@v4
+      uses: docker/build-push-action@v6
       with:
         push: true
         tags: styliteag/ssh-key-manager:latest
     - name: Build and push to GitHub Container Registry
-      uses: docker/build-push-action@v4
+      uses: docker/build-push-action@v6
       with:
         push: true
         tags: ghcr.io/${{ github.repository }}/ssh-key-manager:latest
