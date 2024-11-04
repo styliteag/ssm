@@ -49,4 +49,6 @@
 <label>Options</label>
 <input name="options">
 {% call components::form_tail("Authorize user") %}
+{% set path = "/hosts/".to_owned() + host.name.as_str() + "/delete" %}
+{% call components::post("Delete", path.as_str(), "") %}
 {% endblock %}

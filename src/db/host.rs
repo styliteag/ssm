@@ -149,4 +149,17 @@ impl Host {
         })
         .as_str())
     }
+
+    pub fn get_dependant_hosts(&self, conn: &mut DbConnection) -> Result<Vec<String>, String> {
+        query(
+            host::table
+                .filter(host::jump_via.eq(self.id))
+                .select(host::name)
+                .load::<String>(conn),
+        )
+    }
+
+    pub fn delete(self, conn: &mut DbConnection) -> Result<usize, String> {
+        query(diesel::delete(host::table.filter(host::id.eq(self.id))).execute(conn))
+    }
 }

@@ -1,0 +1,43 @@
+<input type="hidden" name="confirm" value="true" />
+<h3>These hosts and all their authorizations will be deleted:</h3>
+<table>
+  <thead>
+    <tr>
+      <th>Host</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for host in affected_hosts %}
+    <tr>
+      <td><a href="/hosts/{{ host }}">{{ host }}</a></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+<h3>These authorizations will be deleted:</h3>
+<table>
+  <thead>
+    <tr>
+      <th>User</th>
+      <th>User on host</th>
+      <th>Options</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for user in authorizations %}
+    <tr>
+      <td><a href="/users/{{ user.0 }}">{{ user.0 }}</a></td>
+      <td>{{ user.1 }}</td>
+      <td>
+        {% match user.2 %}
+        {% when Some with (options) %}
+        <pre>{{ options }}</pre>
+        {% when None %}
+        <i>No options set</i>
+        {% endmatch %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+<button>Delete</button>

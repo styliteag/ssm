@@ -24,7 +24,8 @@ pub fn hosts_config(cfg: &mut web::ServiceConfig) {
         .service(add_host)
         .service(authorize_user)
         .service(gen_authorized_keys)
-        .service(set_authorized_keys);
+        .service(set_authorized_keys)
+        .service(delete);
 }
 
 #[derive(Template)]
@@ -360,5 +361,75 @@ async fn set_authorized_keys(
     Ok(match res {
         Ok(()) => FormResponseBuilder::success(String::from("Applied authorized_keys")),
         Err(error) => FormResponseBuilder::error(error.to_string()),
+    })
+}
+
+#[derive(Template)]
+#[template(path = "hosts/delete_dialog.htm")]
+struct DeleteHostTemplate {
+    authorizations: Vec<UserAndOptions>,
+    affected_hosts: Vec<String>,
+}
+#[derive(Deserialize)]
+struct HostDeleteForm {
+    #[serde(default)]
+    confirm: bool,
+}
+
+#[post("/{name}/delete")]
+async fn delete(
+    conn: Data<ConnectionPool>,
+    form: web::Form<HostDeleteForm>,
+    host: Path<String>,
+) -> actix_web::Result<impl Responder> {
+    if form.confirm {
+        // TODO: delte host
+
+        let delete_res = web::block(move || {
+            let mut connection = conn.get().unwrap();
+
+            let host = Host::get_host_name(&mut connection, host.to_string()).ok()?;
+
+            host.and_then(|host| host.delete(&mut connection).ok())
+        })
+        .await?;
+
+        return Ok(match delete_res {
+            Some(amt) => FormResponseBuilder::success(format!("Deleted {amt} record(s)")),
+            None => FormResponseBuilder::error("Couldn't find host".to_owned()),
+        });
+    }
+
+    let host2 = host.clone();
+
+    let res = web::block(move || {
+        let mut connection = conn.get().unwrap();
+
+        let host = Host::get_host_name(&mut connection, host2).ok()?;
+
+        host.and_then(|host| {
+            host.get_authorized_users(&mut connection)
+                .ok()
+                .and_then(|auth| {
+                    host.get_dependant_hosts(&mut connection)
+                        .ok()
+                        .map(|hosts| (auth, hosts))
+                })
+        })
+    })
+    .await?;
+
+    // TODO: resolve authorizations of dependant hosts
+    Ok(match res {
+        Some((authorizations, affected_hosts)) => FormResponseBuilder::dialog(Modal {
+            title: format!("In addition to {host}, these entries will be affected"),
+            request_target: format!("/hosts/{host}/delete"),
+            template: DeleteHostTemplate {
+                authorizations,
+                affected_hosts,
+            }
+            .to_string(),
+        }),
+        None => FormResponseBuilder::error("Couldn't find host".to_owned()),
     })
 }

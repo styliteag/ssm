@@ -56,3 +56,9 @@
   <button>{{ message }}</button>
 </form>
 {% endmacro %}
+
+{% macro post(name, target, opts) %}
+<button hx-swap="none" hx-post="{{ target }}" hx-vals='{
+  {{ opts }}
+}'>{{ name }}</button>
+{% endmacro %}
