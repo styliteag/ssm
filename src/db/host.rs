@@ -145,7 +145,10 @@ impl Host {
         Ok(res.into_iter().fold(
             String::with_capacity(estimated_size),
             |buf, (key, options)| {
-                buf + options.unwrap_or(String::new()).as_str() + key.to_openssh().as_str() + "\n"
+                buf + options.unwrap_or(String::new()).as_str()
+                    + " "
+                    + key.to_openssh().as_str()
+                    + "\n"
             },
         ) + (if self.username.eq(&user_on_host) {
             ssh_client.get_own_key_openssh() + "\n"
