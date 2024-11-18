@@ -1,7 +1,10 @@
+{%- import "components.html" as components -%}
+
 <thead>
   <tr>
     <th>Username</th>
     <th>Enabled</th>
+    <th>Delete</th>
   </tr>
 </thead>
 <tbody>
@@ -9,6 +12,14 @@
   <tr>
     <td><a href="/users/{{ user.username }}">{{ user.username }}</a></td>
     <td>{{ user.enabled }}</td>
+    <td>
+
+      {% let confirmation = format!("Are you sure you want to delete {}? This will also remove all associated
+      authorizations.", user.username) %}
+      {% let opts = format!("\"username\": \"{}\"", user.username) %}
+      {% call components::post_confirm("Delete user", confirmation,"/users/delete", opts) %}
+    </td>
   </tr>
+
   {% endfor %}
 </tbody>

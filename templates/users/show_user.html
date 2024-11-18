@@ -12,23 +12,26 @@
       <th>Host</th>
       <th>User on host</th>
       <th>Options</th>
+      <th>Delete</th>
     </tr>
   </thead>
   <tbody>
-    {% for (host, user_on_host, options) in authorizations %}
+    {% for (auth_id, host, user_on_host, options) in authorizations %}
     <tr>
       <td>{{ host }}</td>
       <td>{{ user_on_host }}</td>
       <td>{% call components::maybe_options(options) %}
+      <td>
+        {% let s = format!("\"authorization_id\": {}", auth_id) %}
+        {% call components::post("Edit", "/hosts/edit_authorization", s) %}
+        {% call components::post_confirm("Delete","Are you sure you want to delete this authorization?",
+        "/hosts/delete_authorization", s) %}
+      </td>
     </tr>
     {% endfor %}
   </tbody>
 </table>
 <h3> SSH Keys:</h3>
-<div hx-trigger="load" hx-get="/users/{{ user.username }}/list_keys.htm"></div>
-{% let confirmation = format!("Are you sure you want to delete {}? This will also remove all associated
-authorizations.", username) %}
-{% let opts = format!("\"username\": \"{}\"", username) %}
-{% call components::post_direct("Delete user", confirmation,"/users/delete", opts) %}
+<div hx-trigger="load, reload-keys from:body" hx-get="/users/{{ user.username }}/list_keys.htm"></div>
 
 {% endblock %}

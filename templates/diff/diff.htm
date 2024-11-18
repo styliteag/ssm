@@ -7,7 +7,7 @@
 {% else %}
 {% for (username, user_diff) in user_diff_list %}
 {% if !user_diff.is_empty() %}
-<h4>Differences for user '{{ username }}':</h4>
+<h3>Differences for user '{{ username }}':</h3>
 <aside>
   <button hx-swap="none" hx-post="/hosts/gen_authorized_keys" hx-vals='{
   "user_on_host": "{{ username }}"
@@ -18,6 +18,7 @@
     <tr>
       <th>Difference</th>
       <th>Details</th>
+      <th>Actions</th>
     </tr>
   </thead>
   <tbody>
@@ -45,7 +46,10 @@
           <hr>
           This key is not in the database:
           {{ key.as_html()|safe }}
-          <button hx-swap="none" hx-post="/diff/assign_key_dialog" hx-vals='{
+        </details>
+      </td>
+      <td>
+        <button hx-swap="none" hx-post="/diff/assign_key_dialog" hx-vals='{
         "key_type": "{{ key.algorithm }}",
         "key_base64": "{{ key.base64 }}"
         {% match key.comment %}
@@ -54,7 +58,6 @@
         {% when None %}
         {% endmatch %}
         }'>Assign this key to a user</button>
-        </details>
       </td>
       {% when crate::sshclient::DiffItem::KeyMissing with (key, username) %}
       <td>Missing key</td>
@@ -78,11 +81,13 @@
           <hr>
           This key, owned by <a href="/users/{{ user }}">{{ user }}</a>, is not authorized on this host:
           {{ key.as_html()|safe }}
-          <button hx-swap="none" hx-post="/diff/authorize_user_dialog" hx-vals='{
+        </details>
+      </td>
+      <td>
+        <button hx-swap="none" hx-post="/diff/authorize_user_dialog" hx-vals='{
       "username": "{{ user }}",
       "user_on_host": "{{ username }}"
       }'>Authorize this user</button>
-        </details>
       </td>
       {% when crate::sshclient::DiffItem::FaultyKey with (error, entry) %}
       <td>Faulty line</td>
@@ -97,6 +102,7 @@
           <code>{{ entry }}</code>
         </details>
       </td>
+      <td></td>
       {% when crate::sshclient::DiffItem::PragmaMissing %}
       <td>Pragma missing</td>
       <td>
@@ -110,11 +116,13 @@
           <br>
         </details>
       </td>
+      <td></td>
       {% endmatch %}
     </tr>
     {% endfor %}
   </tbody>
 </table>
+<hr>
 {% endif %}
 {% endfor %}
 {% endif %}

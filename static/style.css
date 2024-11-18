@@ -31,7 +31,6 @@ nav {
 
 nav>a {
   padding: 1vh 0;
-  /* background-color: var(--bg-color-alt); */
   flex-grow: 1;
   text-align: center;
 }
@@ -43,6 +42,29 @@ a {
 
 a:hover {
   color: var(--text-color-alt);
+}
+
+a.button,
+button {
+  font-size: 1.2em;
+  font-weight: bold;
+  margin: 5px;
+  border: 1px solid;
+  border-radius: 5px;
+  background-color: var(--bg-color-alt);
+  color: var(--text-color);
+  padding: 3px;
+  text-decoration: none;
+}
+
+a.button:hover,
+button:hover {
+  cursor: pointer;
+  background-color: var(--bg-color);
+}
+
+details:hover {
+  cursor: pointer;
 }
 
 h1 {
@@ -76,9 +98,10 @@ form>label {
 }
 
 code {
+  font-weight: bold;
   background-color: var(--bg-color-alt);
-  /* white-space: pre-line; */
   word-break: break-all;
+  padding: 2px;
 }
 
 code>span {
@@ -103,6 +126,12 @@ table {
 
 thead {
   background-color: var(--bg-color-alt);
+  font-size: 1.6em;
+}
+
+tbody tr {
+  line-height: 4em;
+  font-size: 1.2em;
 }
 
 tbody tr:nth-child(odd) {
@@ -115,8 +144,8 @@ tbody tr:nth-child(even) {
 
 th,
 td {
-  margin: 20px;
-  text-align: center;
+  padding: 0 20px;
+  border-left: 2px solid var(--text-color);
 }
 
 #snackbar {
@@ -135,18 +164,13 @@ td {
   border-radius: 15px;
   margin-top: 10px;
   padding: 1em;
-  /* border: solid 2px; */
 }
 
 #snackbar>.form_success {
-  /* border-color: #1fbb1a; */
-  /* background-color: #138421; */
   background-color: var(--bg-color-success);
 }
 
 #snackbar>.form_error {
-  /* border-color: #870606; */
-  /* background-color: #c73223; */
   background-color: var(--bg-color-error);
 }
 

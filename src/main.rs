@@ -107,7 +107,7 @@ async fn main() -> Result<(), std::io::Error> {
         .add_source(config::Environment::default())
         .build()
         .unwrap_or_else(|e| {
-            println!(
+            eprintln!(
                 "Error while reading configuration source: {}",
                 e.to_string()
             );
@@ -115,7 +115,7 @@ async fn main() -> Result<(), std::io::Error> {
         })
         .try_deserialize()
         .unwrap_or_else(|e| {
-            println!("Error while parsing configuration: {}", e.to_string());
+            eprintln!("Error while parsing configuration: {}", e.to_string());
             std::process::exit(3);
         });
 

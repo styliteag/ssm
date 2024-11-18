@@ -3,7 +3,10 @@
 {% extends "base.html" %}
 
 {% block content %}
-<h3>Host: {{ host.name }}</h3>
+<h1>Host: {{ host.name }}</h1>
+{% set path="/hosts/" .to_owned() + host.name.as_str() + "/delete" %}
+{% call components::post("Delete this host", path.as_str(), "" ) %}
+<a class="button" href="/diff/{{ host.name }}">View diff</a>
 <p>Address: {{ host.address}}</p>
 <p>Port: {{ host.port }}</p>
 <p>Username: {{ host.username }}</p>
@@ -17,8 +20,8 @@
 <table>
   <thead>
     <tr>
+      <th>Login</th>
       <th>User</th>
-      <th>User on host</th>
       <th>Options</th>
       <th>Tasks</th>
     </tr>
@@ -39,7 +42,7 @@
       <td>
         {% let s = format!("\"authorization_id\": {}", user.0) %}
         {% call components::post("Edit", "/hosts/edit_authorization", s) %}
-        {% call components::post_direct("Delete","Are you sure you want to delete this authorization?",
+        {% call components::post_confirm("Delete","Are you sure you want to delete this authorization?",
         "/hosts/delete_authorization", s) %}
       </td>
     </tr>
@@ -47,7 +50,7 @@
   </tbody>
 </table>
 {% call components::form_head("/hosts/user/authorize") %}
-<h3>Authorize a user on this host</h3>
+<h2>Authorize a user on this host</h2>
 <input type="hidden" name="host_id" value="{{ host.id }}" />
 <label>Username</label>
 {% call components::user_selection(user_list) %}
@@ -56,6 +59,4 @@
 <label>Options</label>
 <input name="options">
 {% call components::form_tail("Authorize user") %}
-{% set path = "/hosts/".to_owned() + host.name.as_str() + "/delete" %}
-{% call components::post("Delete", path.as_str(), "") %}
 {% endblock %}

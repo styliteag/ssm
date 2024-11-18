@@ -34,4 +34,9 @@ impl PublicUserKey {
     pub fn add_key(conn: &mut DbConnection, key: NewPublicUserKey) -> Result<(), String> {
         query_drop(insert_into(user_key::table).values(key).execute(conn))
     }
+
+    /// Remove a key from the db
+    pub fn delete_key(conn: &mut DbConnection, key: i32) -> Result<(), String> {
+        query_drop(diesel::delete(user_key::table.filter(user_key::id.eq(key))).execute(conn))
+    }
 }

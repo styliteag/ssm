@@ -8,7 +8,7 @@ use crate::{
     DbConnection,
 };
 
-use super::{query, query_drop, Authorization};
+use super::{query, query_drop, UserAndOptions};
 
 impl User {
     pub fn get_all_users(conn: &mut DbConnection) -> Result<Vec<Self>, String> {
@@ -50,14 +50,19 @@ impl User {
     pub fn get_authorizations(
         &self,
         conn: &mut DbConnection,
-    ) -> Result<Vec<Authorization>, String> {
+    ) -> Result<Vec<UserAndOptions>, String> {
         query(
             user_in_host::table
                 .inner_join(user::table)
                 .inner_join(host::table)
                 .filter(user::username.eq(&self.username))
-                .select((host::name, user_in_host::user, user_in_host::options))
-                .load::<Authorization>(conn),
+                .select((
+                    user_in_host::id,
+                    host::name,
+                    user_in_host::user,
+                    user_in_host::options,
+                ))
+                .load::<UserAndOptions>(conn),
         )
     }
 }

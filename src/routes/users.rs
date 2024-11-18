@@ -8,7 +8,7 @@ use serde::Deserialize;
 use ssh_key::PublicKey;
 
 use crate::{
-    db::Authorization,
+    db::UserAndOptions,
     forms::FormResponseBuilder,
     routes::{ErrorTemplate, RenderErrorTemplate},
     ConnectionPool,
@@ -55,7 +55,7 @@ async fn render_users(conn: Data<ConnectionPool>) -> actix_web::Result<impl Resp
 #[template(path = "users/show_user.html")]
 struct ShowUserTemplate {
     user: User,
-    authorizations: Vec<Authorization>,
+    authorizations: Vec<UserAndOptions>,
 }
 #[get("/{name}")]
 async fn show_user(

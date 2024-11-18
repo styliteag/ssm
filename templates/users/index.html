@@ -3,7 +3,7 @@
 
 {% block content %}
 <h3>List of all users:</h3>
-<table hx-trigger="load, reload-users from:main" hx-get="/users/list.htm" placeholder="Loading">
+<table hx-trigger="load, reload-users from:body" hx-get="/users/list.htm" placeholder="Loading">
 </table>
 <hr>
 {% call components::form_head("/users/add") %}

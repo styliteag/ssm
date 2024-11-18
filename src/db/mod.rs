@@ -55,9 +55,6 @@ impl From<(PublicUserKey, String, String, Option<String>)> for AllowedUserOnHost
 /// Username and one associated key
 pub type UsernameAndKey = (String, PublicUserKey);
 
-/// A list of allowed hosts for a user: name, user on host, options
-pub type Authorization = (String, String, Option<String>);
-
 /// List of authorized_keys files
 pub type AuthorizedKeysList = Vec<AllowedUserOnHost>;
 
