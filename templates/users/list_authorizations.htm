@@ -1,0 +1,27 @@
+{%- import "components.html" as components -%}
+
+<table>
+  <thead>
+    <tr>
+      <th>Host</th>
+      <th>User on host</th>
+      <th>Options</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for (auth_id, host, user_on_host, options) in authorizations %}
+    <tr>
+      <td><a href="/hosts/{{ host}}">{{ host }}</a></td>
+      <td>{{ user_on_host }}</td>
+      <td>{% call components::maybe_options(options) %}
+      <td>
+        {% let s = format!("\"authorization_id\": {}", auth_id) %}
+        {% call components::post("Edit", "/hosts/edit_authorization", s) %}
+        {% call components::post_confirm("Delete","Are you sure you want to delete this authorization?",
+        "/hosts/delete_authorization", s) %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>

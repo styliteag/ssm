@@ -361,7 +361,8 @@ async fn set_authorized_keys(
         .await;
 
     Ok(match res {
-        Ok(()) => FormResponseBuilder::success(String::from("Applied authorized_keys")),
+        Ok(()) => FormResponseBuilder::success(String::from("Applied authorized_keys"))
+            .add_trigger("reloadDiff".to_owned()),
         Err(error) => FormResponseBuilder::error(error.to_string()),
     })
 }
@@ -454,7 +455,8 @@ async fn delete_authorization(
     .await?;
 
     Ok(match res {
-        Ok(()) => FormResponseBuilder::success("Deleted authorization.".to_owned()),
+        Ok(()) => FormResponseBuilder::success("Deleted authorization.".to_owned())
+            .add_trigger("reload-authorizations".to_owned()),
         Err(e) => FormResponseBuilder::error(e),
     })
 }

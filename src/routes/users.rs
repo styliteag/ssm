@@ -21,6 +21,7 @@ pub fn users_config(cfg: &mut web::ServiceConfig) {
         .service(render_users)
         .service(show_user)
         .service(render_user_keys)
+        .service(list_user_authorizations)
         .service(add_user)
         .service(assign_key_to_user)
         .service(delete_user);
@@ -55,7 +56,6 @@ async fn render_users(conn: Data<ConnectionPool>) -> actix_web::Result<impl Resp
 #[template(path = "users/show_user.html")]
 struct ShowUserTemplate {
     user: User,
-    authorizations: Vec<UserAndOptions>,
 }
 #[get("/{name}")]
 async fn show_user(
@@ -72,11 +72,7 @@ async fn show_user(
                 web::block(move || user2.get_authorizations(&mut conn.get().unwrap())).await?;
 
             match authorizations {
-                Ok(authorizations) => ShowUserTemplate {
-                    user,
-                    authorizations,
-                }
-                .to_response(),
+                Ok(authorizations) => ShowUserTemplate { user }.to_response(),
                 Err(error) => ErrorTemplate { error }.to_response(),
             }
         }
@@ -118,6 +114,7 @@ async fn delete_user(
         Err(e) => FormResponseBuilder::error(e),
     })
 }
+
 #[derive(Template)]
 #[template(path = "users/list_keys.htm")]
 struct ListUserKeysTemplate {
@@ -150,6 +147,31 @@ async fn render_user_keys(
                 .collect();
             ListUserKeysTemplate { keys: public_keys }.to_response()
         }
+        Err(error) => RenderErrorTemplate { error }.to_response(),
+    })
+}
+
+#[derive(Template)]
+#[template(path = "users/list_authorizations.htm")]
+struct ListUserAuthorizationsTemplate {
+    authorizations: Vec<UserAndOptions>,
+}
+
+#[get("/{username}/list_authorizations.htm")]
+async fn list_user_authorizations(
+    conn: Data<ConnectionPool>,
+    username: Path<String>,
+) -> actix_web::Result<impl Responder> {
+    let maybe_user_auth = web::block(move || {
+        let mut connection = conn.get().unwrap();
+        let user = User::get_user(&mut connection, username.to_string())?;
+
+        user.get_authorizations(&mut connection)
+    })
+    .await?;
+
+    Ok(match maybe_user_auth {
+        Ok(authorizations) => ListUserAuthorizationsTemplate { authorizations }.to_response(),
         Err(error) => RenderErrorTemplate { error }.to_response(),
     })
 }
