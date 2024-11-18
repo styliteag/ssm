@@ -63,37 +63,39 @@ get_authorized_keys_location() {
   echo "${home}/${authorized_keys_location}"
 }
 
-check_keyfile_permissions() {
-  keyfile_location="$1"
-  if [ -f "${externaly_managed_keyfile}" ]; then    echo "# !read-only"
-    echo "# !externaly_managed_keyfile:true"
-    echo "# Externaly managed keyfile because ${externaly_managed_keyfile} exists."
-  fi
-  if [ -f "${readonly_keyfile}" ]; then
-    echo "# !readonly_keyfile:true"
-    echo "# Readonly keyfile because ${readonly_keyfile} exists."
-  fi
+# Check if the system has any conditions that make the keyfile externally managed or readonly
+check_keyfile_conditions() {
+    conditions=""
+    
+    # Check for special files
+    [ -f "${externaly_managed_keyfile}" ] && conditions="${conditions} external_file ${externaly_managed_keyfile} exists"
+    [ -f "${readonly_keyfile}" ] && conditions="${conditions} readonly ${readonly_keyfile} exists"
+    
+    # Check for specific systems
+    grep -q "pfSense" "/etc/platform" 2>/dev/null && conditions="${conditions} is_pfsense"
+    uname -a | grep -q "TRUENAS" 2>/dev/null && conditions="${conditions} is_truenas_core"
+    uname -a | grep -q "+truenas " 2>/dev/null && conditions="${conditions} is_truenas_scale"
+    [ -f "/etc/product" ] && grep -q "Sophos UTM" "/etc/product" 2>/dev/null && conditions="${conditions} is_sophos_utm"
+    
+    echo "${conditions}"
+}
 
-  # Check if we are running on pfSense
-  if grep -q "pfSense" "/etc/platform" > /dev/null 2>&1; then
-    echo "# !externaly_managed_keyfile:true"
-    echo "# Externaly managed keyfile because we are running on pfSense."
-  fi
-  # Check if we are running on TrueNAS Core
-  if uname -a | grep -q "TRUENAS" > /dev/null 2>&1; then
-    echo "# !externaly_managed_keyfile:true"
-    echo "# Externaly managed keyfile because we are running on TrueNAS Core."
-  fi
-  # Check if we are running on TrueNAS Scale
-  if uname -a | grep -q "+truenas " > /dev/null 2>&1; then
-    echo "# !externaly_managed_keyfile:true"
-    echo "# Externaly managed keyfile because we are running on TrueNAS Scale."
-  fi
-  # Check if we are running on Sophos UTM
-  if [ -f "/etc/product" ] && grep -q "Sophos UTM" "/etc/product" > /dev/null 2>&1; then
-    echo "# !externaly_managed_keyfile:true"
-    echo "# Externaly managed keyfile because we are running on Sophos UTM."
-  fi
+# Output comments for get_authorized_keyfile command
+print_keyfile_comments() {
+    conditions=$(check_keyfile_conditions)
+    if [ -n "${conditions}" ]; then
+        printf "# !read-only:true\n"
+        printf "# ${conditions}\n"
+    fi
+}
+
+# Check if keyfile modifications should be blocked
+is_keyfile_readonly() {
+    conditions=$(check_keyfile_conditions)
+    if [ -n "${conditions}" ]; then
+        return 0
+    fi
+    return 1
 }
 
 handle_get_authorized_keyfile() {
@@ -105,14 +107,18 @@ handle_get_authorized_keyfile() {
         echo "Tried location: ${keyfile_location}"
         exit 1
     fi
-
-    cat "${keyfile_location}" && check_keyfile_permissions "${keyfile_location}"
+    cat "${keyfile_location}" && print_keyfile_comments
     exit 0
 }
 
 handle_set_authorized_keyfile() {
     user="$1"
     keyfile_location=$(get_authorized_keys_location "${user}")
+
+    if is_keyfile_readonly; then
+        echo "Keyfile is readonly, aborting."
+        exit 1
+    fi
 
     if [ -e "${keyfile_location}" ]; then
         file_head=$(head -n1 < "${keyfile_location}")
@@ -128,7 +134,7 @@ handle_set_authorized_keyfile() {
 }
 
 handle_get_ssh_users() {
-    echo > "${TMP}/homedirs.$$"
+    printf "" > "${TMP}/homedirs.$$"
     
     do_getent_passwd_all | while IFS=: read -r name _password _uid _gid _gecos home _shell; do
             if [ -e "${home}/${authorized_keys_location}" ]; then
@@ -143,6 +149,7 @@ handle_get_ssh_users() {
 handle_update() {
     newfile="${0}.new"
     cat - > "${newfile}"
+    # Can we check if the new file is valid?
     mv "${newfile}" "${0}"
     exit 0
 }
