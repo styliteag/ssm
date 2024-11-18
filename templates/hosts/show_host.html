@@ -29,8 +29,8 @@
   <tbody>
     {% for user in authorized_users %}
     <tr>
-      <td>{{ user.2 }}</td>
-      <td><a href="/users/{{ user.1 }}">{{ user.1 }}</a></td>
+      <td>{{ user.1 }}</td>
+      <td><a href="/users/{{ user.2 }}">{{ user.2 }}</a></td>
       <td>
         {% match user.3 %}
         {% when Some with (options) %}
