@@ -68,14 +68,14 @@ check_keyfile_conditions() {
     conditions=""
     
     # Check for special files
-    [ -f "${externaly_managed_keyfile}" ] && conditions="${conditions} external_file ${externaly_managed_keyfile} exists"
-    [ -f "${readonly_keyfile}" ] && conditions="${conditions} readonly ${readonly_keyfile} exists"
+    [ -f "${externaly_managed_keyfile}" ] && conditions="${conditions} readonly because external_file ${externaly_managed_keyfile} exists"
+    [ -f "${readonly_keyfile}" ] && conditions="${conditions} readonly because ${readonly_keyfile} exists"
     
     # Check for specific systems
-    grep -q "pfSense" "/etc/platform" 2>/dev/null && conditions="${conditions} is_pfsense"
-    uname -a | grep -q "TRUENAS" 2>/dev/null && conditions="${conditions} is_truenas_core"
-    uname -a | grep -q "+truenas " 2>/dev/null && conditions="${conditions} is_truenas_scale"
-    [ -f "/etc/product" ] && grep -q "Sophos UTM" "/etc/product" 2>/dev/null && conditions="${conditions} is_sophos_utm"
+    grep -q "pfSense" "/etc/platform" 2>/dev/null && conditions="${conditions} readonly because product is pfSense"
+    uname -a | grep -q "TRUENAS" 2>/dev/null && conditions="${conditions} readonly because product is Truenas Core"
+    uname -a | grep -q "+truenas " 2>/dev/null && conditions="${conditions} readonly because product is Truenas Scale"
+    [ -f "/etc/product" ] && grep -q "Sophos UTM" "/etc/product" 2>/dev/null && conditions="${conditions} readonly because product is Sophos UTM"
     
     echo "${conditions}"
 }
@@ -85,7 +85,7 @@ print_keyfile_comments() {
     conditions=$(check_keyfile_conditions)
     if [ -n "${conditions}" ]; then
         printf "# !read-only:true\n"
-        printf "# ${conditions}\n"
+        printf "# !message:${conditions}\n"
     fi
 }
 
