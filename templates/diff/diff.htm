@@ -72,7 +72,7 @@
         </details>
       </td>
       {% when crate::sshclient::DiffItem::UnauthorizedKey with (key, user) %}
-      <td>Unauthorized key</td>
+      <td>Unauthorized key owned by <a href="/users/{{ user}}">{{ user }}</a></td>
       <td>
         <details>
           <summary>
@@ -87,7 +87,7 @@
         <button hx-swap="none" hx-post="/diff/authorize_user_dialog" hx-vals='{
       "username": "{{ user }}",
       "user_on_host": "{{ username }}"
-      }'>Authorize this user</button>
+      }'>Authorize '{{user }}'</button>
       </td>
       {% when crate::sshclient::DiffItem::FaultyKey with (error, entry) %}
       <td>Faulty line</td>
