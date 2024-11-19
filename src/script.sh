@@ -107,7 +107,11 @@ handle_get_authorized_keyfile() {
         echo "Tried location: ${keyfile_location}"
         exit 1
     fi
-    cat "${keyfile_location}" && print_keyfile_comments
+    if is_keyfile_readonly; then
+        print_keyfile_comments
+    fi
+    cat "${keyfile_location}"
+    echo ""
     exit 0
 }
 
