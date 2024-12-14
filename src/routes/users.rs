@@ -67,14 +67,8 @@ async fn show_user(
 
     Ok(match maybe_user {
         Ok(user) => {
-            let user2 = user.clone();
-            let authorizations =
-                web::block(move || user2.get_authorizations(&mut conn.get().unwrap())).await?;
-
-            match authorizations {
-                Ok(authorizations) => ShowUserTemplate { user }.to_response(),
-                Err(error) => ErrorTemplate { error }.to_response(),
-            }
+            let _user2 = user.clone();
+            ShowUserTemplate { user }.to_response()
         }
         Err(error) => ErrorTemplate { error }.to_response(),
     })

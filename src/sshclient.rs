@@ -738,6 +738,7 @@ pub enum BashCommand {
     GetSshUsers,
 
     /// Update the bash script on the server
+    #[allow(dead_code)]
     Update(String),
 
     /// Check the script version
