@@ -2,7 +2,7 @@ use crate::templates::AsHTML;
 use actix_web::{
     get, post,
     web::{self, Data, Path},
-    Responder,
+    Responder, HttpResponse,
 };
 use askama_actix::{Template, TemplateToResponse};
 use serde::Deserialize;
@@ -21,8 +21,10 @@ pub fn diff_config(cfg: &mut web::ServiceConfig) {
         .service(render_diff)
         .service(show_diff)
         .service(assign_key_dialog)
-        .service(authorize_user_dialog);
+        .service(authorize_user_dialog)
+        .service(check_host_diff);
 }
+
 #[derive(Template)]
 #[template(path = "diff/index.html")]
 struct DiffPageTemplate {
@@ -31,17 +33,18 @@ struct DiffPageTemplate {
 
 #[get("")]
 async fn diff_page(conn: Data<ConnectionPool>) -> actix_web::Result<impl Responder> {
-    Ok(
-        match web::block(move || Host::get_all_hosts(&mut conn.get().unwrap())).await? {
-            Ok(hosts) => DiffPageTemplate { hosts }.to_response(),
-            Err(error) => ErrorTemplate { error }.to_response(),
-        },
-    )
+    let hosts = web::block(move || Host::get_all_hosts(&mut conn.get().unwrap())).await?;
+
+    Ok(match hosts {
+        Ok(hosts) => DiffPageTemplate { hosts }.to_response(),
+        Err(error) => ErrorTemplate { error }.to_response(),
+    })
 }
 
 #[derive(Template)]
 #[template(path = "diff/diff.htm")]
 struct RenderDiffTemplate {
+    host: Host,
     diff: HostDiff,
 }
 
@@ -71,9 +74,17 @@ async fn render_diff(
         Err(error) => return Ok(RenderErrorTemplate { error }.to_response()),
     };
 
-    let diff = ssh_client.get_host_diff(host).await;
-
-    Ok(RenderDiffTemplate { diff }.to_response())
+    let diff = ssh_client.get_host_diff(host.clone()).await;
+    
+    // Handle SSH client errors
+    if let Err(error) = &diff {
+        return Ok(RenderErrorTemplate {
+            error: error.to_string(),
+        }
+        .to_response());
+    }
+    
+    Ok(RenderDiffTemplate { host, diff }.to_response())
 }
 
 #[derive(Template)]
@@ -190,4 +201,46 @@ async fn authorize_user_dialog(
         }
         .to_string(),
     }))
+}
+
+#[get("/{host_name}/check.htm")]
+async fn check_host_diff(
+    conn: Data<ConnectionPool>,
+    ssh_client: Data<SshClient>,
+    host_name: Path<String>,
+) -> actix_web::Result<impl Responder> {
+    let res = web::block(move || {
+        let mut connection = conn.get().unwrap();
+        Host::get_host_name(&mut connection, host_name.to_string())
+    })
+    .await?;
+
+    let host = match res {
+        Ok(maybe_host) => {
+            let Some(host) = maybe_host else {
+                return Ok(RenderErrorTemplate {
+                    error: String::from("No such host."),
+                }
+                .to_response());
+            };
+            host
+        }
+        Err(error) => return Ok(RenderErrorTemplate { error }.to_response()),
+    };
+
+    let diff = ssh_client.get_host_diff(host.clone()).await;
+    
+    match diff {
+        Ok(ref diff_items) => {
+            if diff_items.is_empty() {
+                Ok(HttpResponse::Ok().body(""))
+            } else {
+                Ok(RenderDiffTemplate { host, diff }.to_response())
+            }
+        }
+        Err(error) => Ok(RenderErrorTemplate {
+            error: error.to_string(),
+        }
+        .to_response()),
+    }
 }

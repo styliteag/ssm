@@ -2,26 +2,160 @@
 {% extends "base.html" %}
 
 {% block content %}
-
-<h3>Hosts</h3>
-<hr>
-<div class="table-container">
-    <table hx-trigger="load, reload-hosts from:body" hx-get="/hosts/list.htm" placeholder="Loading" hx-swap="innerHTML">
-    </table>
+<div class="host-section">
+    <div class="host-header">
+        <h2 class="host-name">SSH Hosts</h2>
+        <div class="host-info">Manage your SSH connections and authorized keys</div>
+    </div>
+    
+    <div class="table-container">
+        <table class="key-table" hx-trigger="load, reload-hosts from:body" hx-get="/hosts/list.htm" placeholder="Loading" hx-swap="innerHTML">
+        </table>
+    </div>
 </div>
-<hr>
-{% call components::form_head("/hosts/add") %}
-<h4>Add a new host</h4>
-<label>Name</label>
-<input required="true" type="text" name="name">
-<label>Username to authenticate as</label>
-<input required="true" type="text" name="username">
-<label>Address</label>
-<input required="true" type="text" name="address">
-<label>Port</label>
-<input required="true" type="number" name="port" min="1" max="65535">
-<label>Jump via</label>
-<select id="jumphost_selection" name="jumphost">
-</select>
-{% call components::form_tail("Add host") %}
+
+<div class="host-section">
+    <div class="host-header">
+        <h2 class="host-name">➕ Add New Host</h2>
+        <div class="host-info">Configure a new SSH connection</div>
+    </div>
+    
+    {% call components::form_head("/hosts/add") %}
+    <div class="form-grid">
+        <div class="form-group">
+            <label>Name</label>
+            <input required="true" type="text" name="name" placeholder="e.g., production-server">
+        </div>
+        
+        <div class="form-group">
+            <label>Username</label>
+            <input required="true" type="text" name="username" placeholder="Authentication username">
+        </div>
+        
+        <div class="form-group">
+            <label>Address</label>
+            <input required="true" type="text" name="address" placeholder="hostname or IP address">
+        </div>
+        
+        <div class="form-group">
+            <label>Port</label>
+            <input required="true" type="number" name="port" min="1" max="65535" value="22">
+        </div>
+        
+        <div class="form-group">
+            <label>Jump via</label>
+            <select id="jumphost_selection" name="jumphost">
+            </select>
+        </div>
+    </div>
+    {% call components::form_tail("Add host") %}
+</div>
+<style>
+.host-section {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.host-header {
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: baseline;
+    gap: 1rem;
+}
+
+.host-name {
+    color: #4287f5;
+    margin: 0;
+    font-size: 1.5rem;
+}
+
+.host-info {
+    color: #888;
+    font-size: 0.9rem;
+}
+
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.form-group {
+    margin-bottom: 0;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.3rem;
+    font-size: 0.9rem;
+    color: #888;
+}
+
+.form-group input,
+.form-group select {
+    width: 100%;
+    padding: 0.5rem;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-color);
+}
+
+.form-group input:focus,
+.form-group select:focus {
+    outline: none;
+    border-color: #4287f5;
+}
+
+.table-container {
+    overflow-x: auto;
+}
+
+.key-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.key-table th {
+    text-align: left;
+    padding: 1rem;
+    background: #4287f5;
+    color: white;
+}
+
+.key-table td {
+    padding: 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.key-table tr:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.key-table a {
+    color: inherit;
+    text-decoration: none;
+}
+
+.key-table a:hover {
+    text-decoration: underline;
+}
+
+.key-table .button {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    background: #4287f5;
+    border-radius: 4px;
+    color: white;
+    text-decoration: none;
+}
+
+.key-table .button:hover {
+    background: #3476e4;
+    text-decoration: none;
+}
+</style>
 {% endblock %}
