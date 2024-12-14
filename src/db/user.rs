@@ -46,6 +46,24 @@ impl User {
         query_drop(delete(user::table.filter(user::username.eq(username))).execute(conn))
     }
 
+    /// Update a user's enabled status and username in the Database
+    pub fn update_user(conn: &mut DbConnection, old_username: &str, new_username: &str, _enabled: bool) -> Result<(), String> {
+        use diesel::prelude::*;
+        use crate::schema::user::dsl::*;
+        
+        // Update username and enabled status
+        diesel::update(user)
+            .filter(username.eq(old_username))
+            .set((
+                username.eq(new_username),
+                enabled.eq(enabled),
+            ))
+            .execute(conn)
+            .map_err(|e| e.to_string())?;
+        
+        Ok(())
+    }
+
     /// Find all hosts this user is authorized on
     pub fn get_authorizations(
         &self,

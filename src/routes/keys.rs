@@ -12,10 +12,6 @@ use crate::{
 
 use crate::models::PublicUserKey;
 
-pub fn keys_config(cfg: &mut web::ServiceConfig) {
-    cfg.service(list_keys).service(delete);
-}
-
 #[derive(Template)]
 #[template(path = "keys/index.html")]
 struct KeysPageTemplate {
@@ -53,4 +49,34 @@ pub async fn delete(
             .into_response(),
         Err(e) => FormResponseBuilder::error(e).into_response(),
     })
+}
+
+#[derive(Deserialize)]
+struct UpdateKeyCommentForm {
+    comment: String,
+}
+
+#[post("/update_comment/{id}")]
+pub async fn update_key_comment(
+    conn: Data<ConnectionPool>,
+    key_id: web::Path<i32>,
+    form: web::Form<UpdateKeyCommentForm>,
+) -> actix_web::Result<impl Responder> {
+    let key_id = key_id.into_inner();
+    let result = web::block(move || {
+        let mut conn = conn.get().unwrap();
+        PublicUserKey::update_comment(&mut conn, key_id, &form.comment)
+    })
+    .await?;
+
+    Ok(match result {
+        Ok(()) => FormResponseBuilder::success("Comment updated successfully".to_owned())
+            .add_trigger("reload-keys".to_owned())
+            .into_response(),
+        Err(e) => FormResponseBuilder::error(e).into_response(),
+    })
+}
+
+pub fn keys_config(cfg: &mut web::ServiceConfig) {
+    cfg.service(list_keys).service(delete).service(update_key_comment);
 }

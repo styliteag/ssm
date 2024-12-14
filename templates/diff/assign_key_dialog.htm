@@ -1,11 +1,100 @@
 {%- import "components.html" as components -%}
-<input type=hidden name="key_type" value="{{ key.key_type}}" />
-<input type=hidden name="key_base64" value="{{ key.key_base64 }}" />
-{% match key.comment %}
-{% when Some with (comment) %}
-<input type=hidden name="key_comment" value="{{ comment }}" />
-{% when None %}
-{% endmatch %}
 
-{% call components::user_selection(users) %}
-<button>Assign</button>
+<div class="dialog-content">
+    <h2>Assign this key to a user</h2>
+    
+    <input type="hidden" name="key_type" value="{{ key.key_type}}" />
+    <input type="hidden" name="key_base64" value="{{ key.key_base64 }}" />
+    {% match key.comment %}
+    {% when Some with (comment) %}
+    <input type="hidden" name="key_comment" value="{{ comment }}" />
+    {% when None %}
+    {% endmatch %}
+
+    <div class="form-group">
+        {% call components::user_selection(users) %}
+    </div>
+
+    <div class="button-group">
+        <button type="submit" class="action-button">Assign</button>
+    </div>
+</div>
+
+<style>
+dialog {
+    padding: 0;
+    border: none;
+    border-radius: 8px;
+    background: var(--bg);
+    color: var(--text);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    max-width: 90vw;
+    margin: 1.5rem;
+}
+
+dialog::backdrop {
+    background: rgba(0, 0, 0, 0.5);
+}
+
+.dialog-content {
+    padding: 1.5rem;
+    min-width: 320px;
+}
+
+.dialog-content h2 {
+    margin: 0 0 1.5rem 0;
+    font-size: 1.25rem;
+    font-weight: 500;
+    color: var(--text);
+}
+
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+.form-group select {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 1rem;
+    appearance: none;
+    background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23666666%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.7rem top 50%;
+    background-size: 0.65rem auto;
+}
+
+.button-group {
+    display: flex;
+    justify-content: stretch;
+    margin-top: 2rem;
+}
+
+.action-button {
+    width: 100%;
+    padding: 1rem;
+    border: none;
+    border-radius: 8px;
+    background: rgb(63, 81, 181);
+    color: white;
+    font-size: 1rem;
+    font-weight: 400;
+    cursor: pointer;
+}
+
+.action-button:hover {
+    opacity: 0.9;
+}
+</style>
+
+<script>
+function closeDialog() {
+    const dialog = document.querySelector('dialog');
+    if (dialog) {
+        dialog.close();
+    }
+}
+</script>

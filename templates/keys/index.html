@@ -1,36 +1,400 @@
 {% extends "base.html" %}
 
 {% block content %}
-<h3>List of all keys:</h3>
-<table>
-  <thead>
-    <tr>
-      <th>Key type</th>
-      <th>Comment</th>
-      <th>Owner</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for touple in keys.to_owned() %}
-    {% let username = touple.0 %}
-    {% let key = touple.1 %}
-    <tr>
-      <td>
-        <details>
-          <summary>{{ key.key_type}}</summary>
-          {{ key.key_base64 }}
-        </details>
-      </td>
-      <td>{% match key.comment %}
-        {% when Some with (comment) %}
-        {{ comment }}
-        {% when None %}
-        <i>No comment</i>
-        {% endmatch %}
-      </td>
-      <td><a href="/users/{{ username }}">{{ username }}</a></td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
+<style>
+.section-content {
+    margin-top: 1rem;
+}
+
+.table-container {
+    background: var(--bg);
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+}
+
+.compact-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+}
+
+.compact-table th,
+.compact-table td {
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+}
+
+.compact-table th {
+    background: var(--bg-alt);
+    font-weight: 500;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.compact-table tbody tr:nth-child(even) {
+    background: var(--bg-alt);
+}
+
+.compact-table tbody tr:hover {
+    background: var(--bg-hover);
+}
+
+.button-small {
+    padding: 0.25rem 0.5rem;
+    border: none;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+
+.button-small.danger {
+    background: rgb(211, 47, 47);
+    color: white;
+}
+
+.button-small.danger:hover {
+    opacity: 0.9;
+}
+
+.button-small.primary {
+    background: rgb(63, 81, 181); /* A distinct blue color */
+    color: white;
+}
+
+.button-small.primary:hover {
+    opacity: 0.9;
+}
+
+.link {
+    color: var(--primary);
+    text-decoration: none;
+}
+
+.link:hover {
+    text-decoration: underline;
+}
+
+dialog {
+    border: none;
+    border-radius: 8px;
+    padding: 3rem;
+    background: var(--background-color);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    min-width: 600px;
+    position: fixed;
+    top: 2rem;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+dialog::backdrop {
+    background: rgba(0, 0, 0, 0.5);
+}
+
+dialog form {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+dialog label {
+    font-size: 1.2rem;
+    font-weight: 500;
+    color: var(--text-color);
+    margin-bottom: 1rem;
+    display: block;
+}
+
+dialog input {
+    width: 100%;
+    padding: 1rem;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+    background: var(--input-background);
+    color: var(--text-color);
+    font-size: 1.1rem;
+    font-family: inherit;
+}
+
+dialog input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(var(--primary-color-rgb), 0.2);
+}
+
+dialog .button-group {
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+    margin-top: 2rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-color);
+}
+
+dialog .action-button {
+    padding: 0.75rem 2rem;
+    border: none;
+    border-radius: 4px;
+    font-weight: 500;
+    font-size: 1rem;
+    cursor: pointer;
+    border: none;
+    transition: opacity 0.2s;
+}
+
+dialog .action-button.primary {
+    background: var(--primary-color);
+    color: white;
+}
+
+dialog .action-button:not(.primary) {
+    background: var(--button-secondary-background);
+    color: var(--text-color);
+}
+
+dialog .action-button:hover {
+    opacity: 0.9;
+}
+
+.key-type {
+    font-weight: 500;
+    color: var(--text-color);
+    display: inline-block;
+}
+
+.separator {
+    color: var(--text-muted);
+    opacity: 0.5;
+    display: inline-block;
+}
+
+.key-preview {
+    font-family: monospace;
+    color: var(--text-muted);
+    font-size: 0.875rem;
+    display: inline-block;
+}
+
+.button-group {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.action-button {
+    padding: 0.5rem 1rem;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.875rem;
+    transition: opacity 0.2s;
+}
+
+.action-button.primary {
+    background: rgb(63, 81, 181);
+    color: white;
+}
+
+.action-button:not(.primary) {
+    background: var(--bg-alt);
+    color: var(--text-color);
+}
+
+.action-button:hover {
+    opacity: 0.9;
+}
+
+.edit-dialog {
+    border: none;
+    border-radius: 8px;
+    padding: 2rem;
+    background-color: rgb(32, 33, 36);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    min-width: 800px;
+    position: fixed;
+    top: 2rem;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.edit-dialog h2 {
+    margin: 0 0 1.5rem 0;
+    font-size: 1.5rem;
+    font-weight: 500;
+}
+
+.edit-dialog form {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+    width: 100%;
+}
+
+.edit-dialog .form-group {
+    margin-bottom: 2rem;
+    width: 100%;
+}
+
+.edit-dialog label {
+    display: block;
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+    color: var(--text-color);
+}
+
+.edit-dialog input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0.75rem;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--bg-alt);
+    color: var(--text-color);
+    font-size: 1rem;
+}
+
+.edit-dialog input:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px rgba(63, 81, 181, 0.2);
+}
+
+.edit-dialog .button-group {
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+    margin-top: 2rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+}
+
+.edit-dialog .action-button {
+    padding: 0.75rem 2rem;
+    border: none;
+    border-radius: 4px;
+    font-weight: 500;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+
+.edit-dialog .action-button.primary {
+    background: rgb(63, 81, 181);
+    color: white;
+}
+
+.edit-dialog .action-button.secondary {
+    background: rgb(96, 96, 96);
+    color: white;
+}
+
+.edit-dialog .action-button:hover {
+    opacity: 0.9;
+}
+
+.edit-dialog::backdrop {
+    background: rgba(0, 0, 0, 0.7);
+}
+</style>
+
+<section>
+    <h2>SSH Keys</h2>
+    <div class="section-content">
+        <div class="table-container">
+            <table class="compact-table">
+                <thead>
+                    <tr>
+                        <th>Comment</th>
+                        <th>Owner</th>
+                        <th>Key</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for touple in keys.to_owned() %}
+                    {% let username = touple.0 %}
+                    {% let key = touple.1 %}
+                    <tr>
+                        <td>
+                            {% match key.comment %}
+                            {% when Some with (comment) %}
+                            {{ comment }}
+                            {% when None %}
+                            <i>No comment</i>
+                            {% endmatch %}
+                        </td>
+                        <td>
+                            <a href="/users/{{ username }}" class="link">{{ username }}</a>
+                        </td>
+                        <td>
+                            <span class="key-type">{{ key.key_type }}</span><span class="separator"> / </span><span class="key-preview" title="{{ key.key_base64 }}">{{ key.key_preview() }}</span>
+                        </td>
+                        <td>
+                            <button type="button" class="button-small primary" onclick="editKey('{{ key.id }}', '{% match key.comment %}{% when Some with (comment) %}{{ comment }}{% when None %}{% endmatch %}')">Edit</button>
+                            <button type="button" class="button-small danger" onclick="showDeleteDialog('{{ key.id }}', this)">Delete</button>
+                            <dialog id="delete-dialog-{{ key.id }}">
+                                {% let username = username %}
+                                {% include "keys/delete_key_dialog.htm" %}
+                            </dialog>
+                            <dialog id="edit-dialog-{{ key.id }}" class="edit-dialog">
+                                <form hx-post="/keys/update_comment/{{ key.id }}" hx-swap="none" style="width: 100%;">
+                                    <h2>Edit Comment</h2>
+                                    <div class="form-group" style="width: 100%;">
+                                        <label for="comment-{{ key.id }}">Comment</label>
+                                        <input type="text" name="comment" id="comment-{{ key.id }}" value="{% match key.comment %}{% when Some with (comment) %}{{ comment }}{% when None %}{% endmatch %}" placeholder="Enter comment" style="width: 100%; box-sizing: border-box;">
+                                    </div>
+                                    <div class="button-group">
+                                        <button type="submit" class="action-button primary">Save</button>
+                                        <button type="button" class="action-button secondary" onclick="closeDialog(this)">Cancel</button>
+                                    </div>
+                                </form>
+                            </dialog>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+<script>
+function showDeleteDialog(keyId, button) {
+    const dialog = document.getElementById('delete-dialog-' + keyId);
+    if (dialog) {
+        dialog.showModal();
+    }
+}
+
+function editKey(keyId, currentComment) {
+    const dialog = document.getElementById('edit-dialog-' + keyId);
+    if (dialog) {
+        const commentInput = dialog.querySelector('input[name="comment"]');
+        commentInput.value = currentComment;
+        dialog.showModal();
+    }
+}
+
+function closeDialog(button) {
+    const dialog = button.closest('dialog');
+    if (dialog) {
+        dialog.close();
+    }
+}
+
+document.body.addEventListener('htmx:afterRequest', function(evt) {
+    if (evt.detail.elt.closest('form') && evt.detail.successful) {
+        const dialog = evt.detail.elt.closest('dialog');
+        if (dialog) {
+            dialog.close();
+            // Refresh the page to show the updated comment
+            window.location.reload();
+        }
+    }
+});
+</script>
 {% endblock %}

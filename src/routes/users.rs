@@ -24,7 +24,8 @@ pub fn users_config(cfg: &mut web::ServiceConfig) {
         .service(list_user_authorizations)
         .service(add_user)
         .service(assign_key_to_user)
-        .service(delete_user);
+        .service(delete_user)
+        .service(edit_user);
 }
 
 #[derive(Template)]
@@ -57,6 +58,7 @@ async fn render_users(conn: Data<ConnectionPool>) -> actix_web::Result<impl Resp
 struct ShowUserTemplate {
     user: User,
 }
+
 #[get("/{name}")]
 async fn show_user(
     conn: Data<ConnectionPool>,
@@ -66,10 +68,7 @@ async fn show_user(
     let maybe_user = web::block(move || User::get_user(&mut conn2, user.to_string())).await?;
 
     Ok(match maybe_user {
-        Ok(user) => {
-            let _user2 = user.clone();
-            ShowUserTemplate { user }.to_response()
-        }
+        Ok(user) => ShowUserTemplate { user }.to_response(),
         Err(error) => ErrorTemplate { error }.to_response(),
     })
 }
@@ -197,4 +196,30 @@ async fn assign_key_to_user(
             .add_trigger("reloadDiff".to_owned()),
         Err(e) => FormResponseBuilder::error(e),
     })
+}
+
+#[derive(Deserialize)]
+struct EditUserForm {
+    old_username: String,
+    new_username: String,
+    enabled: bool,
+}
+
+#[post("/edit")]
+async fn edit_user(
+    conn: Data<ConnectionPool>,
+    form: web::Form<EditUserForm>,
+) -> actix_web::Result<impl Responder> {
+    let mut conn = conn.get().unwrap();
+    match User::update_user(&mut conn, &form.old_username, &form.new_username, form.enabled) {
+        Ok(_) => {
+            let response = actix_web::HttpResponse::Found()
+                .insert_header(("Location", format!("/users/{}", form.new_username)))
+                .finish();
+            Ok(response)
+        }
+        Err(error) => Ok(FormResponseBuilder::error(error)
+            .add_trigger("reload".to_string())
+            .into_response())
+    }
 }
