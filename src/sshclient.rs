@@ -702,6 +702,7 @@ impl SshClient {
             }
             diff_items.push((user_on_host, this_user_diff));
         }
+        diff_items.retain(|(_, user_diff)| !user_diff.is_empty());
         Ok(diff_items)
     }
 

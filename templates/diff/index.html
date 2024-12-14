@@ -1,14 +1,15 @@
 {% extends "base.html" %}
 
 {% block content %}
-<ul>
+<div class="host-grid">
   {% for host in hosts %}
-  <li>
-    <h2><a href="/diff/{{host.name }}">{{ host.name }}</a></h2>
-    <div hx-vals='{"host_name": "{{ host.name }}"}' hx-get="/diff/{{ host.name }}.htm"
-      hx-trigger="load, reloadDiff from:body">
-      Loading</div>
-  </li>
+  <div class="host-card" hx-vals='{"host_name": "{{ host.name }}"}' id="host-{{ host.name }}">
+    <div class="host-content" hx-get="/diff/{{ host.name }}.htm" hx-trigger="load" hx-swap="outerHTML">
+      <div class="loading-placeholder">
+        <div class="loading-pulse"></div>
+      </div>
+    </div>
+  </div>
   {% endfor %}
-</ul>
+</div>
 {% endblock %}

@@ -23,6 +23,7 @@ pub fn diff_config(cfg: &mut web::ServiceConfig) {
         .service(assign_key_dialog)
         .service(authorize_user_dialog);
 }
+
 #[derive(Template)]
 #[template(path = "diff/index.html")]
 struct DiffPageTemplate {
@@ -31,17 +32,18 @@ struct DiffPageTemplate {
 
 #[get("")]
 async fn diff_page(conn: Data<ConnectionPool>) -> actix_web::Result<impl Responder> {
-    Ok(
-        match web::block(move || Host::get_all_hosts(&mut conn.get().unwrap())).await? {
-            Ok(hosts) => DiffPageTemplate { hosts }.to_response(),
-            Err(error) => ErrorTemplate { error }.to_response(),
-        },
-    )
+    let hosts = web::block(move || Host::get_all_hosts(&mut conn.get().unwrap())).await?;
+
+    Ok(match hosts {
+        Ok(hosts) => DiffPageTemplate { hosts }.to_response(),
+        Err(error) => ErrorTemplate { error }.to_response(),
+    })
 }
 
 #[derive(Template)]
 #[template(path = "diff/diff.htm")]
 struct RenderDiffTemplate {
+    host: Host,
     diff: HostDiff,
 }
 
@@ -71,9 +73,9 @@ async fn render_diff(
         Err(error) => return Ok(RenderErrorTemplate { error }.to_response()),
     };
 
-    let diff = ssh_client.get_host_diff(host).await;
+    let diff = ssh_client.get_host_diff(host.clone()).await;
 
-    Ok(RenderDiffTemplate { diff }.to_response())
+    Ok(RenderDiffTemplate { host, diff }.to_response())
 }
 
 #[derive(Template)]
