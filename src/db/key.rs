@@ -39,4 +39,15 @@ impl PublicUserKey {
     pub fn delete_key(conn: &mut DbConnection, key: i32) -> Result<(), String> {
         query_drop(diesel::delete(user_key::table.filter(user_key::id.eq(key))).execute(conn))
     }
+
+    pub fn update_comment(conn: &mut DbConnection, key_id: i32, new_comment: &str) -> Result<(), String> {
+        use crate::schema::user_key::dsl::*;
+        
+        query_drop(
+            diesel::update(user_key)
+                .filter(id.eq(key_id))
+                .set(comment.eq(Some(new_comment.to_string())))
+                .execute(conn),
+        )
+    }
 }

@@ -88,6 +88,11 @@ impl PublicUserKey {
             None => format!("{} {}", self.key_type, self.key_base64),
         }
     }
+
+    pub fn key_preview(&self) -> String {
+        let preview: String = self.key_base64.chars().rev().take(5).collect::<String>().chars().rev().collect();
+        format!("...{}", preview)
+    }
 }
 
 impl TryFrom<&PublicUserKey> for ssh_key::public::PublicKey {
