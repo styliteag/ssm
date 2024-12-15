@@ -18,6 +18,10 @@ actix = "0.13.3"
 actix-web = "4.7.0"
 actix-web-static-files = "4.0"
 static-files = "0.2.1"
+actix-identity = "0.5"
+actix-session = { version = "0.7", features = ["cookie-session"] }
+cookie = "0.16"
+futures-util = "0.3"
 askama = { version = "0.12.1", features = ["with-actix-web"] }
 askama_actix = "0.14.0"
 async-trait = "0.1.81"

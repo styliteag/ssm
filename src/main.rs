@@ -2,9 +2,14 @@ use std::{env, fs, net::IpAddr, path::PathBuf};
 
 use actix_web::{
     web::{self, Data},
-    App, HttpServer,
+    App, HttpServer, HttpResponse,
+    http::{header, StatusCode},
+    middleware::{ErrorHandlers, ErrorHandlerResponse},
+    dev::ServiceResponse,
 };
 use actix_web_static_files::ResourceFiles;
+use actix_session::{SessionMiddleware, storage::CookieSessionStore};
+use actix_identity::IdentityMiddleware;
 use config::Config;
 use diesel::prelude::QueryResult;
 use log::info;
@@ -24,6 +29,7 @@ mod routes;
 mod schema;
 mod sshclient;
 mod templates;
+mod middleware;
 
 include!(concat!(env!("OUT_DIR"), "/generated.rs"));
 
@@ -66,6 +72,10 @@ fn default_loglevel() -> String {
     "info".to_owned()
 }
 
+fn default_session_key() -> String {
+    String::from("my-secret-key-please-change-me-in-production")
+}
+
 #[derive(Debug, Deserialize)]
 pub struct Configuration {
     ssh: SshConfig,
@@ -77,6 +87,8 @@ pub struct Configuration {
     port: u16,
     #[serde(default = "default_loglevel")]
     loglevel: String,
+    #[serde(default = "default_session_key")]
+    session_key: String,
 }
 
 #[tokio::main]
@@ -155,13 +167,41 @@ async fn main() -> Result<(), std::io::Error> {
     let ssh_client = Data::new(SshClient::new(pool.clone(), key));
 
     info!("Starting Secure SSH Manager");
+    let secret_key = cookie::Key::derive_from(configuration.session_key.as_bytes());
+    
     HttpServer::new(move || {
         let generated = generate();
 
         App::new()
+            .wrap(middleware::AuthMiddleware)
+            .wrap(
+                SessionMiddleware::builder(
+                    CookieSessionStore::default(),
+                    secret_key.clone()
+                )
+                .cookie_name("ssm_session".to_string())
+                .cookie_secure(false) // Set to true in production
+                .cookie_http_only(true)
+                .build()
+            )
+            .wrap(IdentityMiddleware::default())
+            .wrap(
+                ErrorHandlers::new()
+                    .handler(StatusCode::UNAUTHORIZED, |res: ServiceResponse| {
+                        let req = res.request().clone();
+                        let response = HttpResponse::Found()
+                            .insert_header((header::LOCATION, "/auth/login"))
+                            .finish();
+                        Ok(ErrorHandlerResponse::Response(ServiceResponse::new(
+                            req,
+                            response.map_into_left_body(),
+                        )))
+                    })
+            )
             .app_data(ssh_client.clone())
             .app_data(web::Data::new(pool.clone()))
             .service(ResourceFiles::new("/", generated).skip_handler_when_not_found())
+            .service(web::scope("/auth").configure(routes::auth::auth_config))
             .configure(routes::route_config)
     })
     .bind((configuration.listen, configuration.port))?

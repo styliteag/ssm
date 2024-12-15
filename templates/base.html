@@ -12,7 +12,12 @@
 </head>
 
 <body>
-	<h1>Secure SSH Manager</h1>
+	<div class="header-container">
+		<h1>Secure SSH Manager</h1>
+		<div class="auth-status" hx-get="/auth/status" hx-trigger="load">
+			<a href="/auth/login">Login</a>
+		</div>
+	</div>
 	<nav>
 		<a href="/">Overview</a>
 		<a href="/hosts">List hosts</a>
@@ -38,6 +43,25 @@
 			GitHub</a>
 	</footer>
 	{% endblock %}
+
+	<style>
+		.header-container {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			padding: 0 1rem;
+		}
+		.auth-status {
+			font-size: 0.9rem;
+		}
+		.auth-status a {
+			color: #0066cc;
+			text-decoration: none;
+		}
+		.auth-status a:hover {
+			text-decoration: underline;
+		}
+	</style>
 </body>
 
 </html>
