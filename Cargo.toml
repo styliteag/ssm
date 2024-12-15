@@ -14,13 +14,13 @@ postgres = ["diesel/postgres", "diesel_migrations/postgres"]
 mysql = ["diesel/mysql", "diesel_migrations/mysql"]
 
 [dependencies]
-actix = "0.13.3"
-actix-web = "4.7.0"
+actix = "0.13"
+actix-web = "4.9"
 actix-web-static-files = "4.0"
-static-files = "0.2.1"
-actix-identity = "0.5"
-actix-session = { version = "0.7", features = ["cookie-session"] }
-cookie = "0.16"
+static-files = "0.2"
+actix-identity = "0.8"
+actix-session = { version = "0.10", features = ["cookie-session"] }
+cookie = { version = "0.16", features = ["secure"] }
 futures-util = "0.3"
 askama = { version = "0.12.1", features = ["with-actix-web"] }
 askama_actix = "0.14.0"
@@ -31,9 +31,9 @@ diesel = { version = "2.2.0", features = ["sqlite", "r2d2"] }
 diesel_migrations = { version = "2.2.0", features = ["sqlite"] }
 futures = "0.3.30"
 log = "0.4.21"
-parking_lot = "0.12.1"
+parking_lot = "0.12"
 pretty_env_logger = "0.5.0"
-russh = "0.45.0"
+russh = "0.46"
 serde = "1.0.203"
 tokio = { version = "1", features = ["full"] }
 ssh-key = { version = "0.6.6", features = ["alloc", "ed25519", "serde"] }
@@ -41,4 +41,4 @@ ssh-encoding = { version = "0.2.0", features = ["alloc", "base64", "std"] }
 similar = { version = "2.6.0", features = ["inline"] }
 
 [build-dependencies]
-static-files = "0.2.1"
+static-files = "0.2"
