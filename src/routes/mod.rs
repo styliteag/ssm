@@ -2,6 +2,7 @@ mod diff;
 mod hosts;
 mod keys;
 mod users;
+pub mod auth;
 
 use actix_web::{
     get,

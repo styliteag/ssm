@@ -87,6 +87,12 @@ impl FormResponseBuilder {
         self
     }
 
+    pub fn with_redirect(mut self, location: &str) -> Self {
+        self.status = StatusCode::FOUND;
+        self.triggers.push(format!("redirect {}", location));
+        self
+    }
+
     pub fn into_response(self) -> HttpResponse<actix_web::body::BoxBody> {
         let mut builder = HttpResponseBuilder::new(self.status);
         builder.insert_header(("X-FORM", "true"));

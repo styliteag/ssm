@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="login-container">
+    <div class="login-box">
+        <h2>Login</h2>
+        <form method="post" action="/auth/login">
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" required>
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">Sign In</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+    .login-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 60vh;
+        padding: 2rem;
+        background-color: #1e1e1e;
+    }
+    .login-box {
+        background: #2d2d2d;
+        padding: 2.5rem;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+        width: 100%;
+        max-width: 400px;
+        border: 1px solid #3d3d3d;
+    }
+    .login-box h2 {
+        text-align: center;
+        margin-bottom: 2rem;
+        color: #ffffff;
+        font-size: 1.75rem;
+        font-weight: 600;
+    }
+    .form-group {
+        margin-bottom: 1.5rem;
+    }
+    .form-group label {
+        display: block;
+        margin-bottom: 0.75rem;
+        font-weight: 500;
+        color: #ffffff;
+        font-size: 1rem;
+    }
+    .form-group input {
+        width: 100%;
+        padding: 0.75rem;
+        border: 1px solid #3d3d3d;
+        border-radius: 6px;
+        background-color: #1e1e1e;
+        color: #ffffff;
+        font-size: 1rem;
+        transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .form-group input:focus {
+        outline: none;
+        border-color: #0066cc;
+        box-shadow: 0 0 0 2px rgba(0, 102, 204, 0.25);
+    }
+    .form-actions {
+        margin-top: 2rem;
+        text-align: center;
+    }
+    .btn {
+        padding: 0.75rem 2rem;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 1rem;
+        border: none;
+        transition: background-color 0.2s, transform 0.1s;
+    }
+    .btn-primary {
+        background-color: #0066cc;
+        color: white;
+    }
+    .btn-primary:hover {
+        background-color: #0052a3;
+    }
+    .btn-primary:active {
+        transform: translateY(1px);
+    }
+</style>
+{% endblock %}

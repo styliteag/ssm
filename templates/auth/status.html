@@ -1,0 +1,5 @@
+{% if logged_in %}
+<span>Logged in (<a href="#" hx-post="/auth/logout" hx-target=".auth-status">Logout</a>)</span>
+{% else %}
+<a href="/auth/login">Login</a>
+{% endif %}
