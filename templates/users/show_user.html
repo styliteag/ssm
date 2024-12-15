@@ -2,13 +2,15 @@
 
 {% extends "base.html" %}
 {% block content %}
+<link rel="stylesheet" href="/static/style.css">
+<div class="content">
 {% let username = user.username.as_str() %}
 <h3>User: {{ username }}</h3>
 <p> Enabled: {{ user.enabled }}</p>
 
 <button id="edit-user-btn" class="button">Edit User</button>
 
-<div id="edit-user-form" style="display: none;">
+<div id="edit-user-form">
     <form action="/users/edit" method="post" data-reload-on-success>
         <input type="hidden" name="old_username" value="{{ username }}">
         <div class="form-grid">
@@ -45,49 +47,4 @@ document.getElementById('edit-user-btn').addEventListener('click', function() {
     form.style.display = form.style.display === 'none' ? 'block' : 'none';
 });
 </script>
-
-<style>
-.button {
-    display: inline-block;
-    padding: 0.5rem 1rem;
-    background: #4287f5;
-    border-radius: 4px;
-    color: white;
-    text-decoration: none;
-    border: none;
-    cursor: pointer;
-}
-
-.button:hover {
-    background: #3476e4;
-}
-
-.form-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 1rem;
-    margin-top: 1rem;
-}
-
-.form-group {
-    margin-bottom: 1rem;
-}
-
-.form-group label {
-    display: block;
-    margin-bottom: 0.3rem;
-    font-size: 0.9rem;
-    color: #888;
-}
-
-.form-group input,
-.form-group select {
-    width: 100%;
-    padding: 0.5rem;
-    border-radius: 4px;
-    border: 1px solid var(--border-color);
-    background: rgba(255, 255, 255, 0.05);
-    color: var(--text-color);
-}
-</style>
 {% endblock %}

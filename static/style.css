@@ -724,3 +724,697 @@ textarea:focus {
     opacity: 0.5;
   }
 }
+
+/* Host Section Styles */
+.host-section {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.host-header {
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+}
+
+.host-name {
+  color: #4287f5;
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.host-info {
+  color: #888;
+  font-size: 0.9rem;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.form-group {
+  margin-bottom: 0;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 0.3rem;
+  font-size: 0.9rem;
+  color: #888;
+}
+
+.form-group input,
+.form-group select {
+  width: 100%;
+  padding: 0.5rem;
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-color);
+}
+
+.form-group input:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: #4287f5;
+}
+
+/* Additional Key Table Styles */
+.table-container {
+  overflow-x: auto;
+}
+
+.key-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.key-table th {
+  text-align: left;
+  padding: 1rem;
+  background: #4287f5;
+  color: white;
+}
+
+.key-table td {
+  padding: 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.key-table tr:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.key-table a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.key-table a:hover {
+  text-decoration: underline;
+}
+
+.key-table .button {
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  background: #4287f5;
+  border-radius: 4px;
+  color: white;
+  text-decoration: none;
+}
+
+.key-table .button:hover {
+  background: #3476e4;
+  text-decoration: none;
+}
+
+/* Button styles */
+.button {
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  background: #4287f5;
+  border-radius: 4px;
+  color: white;
+  text-decoration: none;
+  border: none;
+  cursor: pointer;
+}
+
+.button:hover {
+  background: #3476e4;
+}
+
+/* Dialog Styles */
+dialog {
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  max-width: 90vw;
+  margin: 1.5rem;
+}
+
+dialog::backdrop {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.dialog-content {
+  padding: 1.5rem;
+  min-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  background: var(--bg);
+}
+
+.dialog-content h2 {
+  margin: 0 0 1.5rem 0;
+  font-size: 1.25rem;
+  font-weight: 500;
+  color: var(--text);
+}
+
+/* Dialog Select Styles */
+.form-group select {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 1rem;
+  appearance: none;
+}
+
+.button-group {
+  display: flex;
+  justify-content: stretch;
+  margin-top: 2rem;
+}
+
+/* Login Page Styles */
+.login-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 60vh;
+  padding: 2rem;
+  background-color: #1e1e1e;
+}
+
+.login-box {
+  background: #2d2d2d;
+  padding: 2.5rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+  width: 100%;
+  max-width: 400px;
+  border: 1px solid #3d3d3d;
+}
+
+.login-box h2 {
+  text-align: center;
+  margin-bottom: 2rem;
+  color: #ffffff;
+  font-size: 1.75rem;
+  font-weight: 600;
+}
+
+/* Login Form Styles */
+.form-group {
+  margin-bottom: 1.5rem;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 0.75rem;
+  font-weight: 500;
+  color: #ffffff;
+  font-size: 1rem;
+}
+
+.form-group input {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #3d3d3d;
+  border-radius: 6px;
+  background-color: #1e1e1e;
+  color: #ffffff;
+  font-size: 1rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: #0066cc;
+  box-shadow: 0 0 0 2px rgba(0, 102, 204, 0.25);
+}
+
+.form-actions {
+  margin-top: 2rem;
+  text-align: center;
+}
+
+/* Button Styles */
+.btn {
+  padding: 0.75rem 2rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 1rem;
+  border: none;
+  transition: background-color 0.2s, transform 0.1s;
+}
+
+.btn-primary {
+  background-color: #0066cc;
+  color: white;
+}
+
+.btn-primary:hover {
+  background-color: #0052a3;
+}
+
+.btn-primary:active {
+  transform: translateY(1px);
+}
+
+/* Header Styles */
+.header-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 1rem;
+}
+
+.auth-status {
+  font-size: 0.9rem;
+}
+
+.auth-status a {
+  color: #0066cc;
+  text-decoration: none;
+}
+
+.auth-status a:hover {
+  text-decoration: underline;
+}
+
+/* Diff Page Styles */
+.host-info {
+  margin: 1rem 0;
+  padding: 1.5rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+}
+
+.host-info h2 {
+  margin-top: 0;
+  color: #4169e1;
+  font-size: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.host-info h2 a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.host-info h2 a:hover {
+  text-decoration: underline;
+}
+
+.host-details {
+  margin-bottom: 2rem;
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.host-details th {
+  text-align: left;
+  padding: 0.75rem;
+  width: 120px;
+  color: #888;
+  border-left: 3px solid #90EE90;
+}
+
+.host-details td {
+  padding: 0.75rem;
+  color: #fff;
+}
+
+.host-details tr {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.user-section {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.user-section h3 {
+  color: #ff8c00;
+  margin-top: 0;
+  margin-bottom: 1rem;
+  display: inline-block;
+  background: rgba(255, 140, 0, 0.1);
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+}
+
+.diff-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1rem;
+}
+
+.diff-table th,
+.diff-table td {
+  padding: 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.diff-table th {
+  color: #fff;
+  font-weight: 500;
+  background: rgba(255, 140, 0, 0.1);
+  border-bottom: 2px solid #ff8c00;
+}
+
+.diff-table td {
+  color: #fff;
+}
+
+.actions {
+  margin: 1rem 0;
+  float: right;
+  margin-top: -2.5rem;
+}
+
+.diff-status {
+  padding: 1rem;
+  border-radius: 6px;
+  margin-top: 1rem;
+}
+
+.diff-status.success {
+  background: rgba(0, 255, 0, 0.1);
+  color: #90EE90;
+}
+
+.diff-status.error {
+  background: rgba(255, 0, 0, 0.1);
+  color: #FF6B6B;
+}
+
+/* Button Styles */
+button {
+  background: #4169e1;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+button:hover {
+  background: #5179f1;
+}
+
+.user-section button {
+  background: #ff8c00;
+}
+
+.user-section button:hover {
+  background: #ffa500;
+}
+
+.inline-button {
+  margin-left: 1rem;
+  vertical-align: middle;
+}
+
+/* Section and Table Styles */
+.section-content {
+    margin-top: 1rem;
+}
+
+.table-container {
+    background: var(--bg);
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+}
+
+.compact-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+}
+
+.compact-table th,
+.compact-table td {
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+}
+
+.compact-table th {
+    background: var(--bg-alt);
+    font-weight: 500;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.compact-table tbody tr:nth-child(even) {
+    background: var(--bg-alt);
+}
+
+.compact-table tbody tr:hover {
+    background: var(--bg-hover);
+}
+
+/* Small Button Styles */
+.button-small {
+    padding: 0.25rem 0.5rem;
+    border: none;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+
+.button-small.danger {
+    background: rgb(211, 47, 47);
+    color: white;
+}
+
+.button-small.danger:hover {
+    opacity: 0.9;
+}
+
+.button-small.primary {
+    background: rgb(63, 81, 181);
+    color: white;
+}
+
+.button-small.primary:hover {
+    opacity: 0.9;
+}
+
+/* Link Styles */
+.link {
+    color: var(--primary);
+    text-decoration: none;
+}
+
+.link:hover {
+    text-decoration: underline;
+}
+
+/* Key Display Styles */
+.key-type {
+    font-weight: 500;
+    color: var(--text-color);
+    display: inline-block;
+}
+
+.separator {
+    color: var(--text-muted);
+    opacity: 0.5;
+    display: inline-block;
+}
+
+.key-preview {
+    font-family: monospace;
+    color: var(--text-muted);
+    font-size: 0.875rem;
+    display: inline-block;
+}
+
+/* Edit Dialog Styles */
+.edit-dialog {
+    border: none;
+    border-radius: 8px;
+    padding: 2rem;
+    background-color: rgb(32, 33, 36);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    min-width: 800px;
+    position: fixed;
+    top: 2rem;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.edit-dialog h2 {
+    margin: 0 0 1.5rem 0;
+    font-size: 1.5rem;
+    font-weight: 500;
+}
+
+.edit-dialog form {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+    width: 100%;
+}
+
+.edit-dialog .form-group {
+    margin-bottom: 2rem;
+    width: 100%;
+}
+
+.edit-dialog label {
+    display: block;
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+    color: var(--text-color);
+}
+
+.edit-dialog input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0.75rem;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--bg-alt);
+    color: var(--text-color);
+    font-size: 1rem;
+}
+
+.edit-dialog input:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px rgba(63, 81, 181, 0.2);
+}
+
+.edit-dialog .button-group {
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+    margin-top: 2rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+}
+
+.edit-dialog .action-button {
+    padding: 0.75rem 2rem;
+    border: none;
+    border-radius: 4px;
+    font-weight: 500;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+
+.edit-dialog .action-button.primary {
+    background: rgb(63, 81, 181);
+    color: white;
+}
+
+.edit-dialog .action-button.secondary {
+    background: rgb(96, 96, 96);
+    color: white;
+}
+
+.edit-dialog .action-button:hover {
+    opacity: 0.9;
+}
+
+.edit-dialog::backdrop {
+    background: rgba(0, 0, 0, 0.7);
+}
+
+/* Update existing dialog styles */
+dialog {
+    border: none;
+    border-radius: 8px;
+    padding: 3rem;
+    background: var(--background-color);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    min-width: 600px;
+    position: fixed;
+    top: 2rem;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+dialog::backdrop {
+    background: rgba(0, 0, 0, 0.5);
+}
+
+dialog form {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+dialog label {
+    font-size: 1.2rem;
+    font-weight: 500;
+    color: var(--text-color);
+    margin-bottom: 1rem;
+    display: block;
+}
+
+dialog input {
+    width: 100%;
+    padding: 1rem;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+    background: var(--input-background);
+    color: var(--text-color);
+    font-size: 1.1rem;
+    font-family: inherit;
+}
+
+dialog input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(var(--primary-color-rgb), 0.2);
+}
+
+dialog .button-group {
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+    margin-top: 2rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-color);
+}
+
+dialog .action-button {
+    padding: 0.75rem 2rem;
+    border: none;
+    border-radius: 4px;
+    font-weight: 500;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+
+dialog .action-button.primary {
+    background: var(--primary-color);
+    color: white;
+}
+
+dialog .action-button:not(.primary) {
+    background: var(--button-secondary-background);
+    color: var(--text-color);
+}
+
+dialog .action-button:hover {
+    opacity: 0.9;
+}
