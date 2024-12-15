@@ -483,12 +483,16 @@ impl SshClient {
         authorized_keys: String,
     ) -> Result<(), SshClientError> {
         let host = self.get_host_from_name(host_name).await?;
-        let handle = self.clone().connect(host).await?;
+        let handle = self.clone().connect(host.clone()).await?;
         self.execute_bash(
             &handle,
             BashCommand::SetAuthorizedKeyfile(user_on_host, authorized_keys),
         )
         .await??;
+        
+        // Invalidate the cache for this host
+        self.cache.write().remove(&host.id);
+        
         Ok(())
     }
 
