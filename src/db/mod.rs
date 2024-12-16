@@ -32,8 +32,10 @@ impl From<AllowedUserOnHost> for AuthorizedKey {
             options: value
                 .options
                 .and_then(|opts| ConfigOpts::new(opts).ok())
-                .expect("Checked on db entry"),
+                .unwrap_or_else(|| ConfigOpts::default()),
+
             algorithm: Algorithm::from_str(value.key.key_type.as_str())
+                // TODO: actually check this
                 .expect("Checked on db entry"),
             base64: value.key.key_base64,
             comment: value.key.comment,

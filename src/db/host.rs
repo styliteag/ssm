@@ -38,8 +38,11 @@ impl Host {
         host_id: i32,
         user_id: i32,
         user_on_host: String,
-        options: Option<String>,
+        mut options: Option<String>,
     ) -> Result<(), String> {
+        if options.as_ref().is_some_and(|o| o.is_empty()) {
+            options = None;
+        }
         query_drop(
             insert_into(user_in_host::table)
                 .values((
@@ -145,8 +148,7 @@ impl Host {
         Ok(res.into_iter().fold(
             String::with_capacity(estimated_size),
             |buf, (key, options)| {
-                buf + options.unwrap_or(String::new()).as_str()
-                    + " "
+                buf + options.map_or_else(String::new, |o| o + " ").as_str()
                     + key.to_openssh().as_str()
                     + "\n"
             },
