@@ -3,7 +3,9 @@ use actix_identity::Identity;
 use actix_web::{
     dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
     error::ErrorUnauthorized,
-    Error, FromRequest,
+    Error, FromRequest, HttpResponse,
+    http::header,
+    body::{BoxBody, MessageBody},
 };
 use futures_util::future::LocalBoxFuture;
 use std::rc::Rc;
@@ -14,9 +16,9 @@ impl<S, B> Transform<S, ServiceRequest> for AuthMiddleware
 where
     S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error> + 'static,
     S::Future: 'static,
-    B: 'static,
+    B: MessageBody + 'static,
 {
-    type Response = ServiceResponse<B>;
+    type Response = ServiceResponse<BoxBody>;
     type Error = Error;
     type InitError = ();
     type Transform = AuthMiddlewareService<S>;
@@ -37,9 +39,9 @@ impl<S, B> Service<ServiceRequest> for AuthMiddlewareService<S>
 where
     S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error> + 'static,
     S::Future: 'static,
-    B: 'static,
+    B: MessageBody + 'static,
 {
-    type Response = ServiceResponse<B>;
+    type Response = ServiceResponse<BoxBody>;
     type Error = Error;
     type Future = LocalBoxFuture<'static, Result<Self::Response, Self::Error>>;
 
@@ -52,7 +54,10 @@ where
            req.path().ends_with(".css") ||
            req.path().ends_with(".js") {
             let fut = self.service.call(req);
-            return Box::pin(async move { fut.await });
+            return Box::pin(async move { 
+                let res = fut.await?;
+                Ok(res.map_into_boxed_body())
+            });
         }
 
         let (http_req, payload) = req.into_parts();
@@ -63,9 +68,16 @@ where
             match identity.await {
                 Ok(_) => {
                     let req = ServiceRequest::from_parts(http_req, payload);
-                    service.call(req).await
+                    let res = service.call(req).await?;
+                    Ok(res.map_into_boxed_body())
                 }
-                Err(_) => Err(ErrorUnauthorized("Unauthorized")),
+                Err(_) => {
+                    let response = HttpResponse::Found()
+                        .append_header((header::LOCATION, "/auth/login"))
+                        .insert_header(("HX-Redirect", "/auth/login"))
+                        .body("<a href=\"/auth/login\">Login</a>");
+                    Ok(ServiceResponse::new(http_req, response).map_into_boxed_body())
+                }
             }
         })
     }
