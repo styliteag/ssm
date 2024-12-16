@@ -87,7 +87,7 @@ h1 {
 
 
 .red {
-  background-color: var(--bg-color-err);
+  background-color: var(--bg-color-error);
 }
 
 .green {
