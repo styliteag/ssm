@@ -1,8 +1,13 @@
 <input type="hidden" name="user_on_host" value="{{ user_on_host }}" />
 <input type="hidden" name="authorized_keys" value="{{ authorized_keys }}" />
 <code>
-  {% for line in authorized_keys.lines() %}
-  <span>{{ line }}</span>
+  {% for (diffItem) in diff %}
+  {% match diffItem %}
+  {% when crate::sshclient::KeyDiffItem::Added with (added) %}
+  <p class="green">{{ added }}</p>
+  {% when crate::sshclient::KeyDiffItem::Removed with (removed) %}
+  <p class="red">{{ removed }}</p>
+  {% endmatch %}
   {% endfor %}
 </code>
 <button>Apply</button>

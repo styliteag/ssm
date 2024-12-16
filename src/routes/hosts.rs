@@ -11,7 +11,7 @@ use crate::{
     db::UserAndOptions,
     forms::{FormResponseBuilder, Modal},
     routes::RenderErrorTemplate,
-    sshclient::{ConnectionDetails, SshClient},
+    sshclient::{ConnectionDetails, KeyDiffItem, SshClient},
     ConnectionPool, DbConnection,
 };
 
@@ -305,6 +305,7 @@ struct GenAuthorizedKeysForm {
 struct AuthorizedKeyfileDialog {
     user_on_host: String,
     authorized_keys: String,
+    diff: Vec<KeyDiffItem>,
 }
 
 #[post("/gen_authorized_keys")]
@@ -315,29 +316,51 @@ async fn gen_authorized_keys(
 ) -> actix_web::Result<impl Responder> {
     let host_name = form.host_name.clone();
     let user_on_host = form.user_on_host.clone();
+    let ssh_client2 = ssh_client.clone();
     let res = web::block(move || {
         let mut connection = conn.get().unwrap();
 
         let host = Host::get_host_name(&mut connection, form.host_name.clone()).ok()?;
 
         host.and_then(|host| {
-            host.get_authorized_keys_file_for(&ssh_client, &mut connection, &form.user_on_host)
+            host.get_authorized_keys_file_for(&ssh_client2, &mut connection, &form.user_on_host)
                 .ok()
         })
     })
     .await?;
-    Ok(match res {
-        Some(authorized_keys) => FormResponseBuilder::dialog(Modal {
-            title: format!("Authorized keyfile for '{user_on_host}' on '{host_name}':"),
-            request_target: format!("/hosts/{host_name}/set_authorized_keys"),
-            template: AuthorizedKeyfileDialog {
-                user_on_host,
-                authorized_keys,
-            }
-            .to_string(),
-        }),
-        None => FormResponseBuilder::error(String::from("Couldn't find host")),
-    })
+
+    match res {
+        Some(authorized_keys) => {
+            let Ok(key_diff) = ssh_client
+                .key_diff(
+                    authorized_keys.as_ref(),
+                    host_name.clone(),
+                    user_on_host.clone(),
+                )
+                .await
+            else {
+                return Ok(FormResponseBuilder::error(
+                    "Couldn't calculate key diff".to_owned(),
+                ));
+            };
+
+            Ok(FormResponseBuilder::dialog(Modal {
+                title: format!(
+                    "These changes will be applied for '{user_on_host}' on '{host_name}':"
+                ),
+                request_target: format!("/hosts/{host_name}/set_authorized_keys"),
+                template: AuthorizedKeyfileDialog {
+                    user_on_host,
+                    diff: key_diff,
+                    authorized_keys,
+                }
+                .to_string(),
+            }))
+        }
+        None => Ok(FormResponseBuilder::error(String::from(
+            "Couldn't find host",
+        ))),
+    }
 }
 
 #[derive(Deserialize)]

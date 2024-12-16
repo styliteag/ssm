@@ -2302,6 +2302,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "similar"
+version = "2.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1de1d4f81173b03af4c0cbed3c898f6bff5b870e4a7f5d6f4057d62a7a4b686e"
+
+[[package]]
 name = "slab"
 version = "0.4.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2413,6 +2419,7 @@ dependencies = [
  "pretty_env_logger",
  "russh",
  "serde",
+ "similar",
  "ssh-encoding",
  "ssh-key",
  "static-files",

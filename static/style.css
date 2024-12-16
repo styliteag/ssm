@@ -10,6 +10,15 @@
   padding: 0;
 }
 
+
+.red {
+  background-color: var(--bg-color-error);
+}
+
+.green {
+  background-color: var(--bg-color-success);
+}
+
 nav,
 main,
 footer {
