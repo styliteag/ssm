@@ -35,8 +35,7 @@ impl From<AllowedUserOnHost> for AuthorizedKey {
                 .unwrap_or_else(|| ConfigOpts::default()),
 
             algorithm: Algorithm::from_str(value.key.key_type.as_str())
-                // TODO: actually check this
-                .expect("Checked on db entry"),
+                .expect("Key algorithm in database is invalid"),
             base64: value.key.key_base64,
             comment: value.key.comment,
         }

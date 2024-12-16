@@ -189,12 +189,18 @@ async fn assign_key_to_user(
     conn: Data<ConnectionPool>,
     form: web::Form<AssignKeyDialogForm>,
 ) -> actix_web::Result<impl Responder> {
-    let new_key = NewPublicUserKey {
-        key_type: form.key_type.clone(),
-        key_base64: form.key_base64.clone(),
-        user_id: form.user_id,
-        comment: form.key_comment.clone(),
+    let Ok(algo) = ssh_key::Algorithm::new(&form.key_type) else {
+        return Ok(FormResponseBuilder::error(
+            "Invalid key algorithm".to_owned(),
+        ));
     };
+
+    let new_key = NewPublicUserKey::new(
+        algo,
+        form.key_base64.clone(),
+        form.key_comment.clone(),
+        form.user_id,
+    );
 
     let res = web::block(move || PublicUserKey::add_key(&mut conn.get().unwrap(), new_key)).await?;
 

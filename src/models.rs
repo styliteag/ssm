@@ -44,10 +44,26 @@ pub struct PublicUserKey {
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 #[diesel(belongs_to(User))]
 pub struct NewPublicUserKey {
-    pub key_type: String,
-    pub key_base64: String,
-    pub comment: Option<String>,
-    pub user_id: i32,
+    key_type: String,
+    key_base64: String,
+    comment: Option<String>,
+    user_id: i32,
+}
+
+impl NewPublicUserKey {
+    pub fn new(
+        algorithm: ssh_key::Algorithm,
+        base64: String,
+        comment: Option<String>,
+        user: i32,
+    ) -> Self {
+        Self {
+            key_type: algorithm.to_string(),
+            key_base64: base64,
+            comment,
+            user_id: user,
+        }
+    }
 }
 
 #[derive(Queryable, Selectable, Clone)]
