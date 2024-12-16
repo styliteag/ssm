@@ -4,7 +4,7 @@
 <ul>
   {% for host in hosts %}
   <li>
-    <h2>{{ host.name }}</h2>
+    <h2><a href="/diff/{{host.name }}">{{ host.name }}</a></h2>
     <div hx-vals='{"host_name": "{{ host.name }}"}' hx-get="/diff/{{ host.name }}.htm"
       hx-trigger="load, reloadDiff from:body">
       Loading</div>
