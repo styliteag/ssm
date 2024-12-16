@@ -2,6 +2,14 @@
 
 <div class="host-info">
   <h2><a href="/diff/{{ host.name }}">{{ host.name }}</a></h2>
+  <button class="btn btn-secondary btn-sm mt-2 mb-4"
+    hx-post="/diff/{{ host.name }}/invalidate-cache"
+    hx-trigger="click"
+    hx-target="closest div"
+    hx-swap="none"
+    _="on htmx:afterOnLoad trigger reloadDiff">
+    Invalidate Cache
+  </button>
   <table class="host-details">
     <tr>
       <th>Name</th>

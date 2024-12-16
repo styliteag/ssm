@@ -476,6 +476,18 @@ impl SshClient {
         ))
     }
 
+    pub async fn invalidate_cache(&self, host_name: String) -> Result<(), SshClientError> {
+        let host = self.get_host_from_name(host_name).await?;
+        self.cache.write().remove(&host.id);
+        Ok(())
+    }
+
+    // Does this work ??
+    pub async fn invalidate_all_cache(&self) -> Result<(), SshClientError> {
+        self.cache.write().clear();
+        Ok(())
+    }
+
     pub async fn set_authorized_keys(
         &self,
         host_name: String,

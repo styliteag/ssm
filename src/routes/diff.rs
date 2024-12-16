@@ -21,7 +21,8 @@ pub fn diff_config(cfg: &mut web::ServiceConfig) {
         .service(render_diff)
         .service(show_diff)
         .service(assign_key_dialog)
-        .service(authorize_user_dialog);
+        .service(authorize_user_dialog)
+        .service(invalidate_cache);
 }
 
 #[derive(Template)]
@@ -192,4 +193,38 @@ async fn authorize_user_dialog(
         }
         .to_string(),
     }))
+}
+
+#[post("/{host_name}/invalidate-cache")]
+async fn invalidate_cache(
+    conn: Data<ConnectionPool>,
+    ssh_client: Data<SshClient>,
+    host_name: Path<String>,
+) -> actix_web::Result<impl Responder> {
+    let res = web::block(move || {
+        let mut connection = conn.get().unwrap();
+        Host::get_host_name(&mut connection, host_name.to_string())
+    })
+    .await?;
+
+    let host = match res {
+        Ok(maybe_host) => {
+            let Some(host) = maybe_host else {
+                return Ok(FormResponseBuilder::error(String::from("No such host."))
+                    .add_trigger(String::from("reloadDiff")));
+            };
+            host
+        }
+        Err(error) => {
+            return Ok(FormResponseBuilder::error(error)
+                .add_trigger(String::from("reloadDiff")));
+        }
+    };
+
+    // Get a fresh copy of the host data to force cache invalidation
+    let _ = ssh_client.invalidate_cache(host.name.clone()).await;
+    let _ = ssh_client.get_host_diff(host).await;
+
+    Ok(FormResponseBuilder::success(String::from("Cache invalidated successfully."))
+        .add_trigger(String::from("reloadDiff")))
 }
