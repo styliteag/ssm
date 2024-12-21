@@ -6,11 +6,13 @@ use actix_web::{
 };
 use askama_actix::{Template, TemplateToResponse};
 use serde::Deserialize;
+use bcrypt::{verify, BcryptError};
+use std::fs;
 
 use crate::{
     forms::FormResponseBuilder,
-    models::User,
     ConnectionPool,
+    Configuration,
 };
 
 #[derive(Template)]
@@ -29,6 +31,21 @@ pub struct LoginForm {
     password: String,
 }
 
+fn verify_apache_password(password: &str, hash: &str) -> Result<bool, BcryptError> {
+    // Apache htpasswd bcrypt format starts with $2y$
+    if hash.starts_with("$2y$") {
+        // bcrypt crate uses $2b$ format, so we need to convert
+        let converted_hash = "$2b$".to_string() + &hash[4..];
+        verify(password, &converted_hash)
+    } else if hash.starts_with("$2b$") {
+        // Already in the correct format
+        verify(password, hash)
+    } else {
+        // Unsupported hash format
+        Ok(false)
+    }
+}
+
 #[get("/login")]
 async fn login_page() -> impl Responder {
     LoginTemplate {}.to_response()
@@ -38,10 +55,36 @@ async fn login_page() -> impl Responder {
 async fn login(
     req: HttpRequest,
     form: Form<LoginForm>,
-    pool: Data<ConnectionPool>,
+    _pool: Data<ConnectionPool>,
+    config: Data<Configuration>,
 ) -> actix_web::Result<impl Responder> {
-    // Check for hardcoded admin credentials
-    let is_valid = form.username == "admin" && form.password == "pass";
+    let htpasswd_path = config.htpasswd_path.as_path();
+    
+    // Check if password file exists
+    if !htpasswd_path.exists() {
+        return Ok(FormResponseBuilder::error("Authentication file not found".to_string()).into_response());
+    }
+
+    // Read and verify credentials from password file
+    let password_file = match fs::read_to_string(htpasswd_path) {
+        Ok(content) => content,
+        Err(_) => return Ok(FormResponseBuilder::error("Error reading authentication file".to_string()).into_response()),
+    };
+
+    let mut is_valid = false;
+    for line in password_file.lines() {
+        if let Some((username, hash)) = line.split_once(':') {
+            if username == form.username {
+                match verify_apache_password(&form.password, hash) {
+                    Ok(valid) => {
+                        is_valid = valid;
+                        break;
+                    }
+                    Err(_) => continue,
+                }
+            }
+        }
+    }
 
     if is_valid {
         Identity::login(&req.extensions(), form.username.clone())

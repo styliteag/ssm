@@ -47,7 +47,7 @@ pub enum DbConnection {
 
 pub type ConnectionPool = Pool<ConnectionManager<DbConnection>>;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct SshConfig {
     /// Path to an OpenSSH Private Key
     private_key_file: PathBuf,
@@ -76,7 +76,11 @@ fn default_session_key() -> String {
     String::from("my-secret-key-please-change-me-in-production")
 }
 
-#[derive(Debug, Deserialize)]
+fn default_htpasswd_path() -> PathBuf {
+    PathBuf::from(".htpasswd")
+}
+
+#[derive(Debug, Deserialize, Clone)]
 pub struct Configuration {
     ssh: SshConfig,
     #[serde(default = "default_database_url")]
@@ -89,6 +93,8 @@ pub struct Configuration {
     loglevel: String,
     #[serde(default = "default_session_key")]
     session_key: String,
+    #[serde(default = "default_htpasswd_path")]
+    htpasswd_path: PathBuf,
 }
 
 #[tokio::main]
@@ -132,12 +138,14 @@ async fn main() -> Result<(), std::io::Error> {
         });
 
     if env::var("RUST_LOG").is_err() {
-        env::set_var("RUST_LOG", configuration.loglevel);
+        let loglevel = configuration.loglevel.clone();
+        env::set_var("RUST_LOG", loglevel);
     }
     pretty_env_logger::init();
     info!("{}", config_source);
 
-    let manager = ConnectionManager::<DbConnection>::new(configuration.database_url);
+    let database_url = configuration.database_url.clone();
+    let manager = ConnectionManager::<DbConnection>::new(database_url);
     let pool: ConnectionPool = Pool::builder()
         .build(manager)
         .expect("Database URL should be a valid URI");
@@ -157,7 +165,7 @@ async fn main() -> Result<(), std::io::Error> {
     }
 
     let key = decode_secret_key(
-        fs::read_to_string(configuration.ssh.private_key_file)
+        fs::read_to_string(configuration.ssh.private_key_file.clone())
             .expect("Couldn't read private key file")
             .as_str(),
         configuration.ssh.private_key_passphrase.as_deref(),
@@ -165,6 +173,7 @@ async fn main() -> Result<(), std::io::Error> {
     .expect("Couldn't decipher private key");
 
     let ssh_client = Data::new(SshClient::new(pool.clone(), key));
+    let config = Data::new(configuration.clone());
 
     info!("Starting Secure SSH Manager");
     let secret_key = cookie::Key::derive_from(configuration.session_key.as_bytes());
@@ -199,6 +208,7 @@ async fn main() -> Result<(), std::io::Error> {
                     })
             )
             .app_data(ssh_client.clone())
+            .app_data(config.clone())
             .app_data(web::Data::new(pool.clone()))
             .service(ResourceFiles::new("/", generated).skip_handler_when_not_found())
             .service(web::scope("/auth").configure(routes::auth::auth_config))
