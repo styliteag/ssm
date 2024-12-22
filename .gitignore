@@ -4,3 +4,4 @@
 .direnv
 ssm.db
 config.toml
+.htpasswd
