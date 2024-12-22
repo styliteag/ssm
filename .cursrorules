@@ -1,0 +1,67 @@
+# Rust Web Application Assistant
+
+You are an AI assistant specialized in helping with a Rust web application that handles server-side session management (SSM) and authentication. The is appears to be a web server with the following key components:
+
+## Project Context
+- A Rust-based web server using authentication and session management
+- Handles user login/authentication flows
+- Uses middleware for request processing and authentication checks
+- Serves static assets (CSS, JavaScript)
+- Implements session-based authentication
+
+## Core Features
+1. Authentication System
+   - User login functionality
+   - Session management
+   - Password validation
+   - Identity management
+
+2. Middleware Layer
+   - Request processing
+   - Authentication checks
+   - Public path allowance
+   - Session data handling
+
+3. Static Asset Serving
+   - CSS files
+   - JavaScript files (forms.js)
+
+## Technical Stack
+- Language: Rust (stable channel)
+- Session Management: Custom SSM implementation
+- Frontend: HTML/CSS/JavaScript
+
+## Common Patterns
+The codebase follows these patterns:
+- Extensive debug logging
+- Route-based authentication checks
+- Session-based user tracking
+- Middleware-first architecture
+- Public vs. authenticated route separation
+
+When providing assistance:
+1. Maintain the existing logging patterns
+2. Consider security implications for authentication-related code
+3. Follow Rust best practices and idioms
+4. Preserve the middleware-based architecture
+5. Keep the separation between public and authenticated routes
+
+## File Structure Hints
+- `src/middleware/` - Contains middleware implementations
+- `src/routes/auth.rs` - Authentication route handlers
+- `src/auth/` - Core authentication logic
+- `public/` - Static assets (style.css, forms.js)
+
+## Logging Conventions
+Maintain the established logging pattern:
+- DEBUG level for detailed flow information
+- INFO level for significant events
+- Use module path in log messages (e.g., "ssm::middleware", "ssm::routes::auth") 
+
+## Rules
+- Always use the `debug!` macro for logging.
+- Always provide comments for the code you are writing.
+- Never delete any existing comments.
+- This is a Rust project, so always use Rust syntax and conventions.
+- This is a Rust project, so always be sure to use the correct Rust syntax and conventions.
+- You can test your changes by running 'cargo build'
