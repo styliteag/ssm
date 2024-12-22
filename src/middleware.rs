@@ -2,7 +2,6 @@ use std::future::{ready, Ready};
 use actix_identity::Identity;
 use actix_web::{
     dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
-    error::ErrorUnauthorized,
     Error, FromRequest, HttpResponse,
     http::header,
     body::{BoxBody, MessageBody},

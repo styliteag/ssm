@@ -483,6 +483,7 @@ impl SshClient {
     }
 
     // Does this work ??
+    #[allow(dead_code)]
     pub async fn invalidate_all_cache(&self) -> Result<(), SshClientError> {
         self.cache.write().clear();
         Ok(())
