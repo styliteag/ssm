@@ -179,4 +179,13 @@ impl Host {
                 .execute(conn),
         )
     }
+
+    pub fn update_fingerprint(&self, conn: &mut DbConnection, fingerprint: String) -> Result<(), String> {
+        query_drop(
+            diesel::update(host::table)
+                .filter(host::id.eq(self.id))
+                .set(host::key_fingerprint.eq(fingerprint))
+                .execute(conn),
+        )
+    }
 }

@@ -1,13 +1,15 @@
-PRAGMA foreign_keys=off;
+PRAGMA foreign_keys=on;
 
 CREATE TABLE host_new (
 	id INTEGER NOT NULL PRIMARY KEY,
 	name TEXT UNIQUE NOT NULL,
 	username TEXT NOT NULL,
-	address TEXT UNIQUE NOT NULL,
+	address TEXT NOT NULL,
 	port INTEGER NOT NULL,
 	key_fingerprint TEXT,
-	jump_via INTEGER
+	jump_via INTEGER,
+	FOREIGN KEY (jump_via) REFERENCES host_new(id),
+	CONSTRAINT unique_address_port UNIQUE (address, port)
 );
 
 INSERT INTO host_new (id, name, username, address, port, key_fingerprint, jump_via)
@@ -15,21 +17,3 @@ INSERT INTO host_new (id, name, username, address, port, key_fingerprint, jump_v
 
 DROP TABLE host;
 ALTER TABLE host_new RENAME TO host;
-
--- Add the foreign key constraint after all data is copied
-CREATE TABLE host_temp AS SELECT * FROM host;
-DROP TABLE host;
-CREATE TABLE host (
-	id INTEGER NOT NULL PRIMARY KEY,
-	name TEXT UNIQUE NOT NULL,
-	username TEXT NOT NULL,
-	address TEXT UNIQUE NOT NULL,
-	port INTEGER NOT NULL,
-	key_fingerprint TEXT,
-	jump_via INTEGER,
-	FOREIGN KEY (jump_via) REFERENCES host(id) ON DELETE CASCADE
-);
-INSERT INTO host SELECT * FROM host_temp;
-DROP TABLE host_temp;
-
-PRAGMA foreign_keys=on;

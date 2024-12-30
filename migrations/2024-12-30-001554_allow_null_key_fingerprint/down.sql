@@ -1,4 +1,4 @@
-PRAGMA foreign_keys=off;
+PRAGMA foreign_keys=on;
 
 -- First copy everything to a temp table without constraints
 CREATE TABLE host_temp AS SELECT * FROM host;
