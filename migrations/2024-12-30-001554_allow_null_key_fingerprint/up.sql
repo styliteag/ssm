@@ -6,9 +6,9 @@ CREATE TABLE host_new (
 	username TEXT NOT NULL,
 	address TEXT NOT NULL,
 	port INTEGER NOT NULL,
-	key_fingerprint TEXT,
+	key_fingerprint TEXT NOT NULL,
 	jump_via INTEGER,
-	FOREIGN KEY (jump_via) REFERENCES host_new(id),
+	FOREIGN KEY (jump_via) REFERENCES host_new(id) ON DELETE CASCADE,
 	CONSTRAINT unique_address_port UNIQUE (address, port)
 );
 
