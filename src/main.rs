@@ -12,7 +12,7 @@ use actix_web::{
 use actix_web_static_files::ResourceFiles;
 use config::Config;
 use diesel::prelude::QueryResult;
-use log::info;
+use log::{error, info};
 use serde::Deserialize;
 use sshclient::SshClient;
 
@@ -143,6 +143,14 @@ async fn main() -> Result<(), std::io::Error> {
     }
     pretty_env_logger::init();
     info!("{}", config_source);
+
+    if !configuration.htpasswd_path.exists() {
+        error!(
+            "htpasswd file does not exist: {:?}",
+            configuration.htpasswd_path
+        );
+        std::process::exit(3);
+    }
 
     let database_url = configuration.database_url.clone();
     let manager = ConnectionManager::<DbConnection>::new(database_url);

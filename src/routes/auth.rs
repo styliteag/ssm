@@ -9,7 +9,9 @@ use bcrypt::{verify, BcryptError};
 use serde::Deserialize;
 use std::fs;
 
-use crate::{forms::FormResponseBuilder, Configuration, ConnectionPool};
+use crate::{Configuration, ConnectionPool};
+
+use super::ErrorTemplate;
 
 #[derive(Template)]
 #[template(path = "auth/login.html")]
@@ -58,19 +60,20 @@ async fn login(
 
     // Check if password file exists
     if !htpasswd_path.exists() {
-        return Ok(
-            FormResponseBuilder::error("Authentication file not found".to_string()).into_response(),
-        );
+        return Ok(ErrorTemplate {
+            error: "Authentication file not found".to_owned(),
+        }
+        .to_response());
     }
 
     // Read and verify credentials from password file
     let password_file = match fs::read_to_string(htpasswd_path) {
         Ok(content) => content,
         Err(_) => {
-            return Ok(
-                FormResponseBuilder::error("Error reading authentication file".to_string())
-                    .into_response(),
-            )
+            return Ok(ErrorTemplate {
+                error: "Error reading authentication file".to_owned(),
+            }
+            .to_response());
         }
     };
 
@@ -96,7 +99,10 @@ async fn login(
             .insert_header(("Location", "/"))
             .finish())
     } else {
-        Ok(FormResponseBuilder::error("Invalid credentials".to_string()).into_response())
+        Ok(ErrorTemplate {
+            error: "Invalid credentials".to_owned(),
+        }
+        .to_response())
     }
 }
 
