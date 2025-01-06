@@ -90,7 +90,15 @@ impl PublicUserKey {
     }
 
     pub fn key_preview(&self) -> String {
-        let preview: String = self.key_base64.chars().rev().take(5).collect::<String>().chars().rev().collect();
+        let preview: String = self
+            .key_base64
+            .chars()
+            .rev()
+            .take(5)
+            .collect::<String>()
+            .chars()
+            .rev()
+            .collect();
         format!("...{}", preview)
     }
 }

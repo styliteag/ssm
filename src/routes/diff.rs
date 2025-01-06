@@ -216,8 +216,7 @@ async fn invalidate_cache(
             host
         }
         Err(error) => {
-            return Ok(FormResponseBuilder::error(error)
-                .add_trigger(String::from("reloadDiff")));
+            return Ok(FormResponseBuilder::error(error).add_trigger(String::from("reloadDiff")));
         }
     };
 
@@ -225,6 +224,8 @@ async fn invalidate_cache(
     let _ = ssh_client.invalidate_cache(host.name.clone()).await;
     let _ = ssh_client.get_host_diff(host).await;
 
-    Ok(FormResponseBuilder::success(String::from("Cache invalidated successfully."))
-        .add_trigger(String::from("reloadDiff")))
+    Ok(
+        FormResponseBuilder::success(String::from("Cache invalidated successfully."))
+            .add_trigger(String::from("reloadDiff")),
+    )
 }

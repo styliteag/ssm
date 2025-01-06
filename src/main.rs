@@ -1,15 +1,15 @@
 use std::{env, fs, net::IpAddr, path::PathBuf};
 
+use actix_identity::IdentityMiddleware;
+use actix_session::{storage::CookieSessionStore, SessionMiddleware};
 use actix_web::{
-    web::{self, Data},
-    App, HttpServer, HttpResponse,
-    http::{header, StatusCode},
-    middleware::{ErrorHandlers, ErrorHandlerResponse},
     dev::ServiceResponse,
+    http::{header, StatusCode},
+    middleware::{ErrorHandlerResponse, ErrorHandlers},
+    web::{self, Data},
+    App, HttpResponse, HttpServer,
 };
 use actix_web_static_files::ResourceFiles;
-use actix_session::{SessionMiddleware, storage::CookieSessionStore};
-use actix_identity::IdentityMiddleware;
 use config::Config;
 use diesel::prelude::QueryResult;
 use log::info;
@@ -24,12 +24,12 @@ use russh::keys::decode_secret_key;
 
 mod db;
 mod forms;
+mod middleware;
 mod models;
 mod routes;
 mod schema;
 mod sshclient;
 mod templates;
-mod middleware;
 
 include!(concat!(env!("OUT_DIR"), "/generated.rs"));
 
@@ -177,35 +177,31 @@ async fn main() -> Result<(), std::io::Error> {
 
     info!("Starting Secure SSH Manager");
     let secret_key = cookie::Key::derive_from(configuration.session_key.as_bytes());
-    
+
     HttpServer::new(move || {
         let generated = generate();
 
         App::new()
             .wrap(middleware::AuthMiddleware)
             .wrap(
-                SessionMiddleware::builder(
-                    CookieSessionStore::default(),
-                    secret_key.clone()
-                )
-                .cookie_name("ssm_session".to_string())
-                .cookie_secure(false) // Set to true in production
-                .cookie_http_only(true)
-                .build()
+                SessionMiddleware::builder(CookieSessionStore::default(), secret_key.clone())
+                    .cookie_name("ssm_session".to_string())
+                    .cookie_secure(false) // Set to true in production
+                    .cookie_http_only(true)
+                    .build(),
             )
             .wrap(IdentityMiddleware::default())
             .wrap(
-                ErrorHandlers::new()
-                    .handler(StatusCode::UNAUTHORIZED, |res: ServiceResponse| {
-                        let req = res.request().clone();
-                        let response = HttpResponse::Found()
-                            .insert_header((header::LOCATION, "/auth/login"))
-                            .finish();
-                        Ok(ErrorHandlerResponse::Response(ServiceResponse::new(
-                            req,
-                            response.map_into_left_body(),
-                        )))
-                    })
+                ErrorHandlers::new().handler(StatusCode::UNAUTHORIZED, |res: ServiceResponse| {
+                    let req = res.request().clone();
+                    let response = HttpResponse::Found()
+                        .insert_header((header::LOCATION, "/auth/login"))
+                        .finish();
+                    Ok(ErrorHandlerResponse::Response(ServiceResponse::new(
+                        req,
+                        response.map_into_left_body(),
+                    )))
+                }),
             )
             .app_data(ssh_client.clone())
             .app_data(config.clone())

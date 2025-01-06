@@ -156,18 +156,20 @@ impl russh::client::Handler for SshHandler {
         server_public_key: &PublicKey,
     ) -> Result<bool, Self::Error> {
         let fingerprint = server_public_key.fingerprint();
-        
+
         // If fingerprint is empty (NULL) and we have a host reference, update it
         if self.hostkey_fingerprint.is_empty() {
             if let (Some(host), Some(conn)) = (&self.host, &self.conn) {
-                if let Err(e) = host.update_fingerprint(&mut conn.get().unwrap(), fingerprint.clone()) {
+                if let Err(e) =
+                    host.update_fingerprint(&mut conn.get().unwrap(), fingerprint.clone())
+                {
                     log::warn!("Failed to update host fingerprint: {}", e);
                 }
                 // Update local copy of fingerprint for verification
                 self.hostkey_fingerprint = fingerprint.clone();
             }
         }
-        
+
         Ok(fingerprint.eq(&self.hostkey_fingerprint))
     }
 }
@@ -517,10 +519,10 @@ impl SshClient {
             BashCommand::SetAuthorizedKeyfile(user_on_host, authorized_keys),
         )
         .await??;
-        
+
         // Invalidate the cache for this host
         self.cache.write().remove(&host.id);
-        
+
         Ok(())
     }
 

@@ -2,18 +2,14 @@ use actix_identity::Identity;
 use actix_web::{
     get, post,
     web::{self, Data, Form},
-    HttpResponse, Responder, HttpRequest, HttpMessage,
+    HttpMessage, HttpRequest, HttpResponse, Responder,
 };
 use askama_actix::{Template, TemplateToResponse};
-use serde::Deserialize;
 use bcrypt::{verify, BcryptError};
+use serde::Deserialize;
 use std::fs;
 
-use crate::{
-    forms::FormResponseBuilder,
-    ConnectionPool,
-    Configuration,
-};
+use crate::{forms::FormResponseBuilder, Configuration, ConnectionPool};
 
 #[derive(Template)]
 #[template(path = "auth/login.html")]
@@ -59,16 +55,23 @@ async fn login(
     config: Data<Configuration>,
 ) -> actix_web::Result<impl Responder> {
     let htpasswd_path = config.htpasswd_path.as_path();
-    
+
     // Check if password file exists
     if !htpasswd_path.exists() {
-        return Ok(FormResponseBuilder::error("Authentication file not found".to_string()).into_response());
+        return Ok(
+            FormResponseBuilder::error("Authentication file not found".to_string()).into_response(),
+        );
     }
 
     // Read and verify credentials from password file
     let password_file = match fs::read_to_string(htpasswd_path) {
         Ok(content) => content,
-        Err(_) => return Ok(FormResponseBuilder::error("Error reading authentication file".to_string()).into_response()),
+        Err(_) => {
+            return Ok(
+                FormResponseBuilder::error("Error reading authentication file".to_string())
+                    .into_response(),
+            )
+        }
     };
 
     let mut is_valid = false;

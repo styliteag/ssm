@@ -47,20 +47,22 @@ impl User {
     }
 
     /// Update a user's enabled status and username in the Database
-    pub fn update_user(conn: &mut DbConnection, old_username: &str, new_username: &str, _enabled: bool) -> Result<(), String> {
-        use diesel::prelude::*;
+    pub fn update_user(
+        conn: &mut DbConnection,
+        old_username: &str,
+        new_username: &str,
+        _enabled: bool,
+    ) -> Result<(), String> {
         use crate::schema::user::dsl::*;
-        
+        use diesel::prelude::*;
+
         // Update username and enabled status
         diesel::update(user)
             .filter(username.eq(old_username))
-            .set((
-                username.eq(new_username),
-                enabled.eq(enabled),
-            ))
+            .set((username.eq(new_username), enabled.eq(enabled)))
             .execute(conn)
             .map_err(|e| e.to_string())?;
-        
+
         Ok(())
     }
 

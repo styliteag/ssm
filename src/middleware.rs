@@ -1,12 +1,12 @@
-use std::future::{ready, Ready};
 use actix_identity::Identity;
 use actix_web::{
-    dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
-    Error, FromRequest, HttpResponse,
-    http::header,
     body::{BoxBody, MessageBody},
+    dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
+    http::header,
+    Error, FromRequest, HttpResponse,
 };
 use futures_util::future::LocalBoxFuture;
+use std::future::{ready, Ready};
 use std::rc::Rc;
 
 pub struct AuthMiddleware;
@@ -48,12 +48,13 @@ where
 
     fn call(&self, req: ServiceRequest) -> Self::Future {
         // Skip authentication for login page, static files, and assets
-        if req.path().starts_with("/auth/") || 
-           req.path().starts_with("/static/") ||
-           req.path().ends_with(".css") ||
-           req.path().ends_with(".js") {
+        if req.path().starts_with("/auth/")
+            || req.path().starts_with("/static/")
+            || req.path().ends_with(".css")
+            || req.path().ends_with(".js")
+        {
             let fut = self.service.call(req);
-            return Box::pin(async move { 
+            return Box::pin(async move {
                 let res = fut.await?;
                 Ok(res.map_into_boxed_body())
             });
