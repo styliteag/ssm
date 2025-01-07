@@ -161,8 +161,11 @@ async fn main() -> Result<(), std::io::Error> {
     {
         use diesel::{sql_query, RunQueryDsl};
 
-        info!("Trying to run migrations");
-        let mut conn = pool.get().expect("Cant connect to database");
+        info!(
+            "Trying to connect to database '{}'",
+            configuration.database_url
+        );
+        let mut conn = pool.get().expect("Couldn't connect to database");
 
         sql_query("PRAGMA foreign_keys = on")
             .execute(&mut conn)

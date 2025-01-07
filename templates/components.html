@@ -65,3 +65,11 @@
 <button hx-confirm="{{ confirmation }}" hx-swap="none" hx-post="{{ target }}" hx-vals='{ {{ opts }} }'>{{ name
   }}</button>
 {% endmacro %}
+
+{% macro connection_details(address, port) %}
+{%- if port == 22 -%}
+{{ address }}
+{%- else -%}
+[{{ address }}]:{{ port }}
+{%- endif -%}
+{% endmacro %}

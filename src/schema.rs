@@ -12,7 +12,7 @@ diesel::table! {
         /// port for ssh connections
         port -> Integer,
         /// fingerprint of the hostkey
-        key_fingerprint -> Text,
+        key_fingerprint -> Nullable<Text>,
         /// jumphost for ssh connections
         jump_via -> Nullable<Integer>,
     }

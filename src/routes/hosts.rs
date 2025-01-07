@@ -10,7 +10,7 @@ use serde::Deserialize;
 use crate::{
     db::UserAndOptions,
     forms::{FormResponseBuilder, Modal},
-    routes::RenderErrorTemplate,
+    routes::{ErrorTemplate, RenderErrorTemplate},
     sshclient::{ConnectionDetails, KeyDiffItem, SshClient},
     ConnectionPool, DbConnection,
 };
@@ -25,6 +25,7 @@ pub fn hosts_config(cfg: &mut web::ServiceConfig) {
         .service(authorize_user)
         .service(gen_authorized_keys)
         .service(set_authorized_keys)
+        .service(add_host_key)
         .service(delete)
         .service(delete_authorization);
 }
@@ -64,6 +65,11 @@ fn get_all_host_data(conn: &mut DbConnection, host: String) -> Result<HostData, 
         .get_authorized_users(conn)
         .map_err(HostDataError::DatabaseError)?;
 
+    // Skip getting users if we can't connect
+    if host.key_fingerprint.is_none() {
+        return Ok((host, jumphost, authorized_users, vec![]));
+    }
+
     let user_list = User::get_all_users(conn).map_err(HostDataError::DatabaseError)?;
 
     Ok((host, jumphost, authorized_users, user_list))
@@ -92,17 +98,26 @@ async fn show_host(
         Ok(host_data) => host_data,
         Err(e) => {
             return Ok(match e {
-                HostDataError::HostNotFound => {
-                    FormResponseBuilder::not_found(String::from("Host not found")).into_response()
+                HostDataError::HostNotFound => ErrorTemplate {
+                    error: String::from("Host not found"),
                 }
-                HostDataError::DatabaseError(e) => FormResponseBuilder::error(e).into_response(),
-            })
+                .to_response(),
+                HostDataError::DatabaseError(e) => ErrorTemplate { error: e }.to_response(),
+            });
         }
     };
 
-    let ssh_users = match ssh_client.get_users_on_host(host.clone()).await {
-        Ok(users) => users,
-        Err(e) => return Ok(FormResponseBuilder::from(e).into_response()),
+    let ssh_users = match host.key_fingerprint {
+        Some(_) => match ssh_client.get_users_on_host(host.clone()).await {
+            Ok(users) => users,
+            Err(e) => {
+                return Ok(ErrorTemplate {
+                    error: e.to_string(),
+                }
+                .to_response())
+            }
+        },
+        None => vec![],
     };
 
     Ok(ShowHostTemplate {
@@ -113,6 +128,87 @@ async fn show_host(
         users_on_host: ssh_users,
     }
     .to_response())
+}
+
+#[derive(Deserialize)]
+struct AddHostkeyForm {
+    key_fingerprint: Option<String>,
+}
+
+#[post("/{id}/add_hostkey")]
+async fn add_host_key(
+    conn: Data<ConnectionPool>,
+    ssh_client: Data<SshClient>,
+    host_id: Path<i32>,
+    new_hostkey: web::Form<AddHostkeyForm>,
+) -> actix_web::Result<impl Responder> {
+    let cloned_conn = conn.clone();
+
+    let host =
+        match web::block(move || Host::get_host_id(&mut conn.get().unwrap(), *host_id)).await? {
+            Ok(h) => h,
+            Err(e) => return Ok(FormResponseBuilder::error(e)),
+        };
+
+    match host {
+        Some(host) => {
+            if let Some(ref new_hostkey) = new_hostkey.key_fingerprint {
+                let res =
+                    host.update_fingerprint(&mut cloned_conn.get().unwrap(), new_hostkey.clone());
+                return Ok(match res {
+                    Ok(()) => FormResponseBuilder::created("Added hostkey".to_owned())
+                        .add_trigger("reloadDiff".to_owned()),
+                    Err(e) => FormResponseBuilder::error(e.to_string()),
+                });
+            }
+
+            let target = host.to_connection().unwrap();
+            let maybe_jumphost = host
+                .jump_via
+                .map(|jump| Host::get_host_id(&mut cloned_conn.get().unwrap(), jump));
+
+            let connection_res = match maybe_jumphost {
+                Some(Ok(None)) => {
+                    return Ok(FormResponseBuilder::error("Jump host not found".to_owned()));
+                }
+                Some(Err(e)) => {
+                    return Ok(FormResponseBuilder::error(e));
+                }
+                Some(Ok(Some(jump))) => ssh_client.get_hostkey_via(jump, target).await,
+                None => ssh_client.get_hostkey(target).await,
+            };
+
+            let key_receiver = match connection_res {
+                Ok(r) => r,
+                Err(e) => return Ok(FormResponseBuilder::error(e.to_string())),
+            };
+
+            let Ok(key_fingerprint) = web::block(move || key_receiver.recv()).await? else {
+                return Ok(FormResponseBuilder::error(String::from(
+                    "Connection timed out",
+                )));
+            };
+
+            Ok(FormResponseBuilder::dialog(Modal {
+                title: "Check the hostkey".to_owned(),
+                request_target: format!("/hosts/{}/add_hostkey", host.id),
+                template: HostkeyDialog {
+                    name: host.name,
+                    username: host.username,
+                    address: host.address,
+                    port: host.port,
+                    jumphost: host.jump_via,
+                    key_fingerprint,
+                }
+                .to_string(),
+            }))
+        }
+        None => {
+            return Ok(FormResponseBuilder::not_found(
+                "Couldn't find host".to_owned(),
+            ))
+        }
+    }
 }
 
 #[derive(Template)]

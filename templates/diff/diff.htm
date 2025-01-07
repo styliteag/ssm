@@ -2,14 +2,8 @@
 
 <div class="host-info">
   <h2><a href="/diff/{{ host.name }}">{{ host.name }}</a></h2>
-  <button class="btn btn-secondary btn-sm mt-2 mb-4"
-    hx-post="/diff/{{ host.name }}/invalidate-cache"
-    hx-trigger="click"
-    hx-target="closest div"
-    hx-swap="none"
-    _="on htmx:afterOnLoad trigger reloadDiff">
-    Invalidate Cache
-  </button>
+  <button class="btn btn-secondary btn-sm mt-2 mb-4" hx-post="/diff/{{ host.name }}/invalidate-cache"
+    hx-swap="none">Invalidate Cache</button>
   <table class="host-details">
     <tr>
       <th>Name</th>
@@ -17,7 +11,7 @@
     </tr>
     <tr>
       <th>Address</th>
-      <td>{{ host.address }}{% if host.port != 22 %}:{{ host.port }}{% endif %}</td>
+      <td>{% call components::connection_details(host.address, host.port) %}</td>
     </tr>
   </table>
 </div>
@@ -155,9 +149,17 @@
   {% endfor %}
   {% endif %}
   {% when Err with (err) %}
+  {% match err %}
+  {% when crate::sshclient::SshClientError::NoHostkey %}
+  <div class="diff-status error">
+    <i>No hostkey available.</i>
+    <button hx-swap="none" hx-post="/hosts/{{ host.id }}/add_hostkey">Add one</button>
+  </div>
+  {% else %}
   <div class="diff-status error">
     <i>Error: {{ err }}</i>
   </div>
+  {% endmatch %}
   {% endmatch %}
 </div>
 

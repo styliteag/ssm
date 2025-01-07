@@ -10,7 +10,12 @@
 <p>Address: {{ host.address}}</p>
 <p>Port: {{ host.port }}</p>
 <p>Username: {{ host.username }}</p>
-<p>Key fingerprint: {{ host.key_fingerprint }}</p>
+{% match host.key_fingerprint %}
+{% when Some with (key_fingerprint) %}
+<p>Key fingerprint: {{ key_fingerprint }}</p>
+{% when None %}
+<p>No key fingerprint available. <button hx-swap="none" hx-post="/hosts/{{ host.id }}/add_hostkey">Add now!</button></p>
+{% endmatch %}
 {% match jumphost %}
 {% when Some with (via) %}
 <p>Connecting via: <a href="/hosts/{{ via }}">{{ via }}</a></p>

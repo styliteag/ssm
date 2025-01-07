@@ -1,3 +1,4 @@
+{%- import "components.html" as components -%}
 <input type="hidden" name="name" value="{{ name }}" />
 <input type="hidden" name="username" value="{{ username }}" />
 <input type="hidden" name="address" value="{{ address }}" />
@@ -10,4 +11,10 @@
 {% endmatch %}
 <p>SHA256 fingerprint of the offered key:</p>
 <code>{{ key_fingerprint }}</code>
+<p>Check your known hosts with this command:</p>
+<code>
+  ssh-keygen -l -f ~/.ssh/known_hosts -F "
+  {%- call components::connection_details(address, port) -%}
+  "
+</code>
 <button>Continue</button>
