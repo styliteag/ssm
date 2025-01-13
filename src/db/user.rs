@@ -2,7 +2,7 @@ use diesel::dsl::insert_into;
 use diesel::{delete, prelude::*};
 
 use crate::schema::user_key;
-use crate::schema::{host, user, user_in_host};
+use crate::schema::{authorization, host, user};
 use crate::{
     models::{NewUser, PublicUserKey, User},
     DbConnection,
@@ -72,15 +72,15 @@ impl User {
         conn: &mut DbConnection,
     ) -> Result<Vec<UserAndOptions>, String> {
         query(
-            user_in_host::table
+            authorization::table
                 .inner_join(user::table)
                 .inner_join(host::table)
                 .filter(user::username.eq(&self.username))
                 .select((
-                    user_in_host::id,
+                    authorization::id,
                     host::name,
-                    user_in_host::user,
-                    user_in_host::options,
+                    authorization::login,
+                    authorization::options,
                 ))
                 .load::<UserAndOptions>(conn),
         )

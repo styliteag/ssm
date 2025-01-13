@@ -32,20 +32,15 @@
     </tr>
   </thead>
   <tbody>
-    {% for user in authorized_users %}
+    {% for (authId, username, login, sshOpts) in authorized_users %}
     <tr>
-      <td>{{ user.1 }}</td>
-      <td><a href="/users/{{ user.2 }}">{{ user.2 }}</a></td>
+      <td>{{ login }}</td>
+      <td><a href="/users/{{ username }}">{{ username }}</a></td>
       <td>
-        {% match user.3 %}
-        {% when Some with (options) %}
-        <pre>{{ options }}</pre>
-        {% when None %}
-        <i>No options set</i>
-        {% endmatch %}
+        {% call components::maybe(sshOpts, "No options set") %}
       </td>
       <td>
-        {% let s = format!("\"authorization_id\": {}", user.0) %}
+        {% let s = format!("\"authorization_id\": {}", authId) %}
         {% call components::post("Edit", "/hosts/edit_authorization", s) %}
         {% call components::post_confirm("Delete","Are you sure you want to delete this authorization?",
         "/hosts/delete_authorization", s) %}

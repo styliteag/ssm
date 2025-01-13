@@ -30,11 +30,11 @@ diesel::table! {
     }
 }
 
-diesel::joinable!(user_in_host -> host (host_id));
-diesel::joinable!(user_in_host -> user (user_id));
+diesel::joinable!(authorization -> host (host_id));
+diesel::joinable!(authorization -> user (user_id));
 diesel::table! {
     /// User authorizations
-    user_in_host (id) {
+    authorization (id) {
         /// unique id
         id -> Integer,
         /// host
@@ -42,7 +42,7 @@ diesel::table! {
         /// user
         user_id -> Integer,
         /// username on the host
-        user -> Text,
+        login -> Text,
         /// ssh key options
         options -> Nullable<Text>,
     }
@@ -65,4 +65,4 @@ diesel::table! {
     }
 }
 
-diesel::allow_tables_to_appear_in_same_query!(host, user, user_in_host, user_key,);
+diesel::allow_tables_to_appear_in_same_query!(host, user, authorization, user_key,);

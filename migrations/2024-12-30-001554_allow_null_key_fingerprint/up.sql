@@ -1,5 +1,3 @@
-PRAGMA foreign_keys=on;
-
 CREATE TABLE host_new (
 	id INTEGER NOT NULL PRIMARY KEY,
 	name TEXT UNIQUE NOT NULL,

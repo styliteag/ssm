@@ -1,5 +1,3 @@
-PRAGMA foreign_keys=on;
-
 -- First copy everything to a temp table without constraints
 CREATE TABLE host_temp AS SELECT * FROM host;
 DROP TABLE host;
@@ -22,5 +20,3 @@ SELECT * FROM host_temp
 WHERE key_fingerprint IS NOT NULL;
 
 DROP TABLE host_temp;
-
-PRAGMA foreign_keys=on;

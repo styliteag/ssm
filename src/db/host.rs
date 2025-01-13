@@ -1,6 +1,6 @@
+use crate::schema::authorization;
 use crate::schema::host;
 use crate::schema::user;
-use crate::schema::user_in_host;
 use crate::schema::user_key;
 use crate::sshclient::ConnectionDetails;
 use crate::sshclient::SshClient;
@@ -44,12 +44,12 @@ impl Host {
             options = None;
         }
         query_drop(
-            insert_into(user_in_host::table)
+            insert_into(authorization::table)
                 .values((
-                    user_in_host::host_id.eq(host_id),
-                    user_in_host::user_id.eq(user_id),
-                    user_in_host::user.eq(login),
-                    user_in_host::options.eq(options),
+                    authorization::host_id.eq(host_id),
+                    authorization::user_id.eq(user_id),
+                    authorization::login.eq(login),
+                    authorization::options.eq(options),
                 ))
                 .execute(conn),
         )
@@ -63,14 +63,14 @@ impl Host {
         // let user_ids = self.get_authorized_user_ids(conn)?;
 
         query(
-            user_in_host::table
+            authorization::table
                 .inner_join(user::table)
-                .filter(user_in_host::host_id.eq(self.id))
+                .filter(authorization::host_id.eq(self.id))
                 .select((
-                    user_in_host::id,
+                    authorization::id,
                     user::username,
-                    user_in_host::user,
-                    user_in_host::options,
+                    authorization::login,
+                    authorization::options,
                 ))
                 .load::<UserAndOptions>(conn),
         )
@@ -107,15 +107,15 @@ impl Host {
         query(
             user::table
                 .inner_join(user_key::table)
-                .inner_join(user_in_host::table)
+                .inner_join(authorization::table)
                 .select((
                     PublicUserKey::as_select(),
-                    user_in_host::user,
+                    authorization::login,
                     user::username,
-                    user_in_host::options,
+                    authorization::options,
                 ))
-                .filter(user_in_host::host_id.eq(self.id))
-                .order(user_in_host::user.desc())
+                .filter(authorization::host_id.eq(self.id))
+                .order(authorization::login.desc())
                 .load::<(PublicUserKey, String, String, Option<String>)>(conn),
         )
         .map(|allowed_list| {
@@ -136,10 +136,10 @@ impl Host {
         let res: Vec<(PublicUserKey, Option<String>)> = query(
             user::table
                 .inner_join(user_key::table)
-                .inner_join(user_in_host::table)
-                .select((PublicUserKey::as_select(), user_in_host::options))
-                .filter(user_in_host::host_id.eq(self.id))
-                .filter(user_in_host::user.eq(login))
+                .inner_join(authorization::table)
+                .select((PublicUserKey::as_select(), authorization::options))
+                .filter(authorization::host_id.eq(self.id))
+                .filter(authorization::login.eq(login))
                 .load::<(PublicUserKey, Option<String>)>(conn),
         )?;
 
@@ -175,7 +175,7 @@ impl Host {
 
     pub fn delete_authorization(conn: &mut DbConnection, authorization: i32) -> Result<(), String> {
         query_drop(
-            diesel::delete(user_in_host::table.filter(user_in_host::id.eq(authorization)))
+            diesel::delete(authorization::table.filter(authorization::id.eq(authorization)))
                 .execute(conn),
         )
     }
