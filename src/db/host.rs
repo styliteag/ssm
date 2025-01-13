@@ -37,7 +37,7 @@ impl Host {
         conn: &mut DbConnection,
         host_id: i32,
         user_id: i32,
-        user_on_host: String,
+        login: String,
         mut options: Option<String>,
     ) -> Result<(), String> {
         if options.as_ref().is_some_and(|o| o.is_empty()) {
@@ -48,7 +48,7 @@ impl Host {
                 .values((
                     user_in_host::host_id.eq(host_id),
                     user_in_host::user_id.eq(user_id),
-                    user_in_host::user.eq(user_on_host),
+                    user_in_host::user.eq(login),
                     user_in_host::options.eq(options),
                 ))
                 .execute(conn),
@@ -99,7 +99,7 @@ impl Host {
         query(host::table.load::<Self>(conn))
     }
 
-    /// Gets all allowed users allowed on this host, sorted by user_on_host
+    /// Gets all allowed users allowed on this host, sorted by login
     pub fn get_authorized_keys(
         &self,
         conn: &mut DbConnection,
@@ -126,12 +126,12 @@ impl Host {
         })
     }
 
-    /// Generate authorized key file for a user on a host. Includes ssm key, if applicable
+    /// Generate authorized key file for a login on a host. Includes ssm key, if applicable
     pub fn get_authorized_keys_file_for(
         &self,
         ssh_client: &SshClient,
         conn: &mut DbConnection,
-        user_on_host: &str,
+        login: &str,
     ) -> Result<String, String> {
         let res: Vec<(PublicUserKey, Option<String>)> = query(
             user::table
@@ -139,7 +139,7 @@ impl Host {
                 .inner_join(user_in_host::table)
                 .select((PublicUserKey::as_select(), user_in_host::options))
                 .filter(user_in_host::host_id.eq(self.id))
-                .filter(user_in_host::user.eq(user_on_host))
+                .filter(user_in_host::user.eq(login))
                 .load::<(PublicUserKey, Option<String>)>(conn),
         )?;
 
@@ -152,7 +152,7 @@ impl Host {
                     + key.to_openssh().as_str()
                     + "\n"
             },
-        ) + (if self.username.eq(&user_on_host) {
+        ) + (if self.username.eq(&login) {
             ssh_client.get_own_key_openssh() + "\n"
         } else {
             String::new()

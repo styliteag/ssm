@@ -24,13 +24,13 @@
 </div>
 {% else %}
 <div class="user-diffs">
-  {% for (username, user_diff) in user_diff_list %}
+  {% for (login, user_diff) in user_diff_list %}
   {% if !user_diff.is_empty() %}
   <div class="user-section">
     <h3>
-      User: {{ username }}
+      Login: {{ login }}
       <button class="inline-button" hx-swap="none" hx-post="/hosts/gen_authorized_keys" hx-vals='{
-          "user_on_host": "{{ username }}"
+          "login": "{{ login }}"
         }'>Generate authorized_keys</button>
     </h3>
     <table class="diff-table">
@@ -93,23 +93,23 @@
             </details>
           </td>
           <td></td>
-          {% when crate::sshclient::DiffItem::UnauthorizedKey with (key, user) %}
-          <td>Unauthorized key owned by <a href="/users/{{ user}}">{{ user }}</a></td>
+          {% when crate::sshclient::DiffItem::UnauthorizedKey with (key, username) %}
+          <td>Unauthorized key owned by <a href="/users/{{ username }}">{{ username }}</a></td>
           <td>
             <details>
               <summary>
                 {% call components::maybe(key.comment, "Key has no comment") %}
               </summary>
               <hr>
-              This key, owned by <a href="/users/{{ user }}">{{ user }}</a>, is not authorized on this host:
+              This key, owned by <a href="/users/{{ username }}">{{ username }}</a>, is not authorized on this host:
               {{ key.as_html()|safe }}
             </details>
           </td>
           <td>
             <button hx-swap="none" hx-post="/diff/authorize_user_dialog" hx-vals='{
-          "username": "{{ user }}",
-          "user_on_host": "{{ username }}"
-          }'>Authorize '{{user }}'</button>
+          "username": "{{ username }}",
+          "login": "{{ login }}"
+          }'>Authorize '{{username }}'</button>
           </td>
           {% when crate::sshclient::DiffItem::FaultyKey with (error, entry) %}
           <td>Faulty line</td>

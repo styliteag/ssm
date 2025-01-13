@@ -4,16 +4,16 @@
   <thead>
     <tr>
       <th>Host</th>
-      <th>User on host</th>
+      <th>Login</th>
       <th>Options</th>
       <th>Actions</th>
     </tr>
   </thead>
   <tbody>
-    {% for (auth_id, host, user_on_host, options) in authorizations %}
+    {% for (auth_id, host, login, options) in authorizations %}
     <tr>
       <td><a href="/hosts/{{ host}}">{{ host }}</a></td>
-      <td>{{ user_on_host }}</td>
+      <td>{{ login }}</td>
       <td>{% call components::maybe_options(options) %}
       <td>
         {% let s = format!("\"authorization_id\": {}", auth_id) %}

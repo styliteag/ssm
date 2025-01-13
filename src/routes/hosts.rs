@@ -82,7 +82,7 @@ struct ShowHostTemplate {
     jumphost: Option<String>,
     authorized_users: Vec<UserAndOptions>,
     user_list: Vec<User>,
-    users_on_host: Vec<String>,
+    logins: Vec<String>,
 }
 
 #[get("/{name}")]
@@ -108,7 +108,7 @@ async fn show_host(
     };
 
     let ssh_users = match host.key_fingerprint {
-        Some(_) => match ssh_client.get_users_on_host(host.clone()).await {
+        Some(_) => match ssh_client.get_logins(host.clone()).await {
             Ok(users) => users,
             Err(e) => {
                 return Ok(ErrorTemplate {
@@ -125,7 +125,7 @@ async fn show_host(
         jumphost,
         authorized_users,
         user_list,
-        users_on_host: ssh_users,
+        logins: ssh_users,
     }
     .to_response())
 }
@@ -362,7 +362,7 @@ async fn render_hosts(conn: Data<ConnectionPool>) -> actix_web::Result<impl Resp
 struct AuthorizeUserForm {
     host_id: i32,
     user_id: i32,
-    user_on_host: String,
+    login: String,
     options: Option<String>,
 }
 
@@ -377,7 +377,7 @@ async fn authorize_user(
             &mut conn.get().unwrap(),
             form.host_id,
             form.user_id,
-            form.user_on_host.clone(),
+            form.login.clone(),
             form.options.clone(),
         )
     })
@@ -393,13 +393,13 @@ async fn authorize_user(
 #[derive(Deserialize)]
 struct GenAuthorizedKeysForm {
     host_name: String,
-    user_on_host: String,
+    login: String,
 }
 
 #[derive(Template)]
 #[template(path = "hosts/authorized_keyfile_dialog.htm")]
 struct AuthorizedKeyfileDialog {
-    user_on_host: String,
+    login: String,
     authorized_keys: String,
     diff: Vec<KeyDiffItem>,
 }
@@ -411,7 +411,7 @@ async fn gen_authorized_keys(
     form: web::Form<GenAuthorizedKeysForm>,
 ) -> actix_web::Result<impl Responder> {
     let host_name = form.host_name.clone();
-    let user_on_host = form.user_on_host.clone();
+    let login = form.login.clone();
     let ssh_client2 = ssh_client.clone();
     let res = web::block(move || {
         let mut connection = conn.get().unwrap();
@@ -419,7 +419,7 @@ async fn gen_authorized_keys(
         let host = Host::get_host_name(&mut connection, form.host_name.clone()).ok()?;
 
         host.and_then(|host| {
-            host.get_authorized_keys_file_for(&ssh_client2, &mut connection, &form.user_on_host)
+            host.get_authorized_keys_file_for(&ssh_client2, &mut connection, &form.login)
                 .ok()
         })
     })
@@ -428,11 +428,7 @@ async fn gen_authorized_keys(
     match res {
         Some(authorized_keys) => {
             let Ok(key_diff) = ssh_client
-                .key_diff(
-                    authorized_keys.as_ref(),
-                    host_name.clone(),
-                    user_on_host.clone(),
-                )
+                .key_diff(authorized_keys.as_ref(), host_name.clone(), login.clone())
                 .await
             else {
                 return Ok(FormResponseBuilder::error(
@@ -441,12 +437,10 @@ async fn gen_authorized_keys(
             };
 
             Ok(FormResponseBuilder::dialog(Modal {
-                title: format!(
-                    "These changes will be applied for '{user_on_host}' on '{host_name}':"
-                ),
+                title: format!("These changes will be applied for '{login}' on '{host_name}':"),
                 request_target: format!("/hosts/{host_name}/set_authorized_keys"),
                 template: AuthorizedKeyfileDialog {
-                    user_on_host,
+                    login,
                     diff: key_diff,
                     authorized_keys,
                 }
@@ -461,7 +455,7 @@ async fn gen_authorized_keys(
 
 #[derive(Deserialize)]
 struct SetAuthorizedKeysForm {
-    user_on_host: String,
+    login: String,
     authorized_keys: String,
 }
 
@@ -474,7 +468,7 @@ async fn set_authorized_keys(
     let res = ssh_client
         .set_authorized_keys(
             host.to_string(),
-            form.user_on_host.clone(),
+            form.login.clone(),
             form.authorized_keys.clone(),
         )
         .await;

@@ -497,14 +497,14 @@ impl SshClient {
     pub async fn set_authorized_keys(
         &self,
         host_name: String,
-        user_on_host: String,
+        login: String,
         authorized_keys: String,
     ) -> Result<(), SshClientError> {
         let host = self.get_host_from_name(host_name).await?;
         let handle = self.clone().connect(host.clone()).await?;
         self.execute_bash(
             &handle,
-            BashCommand::SetAuthorizedKeyfile(user_on_host, authorized_keys),
+            BashCommand::SetAuthorizedKeyfile(login, authorized_keys),
         )
         .await??;
 
@@ -514,7 +514,7 @@ impl SshClient {
         Ok(())
     }
 
-    pub async fn get_users_on_host(&self, host: Host) -> Result<Vec<String>, SshClientError> {
+    pub async fn get_logins(&self, host: Host) -> Result<Vec<String>, SshClientError> {
         let handle = self.clone().connect(host).await?;
 
         self.get_ssh_users(&handle).await
@@ -699,7 +699,7 @@ impl SshClient {
         let mut diff_items = Vec::new();
         let mut used_indecies = Vec::new();
 
-        for (user_on_host, has_pragma, host_entries) in host_authorized_entries {
+        for (login, has_pragma, host_entries) in host_authorized_entries {
             let mut this_user_diff = Vec::new();
             if !has_pragma {
                 this_user_diff.push(DiffItem::PragmaMissing);
@@ -720,9 +720,7 @@ impl SshClient {
                 }
 
                 for (i, db_entry) in db_authorized_entries.iter().enumerate() {
-                    if host_entry.base64.eq(&db_entry.key.key_base64)
-                        && user_on_host.eq(&db_entry.user_on_host)
-                    {
+                    if host_entry.base64.eq(&db_entry.key.key_base64) && login.eq(&db_entry.login) {
                         // TODO: check options
                         if used_indecies.contains(&i) {
                             this_user_diff.push(DiffItem::DuplicateKey(host_entry));
@@ -745,14 +743,14 @@ impl SshClient {
             }
 
             for (i, unused_entry) in db_authorized_entries.iter().enumerate() {
-                if !used_indecies.contains(&i) && unused_entry.user_on_host.eq(&user_on_host) {
+                if !used_indecies.contains(&i) && unused_entry.login.eq(&login) {
                     this_user_diff.push(DiffItem::KeyMissing(
                         unused_entry.clone().into(),
                         unused_entry.username.clone(),
                     ));
                 }
             }
-            diff_items.push((user_on_host, this_user_diff));
+            diff_items.push((login, this_user_diff));
         }
         diff_items.retain(|(_, user_diff)| !user_diff.is_empty());
         Ok(diff_items)
@@ -795,8 +793,8 @@ pub enum KeyDiffItem {
     Removed(String),
 }
 
-type Username = String;
-pub type HostDiff = Result<Vec<(Username, Vec<DiffItem>)>, SshClientError>;
+type Login = String;
+pub type HostDiff = Result<Vec<(Login, Vec<DiffItem>)>, SshClientError>;
 
 #[derive(Clone, Debug)]
 pub enum DiffItem {
