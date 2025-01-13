@@ -1,4 +1,4 @@
-use std::{env, fs, net::IpAddr, path::PathBuf};
+use std::{env, fs, net::IpAddr, path::PathBuf, time::Duration};
 
 use actix_identity::IdentityMiddleware;
 use actix_session::{storage::CookieSessionStore, SessionMiddleware};
@@ -47,12 +47,27 @@ pub enum DbConnection {
 
 pub type ConnectionPool = Pool<ConnectionManager<DbConnection>>;
 
+fn default_timeout() -> Duration {
+    Duration::from_secs(120)
+}
+
+fn deserialize_timeout<'de, D>(deserializer: D) -> Result<Duration, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let seconds = u64::deserialize(deserializer)?;
+    Ok(Duration::from_secs(seconds))
+}
+
 #[derive(Debug, Deserialize, Clone)]
 pub struct SshConfig {
     /// Path to an OpenSSH Private Key
     private_key_file: PathBuf,
     /// Passphrase for the key
     private_key_passphrase: Option<String>,
+    /// Connection timeout in seconds (default 2m)
+    #[serde(default = "default_timeout", deserialize_with = "deserialize_timeout")]
+    timeout: Duration,
 }
 
 fn default_database_url() -> String {
@@ -183,8 +198,8 @@ async fn main() -> Result<(), std::io::Error> {
     )
     .expect("Couldn't decipher private key");
 
-    let ssh_client = Data::new(SshClient::new(pool.clone(), key));
     let config = Data::new(configuration.clone());
+    let ssh_client = Data::new(SshClient::new(pool.clone(), key, configuration.ssh));
 
     info!("Starting Secure SSH Manager");
     let secret_key = cookie::Key::derive_from(configuration.session_key.as_bytes());
