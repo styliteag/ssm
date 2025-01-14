@@ -8,6 +8,7 @@ use actix_web::{
 use futures_util::future::LocalBoxFuture;
 use std::future::{ready, Ready};
 use std::rc::Rc;
+use log::warn;
 
 pub struct AuthMiddleware;
 
@@ -47,12 +48,16 @@ where
     forward_ready!(service);
 
     fn call(&self, req: ServiceRequest) -> Self::Future {
+        let path = req.path().to_string();
+        let method = req.method().to_string();
+
         // Skip authentication for login page, static files, and assets
         if req.path().starts_with("/auth/")
             || req.path().starts_with("/static/")
             || req.path().ends_with(".css")
             || req.path().ends_with(".js")
         {
+            warn!("[Web] {} {} (public path)", method, path);
             let fut = self.service.call(req);
             return Box::pin(async move {
                 let res = fut.await?;
@@ -66,12 +71,15 @@ where
 
         Box::pin(async move {
             match identity.await {
-                Ok(_) => {
+                Ok(id) => {
+                    warn!("[Web] {} {} (authenticated user: {})", method, path, 
+                        id.id().unwrap_or_else(|_| "unknown".to_string()));
                     let req = ServiceRequest::from_parts(http_req, payload);
                     let res = service.call(req).await?;
                     Ok(res.map_into_boxed_body())
                 }
                 Err(_) => {
+                    warn!("[Web] {} {} (unauthorized)", method, path);
                     let response = HttpResponse::Found()
                         .append_header((header::LOCATION, "/auth/login"))
                         .insert_header(("HX-Redirect", "/auth/login"))
