@@ -149,6 +149,7 @@ impl From<russh::Error> for SshClientError {
 #[derive(Debug)]
 struct SshHandler {
     hostkey_fingerprint: String,
+    hostname: String,
 }
 
 #[async_trait]
@@ -160,7 +161,7 @@ impl russh::client::Handler for SshHandler {
         server_public_key: &PublicKey,
     ) -> Result<bool, Self::Error> {
         let fingerprint = server_public_key.fingerprint();
-
+        warn!("[{}] Checking server key with fingerprint: {}", self.hostname, fingerprint);
         Ok(fingerprint.eq(&self.hostkey_fingerprint))
     }
 }
@@ -183,12 +184,16 @@ impl russh::client::Handler for SshFirstConnectionHandler {
     ) -> Result<bool, Self::Error> {
         Ok(match &self.state {
             FirstConnectionState::KeySender(tx) => {
+                let fingerprint = server_public_key.fingerprint();
+                warn!("First connection: received server key fingerprint: {}", fingerprint);
                 tx.send(server_public_key.fingerprint()).map_err(|_| {
                     SshClientError::ExecutionError(String::from("Failed to send data over mpsc"))
                 })?;
                 false
             }
             FirstConnectionState::Hostkey(known_fingerprint) => {
+                let fingerprint = server_public_key.fingerprint();
+                warn!("Verifying server key fingerprint: {} against known: {}", fingerprint, known_fingerprint);
                 server_public_key.fingerprint().eq(known_fingerprint)
             }
         })
@@ -288,6 +293,7 @@ impl SshClient {
         hostkey: String,
         user: String,
     ) -> Result<(), SshClientError> {
+        warn!("Attempting authentication for user {} to {}:{}", user, address.hostname, address.port);
         let handler = SshFirstConnectionHandler {
             state: FirstConnectionState::Hostkey(hostkey),
         };
@@ -349,11 +355,13 @@ impl SshClient {
         self,
         host: Host,
     ) -> BoxFuture<'static, Result<russh::client::Handle<SshHandler>, SshClientError>> {
+        warn!("Initiating SSH connection to host: {}", host.name);
         let Some(ref key_fingerprint) = host.key_fingerprint else {
             return Box::pin(async { Err(SshClientError::NoHostkey) });
         };
         let handler = SshHandler {
             hostkey_fingerprint: key_fingerprint.clone(),
+            hostname: host.name.clone(),
         };
 
         async move {
@@ -394,6 +402,7 @@ impl SshClient {
         via: Host,
         to: ConnectionDetails,
     ) -> Result<russh::ChannelStream<russh::client::Msg>, SshClientError> {
+        warn!("Initiating SSH connection to {} via jump host: {}", to.hostname, via.name);
         let jump_handle = self.clone().connect(via).await?;
 
         debug!("Got handle for jump host targeting {}", to.hostname);
@@ -417,20 +426,20 @@ impl SshClient {
         // Check cache first
         if let Some(cached) = self.cache.read().get(&host.id) {
             if cached.timestamp.elapsed() < CACHE_DURATION {
-                info!("Using cached for authorized keys for host {}", host.id);
+                info!("[{}] Using cached authorized keys for host {}", host.name, host.id);
                 return Ok(cached.data.clone());
             }
         }
 
         // If not in cache or expired, fetch fresh data
         let handle = self.clone().connect(host.clone()).await?;
-        let users = self.get_ssh_users(&handle).await?;
+        let users = self.get_ssh_users(&handle, &host.name).await?;
 
         let mut user_vec = Vec::with_capacity(users.len());
 
         for user in users {
-            info!("Loading authorized keys for user: {user}");
-            let (has_pragma, keys) = self.get_authorized_keys_for(&handle, user.clone()).await?;
+            info!("[{}] Loading authorized keys for user: {}", host.name, user);
+            let (has_pragma, keys) = self.get_authorized_keys_for(&handle, user.clone(), &host.name).await?;
             user_vec.push((user, has_pragma, keys));
         }
 
@@ -451,9 +460,10 @@ impl SshClient {
         &self,
         handle: &russh::client::Handle<SshHandler>,
         user: String,
+        hostname: &str,
     ) -> Result<(bool, Vec<AuthorizedKeyEntry>), SshClientError> {
         let res = self
-            .execute_bash(handle, BashCommand::GetAuthorizedKeyfile(user))
+            .execute_bash(handle, BashCommand::GetAuthorizedKeyfile(user), hostname)
             .await??;
 
         let mut iter = res.trim().lines().peekable();
@@ -518,6 +528,7 @@ impl SshClient {
         self.execute_bash(
             &handle,
             BashCommand::SetAuthorizedKeyfile(login, authorized_keys),
+            &host.name,
         )
         .await??;
 
@@ -528,17 +539,17 @@ impl SshClient {
     }
 
     pub async fn get_logins(&self, host: Host) -> Result<Vec<String>, SshClientError> {
-        let handle = self.clone().connect(host).await?;
-
-        self.get_ssh_users(&handle).await
+        let handle = self.clone().connect(host.clone()).await?;
+        self.get_ssh_users(&handle, &host.name).await
     }
 
     async fn get_ssh_users(
         &self,
         handle: &russh::client::Handle<SshHandler>,
+        hostname: &str,
     ) -> Result<Vec<String>, SshClientError> {
         let res = self
-            .execute_bash(handle, BashCommand::GetSshUsers)
+            .execute_bash(handle, BashCommand::GetSshUsers, hostname)
             .await??;
 
         Ok(res.lines().map(std::borrow::ToOwned::to_owned).collect())
@@ -546,55 +557,28 @@ impl SshClient {
 
     pub async fn install_script_on_host(&self, host: i32) -> Result<(), SshClientError> {
         let host = self.get_host_from_id(host).await?;
-        let handle = self.clone().connect(host).await?;
-
-        self.install_script(&handle).await
-    }
-
-    async fn install_script(
-        &self,
-        handle: &russh::client::Handle<SshHandler>,
-    ) -> Result<(), SshClientError> {
-        let script = include_bytes!("./script.sh");
-
-        match self
-            .execute_with_data(
-                handle,
-                &script[..],
-                "cat - > .ssh/ssm.sh; chmod +x .ssh/ssm.sh",
-            )
-            .await
-        {
-            Ok((code, _)) => {
-                if code != 0 {
-                    Err(SshClientError::ExecutionError(String::from(
-                        "Failed to install script.",
-                    )))
-                } else {
-                    Ok(())
-                }
-            }
-            Err(error) => Err(error),
-        }
+        let handle = self.clone().connect(host.clone()).await?;
+        self.install_script(&handle, &host.name).await
     }
 
     async fn execute_bash(
         &self,
         handle: &russh::client::Handle<SshHandler>,
         command: BashCommand,
+        hostname: &str,
     ) -> Result<BashResult, SshClientError> {
         let (exit_code, result) = self
-            .execute(handle, BashCommand::Version.to_string().as_str())
+            .execute(handle, BashCommand::Version.to_string().as_str(), hostname)
             .await?;
         // TODO: checksums
         if exit_code != 0 || !result.contains("Secure SSH Manager") {
-            warn!("Script on host seems to be invalid. Trying to install");
-            match self.install_script(handle).await {
+            warn!("[{}] Script on host seems to be invalid. Trying to install", hostname);
+            match self.install_script(handle, hostname).await {
                 Ok(()) => {
-                    debug!("Succesfully installed script");
+                    debug!("[{}] Successfully installed script", hostname);
                 }
                 Err(error) => {
-                    warn!("Failed to install script on host: {}", error);
+                    warn!("[{}] Failed to install script on host: {}", hostname, error);
                     return Err(SshClientError::ExecutionError(String::from(
                         "Script not valid",
                     )));
@@ -603,7 +587,7 @@ impl SshClient {
         }
 
         let command_str = command.to_string();
-        debug!("Executing bash command {}", &command_str);
+        debug!("[{}] Executing bash command {}", hostname, &command_str);
 
         let stdin: Option<String> = match command {
             BashCommand::SetAuthorizedKeyfile(_, new_keyfile) => Some(new_keyfile),
@@ -620,10 +604,11 @@ impl SshClient {
                     handle,
                     Cursor::new(stdin.into_bytes()),
                     command_str.as_str(),
+                    hostname,
                 )
                 .await
             }
-            None => self.execute(handle, command_str.as_str()).await,
+            None => self.execute(handle, command_str.as_str(), hostname).await,
         }?;
 
         Ok(match exit_code {
@@ -636,9 +621,40 @@ impl SshClient {
         &self,
         handle: &russh::client::Handle<SshHandler>,
         command: &str,
+        hostname: &str,
     ) -> Result<(u32, String), SshClientError> {
-        self.execute_with_data(handle, tokio::io::empty(), command)
+        warn!("[{}] Executing command on remote host: {}", hostname, command);
+        self.execute_with_data(handle, tokio::io::empty(), command, hostname)
             .await
+    }
+
+    async fn install_script(
+        &self,
+        handle: &russh::client::Handle<SshHandler>,
+        hostname: &str,
+    ) -> Result<(), SshClientError> {
+        let script = include_bytes!("./script.sh");
+
+        match self
+            .execute_with_data(
+                handle,
+                &script[..],
+                "cat - > .ssh/ssm.sh; chmod +x .ssh/ssm.sh",
+                hostname,
+            )
+            .await
+        {
+            Ok((code, _)) => {
+                if code != 0 {
+                    Err(SshClientError::ExecutionError(String::from(
+                        "Failed to install script.",
+                    )))
+                } else {
+                    Ok(())
+                }
+            }
+            Err(error) => Err(error),
+        }
     }
 
     /// Runs a command and returns exit code and std{out/err} merged as a touple
@@ -647,6 +663,7 @@ impl SshClient {
         handle: &russh::client::Handle<SshHandler>,
         data: R,
         command: &str,
+        hostname: &str,
     ) -> Result<(u32, String), SshClientError>
     where
         R: AsyncRead + Unpin,
@@ -676,7 +693,7 @@ impl SshClient {
                     exit_code = Some(exit_status);
                 }
                 _ => {
-                    debug!("Received extra message: {:?}", msg);
+                    debug!("[{}] Received extra message: {:?}", hostname, msg);
                 }
             }
         }
@@ -779,10 +796,10 @@ impl SshClient {
             return Err(SshClientError::NoSuchHost);
         };
 
-        let conn = self.clone().connect(host).await?;
+        let conn = self.clone().connect(host.clone()).await?;
 
         let curr_keys = self
-            .execute_bash(&conn, BashCommand::GetAuthorizedKeyfile(login))
+            .execute_bash(&conn, BashCommand::GetAuthorizedKeyfile(login), &host.name)
             .await??;
 
         let new_keys = new.to_owned();
