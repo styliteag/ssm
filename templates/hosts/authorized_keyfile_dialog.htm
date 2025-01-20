@@ -3,9 +3,9 @@
 <code>
   {% for (diffItem) in diff %}
   {% match diffItem %}
-  {% when crate::sshclient::KeyDiffItem::Added with (added) %}
+  {% when crate::ssh::KeyDiffItem::Added with (added) %}
   <p class="green">{{ added }}</p>
-  {% when crate::sshclient::KeyDiffItem::Removed with (removed) %}
+  {% when crate::ssh::KeyDiffItem::Removed with (removed) %}
   <p class="red">{{ removed }}</p>
   {% endmatch %}
   {% endfor %}

@@ -14,6 +14,8 @@
       <td>{% call components::connection_details(host.address, host.port) %}</td>
     </tr>
   </table>
+  {% let test = cached_from %}
+  <h2>{{ format!("Cached result from {:.0} ago", time::OffsetDateTime::now_utc() - test) }}</h2>
 </div>
 
 {% match diff %}
@@ -45,7 +47,7 @@
         {% for item in user_diff %}
         <tr>
           {% match item %}
-          {% when crate::sshclient::DiffItem::DuplicateKey with (key) %}
+          {% when crate::ssh::DiffItem::DuplicateKey with (key) %}
           <td>Duplicate key</td>
           <td>
             <details>
@@ -57,7 +59,7 @@
             </details>
           </td>
           <td></td>
-          {% when crate::sshclient::DiffItem::UnknownKey with (key) %}
+          {% when crate::ssh::DiffItem::UnknownKey with (key) %}
           <td>Unknown key</td>
           <td>
             <details>
@@ -80,7 +82,7 @@
             {% endmatch %}
             }'>Assign this key to a user</button>
           </td>
-          {% when crate::sshclient::DiffItem::KeyMissing with (key, username) %}
+          {% when crate::ssh::DiffItem::KeyMissing with (key, username) %}
           <td>Missing key</td>
           <td>
             <details>
@@ -93,7 +95,7 @@
             </details>
           </td>
           <td></td>
-          {% when crate::sshclient::DiffItem::UnauthorizedKey with (key, username) %}
+          {% when crate::ssh::DiffItem::UnauthorizedKey with (key, username) %}
           <td>Unauthorized key owned by <a href="/users/{{ username }}">{{ username }}</a></td>
           <td>
             <details>
@@ -111,7 +113,7 @@
           "login": "{{ login }}"
           }'>Authorize '{{username }}'</button>
           </td>
-          {% when crate::sshclient::DiffItem::FaultyKey with (error, entry) %}
+          {% when crate::ssh::DiffItem::FaultyKey with (error, entry) %}
           <td>Faulty line</td>
           <td>
             <details>
@@ -125,7 +127,7 @@
             </details>
           </td>
           <td></td>
-          {% when crate::sshclient::DiffItem::PragmaMissing %}
+          {% when crate::ssh::DiffItem::PragmaMissing %}
           <td>Pragma missing</td>
           <td>
             <details>
@@ -150,7 +152,7 @@
   {% endif %}
   {% when Err with (err) %}
   {% match err %}
-  {% when crate::sshclient::SshClientError::NoHostkey %}
+  {% when crate::ssh::SshClientError::NoHostkey %}
   <div class="diff-status error">
     <i>No hostkey available.</i>
     <button hx-swap="none" hx-post="/hosts/{{ host.id }}/add_hostkey">Add one</button>

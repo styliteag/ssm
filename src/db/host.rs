@@ -2,9 +2,9 @@ use crate::schema::authorization;
 use crate::schema::host;
 use crate::schema::user;
 use crate::schema::user_key;
-use crate::sshclient::ConnectionDetails;
-use crate::sshclient::SshClient;
-use crate::sshclient::SshClientError;
+use crate::ssh::ConnectionDetails;
+use crate::ssh::SshClient;
+use crate::ssh::SshClientError;
 use crate::{
     models::{Host, NewHost, PublicUserKey},
     DbConnection,

@@ -1,7 +1,7 @@
 use actix_web::{http::StatusCode, HttpResponse, HttpResponseBuilder};
 use askama::Template;
 
-use crate::sshclient::SshClientError;
+use crate::ssh::SshClientError;
 
 #[derive(Debug)]
 pub struct Modal {
@@ -87,7 +87,7 @@ impl FormResponseBuilder {
         self
     }
 
-    pub fn with_redirect(mut self, location: &str) -> Self {
+    pub fn _with_redirect(mut self, location: &str) -> Self {
         self.status = StatusCode::FOUND;
         self.triggers.push(format!("redirect {}", location));
         self

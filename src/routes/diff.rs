@@ -1,4 +1,7 @@
-use crate::templates::AsHTML;
+use crate::{
+    ssh::{CachingSshClient, DiffItem, SshClientError},
+    templates::AsHTML,
+};
 use actix_web::{
     get, post,
     web::{self, Data, Path},
@@ -6,11 +9,12 @@ use actix_web::{
 };
 use askama_actix::{Template, TemplateToResponse};
 use serde::Deserialize;
+use time::OffsetDateTime;
 
 use crate::{
     forms::{FormResponseBuilder, Modal},
     routes::{ErrorTemplate, RenderErrorTemplate},
-    sshclient::{HostDiff, SshClient, SshPublicKey},
+    ssh::SshPublicKey,
     ConnectionPool,
 };
 
@@ -21,8 +25,7 @@ pub fn diff_config(cfg: &mut web::ServiceConfig) {
         .service(render_diff)
         .service(show_diff)
         .service(assign_key_dialog)
-        .service(authorize_user_dialog)
-        .service(invalidate_cache);
+        .service(authorize_user_dialog);
 }
 
 #[derive(Template)]
@@ -45,13 +48,14 @@ async fn diff_page(conn: Data<ConnectionPool>) -> actix_web::Result<impl Respond
 #[template(path = "diff/diff.htm")]
 struct RenderDiffTemplate {
     host: Host,
-    diff: HostDiff,
+    diff: Result<Vec<(String, Vec<DiffItem>)>, SshClientError>,
+    cached_from: OffsetDateTime,
 }
 
 #[get("/{host_name}.htm")]
 async fn render_diff(
     conn: Data<ConnectionPool>,
-    ssh_client: Data<SshClient>,
+    caching_ssh_client: Data<CachingSshClient>,
     host_name: Path<String>,
 ) -> actix_web::Result<impl Responder> {
     let res = web::block(move || {
@@ -74,9 +78,14 @@ async fn render_diff(
         Err(error) => return Ok(RenderErrorTemplate { error }.to_response()),
     };
 
-    let diff = ssh_client.get_host_diff(host.clone()).await;
+    let (cached_from, diff) = caching_ssh_client.get_host_diff(host.clone()).await;
 
-    Ok(RenderDiffTemplate { host, diff }.to_response())
+    Ok(RenderDiffTemplate {
+        host,
+        diff,
+        cached_from,
+    }
+    .to_response())
 }
 
 #[derive(Template)]
@@ -188,39 +197,4 @@ async fn authorize_user_dialog(
         request_target: String::from("/hosts/user/authorize"),
         template: AuthorizeUserDialog { host, user, login }.to_string(),
     }))
-}
-
-#[post("/{host_name}/invalidate-cache")]
-async fn invalidate_cache(
-    conn: Data<ConnectionPool>,
-    ssh_client: Data<SshClient>,
-    host_name: Path<String>,
-) -> actix_web::Result<impl Responder> {
-    let res = web::block(move || {
-        let mut connection = conn.get().unwrap();
-        Host::get_host_name(&mut connection, host_name.to_string())
-    })
-    .await?;
-
-    let host = match res {
-        Ok(maybe_host) => {
-            let Some(host) = maybe_host else {
-                return Ok(FormResponseBuilder::error(String::from("No such host."))
-                    .add_trigger(String::from("reloadDiff")));
-            };
-            host
-        }
-        Err(error) => {
-            return Ok(FormResponseBuilder::error(error).add_trigger(String::from("reloadDiff")));
-        }
-    };
-
-    // Get a fresh copy of the host data to force cache invalidation
-    let _ = ssh_client.invalidate_cache(host.name.clone()).await;
-    let _ = ssh_client.get_host_diff(host).await;
-
-    Ok(
-        FormResponseBuilder::success(String::from("Cache invalidated successfully."))
-            .add_trigger(String::from("reloadDiff")),
-    )
 }

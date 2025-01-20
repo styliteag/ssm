@@ -11,7 +11,7 @@ use crate::{
     db::UserAndOptions,
     forms::{FormResponseBuilder, Modal},
     routes::{ErrorTemplate, RenderErrorTemplate},
-    sshclient::{ConnectionDetails, KeyDiffItem, SshClient},
+    ssh::{CachingSshClient, ConnectionDetails, KeyDiffItem, SshClient},
     ConnectionPool, DbConnection,
 };
 
@@ -88,7 +88,7 @@ struct ShowHostTemplate {
 #[get("/{name}")]
 async fn show_host(
     conn: Data<ConnectionPool>,
-    ssh_client: Data<SshClient>,
+    caching_ssh_client: Data<CachingSshClient>,
     host: Path<String>,
 ) -> actix_web::Result<impl Responder> {
     let res =
@@ -108,7 +108,7 @@ async fn show_host(
     };
 
     let ssh_users = match host.key_fingerprint {
-        Some(_) => match ssh_client.get_logins(host.clone()).await {
+        Some(_) => match caching_ssh_client.get_logins(host.clone()).await {
             Ok(users) => users,
             Err(e) => {
                 return Ok(ErrorTemplate {

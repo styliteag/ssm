@@ -4,7 +4,7 @@ use diesel::result::Error;
 use log::error;
 use ssh_key::{authorized_keys::ConfigOpts, Algorithm};
 
-use crate::{models::PublicUserKey, sshclient::AuthorizedKey};
+use crate::{models::PublicUserKey, ssh::AuthorizedKey};
 
 mod host;
 mod key;

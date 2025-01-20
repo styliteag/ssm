@@ -1,4 +1,4 @@
-use std::{env, fs, net::IpAddr, path::PathBuf, time::Duration};
+use std::{env, net::IpAddr, path::PathBuf, sync::Arc, time::Duration};
 
 use actix_identity::IdentityMiddleware;
 use actix_session::{storage::CookieSessionStore, SessionMiddleware};
@@ -14,13 +14,14 @@ use config::Config;
 use diesel::prelude::QueryResult;
 use log::{error, info};
 use serde::Deserialize;
-use sshclient::SshClient;
+use ssh::{CachingSshClient, SshClient};
 
 use diesel::r2d2::ConnectionManager;
 use diesel::r2d2::Pool;
 
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
-use russh::keys::decode_secret_key;
+use russh::keys::key::PrivateKeyWithHashAlg;
+use ssh_key::PrivateKey;
 
 mod db;
 mod forms;
@@ -28,7 +29,7 @@ mod middleware;
 mod models;
 mod routes;
 mod schema;
-mod sshclient;
+mod ssh;
 mod templates;
 
 include!(concat!(env!("OUT_DIR"), "/generated.rs"));
@@ -190,16 +191,38 @@ async fn main() -> Result<(), std::io::Error> {
             .expect("Error while running migrations:");
     }
 
-    let key = decode_secret_key(
-        fs::read_to_string(configuration.ssh.private_key_file.clone())
-            .expect("Couldn't read private key file")
-            .as_str(),
-        configuration.ssh.private_key_passphrase.as_deref(),
-    )
-    .expect("Couldn't decipher private key");
+    let key_path = &configuration.ssh.private_key_file;
+
+    let mut key =
+        PrivateKey::read_openssh_file(key_path).expect("Failed to read key from '{key_path}'.");
+
+    if let Some(key_passphrase) = configuration.ssh.private_key_passphrase.as_ref() {
+        key = match key.decrypt(key_passphrase) {
+            Ok(k) => k,
+            Err(ssh_key::Error::Decrypted) => {
+                error!("Tried to decrypt ssh key, but it is already decrypted.");
+                std::process::exit(4);
+            }
+            Err(e) => {
+                error!("Failed to decrypt ssh key: {e}");
+                std::process::exit(3);
+            }
+        };
+    };
+
+    let hash = match key.algorithm() {
+        ssh_key::Algorithm::Rsa { hash } => hash,
+        _ => None,
+    };
+
+    // TODO: maybe a better error message
+    let key = PrivateKeyWithHashAlg::new(Arc::new(key), hash)
+        .expect("Failed to convert key to Private key");
 
     let config = Data::new(configuration.clone());
-    let ssh_client = Data::new(SshClient::new(pool.clone(), key, configuration.ssh));
+    let ssh_client = SshClient::new(pool.clone(), key, configuration.ssh);
+
+    let caching_ssh_client = Data::new(CachingSshClient::new(pool.clone(), ssh_client.clone()));
 
     info!("Starting Secure SSH Manager");
     let secret_key = cookie::Key::derive_from(configuration.session_key.as_bytes());
@@ -229,7 +252,8 @@ async fn main() -> Result<(), std::io::Error> {
                     )))
                 }),
             )
-            .app_data(ssh_client.clone())
+            .app_data(Data::new(ssh_client.clone()))
+            .app_data(caching_ssh_client.clone())
             .app_data(config.clone())
             .app_data(web::Data::new(pool.clone()))
             .service(ResourceFiles::new("/", generated).skip_handler_when_not_found())

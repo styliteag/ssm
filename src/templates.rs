@@ -1,6 +1,6 @@
 use askama::Template;
 
-use crate::sshclient::AuthorizedKey;
+use crate::ssh::AuthorizedKey;
 
 pub trait AsHTML {
     fn as_html(&self) -> String;
