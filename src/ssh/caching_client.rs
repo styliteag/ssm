@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use actix_web::web;
 use diesel::r2d2::{ConnectionManager, PooledConnection};
 use time::OffsetDateTime;
 use tokio::sync::RwLock;
@@ -11,8 +10,8 @@ use crate::{
 };
 
 use super::{
-    sshclient::SshClientError, AuthorizedKeyEntry, Cache, CacheValue, DiffItem, HostDiff, HostName,
-    Login, SshClient,
+    sshclient::SshClientError, AuthorizedKeyEntry, AuthorizedKeys, Cache, CacheValue, DiffItem,
+    HostDiff, HostName, Login, SshClient,
 };
 
 #[derive(Debug)]
@@ -31,32 +30,48 @@ impl CachingSshClient {
         }
     }
 
-    async fn get_entry(&self, host_name: &String) -> Result<CacheValue, SshClientError> {
-        let cache = self.cache.read().await;
+    /// Removes a cache entry entirely. This should only be used when the underlying host no longer exists.
+    pub async fn remove(&self, host_name: &str) {
+        let mut lock = self.cache.write().await;
+        let _ = lock.remove(host_name);
+    }
 
-        if let Some(cached) = cache.get(host_name) {
-            Ok(cached.clone())
-        } else {
-            drop(cache);
-            let host_name2 = host_name.clone();
-            let mut conn = self.conn.get().unwrap();
+    async fn get_current_host_data(
+        &self,
+        host_name: &str,
+    ) -> Result<AuthorizedKeys, SshClientError> {
+        let conn = self.conn.get().unwrap();
 
-            let res = match web::block(move || Host::get_host_name(&mut conn, host_name2)).await? {
-                Err(e) => Err(SshClientError::DatabaseError(e)),
-                Ok(Some(host)) => self.ssh_client.clone().get_authorized_keys(host).await,
-                Ok(None) => Err(SshClientError::NoSuchHost),
-            };
-
-            let mut lock = self.cache.write().await;
-            lock.insert(host_name.clone(), (OffsetDateTime::now_utc(), res));
-            Ok(lock.get(host_name).expect("We just inserted this").clone())
+        match Host::get_from_name(conn, host_name.to_owned()).await? {
+            Some(host) => Ok(self.ssh_client.clone().get_authorized_keys(host).await),
+            None => Err(SshClientError::NoSuchHost),
         }
+    }
+
+    async fn get_entry(
+        &self,
+        host_name: &String,
+        force_update: bool,
+    ) -> Result<CacheValue, SshClientError> {
+        if !force_update {
+            let cache = self.cache.read().await;
+            if let Some(cached) = cache.get(host_name) {
+                return Ok(cached.clone());
+            }
+        }
+
+        let data = self.get_current_host_data(host_name).await?;
+        let time = OffsetDateTime::now_utc();
+
+        let mut lock = self.cache.write().await;
+        lock.insert(host_name.clone(), (time, data));
+        Ok(lock.get(host_name).expect("We just inserted this").clone())
     }
     pub async fn get_authorized_keys(
         &self,
         host_name: HostName,
     ) -> Result<CacheValue, SshClientError> {
-        self.get_entry(&host_name).await
+        self.get_entry(&host_name, false).await
     }
 
     fn calculate_diff(
@@ -157,8 +172,12 @@ impl CachingSshClient {
         )
     }
 
-    pub async fn get_logins(&self, host: Host) -> Result<Vec<Login>, SshClientError> {
-        let logins = self.get_entry(&host.name).await?.1;
+    pub async fn get_logins(
+        &self,
+        host: Host,
+        force_update: bool,
+    ) -> Result<Vec<Login>, SshClientError> {
+        let logins = self.get_entry(&host.name, force_update).await?.1;
 
         logins.map(|logins| logins.into_iter().map(|(login, _, _)| login).collect())
     }

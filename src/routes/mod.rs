@@ -11,6 +11,7 @@ use actix_web::{
     Responder,
 };
 use askama_actix::Template;
+use serde::Deserialize;
 
 pub fn route_config(cfg: &mut web::ServiceConfig) {
     cfg.service(index)
@@ -19,6 +20,17 @@ pub fn route_config(cfg: &mut web::ServiceConfig) {
         .service(web::scope("/keys").configure(keys::keys_config))
         .service(web::scope("/diff").configure(diff::diff_config))
         .default_service(web::to(not_found));
+}
+
+#[derive(Deserialize)]
+struct ForceUpdateQuery {
+    force_update: Option<bool>,
+}
+
+type ForceUpdate = web::Query<ForceUpdateQuery>;
+
+fn should_update(force_update: ForceUpdate) -> bool {
+    force_update.force_update.is_some_and(|update| update)
 }
 
 #[derive(Template)]

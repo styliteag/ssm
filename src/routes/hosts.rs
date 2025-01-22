@@ -10,8 +10,8 @@ use serde::Deserialize;
 use crate::{
     db::UserAndOptions,
     forms::{FormResponseBuilder, Modal},
-    routes::{ErrorTemplate, RenderErrorTemplate},
-    ssh::{CachingSshClient, ConnectionDetails, KeyDiffItem, SshClient},
+    routes::{should_update, ErrorTemplate, ForceUpdate, RenderErrorTemplate},
+    ssh::{CachingSshClient, ConnectionDetails, KeyDiffItem, SshClient, SshClientError},
     ConnectionPool, DbConnection,
 };
 
@@ -21,6 +21,7 @@ pub fn hosts_config(cfg: &mut web::ServiceConfig) {
     cfg.service(hosts_page)
         .service(render_hosts)
         .service(show_host)
+        .service(get_logins)
         .service(add_host)
         .service(authorize_user)
         .service(gen_authorized_keys)
@@ -76,19 +77,47 @@ fn get_all_host_data(conn: &mut DbConnection, host: String) -> Result<HostData, 
 }
 
 #[derive(Template)]
+#[template(path = "hosts/logins.htm")]
+struct LoginsTemplate {
+    logins: Result<Vec<String>, SshClientError>,
+}
+
+#[get("/{name}/logins")]
+async fn get_logins(
+    conn: Data<ConnectionPool>,
+    caching_ssh_client: Data<CachingSshClient>,
+    host_name: Path<String>,
+    update: ForceUpdate,
+) -> actix_web::Result<impl Responder> {
+    let host = Host::get_from_name(conn.get().unwrap(), host_name.to_string()).await;
+
+    match host {
+        Err(error) => Ok(RenderErrorTemplate { error }.to_response()),
+        Ok(None) => Ok(RenderErrorTemplate {
+            error: "Host not found".to_owned(),
+        }
+        .to_response()),
+        Ok(Some(host)) => {
+            let logins = caching_ssh_client
+                .get_logins(host, should_update(update))
+                .await;
+            Ok(LoginsTemplate { logins }.to_response())
+        }
+    }
+}
+
+#[derive(Template)]
 #[template(path = "hosts/show_host.html")]
 struct ShowHostTemplate {
     host: Host,
     jumphost: Option<String>,
     authorized_users: Vec<UserAndOptions>,
     user_list: Vec<User>,
-    logins: Vec<String>,
 }
 
 #[get("/{name}")]
 async fn show_host(
     conn: Data<ConnectionPool>,
-    caching_ssh_client: Data<CachingSshClient>,
     host: Path<String>,
 ) -> actix_web::Result<impl Responder> {
     let res =
@@ -107,25 +136,11 @@ async fn show_host(
         }
     };
 
-    let ssh_users = match host.key_fingerprint {
-        Some(_) => match caching_ssh_client.get_logins(host.clone()).await {
-            Ok(users) => users,
-            Err(e) => {
-                return Ok(ErrorTemplate {
-                    error: e.to_string(),
-                }
-                .to_response())
-            }
-        },
-        None => vec![],
-    };
-
     Ok(ShowHostTemplate {
         host,
         jumphost,
         authorized_users,
         user_list,
-        logins: ssh_users,
     }
     .to_response())
 }
@@ -493,6 +508,7 @@ struct HostDeleteForm {
 #[post("/{name}/delete")]
 async fn delete(
     conn: Data<ConnectionPool>,
+    caching_ssh_client: Data<CachingSshClient>,
     form: web::Form<HostDeleteForm>,
     host_name: Path<String>,
 ) -> impl Responder {
@@ -508,7 +524,10 @@ async fn delete(
 
     if form.confirm {
         return match host.delete(&mut conn.get().unwrap()) {
-            Ok(amt) => FormResponseBuilder::success(format!("Deleted {amt} record(s)")),
+            Ok(amt) => {
+                caching_ssh_client.remove(host_name.as_str()).await;
+                return FormResponseBuilder::success(format!("Deleted {amt} record(s)"));
+            }
             Err(e) => FormResponseBuilder::error(format!("Failed to delete host: {e}")),
         };
     }
