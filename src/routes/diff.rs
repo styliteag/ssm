@@ -58,12 +58,7 @@ async fn render_diff(
     caching_ssh_client: Data<CachingSshClient>,
     host_name: Path<String>,
 ) -> actix_web::Result<impl Responder> {
-    let res = web::block(move || {
-        let mut connection = conn.get().unwrap();
-
-        Host::get_host_name(&mut connection, host_name.to_string())
-    })
-    .await?;
+    let res = Host::get_from_name(conn.get().unwrap(), host_name.to_string()).await;
 
     let host = match res {
         Ok(maybe_host) => {
@@ -100,11 +95,7 @@ async fn show_diff(
     host_name: Path<String>,
 ) -> actix_web::Result<impl Responder> {
     Ok(
-        match web::block(move || {
-            Host::get_host_name(&mut conn.get().unwrap(), host_name.to_string())
-        })
-        .await?
-        {
+        match Host::get_from_name(conn.get().unwrap(), host_name.to_string()).await {
             Ok(host) => {
                 let Some(host) = host else {
                     return Ok(ErrorTemplate {
@@ -171,7 +162,7 @@ async fn authorize_user_dialog(
         let mut connection = conn.get().unwrap();
 
         let user = User::get_user(&mut connection, form.username.clone());
-        let host = Host::get_host_name(&mut connection, form.host_name.clone());
+        let host = Host::get_from_name_sync(&mut connection, form.host_name.clone());
         (
             user.map(|u| (u.username, u.id)),
             host.map(|h| h.map(|h| (h.name, h.id))),

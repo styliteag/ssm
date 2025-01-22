@@ -256,19 +256,6 @@ impl SshClient {
         }
     }
 
-    async fn get_host_from_id(&self, host_id: i32) -> Result<Host, SshClientError> {
-        // TODO: this is blocking the thread
-        Host::get_host_id(&mut self.conn.get().unwrap(), host_id)
-            .map_err(SshClientError::DatabaseError)?
-            .ok_or(SshClientError::NoSuchHost)
-    }
-    async fn get_host_from_name(&self, host_name: String) -> Result<Host, SshClientError> {
-        // TODO: this is blocking the thread
-        Host::get_host_name(&mut self.conn.get().unwrap(), host_name)
-            .map_err(SshClientError::DatabaseError)?
-            .ok_or(SshClientError::NoSuchHost)
-    }
-
     fn connect(
         self,
         host: Host,
@@ -283,7 +270,9 @@ impl SshClient {
         async move {
             let mut handle = match host.jump_via {
                 Some(via) => {
-                    let jump_host = self.get_host_from_id(via).await?;
+                    let jump_host = Host::get_from_id(self.conn.get().unwrap(), via)
+                        .await?
+                        .ok_or(SshClientError::NoSuchHost)?;
                     let stream = self.connect_via(jump_host, host.to_connection()?).await?;
 
                     russh::client::connect_stream(self.connection_config.clone(), stream, handler)
@@ -401,7 +390,9 @@ impl SshClient {
         login: String,
         authorized_keys: String,
     ) -> Result<(), SshClientError> {
-        let host = self.get_host_from_name(host_name).await?;
+        let host = Host::get_from_name(self.conn.get().unwrap(), host_name)
+            .await?
+            .ok_or(SshClientError::NoSuchHost)?;
         let handle = self.clone().connect(host.clone()).await?;
         self.execute_bash(
             &handle,
@@ -424,7 +415,9 @@ impl SshClient {
     }
 
     pub async fn install_script_on_host(&self, host: i32) -> Result<(), SshClientError> {
-        let host = self.get_host_from_id(host).await?;
+        let host = Host::get_from_id(self.conn.get().unwrap(), host)
+            .await?
+            .ok_or(SshClientError::NoSuchHost)?;
         let handle = self.clone().connect(host).await?;
 
         self.install_script(&handle).await
@@ -583,7 +576,7 @@ impl SshClient {
         host_name: String,
         login: String,
     ) -> Result<Vec<KeyDiffItem>, SshClientError> {
-        let Some(host) = Host::get_host_name(&mut self.conn.get().unwrap(), host_name)? else {
+        let Some(host) = Host::get_from_name(self.conn.get().unwrap(), host_name).await? else {
             return Err(SshClientError::NoSuchHost);
         };
 

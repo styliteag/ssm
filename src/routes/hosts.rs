@@ -47,14 +47,14 @@ enum HostDataError {
 }
 
 fn get_all_host_data(conn: &mut DbConnection, host: String) -> Result<HostData, HostDataError> {
-    let maybe_host = Host::get_host_name(conn, host).map_err(HostDataError::DatabaseError)?;
+    let maybe_host = Host::get_from_name_sync(conn, host).map_err(HostDataError::DatabaseError)?;
 
     let Some(host) = maybe_host else {
         return Err(HostDataError::HostNotFound);
     };
 
     let jumphost = if let Some(id) = host.jump_via {
-        Host::get_host_id(conn, id)
+        Host::get_from_id_sync(conn, id)
             .map_err(HostDataError::DatabaseError)?
             .map(|h| h.name)
     } else {
@@ -144,11 +144,10 @@ async fn add_host_key(
 ) -> actix_web::Result<impl Responder> {
     let cloned_conn = conn.clone();
 
-    let host =
-        match web::block(move || Host::get_host_id(&mut conn.get().unwrap(), *host_id)).await? {
-            Ok(h) => h,
-            Err(e) => return Ok(FormResponseBuilder::error(e)),
-        };
+    let host = match Host::get_from_id(conn.get().unwrap(), *host_id).await {
+        Ok(h) => h,
+        Err(e) => return Ok(FormResponseBuilder::error(e)),
+    };
 
     match host {
         Some(host) => {
@@ -165,7 +164,7 @@ async fn add_host_key(
             let target = host.to_connection().unwrap();
             let maybe_jumphost = host
                 .jump_via
-                .map(|jump| Host::get_host_id(&mut cloned_conn.get().unwrap(), jump));
+                .map(|jump| Host::get_from_id_sync(&mut cloned_conn.get().unwrap(), jump));
 
             let connection_res = match maybe_jumphost {
                 Some(Ok(None)) => {
@@ -246,9 +245,7 @@ async fn add_host(
         if via < 0 {
             None
         } else {
-            match web::block(move || Host::get_host_id(&mut cloned_conn.get().unwrap(), via))
-                .await?
-            {
+            match Host::get_from_id(cloned_conn.get().unwrap(), via).await {
                 Ok(j) => j,
                 Err(_) => {
                     return Ok(FormResponseBuilder::not_found(String::from(
@@ -410,47 +407,48 @@ async fn gen_authorized_keys(
     ssh_client: Data<SshClient>,
     form: web::Form<GenAuthorizedKeysForm>,
 ) -> actix_web::Result<impl Responder> {
-    let host_name = form.host_name.clone();
-    let login = form.login.clone();
-    let ssh_client2 = ssh_client.clone();
-    let res = web::block(move || {
-        let mut connection = conn.get().unwrap();
+    let host_name = &form.host_name;
+    let login = &form.login;
 
-        let host = Host::get_host_name(&mut connection, form.host_name.clone()).ok()?;
-
-        host.and_then(|host| {
-            host.get_authorized_keys_file_for(&ssh_client2, &mut connection, &form.login)
-                .ok()
-        })
-    })
-    .await?;
-
-    match res {
-        Some(authorized_keys) => {
-            let Ok(key_diff) = ssh_client
-                .key_diff(authorized_keys.as_ref(), host_name.clone(), login.clone())
-                .await
-            else {
-                return Ok(FormResponseBuilder::error(
-                    "Couldn't calculate key diff".to_owned(),
-                ));
-            };
-
-            Ok(FormResponseBuilder::dialog(Modal {
-                title: format!("These changes will be applied for '{login}' on '{host_name}':"),
-                request_target: format!("/hosts/{host_name}/set_authorized_keys"),
-                template: AuthorizedKeyfileDialog {
-                    login,
-                    diff: key_diff,
-                    authorized_keys,
-                }
-                .to_string(),
-            }))
+    let authorized_keys = match Host::get_from_name(conn.get().unwrap(), host_name.to_owned()).await
+    {
+        Err(error) => {
+            return Ok(FormResponseBuilder::error(error));
         }
-        None => Ok(FormResponseBuilder::error(String::from(
-            "Couldn't find host",
-        ))),
-    }
+        Ok(None) => {
+            return Ok(FormResponseBuilder::error("No such host.".to_owned()));
+        }
+        Ok(Some(host)) => {
+            host.get_authorized_keys_file_for(&ssh_client, &mut conn.get().unwrap(), login.as_ref())
+        }
+    };
+
+    let authorized_keys = match authorized_keys {
+        Ok(keys) => keys,
+        Err(error) => {
+            return Ok(FormResponseBuilder::error(error));
+        }
+    };
+
+    let Ok(key_diff) = ssh_client
+        .key_diff(authorized_keys.as_ref(), host_name.clone(), login.clone())
+        .await
+    else {
+        return Ok(FormResponseBuilder::error(
+            "Couldn't calculate key diff".to_owned(),
+        ));
+    };
+
+    Ok(FormResponseBuilder::dialog(Modal {
+        title: format!("These changes will be applied for '{login}' on '{host_name}':"),
+        request_target: format!("/hosts/{host_name}/set_authorized_keys"),
+        template: AuthorizedKeyfileDialog {
+            login: login.to_owned(),
+            diff: key_diff,
+            authorized_keys,
+        }
+        .to_string(),
+    }))
 }
 
 #[derive(Deserialize)]
@@ -496,58 +494,47 @@ struct HostDeleteForm {
 async fn delete(
     conn: Data<ConnectionPool>,
     form: web::Form<HostDeleteForm>,
-    host: Path<String>,
-) -> actix_web::Result<impl Responder> {
+    host_name: Path<String>,
+) -> impl Responder {
+    let host = match Host::get_from_name(conn.get().unwrap(), host_name.to_owned()).await {
+        Ok(None) => {
+            return FormResponseBuilder::error("Host not found".to_owned());
+        }
+        Err(error) => {
+            return FormResponseBuilder::error(format!("Database error: {error}"));
+        }
+        Ok(Some(host)) => host,
+    };
+
     if form.confirm {
-        // TODO: delte host
-
-        let delete_res = web::block(move || {
-            let mut connection = conn.get().unwrap();
-
-            let host = Host::get_host_name(&mut connection, host.to_string()).ok()?;
-
-            host.and_then(|host| host.delete(&mut connection).ok())
-        })
-        .await?;
-
-        return Ok(match delete_res {
-            Some(amt) => FormResponseBuilder::success(format!("Deleted {amt} record(s)")),
-            None => FormResponseBuilder::error("Couldn't find host".to_owned()),
-        });
+        return match host.delete(&mut conn.get().unwrap()) {
+            Ok(amt) => FormResponseBuilder::success(format!("Deleted {amt} record(s)")),
+            Err(e) => FormResponseBuilder::error(format!("Failed to delete host: {e}")),
+        };
     }
 
-    let host2 = host.clone();
+    let mut connection = conn.get().unwrap();
 
-    let res = web::block(move || {
-        let mut connection = conn.get().unwrap();
-
-        let host = Host::get_host_name(&mut connection, host2).ok()?;
-
-        host.and_then(|host| {
-            host.get_authorized_users(&mut connection)
-                .ok()
-                .and_then(|auth| {
-                    host.get_dependant_hosts(&mut connection)
-                        .ok()
-                        .map(|hosts| (auth, hosts))
-                })
-        })
-    })
-    .await?;
+    let res = host
+        .get_authorized_users(&mut connection)
+        .and_then(|authorizations| {
+            host.get_dependant_hosts(&mut connection)
+                .map(|hosts| (authorizations, hosts))
+        });
 
     // TODO: resolve authorizations of dependant hosts
-    Ok(match res {
-        Some((authorizations, affected_hosts)) => FormResponseBuilder::dialog(Modal {
-            title: format!("In addition to {host}, these entries will be affected"),
-            request_target: format!("/hosts/{host}/delete"),
+    match res {
+        Ok((authorizations, affected_hosts)) => FormResponseBuilder::dialog(Modal {
+            title: format!("In addition to {host_name}, these entries will be affected"),
+            request_target: format!("/hosts/{host_name}/delete"),
             template: DeleteHostTemplate {
                 authorizations,
                 affected_hosts,
             }
             .to_string(),
         }),
-        None => FormResponseBuilder::error("Couldn't find host".to_owned()),
-    })
+        Err(error) => FormResponseBuilder::error(format!("Failed to get authorizations: {error}")),
+    }
 }
 
 #[derive(Deserialize)]

@@ -11,6 +11,8 @@ use crate::{
 };
 use diesel::dsl::insert_into;
 use diesel::prelude::*;
+use diesel::r2d2::ConnectionManager;
+use diesel::r2d2::PooledConnection;
 
 use super::query;
 use super::query_drop;
@@ -77,7 +79,43 @@ impl Host {
     }
 
     /// Get a host from a name
-    pub fn get_host_name(conn: &mut DbConnection, host: String) -> Result<Option<Self>, String> {
+    pub async fn get_from_name(
+        mut conn: PooledConnection<ConnectionManager<DbConnection>>,
+        host: String,
+    ) -> Result<Option<Self>, String> {
+        actix_web::web::block(move || {
+            query(
+                host::table
+                    .filter(host::name.eq(host))
+                    .first::<Self>(&mut conn)
+                    .optional(),
+            )
+        })
+        .await
+        .map_err(|_| "Blocking error.".to_owned())?
+    }
+
+    /// Get a host from an id
+    pub async fn get_from_id(
+        mut conn: PooledConnection<ConnectionManager<DbConnection>>,
+        host_id: i32,
+    ) -> Result<Option<Self>, String> {
+        actix_web::web::block(move || {
+            query(
+                host::table
+                    .filter(host::id.eq(host_id))
+                    .first::<Self>(&mut conn)
+                    .optional(),
+            )
+        })
+        .await
+        .map_err(|_| "Blocking error.".to_owned())?
+    }
+    /// Get a host from a name
+    pub fn get_from_name_sync(
+        conn: &mut DbConnection,
+        host: String,
+    ) -> Result<Option<Self>, String> {
         query(
             host::table
                 .filter(host::name.eq(host))
@@ -87,7 +125,7 @@ impl Host {
     }
 
     /// Get a host from an id
-    pub fn get_host_id(conn: &mut DbConnection, host: i32) -> Result<Option<Self>, String> {
+    pub fn get_from_id_sync(conn: &mut DbConnection, host: i32) -> Result<Option<Self>, String> {
         query(
             host::table
                 .filter(host::id.eq(host))
