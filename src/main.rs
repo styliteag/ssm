@@ -48,7 +48,7 @@ pub enum DbConnection {
 
 pub type ConnectionPool = Pool<ConnectionManager<DbConnection>>;
 
-fn default_timeout() -> Duration {
+const fn default_timeout() -> Duration {
     Duration::from_secs(120)
 }
 
@@ -75,12 +75,12 @@ fn default_database_url() -> String {
     "sqlite://ssm.db".to_owned()
 }
 
-fn default_listen() -> IpAddr {
+const fn default_listen() -> IpAddr {
     use core::net::Ipv6Addr;
     IpAddr::V6(Ipv6Addr::UNSPECIFIED)
 }
 
-fn default_port() -> u16 {
+const fn default_port() -> u16 {
     8080
 }
 
@@ -113,14 +113,7 @@ pub struct Configuration {
     htpasswd_path: PathBuf,
 }
 
-#[tokio::main]
-async fn main() -> Result<(), std::io::Error> {
-    color_eyre::install().expect("Couldn't intall color_eyre");
-
-    if std::env::var("RUST_SPANTRACE").is_err() {
-        std::env::set_var("RUST_SPANTRACE", "0");
-    }
-
+fn get_configuration() -> (Configuration, String) {
     let config_path = env::var("CONFIG").unwrap_or_else(|_| String::from("./config.toml"));
     let config_builder = Config::builder();
 
@@ -137,21 +130,32 @@ async fn main() -> Result<(), std::io::Error> {
         )
     };
 
-    let configuration: Configuration = config_builder
-        .add_source(config::Environment::default())
-        .build()
-        .unwrap_or_else(|e| {
-            eprintln!(
-                "Error while reading configuration source: {}",
-                e.to_string()
-            );
-            std::process::exit(3);
-        })
-        .try_deserialize()
-        .unwrap_or_else(|e| {
-            eprintln!("Error while parsing configuration: {}", e.to_string());
-            std::process::exit(3);
-        });
+    (
+        config_builder
+            .add_source(config::Environment::default())
+            .build()
+            .unwrap_or_else(|e| {
+                eprintln!("Error while reading configuration source: {e}");
+                std::process::exit(3);
+            })
+            .try_deserialize()
+            .unwrap_or_else(|e| {
+                eprintln!("Error while parsing configuration: {e}");
+                std::process::exit(3);
+            }),
+        config_source,
+    )
+}
+
+#[tokio::main]
+async fn main() -> Result<(), std::io::Error> {
+    color_eyre::install().expect("Couldn't intall color_eyre");
+
+    if std::env::var("RUST_SPANTRACE").is_err() {
+        std::env::set_var("RUST_SPANTRACE", "0");
+    }
+
+    let (configuration, config_source) = get_configuration();
 
     if env::var("RUST_LOG").is_err() {
         let loglevel = configuration.loglevel.clone();
@@ -234,7 +238,7 @@ async fn main() -> Result<(), std::io::Error> {
             .wrap(middleware::AuthMiddleware)
             .wrap(
                 SessionMiddleware::builder(CookieSessionStore::default(), secret_key.clone())
-                    .cookie_name("ssm_session".to_string())
+                    .cookie_name("ssm_session".to_owned())
                     .cookie_secure(false) // Set to true in production
                     .cookie_http_only(true)
                     .build(),

@@ -99,7 +99,7 @@ impl PublicUserKey {
             .chars()
             .rev()
             .collect();
-        format!("...{}", preview)
+        format!("...{preview}")
     }
 }
 

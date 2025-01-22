@@ -30,7 +30,6 @@ use super::AuthorizedKeyEntry;
 use super::AuthorizedKeys;
 use super::ConnectionDetails;
 use super::KeyDiffItem;
-use super::SshPublicKey;
 
 #[derive(Debug, Clone)]
 pub struct SshClient {
@@ -42,7 +41,6 @@ pub struct SshClient {
 
 #[derive(Debug, Clone)]
 pub enum SshClientError {
-    DatabaseError(String),
     ExecutionError(String),
     NoSuchHost,
     PortCastFailed,
@@ -60,15 +58,15 @@ pub enum SshClientError {
 impl fmt::Display for SshClientError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::DatabaseError(t) | Self::ExecutionError(t) | Self::SshError(t) => {
-                write!(f, "{t}")
-            }
             Self::NoSuchHost => write!(f, "The host doesn't exist in the database."),
             Self::PortCastFailed => write!(f, "Couldn't convert an i32 to u32."),
             Self::NoHostkey => write!(f, "No hostkey available for this host."),
             Self::Timeout => write!(f, "Connection to this host timed out."),
             Self::UnknownKey => write!(f, "Host responded with an unknown hostkey."),
             Self::NotAuthenticated => write!(f, "Couldn't authenticate on the host."),
+            Self::ExecutionError(t) | Self::SshError(t) => {
+                write!(f, "{t}")
+            }
         }
     }
 }
@@ -102,7 +100,7 @@ impl russh::client::Handler for SshHandler {
         &mut self,
         server_public_key: &PublicKey,
     ) -> Result<bool, Self::Error> {
-        let fingerprint = server_public_key.fingerprint(Default::default());
+        let fingerprint = server_public_key.fingerprint(ssh_key::HashAlg::default());
 
         Ok(fingerprint.to_string().eq(&self.hostkey_fingerprint))
     }
@@ -128,7 +126,7 @@ impl russh::client::Handler for SshFirstConnectionHandler {
             FirstConnectionState::KeySender(tx) => {
                 tx.send(
                     server_public_key
-                        .fingerprint(Default::default())
+                        .fingerprint(ssh_key::HashAlg::default())
                         .to_string(),
                 )
                 .map_err(|_| {
@@ -137,7 +135,7 @@ impl russh::client::Handler for SshFirstConnectionHandler {
                 false
             }
             FirstConnectionState::Hostkey(known_fingerprint) => server_public_key
-                .fingerprint(Default::default())
+                .fingerprint(ssh_key::HashAlg::default())
                 .to_string()
                 .eq(known_fingerprint),
         })
@@ -347,10 +345,7 @@ impl SshClient {
             .await??;
 
         let mut iter = res.trim().lines().peekable();
-        let has_pragma = iter
-            .peek()
-            .map(|first| PRAGMA.to_owned().eq(first))
-            .unwrap_or(false);
+        let has_pragma = iter.peek().is_some_and(|first| PRAGMA.to_owned().eq(first));
         Ok((
             has_pragma,
             iter.filter(|line| !line.trim_start().starts_with('#'))
@@ -592,7 +587,7 @@ impl SshClient {
 
         Ok(diff
             .iter_all_changes()
-            .flat_map(|e| match e.tag() {
+            .filter_map(|e| match e.tag() {
                 similar::ChangeTag::Delete => Some(KeyDiffItem::Removed(e.value().to_owned())),
                 similar::ChangeTag::Insert => Some(KeyDiffItem::Added(e.value().to_owned())),
                 similar::ChangeTag::Equal => None,
@@ -636,21 +631,10 @@ impl std::fmt::Display for BashCommand {
 
 impl From<BashExecError> for SshClientError {
     fn from(value: BashExecError) -> Self {
-        SshClientError::ExecutionError(value)
+        Self::ExecutionError(value)
     }
 }
 
 type BashExecError = String;
 type BashExecResponse = String;
 pub type BashResult = Result<BashExecResponse, BashExecError>;
-
-impl TryFrom<&ssh_key::PublicKey> for SshPublicKey {
-    type Error = String;
-
-    fn try_from(value: &ssh_key::PublicKey) -> Result<Self, Self::Error> {
-        let Ok(key) = value.to_openssh() else {
-            return Err(String::from("Couldn't convert to openssh"));
-        };
-        Self::try_from(key.as_str()).map_err(|e| e.to_string())
-    }
-}

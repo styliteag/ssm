@@ -32,8 +32,8 @@ impl From<AllowedUserOnHost> for AuthorizedKey {
         Self {
             options: value
                 .options
-                .and_then(|opts| ConfigOpts::new(opts).ok())
-                .unwrap_or_else(|| ConfigOpts::default()),
+                .map(|opts| ConfigOpts::new(opts).expect("Encountered invalid key"))
+                .unwrap_or_default(),
 
             algorithm: Algorithm::from_str(value.key.key_type.as_str())
                 .expect("Key algorithm in database is invalid"),
@@ -45,7 +45,7 @@ impl From<AllowedUserOnHost> for AuthorizedKey {
 
 impl From<(PublicUserKey, String, String, Option<String>)> for AllowedUserOnHost {
     fn from(value: (PublicUserKey, String, String, Option<String>)) -> Self {
-        AllowedUserOnHost {
+        Self {
             key: value.0,
             login: value.1,
             username: value.2,

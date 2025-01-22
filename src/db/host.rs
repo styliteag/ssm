@@ -42,7 +42,7 @@ impl Host {
         login: String,
         mut options: Option<String>,
     ) -> Result<(), String> {
-        if options.as_ref().is_some_and(|o| o.is_empty()) {
+        if options.as_ref().is_some_and(String::is_empty) {
             options = None;
         }
         query_drop(

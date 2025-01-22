@@ -17,7 +17,7 @@ impl PublicUserKey {
         query(
             user_key::table
                 .inner_join(user::table)
-                .select((user::username, PublicUserKey::as_select()))
+                .select((user::username, Self::as_select()))
                 .load::<UsernameAndKey>(conn),
         )
     }
@@ -50,7 +50,7 @@ impl PublicUserKey {
         query_drop(
             diesel::update(user_key)
                 .filter(id.eq(key_id))
-                .set(comment.eq(Some(new_comment.to_string())))
+                .set(comment.eq(Some(new_comment.to_owned())))
                 .execute(conn),
         )
     }

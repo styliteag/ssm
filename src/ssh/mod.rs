@@ -1,4 +1,3 @@
-use core::fmt;
 use ssh_key::{authorized_keys::ConfigOpts, Algorithm};
 use std::collections::HashMap;
 use time::OffsetDateTime;
@@ -29,17 +28,6 @@ pub struct AuthorizedKey {
     pub comment: Option<String>,
 }
 
-#[derive(Debug)]
-pub enum KeyParseError {
-    Malformed,
-}
-
-impl std::fmt::Display for KeyParseError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Failed to parse publickey")
-    }
-}
-
 impl std::fmt::Display for SshPublicKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.comment.clone() {
@@ -53,29 +41,6 @@ impl std::fmt::Display for SshPublicKey {
     }
 }
 
-impl TryFrom<String> for SshPublicKey {
-    type Error = KeyParseError;
-    fn try_from(value: String) -> Result<Self, KeyParseError> {
-        SshPublicKey::try_from(value.as_str())
-    }
-}
-
-impl TryFrom<&str> for SshPublicKey {
-    type Error = KeyParseError;
-    fn try_from(key_string: &str) -> Result<Self, KeyParseError> {
-        // TODO: write a better parser (nom)
-        let mut parts = key_string.splitn(3, ' ');
-
-        let key_type_str = parts.next().ok_or(KeyParseError::Malformed)?;
-
-        Ok(SshPublicKey {
-            key_type: key_type_str.to_owned(),
-            key_base64: parts.next().ok_or(KeyParseError::Malformed)?.to_owned(),
-            comment: parts.next().map(String::from),
-        })
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct ConnectionDetails {
     pub hostname: String,
@@ -83,7 +48,7 @@ pub struct ConnectionDetails {
 }
 
 impl ConnectionDetails {
-    pub fn new(hostname: String, port: u32) -> Self {
+    pub const fn new(hostname: String, port: u32) -> Self {
         Self { hostname, port }
     }
     pub fn new_from_signed(hostname: String, port: i32) -> Result<Self, SshClientError> {

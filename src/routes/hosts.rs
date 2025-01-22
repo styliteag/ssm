@@ -172,7 +172,7 @@ async fn add_host_key(
                 return Ok(match res {
                     Ok(()) => FormResponseBuilder::created("Added hostkey".to_owned())
                         .add_trigger("reloadDiff".to_owned()),
-                    Err(e) => FormResponseBuilder::error(e.to_string()),
+                    Err(e) => FormResponseBuilder::error(e),
                 });
             }
 
@@ -217,11 +217,9 @@ async fn add_host_key(
                 .to_string(),
             }))
         }
-        None => {
-            return Ok(FormResponseBuilder::not_found(
-                "Couldn't find host".to_owned(),
-            ))
-        }
+        None => Ok(FormResponseBuilder::not_found(
+            "Couldn't find host".to_owned(),
+        )),
     }
 }
 

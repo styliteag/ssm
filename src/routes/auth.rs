@@ -6,6 +6,7 @@ use actix_web::{
 };
 use askama_actix::{Template, TemplateToResponse};
 use bcrypt::{verify, BcryptError};
+use log::error;
 use serde::Deserialize;
 use std::fs;
 
@@ -31,16 +32,17 @@ pub struct LoginForm {
 
 fn verify_apache_password(password: &str, hash: &str) -> Result<bool, BcryptError> {
     // Apache htpasswd bcrypt format starts with $2y$
-    if hash.starts_with("$2y$") {
-        // bcrypt crate uses $2b$ format, so we need to convert
-        let converted_hash = "$2b$".to_string() + &hash[4..];
-        verify(password, &converted_hash)
-    } else if hash.starts_with("$2b$") {
-        // Already in the correct format
-        verify(password, hash)
-    } else {
-        // Unsupported hash format
-        Ok(false)
+
+    match &hash[..4] {
+        "$2y$" => {
+            let converted_hash = format!("$2b${}", &hash[4..]);
+            verify(password, &converted_hash)
+        }
+        "$2b$" => verify(password, hash),
+        hash_type => {
+            error!("Unsupported hash type '{hash_type}' encountered.");
+            Ok(false)
+        }
     }
 }
 
@@ -60,6 +62,7 @@ async fn login(
 
     // Check if password file exists
     if !htpasswd_path.exists() {
+        error!("Authentication file not found");
         return Ok(ErrorTemplate {
             error: "Authentication file not found".to_owned(),
         }
@@ -69,7 +72,8 @@ async fn login(
     // Read and verify credentials from password file
     let password_file = match fs::read_to_string(htpasswd_path) {
         Ok(content) => content,
-        Err(_) => {
+        Err(e) => {
+            error!("Error reading authentication file: {e}");
             return Ok(ErrorTemplate {
                 error: "Error reading authentication file".to_owned(),
             }
