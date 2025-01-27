@@ -1,9 +1,9 @@
 {%- import "components.html" as components -%}
 
-<div class="host-info">
+<div id="{{host.name }}_diff_root" class="host-info">
   <h2><a href="/diff/{{ host.name }}">{{ host.name }}</a></h2>
-  <button class="btn btn-secondary btn-sm mt-2 mb-4" hx-post="/diff/{{ host.name }}/invalidate-cache"
-    hx-swap="none">Invalidate Cache</button>
+  <button class="btn btn-secondary btn-sm mt-2 mb-4" hx-get="/diff/{{ host.name }}.htm?force_update=true"
+    hx-swap="outerHTML" hx-target="#{{host.name }}_diff_root">Reload host</button>
   <table class="host-details">
     <tr>
       <th>Name</th>

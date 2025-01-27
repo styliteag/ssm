@@ -1,4 +1,5 @@
 use crate::{
+    routes::{should_update, ForceUpdate},
     ssh::{CachingSshClient, DiffItem, SshClientError},
     templates::AsHTML,
 };
@@ -57,6 +58,7 @@ async fn render_diff(
     conn: Data<ConnectionPool>,
     caching_ssh_client: Data<CachingSshClient>,
     host_name: Path<String>,
+    force_update: ForceUpdate,
 ) -> actix_web::Result<impl Responder> {
     let res = Host::get_from_name(conn.get().unwrap(), host_name.to_string()).await;
 
@@ -73,7 +75,9 @@ async fn render_diff(
         Err(error) => return Ok(RenderErrorTemplate { error }.to_response()),
     };
 
-    let (cached_from, diff) = caching_ssh_client.get_host_diff(host.clone()).await;
+    let (cached_from, diff) = caching_ssh_client
+        .get_host_diff(host.clone(), should_update(force_update))
+        .await;
 
     Ok(RenderDiffTemplate {
         host,

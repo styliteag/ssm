@@ -11,7 +11,7 @@ use crate::{
 
 use super::{
     sshclient::SshClientError, AuthorizedKeyEntry, AuthorizedKeys, Cache, CacheValue, DiffItem,
-    HostDiff, HostName, Login, SshClient,
+    HostDiff, Login, SshClient,
 };
 
 #[derive(Debug)]
@@ -66,12 +66,6 @@ impl CachingSshClient {
         let mut lock = self.cache.write().await;
         lock.insert(host_name.clone(), (time, data));
         Ok(lock.get(host_name).expect("We just inserted this").clone())
-    }
-    pub async fn get_authorized_keys(
-        &self,
-        host_name: HostName,
-    ) -> Result<CacheValue, SshClientError> {
-        self.get_entry(&host_name, false).await
     }
 
     fn calculate_diff(
@@ -148,9 +142,9 @@ impl CachingSshClient {
     }
 
     /// Get the difference between the supposed and actual state of the authorized keys
-    pub async fn get_host_diff(&self, host: Host) -> HostDiff {
+    pub async fn get_host_diff(&self, host: Host, force_update: bool) -> HostDiff {
         let (inserted, cached_authorized_keys) =
-            match self.get_authorized_keys(host.name.clone()).await {
+            match self.get_entry(&host.name, force_update).await {
                 Ok(t) => t,
                 Err(e) => {
                     return (OffsetDateTime::now_utc(), Err(e));
