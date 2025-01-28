@@ -1,0 +1,10 @@
+{% match logins %}
+{% when Ok with (logins) %}
+<select id="host_login_selection" name="login">
+  {% for login in logins %}
+  <option value="{{ login }}">{{ login }}</option>
+  {% endfor %}
+</select>
+{% when Err with (err) %}
+<span id="host_login_selection">Failed to get logins: {{ err }}</span>
+{% endmatch %}

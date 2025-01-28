@@ -55,7 +55,12 @@
 <label>User</label>
 {% call components::user_selection(user_list) %}
 <label>Login</label>
-{% call components::basic_user_selection(logins, "login") %}
+{# TODO: insert a placeholder here #}
+<select id="host_login_selection" hx-get="/hosts/{{ host.name }}/logins" hx-trigger="load" hx-swap="outerHTML"
+  name="login"></select>
+<button type="button" hx-get="/hosts/{{ host.name }}/logins?force_update=true" hx-swap="outerHTML"
+  hx-target="#host_login_selection">Reload
+  logins</button>
 <label>Options</label>
 <input name="options">
 {% call components::form_tail("Authorize user") %}

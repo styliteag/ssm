@@ -1,76 +1,79 @@
 {%- import "components.html" as components -%}
 
-<div class="host-info">
-  <h2><a href="/diff/{{ host.name }}">{{ host.name }}</a></h2>
-  <button class="btn btn-secondary btn-sm mt-2 mb-4" hx-post="/diff/{{ host.name }}/invalidate-cache"
-    hx-swap="none">Invalidate Cache</button>
-  <table class="host-details">
-    <tr>
-      <th>Name</th>
-      <td>{{ host.name }}</td>
-    </tr>
-    <tr>
-      <th>Address</th>
-      <td>{% call components::connection_details(host.address, host.port) %}</td>
-    </tr>
-  </table>
-</div>
+<div id="{{host.name }}_diff_root">
+  <div class="host-info">
+    <h2><a href="/diff/{{ host.name }}">{{ host.name }}</a></h2>
+    <button class="btn btn-secondary btn-sm mt-2 mb-4" hx-get="/diff/{{ host.name }}.htm?force_update=true"
+      hx-swap="outerHTML" hx-target="#{{host.name }}_diff_root">Reload host</button>
+    <table class="host-details">
+      <tr>
+        <th>Name</th>
+        <td>{{ host.name }}</td>
+      </tr>
+      <tr>
+        <th>Address</th>
+        <td>{% call components::connection_details(host.address, host.port) %}</td>
+      </tr>
+    </table>
+    {% let test = cached_from %}
+    <h2>{{ format!("Cached result from {:.0} ago", time::OffsetDateTime::now_utc() - test) }}</h2>
+  </div>
 
-{% match diff %}
-{% when Ok with (user_diff_list) %}
-{% if user_diff_list.is_empty() %}
-<div class="diff-status success">
-  <i>✓ No differences found</i>
-</div>
-{% else %}
-<div class="user-diffs">
-  {% for (login, user_diff) in user_diff_list %}
-  {% if !user_diff.is_empty() %}
-  <div class="user-section">
-    <h3>
-      Login: {{ login }}
-      <button class="inline-button" hx-swap="none" hx-post="/hosts/gen_authorized_keys" hx-vals='{
+  {% match diff %}
+  {% when Ok with (user_diff_list) %}
+  {% if user_diff_list.is_empty() %}
+  <div class="diff-status success">
+    <i>✓ No differences found</i>
+  </div>
+  {% else %}
+  <div class="user-diffs">
+    {% for (login, user_diff) in user_diff_list %}
+    {% if !user_diff.is_empty() %}
+    <div class="user-section">
+      <h3>
+        Login: {{ login }}
+        <button class="inline-button" hx-swap="none" hx-post="/hosts/gen_authorized_keys" hx-vals='{
           "login": "{{ login }}"
         }'>Generate authorized_keys</button>
-    </h3>
-    <table class="diff-table">
-      <thead>
-        <tr>
-          <th>Difference</th>
-          <th>Details</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for item in user_diff %}
-        <tr>
-          {% match item %}
-          {% when crate::sshclient::DiffItem::DuplicateKey with (key) %}
-          <td>Duplicate key</td>
-          <td>
-            <details>
-              <summary>
-                {% call components::maybe(key.comment, "Key has no comment") %}</summary>
-              <hr>
-              There are multiple copies of this key:
-              {{ key.as_html()|safe }}
-            </details>
-          </td>
-          <td></td>
-          {% when crate::sshclient::DiffItem::UnknownKey with (key) %}
-          <td>Unknown key</td>
-          <td>
-            <details>
-              <summary>
-                {% call components::maybe(key.comment, "Key has no comment") %}
-              </summary>
-              <hr>
-              This key is not in the database:
-              {{ key.as_html()|safe }}
-            </details>
-          </td>
-          <td>
-            <button hx-swap="none" hx-post="/diff/assign_key_dialog" hx-vals='{
+      </h3>
+      <table class="diff-table">
+        <thead>
+          <tr>
+            <th>Difference</th>
+            <th>Details</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in user_diff %}
+          <tr>
+            {% match item %}
+            {% when crate::ssh::DiffItem::DuplicateKey with (key) %}
+            <td>Duplicate key</td>
+            <td>
+              <details>
+                <summary>
+                  {% call components::maybe(key.comment, "Key has no comment") %}</summary>
+                <hr>
+                There are multiple copies of this key:
+                {{ key.as_html()|safe }}
+              </details>
+            </td>
+            <td></td>
+            {% when crate::ssh::DiffItem::UnknownKey with (key) %}
+            <td>Unknown key</td>
+            <td>
+              <details>
+                <summary>
+                  {% call components::maybe(key.comment, "Key has no comment") %}
+                </summary>
+                <hr>
+                This key is not in the database:
+                {{ key.as_html()|safe }}
+              </details>
+            </td>
+            <td>
+              <button hx-swap="none" hx-post="/diff/assign_key_dialog" hx-vals='{
             "key_type": "{{ key.algorithm }}",
             "key_base64": "{{ key.base64 }}"
             {% match key.comment %}
@@ -79,223 +82,224 @@
             {% when None %}
             {% endmatch %}
             }'>Assign this key to a user</button>
-          </td>
-          {% when crate::sshclient::DiffItem::KeyMissing with (key, username) %}
-          <td>Missing key</td>
-          <td>
-            <details>
-              <summary>
-                {% call components::maybe(key.comment, "Key has no comment") %}
-              </summary>
-              <hr>
-              This key, owned by <a href="/users/{{ username }}">{{ username }}</a>, is missing:
-              {{ key.as_html()|safe }}
-            </details>
-          </td>
-          <td></td>
-          {% when crate::sshclient::DiffItem::UnauthorizedKey with (key, username) %}
-          <td>Unauthorized key owned by <a href="/users/{{ username }}">{{ username }}</a></td>
-          <td>
-            <details>
-              <summary>
-                {% call components::maybe(key.comment, "Key has no comment") %}
-              </summary>
-              <hr>
-              This key, owned by <a href="/users/{{ username }}">{{ username }}</a>, is not authorized on this host:
-              {{ key.as_html()|safe }}
-            </details>
-          </td>
-          <td>
-            <button hx-swap="none" hx-post="/diff/authorize_user_dialog" hx-vals='{
+            </td>
+            {% when crate::ssh::DiffItem::KeyMissing with (key, username) %}
+            <td>Missing key</td>
+            <td>
+              <details>
+                <summary>
+                  {% call components::maybe(key.comment, "Key has no comment") %}
+                </summary>
+                <hr>
+                This key, owned by <a href="/users/{{ username }}">{{ username }}</a>, is missing:
+                {{ key.as_html()|safe }}
+              </details>
+            </td>
+            <td></td>
+            {% when crate::ssh::DiffItem::UnauthorizedKey with (key, username) %}
+            <td>Unauthorized key owned by <a href="/users/{{ username }}">{{ username }}</a></td>
+            <td>
+              <details>
+                <summary>
+                  {% call components::maybe(key.comment, "Key has no comment") %}
+                </summary>
+                <hr>
+                This key, owned by <a href="/users/{{ username }}">{{ username }}</a>, is not authorized on this host:
+                {{ key.as_html()|safe }}
+              </details>
+            </td>
+            <td>
+              <button hx-swap="none" hx-post="/diff/authorize_user_dialog" hx-vals='{
           "username": "{{ username }}",
           "login": "{{ login }}"
           }'>Authorize '{{username }}'</button>
-          </td>
-          {% when crate::sshclient::DiffItem::FaultyKey with (error, entry) %}
-          <td>Faulty line</td>
-          <td>
-            <details>
-              <summary>
-                {{ error }}
-              </summary>
-              <hr>
-              This line couldn't be parsed:
-              <br>
-              <code>{{ entry }}</code>
-            </details>
-          </td>
-          <td></td>
-          {% when crate::sshclient::DiffItem::PragmaMissing %}
-          <td>Pragma missing</td>
-          <td>
-            <details>
-              <summary>
-                This file is not managed by ssm
-              </summary>
-              <hr>
-              The pragma is not in this file, suggesting that someone has edited it
-              or it was never managed in the first place.
-              <br>
-            </details>
-          </td>
-          <td></td>
-          {% endmatch %}
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+            </td>
+            {% when crate::ssh::DiffItem::FaultyKey with (error, entry) %}
+            <td>Faulty line</td>
+            <td>
+              <details>
+                <summary>
+                  {{ error }}
+                </summary>
+                <hr>
+                This line couldn't be parsed:
+                <br>
+                <code>{{ entry }}</code>
+              </details>
+            </td>
+            <td></td>
+            {% when crate::ssh::DiffItem::PragmaMissing %}
+            <td>Pragma missing</td>
+            <td>
+              <details>
+                <summary>
+                  This file is not managed by ssm
+                </summary>
+                <hr>
+                The pragma is not in this file, suggesting that someone has edited it
+                or it was never managed in the first place.
+                <br>
+              </details>
+            </td>
+            <td></td>
+            {% endmatch %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+    {% endfor %}
+    {% endif %}
+    {% when Err with (err) %}
+    {% match err %}
+    {% when crate::ssh::SshClientError::NoHostkey %}
+    <div class="diff-status error">
+      <i>No hostkey available.</i>
+      <button hx-swap="none" hx-post="/hosts/{{ host.id }}/add_hostkey">Add one</button>
+    </div>
+    {% else %}
+    <div class="diff-status error">
+      <i>Error: {{ err }}</i>
+    </div>
+    {% endmatch %}
+    {% endmatch %}
   </div>
-  {% endif %}
-  {% endfor %}
-  {% endif %}
-  {% when Err with (err) %}
-  {% match err %}
-  {% when crate::sshclient::SshClientError::NoHostkey %}
-  <div class="diff-status error">
-    <i>No hostkey available.</i>
-    <button hx-swap="none" hx-post="/hosts/{{ host.id }}/add_hostkey">Add one</button>
-  </div>
-  {% else %}
-  <div class="diff-status error">
-    <i>Error: {{ err }}</i>
-  </div>
-  {% endmatch %}
-  {% endmatch %}
+
+  <style>
+    .host-info {
+      margin: 1rem 0;
+      padding: 1.5rem;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
+    }
+
+    .host-info h2 {
+      margin-top: 0;
+      color: #4169e1;
+      font-size: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .host-info h2 a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .host-info h2 a:hover {
+      text-decoration: underline;
+    }
+
+    .host-details {
+      margin-bottom: 2rem;
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .host-details th {
+      text-align: left;
+      padding: 0.75rem;
+      width: 120px;
+      color: #888;
+      border-left: 3px solid #90EE90;
+    }
+
+    .host-details td {
+      padding: 0.75rem;
+      color: #fff;
+    }
+
+    .host-details tr {
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .user-section {
+      margin-top: 2rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .user-section h3 {
+      color: #ff8c00;
+      margin-top: 0;
+      margin-bottom: 1rem;
+      display: inline-block;
+      background: rgba(255, 140, 0, 0.1);
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+    }
+
+    .diff-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+    }
+
+    .diff-table th,
+    .diff-table td {
+      padding: 0.75rem;
+      text-align: left;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .diff-table th {
+      color: #fff;
+      font-weight: 500;
+      background: rgba(255, 140, 0, 0.1);
+      border-bottom: 2px solid #ff8c00;
+    }
+
+    .diff-table td {
+      color: #fff;
+    }
+
+    .actions {
+      margin: 1rem 0;
+      float: right;
+      margin-top: -2.5rem;
+    }
+
+    .diff-status {
+      padding: 1rem;
+      border-radius: 6px;
+      margin-top: 1rem;
+    }
+
+    .diff-status.success {
+      background: rgba(0, 255, 0, 0.1);
+      color: #90EE90;
+    }
+
+    .diff-status.error {
+      background: rgba(255, 0, 0, 0.1);
+      color: #FF6B6B;
+    }
+
+    button {
+      background: #4169e1;
+      color: white;
+      border: none;
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+
+    button:hover {
+      background: #5179f1;
+    }
+
+    .user-section button {
+      background: #ff8c00;
+    }
+
+    .user-section button:hover {
+      background: #ffa500;
+    }
+
+    .inline-button {
+      margin-left: 1rem;
+      vertical-align: middle;
+    }
+  </style>
 </div>
-
-<style>
-  .host-info {
-    margin: 1rem 0;
-    padding: 1.5rem;
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 8px;
-  }
-
-  .host-info h2 {
-    margin-top: 0;
-    color: #4169e1;
-    font-size: 1.5rem;
-    margin-bottom: 1.5rem;
-  }
-
-  .host-info h2 a {
-    color: inherit;
-    text-decoration: none;
-  }
-
-  .host-info h2 a:hover {
-    text-decoration: underline;
-  }
-
-  .host-details {
-    margin-bottom: 2rem;
-    width: 100%;
-    border-collapse: collapse;
-  }
-
-  .host-details th {
-    text-align: left;
-    padding: 0.75rem;
-    width: 120px;
-    color: #888;
-    border-left: 3px solid #90EE90;
-  }
-
-  .host-details td {
-    padding: 0.75rem;
-    color: #fff;
-  }
-
-  .host-details tr {
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  }
-
-  .user-section {
-    margin-top: 2rem;
-    padding-top: 1.5rem;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-  }
-
-  .user-section h3 {
-    color: #ff8c00;
-    margin-top: 0;
-    margin-bottom: 1rem;
-    display: inline-block;
-    background: rgba(255, 140, 0, 0.1);
-    padding: 0.5rem 1rem;
-    border-radius: 4px;
-  }
-
-  .diff-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 1rem;
-  }
-
-  .diff-table th,
-  .diff-table td {
-    padding: 0.75rem;
-    text-align: left;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  }
-
-  .diff-table th {
-    color: #fff;
-    font-weight: 500;
-    background: rgba(255, 140, 0, 0.1);
-    border-bottom: 2px solid #ff8c00;
-  }
-
-  .diff-table td {
-    color: #fff;
-  }
-
-  .actions {
-    margin: 1rem 0;
-    float: right;
-    margin-top: -2.5rem;
-  }
-
-  .diff-status {
-    padding: 1rem;
-    border-radius: 6px;
-    margin-top: 1rem;
-  }
-
-  .diff-status.success {
-    background: rgba(0, 255, 0, 0.1);
-    color: #90EE90;
-  }
-
-  .diff-status.error {
-    background: rgba(255, 0, 0, 0.1);
-    color: #FF6B6B;
-  }
-
-  button {
-    background: #4169e1;
-    color: white;
-    border: none;
-    padding: 0.5rem 1rem;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 0.9rem;
-  }
-
-  button:hover {
-    background: #5179f1;
-  }
-
-  .user-section button {
-    background: #ff8c00;
-  }
-
-  .user-section button:hover {
-    background: #ffa500;
-  }
-
-  .inline-button {
-    margin-left: 1rem;
-    vertical-align: middle;
-  }
-</style>

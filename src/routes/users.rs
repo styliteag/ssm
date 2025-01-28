@@ -230,7 +230,7 @@ async fn edit_user(
             Ok(response)
         }
         Err(error) => Ok(FormResponseBuilder::error(error)
-            .add_trigger("reload".to_string())
+            .add_trigger("reload".to_owned())
             .into_response()),
     }
 }

@@ -10,8 +10,8 @@ use serde::Deserialize;
 use crate::{
     db::UserAndOptions,
     forms::{FormResponseBuilder, Modal},
-    routes::{ErrorTemplate, RenderErrorTemplate},
-    sshclient::{ConnectionDetails, KeyDiffItem, SshClient},
+    routes::{should_update, ErrorTemplate, ForceUpdate, RenderErrorTemplate},
+    ssh::{CachingSshClient, ConnectionDetails, KeyDiffItem, SshClient, SshClientError},
     ConnectionPool, DbConnection,
 };
 
@@ -21,6 +21,7 @@ pub fn hosts_config(cfg: &mut web::ServiceConfig) {
     cfg.service(hosts_page)
         .service(render_hosts)
         .service(show_host)
+        .service(get_logins)
         .service(add_host)
         .service(authorize_user)
         .service(gen_authorized_keys)
@@ -47,14 +48,14 @@ enum HostDataError {
 }
 
 fn get_all_host_data(conn: &mut DbConnection, host: String) -> Result<HostData, HostDataError> {
-    let maybe_host = Host::get_host_name(conn, host).map_err(HostDataError::DatabaseError)?;
+    let maybe_host = Host::get_from_name_sync(conn, host).map_err(HostDataError::DatabaseError)?;
 
     let Some(host) = maybe_host else {
         return Err(HostDataError::HostNotFound);
     };
 
     let jumphost = if let Some(id) = host.jump_via {
-        Host::get_host_id(conn, id)
+        Host::get_from_id_sync(conn, id)
             .map_err(HostDataError::DatabaseError)?
             .map(|h| h.name)
     } else {
@@ -76,19 +77,47 @@ fn get_all_host_data(conn: &mut DbConnection, host: String) -> Result<HostData, 
 }
 
 #[derive(Template)]
+#[template(path = "hosts/logins.htm")]
+struct LoginsTemplate {
+    logins: Result<Vec<String>, SshClientError>,
+}
+
+#[get("/{name}/logins")]
+async fn get_logins(
+    conn: Data<ConnectionPool>,
+    caching_ssh_client: Data<CachingSshClient>,
+    host_name: Path<String>,
+    update: ForceUpdate,
+) -> actix_web::Result<impl Responder> {
+    let host = Host::get_from_name(conn.get().unwrap(), host_name.to_string()).await;
+
+    match host {
+        Err(error) => Ok(RenderErrorTemplate { error }.to_response()),
+        Ok(None) => Ok(RenderErrorTemplate {
+            error: "Host not found".to_owned(),
+        }
+        .to_response()),
+        Ok(Some(host)) => {
+            let logins = caching_ssh_client
+                .get_logins(host, should_update(update))
+                .await;
+            Ok(LoginsTemplate { logins }.to_response())
+        }
+    }
+}
+
+#[derive(Template)]
 #[template(path = "hosts/show_host.html")]
 struct ShowHostTemplate {
     host: Host,
     jumphost: Option<String>,
     authorized_users: Vec<UserAndOptions>,
     user_list: Vec<User>,
-    logins: Vec<String>,
 }
 
 #[get("/{name}")]
 async fn show_host(
     conn: Data<ConnectionPool>,
-    ssh_client: Data<SshClient>,
     host: Path<String>,
 ) -> actix_web::Result<impl Responder> {
     let res =
@@ -107,25 +136,11 @@ async fn show_host(
         }
     };
 
-    let ssh_users = match host.key_fingerprint {
-        Some(_) => match ssh_client.get_logins(host.clone()).await {
-            Ok(users) => users,
-            Err(e) => {
-                return Ok(ErrorTemplate {
-                    error: e.to_string(),
-                }
-                .to_response())
-            }
-        },
-        None => vec![],
-    };
-
     Ok(ShowHostTemplate {
         host,
         jumphost,
         authorized_users,
         user_list,
-        logins: ssh_users,
     }
     .to_response())
 }
@@ -144,11 +159,10 @@ async fn add_host_key(
 ) -> actix_web::Result<impl Responder> {
     let cloned_conn = conn.clone();
 
-    let host =
-        match web::block(move || Host::get_host_id(&mut conn.get().unwrap(), *host_id)).await? {
-            Ok(h) => h,
-            Err(e) => return Ok(FormResponseBuilder::error(e)),
-        };
+    let host = match Host::get_from_id(conn.get().unwrap(), *host_id).await {
+        Ok(h) => h,
+        Err(e) => return Ok(FormResponseBuilder::error(e)),
+    };
 
     match host {
         Some(host) => {
@@ -158,14 +172,14 @@ async fn add_host_key(
                 return Ok(match res {
                     Ok(()) => FormResponseBuilder::created("Added hostkey".to_owned())
                         .add_trigger("reloadDiff".to_owned()),
-                    Err(e) => FormResponseBuilder::error(e.to_string()),
+                    Err(e) => FormResponseBuilder::error(e),
                 });
             }
 
             let target = host.to_connection().unwrap();
             let maybe_jumphost = host
                 .jump_via
-                .map(|jump| Host::get_host_id(&mut cloned_conn.get().unwrap(), jump));
+                .map(|jump| Host::get_from_id_sync(&mut cloned_conn.get().unwrap(), jump));
 
             let connection_res = match maybe_jumphost {
                 Some(Ok(None)) => {
@@ -203,11 +217,9 @@ async fn add_host_key(
                 .to_string(),
             }))
         }
-        None => {
-            return Ok(FormResponseBuilder::not_found(
-                "Couldn't find host".to_owned(),
-            ))
-        }
+        None => Ok(FormResponseBuilder::not_found(
+            "Couldn't find host".to_owned(),
+        )),
     }
 }
 
@@ -246,9 +258,7 @@ async fn add_host(
         if via < 0 {
             None
         } else {
-            match web::block(move || Host::get_host_id(&mut cloned_conn.get().unwrap(), via))
-                .await?
-            {
+            match Host::get_from_id(cloned_conn.get().unwrap(), via).await {
                 Ok(j) => j,
                 Err(_) => {
                     return Ok(FormResponseBuilder::not_found(String::from(
@@ -410,47 +420,48 @@ async fn gen_authorized_keys(
     ssh_client: Data<SshClient>,
     form: web::Form<GenAuthorizedKeysForm>,
 ) -> actix_web::Result<impl Responder> {
-    let host_name = form.host_name.clone();
-    let login = form.login.clone();
-    let ssh_client2 = ssh_client.clone();
-    let res = web::block(move || {
-        let mut connection = conn.get().unwrap();
+    let host_name = &form.host_name;
+    let login = &form.login;
 
-        let host = Host::get_host_name(&mut connection, form.host_name.clone()).ok()?;
-
-        host.and_then(|host| {
-            host.get_authorized_keys_file_for(&ssh_client2, &mut connection, &form.login)
-                .ok()
-        })
-    })
-    .await?;
-
-    match res {
-        Some(authorized_keys) => {
-            let Ok(key_diff) = ssh_client
-                .key_diff(authorized_keys.as_ref(), host_name.clone(), login.clone())
-                .await
-            else {
-                return Ok(FormResponseBuilder::error(
-                    "Couldn't calculate key diff".to_owned(),
-                ));
-            };
-
-            Ok(FormResponseBuilder::dialog(Modal {
-                title: format!("These changes will be applied for '{login}' on '{host_name}':"),
-                request_target: format!("/hosts/{host_name}/set_authorized_keys"),
-                template: AuthorizedKeyfileDialog {
-                    login,
-                    diff: key_diff,
-                    authorized_keys,
-                }
-                .to_string(),
-            }))
+    let authorized_keys = match Host::get_from_name(conn.get().unwrap(), host_name.to_owned()).await
+    {
+        Err(error) => {
+            return Ok(FormResponseBuilder::error(error));
         }
-        None => Ok(FormResponseBuilder::error(String::from(
-            "Couldn't find host",
-        ))),
-    }
+        Ok(None) => {
+            return Ok(FormResponseBuilder::error("No such host.".to_owned()));
+        }
+        Ok(Some(host)) => {
+            host.get_authorized_keys_file_for(&ssh_client, &mut conn.get().unwrap(), login.as_ref())
+        }
+    };
+
+    let authorized_keys = match authorized_keys {
+        Ok(keys) => keys,
+        Err(error) => {
+            return Ok(FormResponseBuilder::error(error));
+        }
+    };
+
+    let Ok(key_diff) = ssh_client
+        .key_diff(authorized_keys.as_ref(), host_name.clone(), login.clone())
+        .await
+    else {
+        return Ok(FormResponseBuilder::error(
+            "Couldn't calculate key diff".to_owned(),
+        ));
+    };
+
+    Ok(FormResponseBuilder::dialog(Modal {
+        title: format!("These changes will be applied for '{login}' on '{host_name}':"),
+        request_target: format!("/hosts/{host_name}/set_authorized_keys"),
+        template: AuthorizedKeyfileDialog {
+            login: login.to_owned(),
+            diff: key_diff,
+            authorized_keys,
+        }
+        .to_string(),
+    }))
 }
 
 #[derive(Deserialize)]
@@ -495,59 +506,52 @@ struct HostDeleteForm {
 #[post("/{name}/delete")]
 async fn delete(
     conn: Data<ConnectionPool>,
+    caching_ssh_client: Data<CachingSshClient>,
     form: web::Form<HostDeleteForm>,
-    host: Path<String>,
-) -> actix_web::Result<impl Responder> {
+    host_name: Path<String>,
+) -> impl Responder {
+    let host = match Host::get_from_name(conn.get().unwrap(), host_name.to_owned()).await {
+        Ok(None) => {
+            return FormResponseBuilder::error("Host not found".to_owned());
+        }
+        Err(error) => {
+            return FormResponseBuilder::error(format!("Database error: {error}"));
+        }
+        Ok(Some(host)) => host,
+    };
+
     if form.confirm {
-        // TODO: delte host
-
-        let delete_res = web::block(move || {
-            let mut connection = conn.get().unwrap();
-
-            let host = Host::get_host_name(&mut connection, host.to_string()).ok()?;
-
-            host.and_then(|host| host.delete(&mut connection).ok())
-        })
-        .await?;
-
-        return Ok(match delete_res {
-            Some(amt) => FormResponseBuilder::success(format!("Deleted {amt} record(s)")),
-            None => FormResponseBuilder::error("Couldn't find host".to_owned()),
-        });
+        return match host.delete(&mut conn.get().unwrap()) {
+            Ok(amt) => {
+                caching_ssh_client.remove(host_name.as_str()).await;
+                return FormResponseBuilder::success(format!("Deleted {amt} record(s)"));
+            }
+            Err(e) => FormResponseBuilder::error(format!("Failed to delete host: {e}")),
+        };
     }
 
-    let host2 = host.clone();
+    let mut connection = conn.get().unwrap();
 
-    let res = web::block(move || {
-        let mut connection = conn.get().unwrap();
-
-        let host = Host::get_host_name(&mut connection, host2).ok()?;
-
-        host.and_then(|host| {
-            host.get_authorized_users(&mut connection)
-                .ok()
-                .and_then(|auth| {
-                    host.get_dependant_hosts(&mut connection)
-                        .ok()
-                        .map(|hosts| (auth, hosts))
-                })
-        })
-    })
-    .await?;
+    let res = host
+        .get_authorized_users(&mut connection)
+        .and_then(|authorizations| {
+            host.get_dependant_hosts(&mut connection)
+                .map(|hosts| (authorizations, hosts))
+        });
 
     // TODO: resolve authorizations of dependant hosts
-    Ok(match res {
-        Some((authorizations, affected_hosts)) => FormResponseBuilder::dialog(Modal {
-            title: format!("In addition to {host}, these entries will be affected"),
-            request_target: format!("/hosts/{host}/delete"),
+    match res {
+        Ok((authorizations, affected_hosts)) => FormResponseBuilder::dialog(Modal {
+            title: format!("In addition to {host_name}, these entries will be affected"),
+            request_target: format!("/hosts/{host_name}/delete"),
             template: DeleteHostTemplate {
                 authorizations,
                 affected_hosts,
             }
             .to_string(),
         }),
-        None => FormResponseBuilder::error("Couldn't find host".to_owned()),
-    })
+        Err(error) => FormResponseBuilder::error(format!("Failed to get authorizations: {error}")),
+    }
 }
 
 #[derive(Deserialize)]

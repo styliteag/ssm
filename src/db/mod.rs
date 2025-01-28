@@ -4,7 +4,7 @@ use diesel::result::Error;
 use log::error;
 use ssh_key::{authorized_keys::ConfigOpts, Algorithm};
 
-use crate::{models::PublicUserKey, sshclient::AuthorizedKey};
+use crate::{models::PublicUserKey, ssh::AuthorizedKey};
 
 mod host;
 mod key;
@@ -32,8 +32,8 @@ impl From<AllowedUserOnHost> for AuthorizedKey {
         Self {
             options: value
                 .options
-                .and_then(|opts| ConfigOpts::new(opts).ok())
-                .unwrap_or_else(|| ConfigOpts::default()),
+                .map(|opts| ConfigOpts::new(opts).expect("Encountered invalid key"))
+                .unwrap_or_default(),
 
             algorithm: Algorithm::from_str(value.key.key_type.as_str())
                 .expect("Key algorithm in database is invalid"),
@@ -45,7 +45,7 @@ impl From<AllowedUserOnHost> for AuthorizedKey {
 
 impl From<(PublicUserKey, String, String, Option<String>)> for AllowedUserOnHost {
     fn from(value: (PublicUserKey, String, String, Option<String>)) -> Self {
-        AllowedUserOnHost {
+        Self {
             key: value.0,
             login: value.1,
             username: value.2,

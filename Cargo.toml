@@ -31,15 +31,15 @@ diesel = { version = "2.2.0", features = ["sqlite", "r2d2"] }
 diesel_migrations = { version = "2.2.0", features = ["sqlite"] }
 futures = "0.3.30"
 log = "0.4.21"
-parking_lot = "0.12"
 pretty_env_logger = "0.5.0"
-russh = "0.46"
+russh = "0.49.2"
 serde = "1.0.203"
 tokio = { version = "1", features = ["full"] }
 bcrypt = "0.15"
-ssh-key = { version = "0.6.6", features = ["alloc", "ed25519", "serde"] }
+ssh-key = { version = "0.6.7", features = ["alloc", "ed25519", "serde"] }
 ssh-encoding = { version = "0.2.0", features = ["alloc", "base64", "std"] }
 similar = { version = "2.6.0", features = ["inline"] }
+time = "0.3.37"
 
 [build-dependencies]
 static-files = "0.2"

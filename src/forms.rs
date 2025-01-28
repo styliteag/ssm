@@ -1,7 +1,7 @@
 use actix_web::{http::StatusCode, HttpResponse, HttpResponseBuilder};
 use askama::Template;
 
-use crate::sshclient::SshClientError;
+use crate::ssh::SshClientError;
 
 #[derive(Debug)]
 pub struct Modal {
@@ -37,7 +37,7 @@ struct FormResponseTemplate {
 }
 
 impl FormResponseBuilder {
-    pub fn success(message: String) -> Self {
+    pub const fn success(message: String) -> Self {
         Self {
             triggers: Vec::new(),
             status: StatusCode::OK,
@@ -45,7 +45,7 @@ impl FormResponseBuilder {
         }
     }
 
-    pub fn created(message: String) -> Self {
+    pub const fn created(message: String) -> Self {
         Self {
             triggers: Vec::new(),
             status: StatusCode::CREATED,
@@ -53,7 +53,7 @@ impl FormResponseBuilder {
         }
     }
 
-    pub fn error(message: String) -> Self {
+    pub const fn error(message: String) -> Self {
         Self {
             triggers: Vec::new(),
             status: StatusCode::UNPROCESSABLE_ENTITY,
@@ -61,7 +61,7 @@ impl FormResponseBuilder {
         }
     }
 
-    pub fn not_found(message: String) -> Self {
+    pub const fn not_found(message: String) -> Self {
         Self {
             triggers: Vec::new(),
             status: StatusCode::NOT_FOUND,
@@ -69,7 +69,7 @@ impl FormResponseBuilder {
         }
     }
 
-    pub fn dialog(modal: Modal) -> Self {
+    pub const fn dialog(modal: Modal) -> Self {
         Self {
             triggers: Vec::new(),
             status: StatusCode::OK,
@@ -87,9 +87,9 @@ impl FormResponseBuilder {
         self
     }
 
-    pub fn with_redirect(mut self, location: &str) -> Self {
+    pub fn _with_redirect(mut self, location: &str) -> Self {
         self.status = StatusCode::FOUND;
-        self.triggers.push(format!("redirect {}", location));
+        self.triggers.push(format!("redirect {location}"));
         self
     }
 
@@ -118,6 +118,6 @@ impl actix_web::Responder for FormResponseBuilder {
 
 impl From<SshClientError> for FormResponseBuilder {
     fn from(value: SshClientError) -> Self {
-        FormResponseBuilder::error(value.to_string())
+        Self::error(value.to_string())
     }
 }
