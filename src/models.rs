@@ -1,5 +1,6 @@
 use diesel::prelude::*;
 use serde::Deserialize;
+use crate::DbConnection;
 
 #[derive(Queryable, Selectable, Associations, Clone, Debug)]
 #[diesel(table_name = crate::schema::host)]
@@ -13,6 +14,46 @@ pub struct Host {
     pub port: i32,
     pub key_fingerprint: Option<String>,
     pub jump_via: Option<i32>,
+}
+
+impl Host {
+    /// Updates the host's name, address, username, port, key_fingerprint, and jump_via. This is a stub implementation; in a real application, you should perform a database update.
+    pub fn update_host(
+        conn: &mut crate::DbConnection,
+        old_name: String,
+        new_name: String,
+        new_address: String,
+        new_username: String,
+        new_port: i32,
+        new_key_fingerprint: Option<String>,
+        new_jump_via: Option<i32>
+    ) -> Result<(), actix_web::Error> {
+        use crate::schema::host::dsl::*;
+        log::warn!(
+            "ssm::models::Host: Host update details for '{}':\n  Name -> {}\n  Address -> {}\n  Username -> {}\n  Port -> {}\n  Key Fingerprint -> {:?}\n  Jump Via -> {:?}",
+            old_name,
+            new_name,
+            new_address,
+            new_username,
+            new_port,
+            new_key_fingerprint,
+            new_jump_via
+        );
+
+        diesel::update(host.filter(name.eq(&old_name)))
+            .set((
+                name.eq(new_name),
+                address.eq(new_address),
+                username.eq(new_username),
+                port.eq(new_port),
+                key_fingerprint.eq(new_key_fingerprint),
+                jump_via.eq(new_jump_via),
+            ))
+            .execute(conn)
+            .map_err(actix_web::error::ErrorInternalServerError)?;
+
+        Ok(())
+    }
 }
 
 #[derive(Insertable, Clone)]

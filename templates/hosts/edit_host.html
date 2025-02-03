@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Host - {{ host.name }}{% endblock %}
+
+{% block content %}
+<div class="content-container">
+    <h2>Edit Host: {{ host.name }}</h2>
+    <form action="/hosts/{{ host.name }}/edit" method="post" class="form-grid">
+        <div class="form-group">
+            <label for="name">Name:</label>
+            <input type="text" id="name" name="name" value="{{ host.name }}" required />
+        </div>
+
+        <div class="form-group">
+            <label for="address">Address:</label>
+            <input type="text" id="address" name="address" value="{{ host.address }}" required />
+        </div>
+
+        <div class="form-group">
+            <label for="username">Username:</label>
+            <input type="text" id="username" name="username" value="{{ host.username }}" required />
+        </div>
+
+        <div class="form-group">
+            <label for="port">Port:</label>
+            <input type="number" id="port" name="port" value="{{ host.port }}" required />
+        </div>
+
+        <div class="form-group">
+            <label for="key_fingerprint">Key Fingerprint:</label>
+            <input type="text" id="key_fingerprint" name="key_fingerprint" value="{{ host.key_fingerprint }}" />
+        </div>
+
+        <div class="form-group">
+            <label for="jump_via">Jump Via:</label>
+            <input type="text" id="jump_via" name="jump_via" value="{{ host.jump_via }}" />
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="button primary">Save Changes</button>
+            <a href="/hosts" class="button">Cancel</a>
+        </div>
+    </form>
+</div>
+
+<style>
+    .content-container {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 2rem;
+    }
+    .form-grid {
+        display: grid;
+        gap: 1rem;
+    }
+    .form-group {
+        display: grid;
+        gap: 0.5rem;
+    }
+    .form-group label {
+        font-weight: bold;
+    }
+    .form-group input {
+        padding: 0.5rem;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        font-size: 1rem;
+    }
+    .form-actions {
+        display: flex;
+        gap: 1rem;
+        margin-top: 1rem;
+    }
+    .button {
+        padding: 0.5rem 1rem;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        text-decoration: none;
+        color: #333;
+        background: #f5f5f5;
+        cursor: pointer;
+    }
+    .button.primary {
+        background: #0066cc;
+        color: white;
+        border-color: #0052a3;
+    }
+    .button:hover {
+        opacity: 0.9;
+    }
+</style>
+{% endblock %}

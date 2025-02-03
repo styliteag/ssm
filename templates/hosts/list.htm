@@ -3,6 +3,7 @@
     <th>Host</th>
     <th>Address</th>
     <th>View diff</th>
+    <th>Edit</th>
   </tr>
 </thead>
 <tbody>
@@ -11,6 +12,7 @@
     <td><a href="/hosts/{{ host.name }}">{{ host.name }}</a></td>
     <td>{{ host.address}}</td>
     <td><a class="button" href="/diff/{{ host.name }}">Diff</a></td>
+    <td><a class="button" href="/hosts/{{ host.name }}/edit">Edit</a></td>
   </tr>
   {% endfor %}
 </tbody>
