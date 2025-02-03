@@ -1,5 +1,7 @@
+use serde::Deserialize;
+use ssh_encoding::{Base64Writer, Encode};
 use ssh_key::{authorized_keys::ConfigOpts, Algorithm};
-use std::collections::HashMap;
+use std::{collections::HashMap, str::FromStr};
 use time::OffsetDateTime;
 
 mod caching_client;
@@ -14,11 +16,6 @@ pub struct SshPublicKey {
     pub key_base64: String,
     pub comment: Option<String>,
 }
-/// Parser error
-type ErrorMsg = String;
-/// The entire line containing the Error
-type Line = String;
-pub type AuthorizedKeyEntry = Result<AuthorizedKey, (ErrorMsg, Line)>;
 
 #[derive(Debug, Clone)]
 pub struct AuthorizedKey {
@@ -91,7 +88,90 @@ pub enum DiffItem {
     /// The Pragma is missing, meaning this file is not yet managed
     PragmaMissing,
 }
+
+pub type SshKeyfiles = Vec<SshKeyfileResponse>;
+
+#[derive(Debug, Clone)]
+pub struct SshKeyfileResponse {
+    login: String,
+    has_pragma: bool,
+    read_only: bool,
+    keyfile: Vec<AuthorizedKeyEntry>,
+}
+
+/// Parser error
+type ErrorMsg = String;
+/// The entire line containing the Error
+type Line = String;
+
+// pub type AuthorizedKeyEntry = Result<AuthorizedKey, (ErrorMsg, Line)>;
+#[derive(Debug, Clone)]
+pub enum AuthorizedKeyEntry {
+    Authorization(AuthorizedKey),
+    Error(ErrorMsg, Line),
+}
+
+#[derive(Deserialize)]
+struct PlainSshKeyfileResponse {
+    login: String,
+    has_pragma: bool,
+    read_only: bool,
+    keyfile: String,
+}
+
+impl<'de> Deserialize<'de> for SshKeyfileResponse {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let plain = PlainSshKeyfileResponse::deserialize(deserializer)?;
+
+        let entries: Vec<AuthorizedKeyEntry> = plain
+            .keyfile
+            .lines()
+            .filter(|line| !line.trim_start().starts_with('#'))
+            .map(AuthorizedKeyEntry::from)
+            .collect();
+
+        Ok(Self {
+            login: plain.login,
+            has_pragma: plain.has_pragma,
+            read_only: plain.read_only,
+            keyfile: entries,
+        })
+    }
+}
+
+impl From<&str> for AuthorizedKeyEntry {
+    fn from(value: &str) -> Self {
+        match ssh_key::authorized_keys::Entry::from_str(value) {
+            Ok(entry) => {
+                //TODO: algorithm to estimate size
+                let mut buf = vec![0u8; 1024];
+                let mut writer = Base64Writer::new(&mut buf).expect("buf is non-zero");
+
+                let pkey = entry.public_key();
+                let comment = pkey.comment();
+
+                pkey.key_data().encode(&mut writer).expect("Buffer overrun");
+                let b64 = writer.finish().expect("Buffer overrun");
+
+                Self::Authorization(AuthorizedKey {
+                    options: entry.config_opts().clone(),
+                    algorithm: pkey.algorithm(),
+                    base64: b64.to_owned(),
+                    comment: if comment.is_empty() {
+                        None
+                    } else {
+                        Some(comment.to_owned())
+                    },
+                })
+            }
+            Err(e) => Self::Error(e.to_string(), value.to_owned()),
+        }
+    }
+}
+
 type HostName = String;
-type AuthorizedKeys = Result<Vec<(Login, bool, Vec<AuthorizedKeyEntry>)>, SshClientError>;
-type CacheValue = (OffsetDateTime, AuthorizedKeys);
+type CacheValue = (OffsetDateTime, Result<SshKeyfiles, SshClientError>);
 type Cache = HashMap<HostName, CacheValue>;

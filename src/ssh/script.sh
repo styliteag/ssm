@@ -65,6 +65,7 @@ get_authorized_keys_location() {
 
 # Check if the system has any conditions that make the keyfile externally managed or readonly
 check_keyfile_conditions() {
+    user="$1"
     conditions=""
     
     # Check for special files
@@ -80,18 +81,10 @@ check_keyfile_conditions() {
     echo "${conditions}"
 }
 
-# Output comments for get_authorized_keyfile command
-print_keyfile_comments() {
-    conditions=$(check_keyfile_conditions)
-    if [ -n "${conditions}" ]; then
-        printf "# !read-only:true\n"
-        printf "# !message:${conditions}\n"
-    fi
-}
-
 # Check if keyfile modifications should be blocked
 is_keyfile_readonly() {
-    conditions=$(check_keyfile_conditions)
+    user="$1"
+    conditions=$(check_keyfile_conditions "${user}")
     if [ -n "${conditions}" ]; then
         return 0
     fi
@@ -107,9 +100,7 @@ handle_get_authorized_keyfile() {
         echo "Tried location: ${keyfile_location}"
         exit 1
     fi
-    if is_keyfile_readonly; then
-        print_keyfile_comments
-    fi
+
     cat "${keyfile_location}"
     echo ""
     exit 0
@@ -119,7 +110,7 @@ handle_set_authorized_keyfile() {
     user="$1"
     keyfile_location=$(get_authorized_keys_location "${user}")
 
-    if is_keyfile_readonly; then
+    if is_keyfile_readonly "${user}"; then
         echo "Keyfile is readonly, aborting."
         exit 1
     fi
@@ -148,6 +139,33 @@ handle_get_ssh_users() {
         done
     rm -f "${TMP}/homedirs.$$"
     exit 0
+}
+
+
+handle_get_ssh_keyfiles() {
+    isFirst=true
+    printf "["
+      handle_get_ssh_users | while read -r login; do
+            # Get keyfiles and replace newline with escaped version
+            keyfile=$(handle_get_authorized_keyfile "${login}")
+            if [ "${isFirst}" = true ]; then
+                isFirst=false
+            else
+                printf ','
+            fi
+            head=$(printf "%s" "${keyfile}" | head -n1)
+
+            has_pragma="false"
+            is_readonly="false"
+
+            [ "${head}" = "${keyfile_head}" ] && has_pragma="true"
+
+            is_keyfile_readonly "${login}" && is_readonly="true"
+
+            printf '{"login":"%s", "has_pragma": %s, "read_only": %s,' "${login}" "${has_pragma}" "${is_readonly}"
+            printf '"keyfile":"%s"}' "$(printf "%s" "${keyfile}" | sed ':a;N;$!ba;s/\n/\\n/g')"
+      done
+    printf "]"
 }
 
 handle_update() {
@@ -179,9 +197,8 @@ fi
 command="$1"
 shift
 case "${command}" in
-    get_authorized_keyfile)  handle_get_authorized_keyfile "$@" ;;
     set_authorized_keyfile)  handle_set_authorized_keyfile "$@" ;;
-    get_ssh_users)           handle_get_ssh_users ;;
+    get_ssh_keyfiles)        handle_get_ssh_keyfiles ;;
     update)                  handle_update ;;
     version)                 handle_version ;;
     *)

@@ -10,8 +10,8 @@ use crate::{
 };
 
 use super::{
-    sshclient::SshClientError, AuthorizedKeyEntry, AuthorizedKeys, Cache, CacheValue, DiffItem,
-    HostDiff, HostName, Login, SshClient,
+    sshclient::SshClientError, AuthorizedKeyEntry, Cache, CacheValue, DiffItem, HostDiff, HostName,
+    Login, SshClient, SshKeyfiles,
 };
 
 #[derive(Debug)]
@@ -36,14 +36,11 @@ impl CachingSshClient {
         let _ = lock.remove(host_name);
     }
 
-    async fn get_current_host_data(
-        &self,
-        host_name: &str,
-    ) -> Result<AuthorizedKeys, SshClientError> {
+    async fn get_current_host_data(&self, host_name: &str) -> Result<SshKeyfiles, SshClientError> {
         let conn = self.conn.get().unwrap();
 
         match Host::get_from_name(conn, host_name.to_owned()).await? {
-            Some(host) => Ok(self.ssh_client.clone().get_authorized_keys(host).await),
+            Some(host) => self.ssh_client.clone().get_authorized_keys(host).await,
             None => Err(SshClientError::NoSuchHost),
         }
     }
@@ -60,7 +57,7 @@ impl CachingSshClient {
             }
         }
 
-        let data = self.get_current_host_data(host_name).await?;
+        let data = self.get_current_host_data(host_name).await;
         let time = OffsetDateTime::now_utc();
 
         let mut lock = self.cache.write().await;
@@ -71,7 +68,7 @@ impl CachingSshClient {
     fn calculate_diff(
         &self,
         mut conn: PooledConnection<ConnectionManager<DbConnection>>,
-        host_entries: Vec<(Login, bool, Vec<AuthorizedKeyEntry>)>,
+        host_entries: SshKeyfiles,
         host: &Host,
     ) -> Result<Vec<(Login, Vec<DiffItem>)>, SshClientError> {
         let db_authorized_entries = host.get_authorized_keys(&mut conn)?;
@@ -84,16 +81,16 @@ impl CachingSshClient {
         let mut diff_items = Vec::new();
         let mut used_indecies = Vec::new();
 
-        for (login, has_pragma, host_entries) in host_entries {
+        for entry in host_entries {
             let mut this_user_diff = Vec::new();
-            if !has_pragma {
+            if !entry.has_pragma {
                 this_user_diff.push(DiffItem::PragmaMissing);
             }
 
-            'entries: for host_entry in host_entries {
+            'entries: for host_entry in entry.keyfile {
                 let host_entry = match host_entry {
-                    Ok(k) => k,
-                    Err((error, line)) => {
+                    AuthorizedKeyEntry::Authorization(k) => k,
+                    AuthorizedKeyEntry::Error(error, line) => {
                         this_user_diff.push(DiffItem::FaultyKey(error, line));
                         continue 'entries;
                     }
@@ -105,7 +102,9 @@ impl CachingSshClient {
                 }
 
                 for (i, db_entry) in db_authorized_entries.iter().enumerate() {
-                    if host_entry.base64.eq(&db_entry.key.key_base64) && login.eq(&db_entry.login) {
+                    if host_entry.base64.eq(&db_entry.key.key_base64)
+                        && entry.login.eq(&db_entry.login)
+                    {
                         // TODO: check options
                         if used_indecies.contains(&i) {
                             this_user_diff.push(DiffItem::DuplicateKey(host_entry));
@@ -128,14 +127,14 @@ impl CachingSshClient {
             }
 
             for (i, unused_entry) in db_authorized_entries.iter().enumerate() {
-                if !used_indecies.contains(&i) && unused_entry.login.eq(&login) {
+                if !used_indecies.contains(&i) && unused_entry.login.eq(&entry.login) {
                     this_user_diff.push(DiffItem::KeyMissing(
                         unused_entry.clone().into(),
                         unused_entry.username.clone(),
                     ));
                 }
             }
-            diff_items.push((login, this_user_diff));
+            diff_items.push((entry.login, this_user_diff));
         }
         diff_items.retain(|(_, user_diff)| !user_diff.is_empty());
         Ok(diff_items)
@@ -188,6 +187,6 @@ impl CachingSshClient {
     ) -> Result<Vec<Login>, SshClientError> {
         let logins = self.get_entry(&host.name, force_update).await?.1;
 
-        logins.map(|logins| logins.into_iter().map(|(login, _, _)| login).collect())
+        logins.map(|logins| logins.into_iter().map(|response| response.login).collect())
     }
 }
