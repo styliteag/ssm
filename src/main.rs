@@ -11,6 +11,7 @@ use actix_web::{
 };
 use actix_web_static_files::ResourceFiles;
 use config::Config;
+use croner::Cron;
 use diesel::prelude::QueryResult;
 use log::{error, info};
 use serde::Deserialize;
@@ -22,6 +23,7 @@ use diesel::r2d2::Pool;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use russh::keys::key::PrivateKeyWithHashAlg;
 use ssh_key::PrivateKey;
+use tokio_cron_scheduler::{JobBuilder, JobScheduler};
 
 mod db;
 mod forms;
@@ -60,8 +62,37 @@ where
     Ok(Duration::from_secs(seconds))
 }
 
+fn deserialize_cron<'de, D>(deserializer: D) -> Result<Option<Cron>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let pat = String::deserialize(deserializer)?;
+
+    match Cron::new(pat.as_str()).with_seconds_optional().parse() {
+        Ok(cron) => Ok(Some(cron)),
+        Err(e) => {
+            eprintln!("Failed to parse Cron syntax '{pat}': {e}");
+            std::process::exit(3);
+        }
+    }
+}
+
+fn no_cron() -> Option<Cron> {
+    None
+}
+
 #[derive(Debug, Deserialize, Clone)]
 pub struct SshConfig {
+    /// Cron schedule when to check Hosts (default disabled)
+    /// In the future this will trigger some sort of action
+    /// e.g. send an Email
+    #[serde(default = "no_cron", deserialize_with = "deserialize_cron")]
+    check_schedule: Option<Cron>,
+
+    /// Cron schedule when update the cache (default disabled)
+    #[serde(default = "no_cron", deserialize_with = "deserialize_cron")]
+    update_schedule: Option<Cron>,
+
     /// Path to an OpenSSH Private Key
     private_key_file: PathBuf,
     /// Passphrase for the key
@@ -209,7 +240,7 @@ async fn main() -> Result<(), std::io::Error> {
             }
             Err(e) => {
                 error!("Failed to decrypt ssh key: {e}");
-                std::process::exit(3);
+                std::process::exit(4);
             }
         };
     };
@@ -224,12 +255,81 @@ async fn main() -> Result<(), std::io::Error> {
         .expect("Failed to convert key to Private key");
 
     let config = Data::new(configuration.clone());
-    let ssh_client = SshClient::new(pool.clone(), key, configuration.ssh);
+    let ssh_client = SshClient::new(pool.clone(), key, configuration.ssh.clone());
 
     let caching_ssh_client = Data::new(CachingSshClient::new(pool.clone(), ssh_client.clone()));
 
     info!("Starting Secure SSH Manager");
     let secret_key = cookie::Key::derive_from(configuration.session_key.as_bytes());
+
+    let caching_client_jobs = Arc::clone(&caching_ssh_client);
+
+    let check_schedule = configuration.ssh.check_schedule;
+    let update_schedule = configuration.ssh.update_schedule;
+
+    if check_schedule.is_some() || update_schedule.is_some() {
+        let sched = JobScheduler::new()
+            .await
+            .expect("Failed to create job scheduler");
+
+        tokio::spawn(async move {
+            if let Some(check_schedule) = check_schedule {
+                let client = caching_client_jobs.clone();
+
+                let mut job = JobBuilder::new().with_cron_job_type();
+                job.schedule = Some(check_schedule.clone());
+                job = job.with_run_async(Box::new(move |_uuid, _sched| {
+                    let client = client.clone();
+                    Box::pin(async move {
+                        info!("Running check job");
+                        match client.get_current_state().await {
+                            Ok(_data) => {
+                                info!("Succeeded check job");
+                                // TODO: do something with data
+                            }
+                            Err(e) => {
+                                error!("Failed check job: {e}");
+                            }
+                        };
+                    })
+                }));
+
+                sched
+                    .add(job.build().expect("Failed to build check job"))
+                    .await
+                    .expect("Failed to create check job");
+                info!("Scheduled check job: '{}'", check_schedule.pattern);
+            }
+
+            if let Some(update_schedule) = update_schedule {
+                let mut job = JobBuilder::new().with_cron_job_type();
+                job.schedule = Some(update_schedule.clone());
+                job = job.with_run_async(Box::new(move |_uuid, _sched| {
+                    let client = caching_client_jobs.clone();
+                    Box::pin(async move {
+                        info!("Running update job");
+                        match client.get_current_state().await {
+                            Ok(_) => {
+                                info!("Succeeded update job");
+                            }
+                            Err(e) => {
+                                error!("Failed update job: {e}");
+                            }
+                        };
+                    })
+                }));
+
+                sched
+                    .add(job.build().expect("Failed to build update job"))
+                    .await
+                    .expect("Failed to create update job");
+                info!("Scheduled update job: '{}'", update_schedule.pattern);
+            }
+
+            info!("Starting scheduler");
+            sched.start().await
+        });
+    }
 
     HttpServer::new(move || {
         let generated = generate();

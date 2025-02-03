@@ -11,7 +11,7 @@ use crate::{
 
 use super::{
     sshclient::SshClientError, AuthorizedKeyEntry, AuthorizedKeys, Cache, CacheValue, DiffItem,
-    HostDiff, Login, SshClient,
+    HostDiff, HostName, Login, SshClient,
 };
 
 #[derive(Debug)]
@@ -164,6 +164,21 @@ impl CachingSshClient {
             inserted,
             self.calculate_diff(conn, host_authorized_entries, &host),
         )
+    }
+
+    /// Gets the current state of all known hosts, forcing an update
+    pub async fn get_current_state(&self) -> Result<Vec<(HostName, HostDiff)>, String> {
+        let hosts = Host::get_all_hosts(&mut self.conn.get().unwrap())?;
+
+        let mut state = Vec::with_capacity(hosts.len());
+
+        for host in hosts.into_iter() {
+            let hostname = host.name.to_owned();
+            let res = self.get_host_diff(host, true).await;
+            state.push((hostname, res));
+        }
+
+        Ok(state)
     }
 
     pub async fn get_logins(

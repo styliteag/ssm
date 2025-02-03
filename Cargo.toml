@@ -40,6 +40,8 @@ ssh-key = { version = "0.6.7", features = ["alloc", "ed25519", "serde"] }
 ssh-encoding = { version = "0.2.0", features = ["alloc", "base64", "std"] }
 similar = { version = "2.6.0", features = ["inline"] }
 time = "0.3.37"
+tokio-cron-scheduler = "0.13.0"
+croner = "2.1.0"
 
 [build-dependencies]
 static-files = "0.2"
