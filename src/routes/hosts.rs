@@ -355,18 +355,42 @@ async fn add_host(
     })
 }
 
+// Added view model for host list rendering to convert optional fields
+struct ListHostView {
+    pub id: i32,
+    pub name: String,
+    pub address: String,
+    pub username: String,
+    pub port: i32,
+    pub key_fingerprint: String,
+    pub jump_via: String,
+}
+
+// Update RenderHostsTemplate to use ListHostView instead of Host
 #[derive(Template)]
 #[template(path = "hosts/list.htm")]
 struct RenderHostsTemplate {
-    hosts: Vec<Host>,
+    hosts: Vec<ListHostView>,
 }
 
+// Modify the render_hosts function to map Host to ListHostView
 #[get("/list.htm")]
 async fn render_hosts(conn: Data<ConnectionPool>) -> actix_web::Result<impl Responder> {
     let all_hosts = web::block(move || Host::get_all_hosts(&mut conn.get().unwrap())).await?;
 
     Ok(match all_hosts {
-        Ok(all_hosts) => RenderHostsTemplate { hosts: all_hosts }.to_response(),
+        Ok(hosts) => {
+            let view_hosts = hosts.into_iter().map(|host| ListHostView {
+                id: host.id,
+                name: host.name,
+                address: host.address,
+                username: host.username,
+                port: host.port,
+                key_fingerprint: host.key_fingerprint.unwrap_or_default(),
+                jump_via: host.jump_via.map(|v| v.to_string()).unwrap_or_default(),
+            }).collect();
+            RenderHostsTemplate { hosts: view_hosts }.to_response()
+        },
         Err(error) => RenderErrorTemplate { error }.to_response(),
     })
 }

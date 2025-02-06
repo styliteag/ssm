@@ -10,9 +10,45 @@
   {% for host in hosts %}
   <tr>
     <td><a href="/hosts/{{ host.name }}">{{ host.name }}</a></td>
-    <td>{{ host.address}}</td>
+    <td>{{ host.address }}</td>
     <td><a class="button" href="/diff/{{ host.name }}">Diff</a></td>
-    <td><a class="button" href="/hosts/{{ host.name }}/edit">Edit</a></td>
+    <td>
+      <button class="button edit-toggle" data-host-id="{{ host.name }}" onclick="toggleEditForm('{{ host.name }}')">Edit</button>
+    </td>
+  </tr>
+  <tr id="edit-form-{{ host.name }}" class="edit-form-row" style="display: none;">
+    <td colspan="4">
+      <form action="/hosts/{{ host.name }}/edit" method="post">
+          <div>
+              <label for="name-{{ host.name }}">Name:</label>
+              <input type="text" id="name-{{ host.name }}" name="name" value="{{ host.name }}" required>
+          </div>
+          <div>
+              <label for="address-{{ host.name }}">Address:</label>
+              <input type="text" id="address-{{ host.name }}" name="address" value="{{ host.address }}" required>
+          </div>
+          <div>
+              <label for="username-{{ host.name }}">Username:</label>
+              <input type="text" id="username-{{ host.name }}" name="username" value="{{ host.username }}" required>
+          </div>
+          <div>
+              <label for="port-{{ host.name }}">Port:</label>
+              <input type="number" id="port-{{ host.name }}" name="port" value="{{ host.port }}" required>
+          </div>
+          <div>
+              <label for="key_fingerprint-{{ host.name }}">Key Fingerprint:</label>
+              <input type="text" id="key_fingerprint-{{ host.name }}" name="key_fingerprint" value="{{ host.key_fingerprint }}">
+          </div>
+          <div>
+              <label for="jump_via-{{ host.name }}">Jump Via:</label>
+              <input type="text" id="jump_via-{{ host.name }}" name="jump_via" value="{{ host.jump_via }}">
+          </div>
+          <div>
+              <button type="submit" class="button primary">Save Changes</button>
+              <button type="button" class="button" onclick="toggleEditForm('{{ host.name }}')">Cancel</button>
+          </div>
+      </form>
+    </td>
   </tr>
   {% endfor %}
 </tbody>
@@ -23,3 +59,14 @@
   <option value="{{ host.id }}">{{ host.name }}</option>
   {% endfor %}
 </select>
+
+<script>
+function toggleEditForm(hostId) {
+    var formRow = document.getElementById('edit-form-' + hostId);
+    if (formRow.style.display === 'none' || formRow.style.display === '') {
+        formRow.style.display = 'table-row';
+    } else {
+        formRow.style.display = 'none';
+    }
+}
+</script>
