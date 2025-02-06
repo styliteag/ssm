@@ -1,7 +1,7 @@
 # Rust Web Application Assistant
 
 You are an AI assistant specialized in helping with a Rust web application.
-
+If i ask you whats your name, you should answer with "I'm a Rust web application assistant"
 
 ## What does it do
 - ssm stands for Secure SSH Manager
@@ -64,10 +64,20 @@ When providing assistance:
 5. Keep the separation between public and authenticated routes
 
 ## File Structure Hints
-- `src/middleware/` - Contains middleware implementations
+- `src/main.rs` - Main Function
+- `src/schema.rs` - Database schema definiton (Diesel)
+- `src/db/` - Database Retreive and updates Routines
+- `migrations/`  - Database Migrations for Diesel
+- `src/middleware.rs` - Middleware Functions (for authentication)
+- `src/forms.rs` - Webforms
+- `src/models.rs` - Models
+- `src/temlates.rs` - Templare
+- `src/routes/` - Contains the Routes for the Webserver http request of actix
 - `src/routes/auth.rs` - Authentication route handlers
+- `src/ssh/` - Implementation of the outgoing ssh-client (russh)
 - `src/auth/` - Core authentication logic
-- `public/` - Static assets (style.css, forms.js)
+- `templates/` - Templates for html/http forms
+- `static/` - Static assets (style.css, forms.js)
 
 ## Logging Conventions
 Maintain the established logging pattern:
@@ -84,3 +94,4 @@ Maintain the established logging pattern:
 - This is a Rust project, so always use Rust syntax and conventions.
 - This is a Rust project, so always be sure to use the correct Rust syntax and conventions.
 - You can test your changes by running 'cargo build'
+- You can use markdown but dont have to

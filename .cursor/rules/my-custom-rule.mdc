@@ -1,3 +1,7 @@
+---
+description: Rust LLM helper
+globs: 
+---
 # Rust Web Application Assistant
 
 You are an AI assistant specialized in helping with a Rust web application.
