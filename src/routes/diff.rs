@@ -1,6 +1,6 @@
 use crate::{
     routes::{should_update, ForceUpdate},
-    ssh::{CachingSshClient, DiffItem, SshClientError},
+    ssh::{CachingSshClient, DiffItem, SshClient, SshClientError},
     templates::AsHTML,
 };
 use actix_web::{
@@ -9,6 +9,7 @@ use actix_web::{
     Responder,
 };
 use askama_actix::{Template, TemplateToResponse};
+use log::warn;
 use serde::Deserialize;
 use time::OffsetDateTime;
 
@@ -53,10 +54,50 @@ struct RenderDiffTemplate {
     cached_from: OffsetDateTime,
 }
 
+async fn check_host_fingerprint(
+    conn: &ConnectionPool,
+    ssh_client: &SshClient,
+    host: &Host,
+) -> Result<(), actix_web::Error> {
+    let target = host.to_connection().unwrap();
+    
+    // Get jump host if needed
+    let connection_res = match host.jump_via {
+        Some(jump_id) => {
+            let jump_host = match Host::get_from_id(conn.get().unwrap(), jump_id).await {
+                Ok(Some(h)) => h,
+                Ok(None) => return Err(actix_web::error::ErrorBadRequest("Jump host not found")),
+                Err(e) => return Err(actix_web::error::ErrorInternalServerError(e)),
+            };
+            ssh_client.get_hostkey_via(jump_host, target).await
+        },
+        None => ssh_client.get_hostkey(target).await,
+    };
+
+    // Check fingerprint
+    if let Ok(key_receiver) = connection_res {
+        if let Ok(current_fingerprint) = web::block(move || key_receiver.recv()).await? {
+            match &host.key_fingerprint {
+                Some(stored_fingerprint) if current_fingerprint != *stored_fingerprint => {
+                    warn!("Host {} key mismatch - Stored: {}, Current: {}", 
+                        host.name, stored_fingerprint, current_fingerprint);
+                }
+                None => {
+                    warn!("Host {} has no stored fingerprint - Current: {}", 
+                        host.name, current_fingerprint);
+                }
+                _ => {} // Fingerprint matches stored one
+            }
+        }
+    }
+    Ok(())
+}
+
 #[get("/{host_name}.htm")]
 async fn render_diff(
     conn: Data<ConnectionPool>,
     caching_ssh_client: Data<CachingSshClient>,
+    ssh_client: Data<SshClient>,
     host_name: Path<String>,
     force_update: ForceUpdate,
 ) -> actix_web::Result<impl Responder> {
@@ -74,6 +115,8 @@ async fn render_diff(
         }
         Err(error) => return Ok(RenderErrorTemplate { error }.to_response()),
     };
+
+    check_host_fingerprint(&conn, &ssh_client, &host).await?;
 
     let (cached_from, diff) = caching_ssh_client
         .get_host_diff(host.clone(), should_update(force_update))
