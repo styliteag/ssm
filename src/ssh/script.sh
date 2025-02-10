@@ -175,7 +175,7 @@ handle_get_ssh_keyfiles() {
             printf '{"login":"%s", "has_pragma": %s, "readonly_condition": "%s",' "${login}" "${has_pragma}" "${readonly_condition}"
 
             # Replace newlines with escaped version
-            printf '"keyfile":"%s"}' "$(printf "%s" "${keyfile}" | sed ':a;N;$!ba;s/\n/\\n/g')"
+            printf '"keyfile":"%s"}' "$(printf "%s" "${keyfile}" | sed 's/\"/\\\"/g' | awk 1 ORS='\\n' )"
       done
     printf "]"
 }
