@@ -54,22 +54,25 @@ check_keyfile_condition() {
     # Check for global override
     system_readonly="${HOME}/.ssh/system_readonly"
     if [ -f "${system_readonly}" ]; then
-        echo "Global overrride '${system_readonly}' exists"
+        content=$(cat "${system_readonly}")
+        if [ -n "${content}" ]; then
+            printf "%s" "${content}"
+        else
+            printf "Global overrride '%s' exists" "${system_readonly}"
+        fi
         return 0
     fi
     
+    # Check for user override
     home=$(do_getent_passwd "${login}" | cut -d: -f6)
-
-    # Check for special files
-    externaly_managed_keyfile="${home}/.ssh/external_managed_keys"
-    if [ -f "${externaly_managed_keyfile}" ]; then
-     echo "Local override '${externaly_managed_keyfile}' exists"   
-     return 0
-    fi
-
-    readonly_keyfile="${home}/.ssh/readonly_keys"
-    if [ -f "${readonly_keyfile}" ]; then
-        echo "Local override '${readonly_keyfile}' exists"
+    user_readonly="${home}/.ssh/user_readonly"
+    if [ -f "${user_readonly}" ]; then
+        content=$(cat "${user_readonly}")
+        if [ -n "${content}" ]; then
+            printf "%s" "${content}"
+        else
+            printf "Local override '%s' exists" "${user_readonly}"
+        fi
         return 0
     fi
     
@@ -174,8 +177,9 @@ handle_get_ssh_keyfiles() {
 
             printf '{"login":"%s", "has_pragma": %s, "readonly_condition": "%s",' "${login}" "${has_pragma}" "${readonly_condition}"
 
-            # Replace newlines with escaped version
-            printf '"keyfile":"%s"}' "$(printf "%s" "${keyfile}" | sed 's/\"/\\\"/g' | awk 1 ORS='\\n' )"
+            # Remove carriage returns
+            # Escape double quotes and newlines
+            printf '"keyfile":"%s"}' "$(printf "%s" "${keyfile}" | tr -d '\r' | sed 's/\"/\\\"/g' | awk 1 ORS='\\n' )"
       done
     printf "]"
 }
