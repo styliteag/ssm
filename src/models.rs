@@ -1,6 +1,5 @@
 use diesel::prelude::*;
 use serde::Deserialize;
-use crate::DbConnection;
 
 #[derive(Queryable, Selectable, Associations, Clone, Debug)]
 #[diesel(table_name = crate::schema::host)]
@@ -26,7 +25,7 @@ impl Host {
         new_username: String,
         new_port: i32,
         new_key_fingerprint: Option<String>,
-        new_jump_via: Option<i32>
+        new_jump_via: Option<i32>,
     ) -> Result<(), actix_web::Error> {
         use crate::schema::host::dsl::*;
         log::warn!(

@@ -68,9 +68,10 @@ pub enum KeyDiffItem {
 }
 
 type Login = String;
+type ReadonlyCondition = Option<String>;
 pub type HostDiff = (
     OffsetDateTime,
-    Result<Vec<(Login, Vec<DiffItem>)>, SshClientError>,
+    Result<Vec<(Login, ReadonlyCondition, Vec<DiffItem>)>, SshClientError>,
 );
 
 #[derive(Clone, Debug)]
@@ -95,7 +96,7 @@ pub type SshKeyfiles = Vec<SshKeyfileResponse>;
 pub struct SshKeyfileResponse {
     login: String,
     has_pragma: bool,
-    read_only: bool,
+    readonly_condition: ReadonlyCondition,
     keyfile: Vec<AuthorizedKeyEntry>,
 }
 
@@ -104,18 +105,17 @@ type ErrorMsg = String;
 /// The entire line containing the Error
 type Line = String;
 
-// pub type AuthorizedKeyEntry = Result<AuthorizedKey, (ErrorMsg, Line)>;
 #[derive(Debug, Clone)]
 pub enum AuthorizedKeyEntry {
     Authorization(AuthorizedKey),
     Error(ErrorMsg, Line),
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 struct PlainSshKeyfileResponse {
     login: String,
     has_pragma: bool,
-    read_only: bool,
+    readonly_condition: String,
     keyfile: String,
 }
 
@@ -136,7 +136,11 @@ impl<'de> Deserialize<'de> for SshKeyfileResponse {
         Ok(Self {
             login: plain.login,
             has_pragma: plain.has_pragma,
-            read_only: plain.read_only,
+            readonly_condition: if plain.readonly_condition.is_empty() {
+                None
+            } else {
+                Some(plain.readonly_condition)
+            },
             keyfile: entries,
         })
     }

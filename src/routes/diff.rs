@@ -1,6 +1,6 @@
 use crate::{
     routes::{should_update, ForceUpdate},
-    ssh::{CachingSshClient, DiffItem, SshClientError},
+    ssh::{CachingSshClient, HostDiff},
     templates::AsHTML,
 };
 use actix_web::{
@@ -10,7 +10,6 @@ use actix_web::{
 };
 use askama_actix::{Template, TemplateToResponse};
 use serde::Deserialize;
-use time::OffsetDateTime;
 
 use crate::{
     forms::{FormResponseBuilder, Modal},
@@ -49,8 +48,7 @@ async fn diff_page(conn: Data<ConnectionPool>) -> actix_web::Result<impl Respond
 #[template(path = "diff/diff.htm")]
 struct RenderDiffTemplate {
     host: Host,
-    diff: Result<Vec<(String, Vec<DiffItem>)>, SshClientError>,
-    cached_from: OffsetDateTime,
+    diff: HostDiff,
 }
 
 #[get("/{host_name}.htm")]
@@ -75,16 +73,11 @@ async fn render_diff(
         Err(error) => return Ok(RenderErrorTemplate { error }.to_response()),
     };
 
-    let (cached_from, diff) = caching_ssh_client
+    let diff = caching_ssh_client
         .get_host_diff(host.clone(), should_update(force_update))
         .await;
 
-    Ok(RenderDiffTemplate {
-        host,
-        diff,
-        cached_from,
-    }
-    .to_response())
+    Ok(RenderDiffTemplate { host, diff }.to_response())
 }
 
 #[derive(Template)]

@@ -11,7 +11,7 @@ use crate::{
 
 use super::{
     sshclient::SshClientError, AuthorizedKeyEntry, Cache, CacheValue, DiffItem, HostDiff, HostName,
-    Login, SshClient, SshKeyfiles,
+    Login, ReadonlyCondition, SshClient, SshKeyfiles,
 };
 
 #[derive(Debug)]
@@ -70,7 +70,7 @@ impl CachingSshClient {
         mut conn: PooledConnection<ConnectionManager<DbConnection>>,
         host_entries: SshKeyfiles,
         host: &Host,
-    ) -> Result<Vec<(Login, Vec<DiffItem>)>, SshClientError> {
+    ) -> Result<Vec<(Login, ReadonlyCondition, Vec<DiffItem>)>, SshClientError> {
         let db_authorized_entries = host.get_authorized_keys(&mut conn)?;
 
         let mut conn = self.conn.get().unwrap();
@@ -134,9 +134,9 @@ impl CachingSshClient {
                     ));
                 }
             }
-            diff_items.push((entry.login, this_user_diff));
+            diff_items.push((entry.login, entry.readonly_condition, this_user_diff));
         }
-        diff_items.retain(|(_, user_diff)| !user_diff.is_empty());
+        diff_items.retain(|(_, _, user_diff)| !user_diff.is_empty());
         Ok(diff_items)
     }
 

@@ -15,11 +15,11 @@
         <td>{% call components::connection_details(host.address, host.port) %}</td>
       </tr>
     </table>
-    {% let test = cached_from %}
-    <h2>{{ format!("Cached result from {:.0} ago", time::OffsetDateTime::now_utc() - test) }}</h2>
+    {% let cached_from = diff.0 %}
+    <h2>{{ format!("Cached result from {:.0} ago", time::OffsetDateTime::now_utc() - cached_from) }}</h2>
   </div>
 
-  {% match diff %}
+  {% match diff.1 %}
   {% when Ok with (user_diff_list) %}
   {% if user_diff_list.is_empty() %}
   <div class="diff-status success">
@@ -27,15 +27,20 @@
   </div>
   {% else %}
   <div class="user-diffs">
-    {% for (login, user_diff) in user_diff_list %}
+    {% for (login, readonly_condition, user_diff) in user_diff_list %}
     {% if !user_diff.is_empty() %}
     <div class="user-section">
       <h3>
         Login: {{ login }}
-        <button class="inline-button" hx-swap="none" hx-post="/hosts/gen_authorized_keys" hx-vals='{
+      </h3>
+      {% match readonly_condition %}
+      {% when Some with (condition) %}
+      <h4>Keyfile is readonly: {{ condition }}</h4>
+      {% when None %}
+      <button class="inline-button" hx-swap="none" hx-post="/hosts/gen_authorized_keys" hx-vals='{
           "login": "{{ login }}"
         }'>Generate authorized_keys</button>
-      </h3>
+      {% endmatch %}
       <table class="diff-table">
         <thead>
           <tr>
