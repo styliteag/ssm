@@ -129,7 +129,7 @@ impl<'de> Deserialize<'de> for SshKeyfileResponse {
         let entries: Vec<AuthorizedKeyEntry> = plain
             .keyfile
             .lines()
-            .filter(|line| !line.trim_start().starts_with('#'))
+            .filter(|line| !(line.is_empty() || line.trim_start().starts_with('#')))
             .map(AuthorizedKeyEntry::from)
             .collect();
 
