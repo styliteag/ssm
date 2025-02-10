@@ -409,14 +409,14 @@ impl SshClient {
         handle: &russh::client::Handle<SshHandler>,
         script_path: &str,
     ) -> Result<bool, SshClientError> {
-        debug!("Checking scrip version at '{script_path}'");
+        debug!("Checking script version at '{script_path}'");
         let (exit_code, cmd_out) = self
             .execute(handle, format!("cat {script_path}").as_ref())
             .await?;
 
         if exit_code != 0 {
             warn!("Failed to check script version ({exit_code}): {cmd_out}");
-            return Err(SshClientError::ExecutionError("Invalid script".to_owned()));
+            return Ok(false);
         }
 
         // let version = match serde_json::from_str::<ScriptVersion>(&cmd_out) {
