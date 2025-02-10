@@ -55,3 +55,11 @@ private_key_file = '/path/to/your/private_key'
 # Optional Passphrase for the given keyh
 private_key_passphrase = 'OptionalPassphrase'
 ```
+
+### Manually stop ssm from writing keyfiles
+If you want to prevent ssm from overwriting some of your keyfiles there are two options:
+
+ - create `.ssh/system_readonly` (inside the `$HOME` of the user which is used to connect to the host): disables updating for all keyfile on this host.
+ - create `.ssh/user_readonly` (inside any users `$HOME`): disables updating just this users keyfiles.
+
+You can optionally provide a reason in the file, which will be displayed in ssm.
