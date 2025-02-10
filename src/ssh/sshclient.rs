@@ -5,6 +5,7 @@ use futures::future::BoxFuture;
 use futures::AsyncWriteExt;
 use futures::FutureExt;
 use log::debug;
+use log::error;
 use log::warn;
 use russh::keys::key::PrivateKeyWithHashAlg;
 use russh::keys::PublicKeyBase64;
@@ -22,6 +23,7 @@ use crate::{models::Host, ConnectionPool};
 use super::ConnectionDetails;
 use super::KeyDiffItem;
 use super::PlainSshKeyfileResponse;
+const SCRIPT_SRC: &[u8] = include_bytes!("./script.sh");
 
 #[derive(Debug, Clone)]
 pub struct SshClient {
@@ -133,6 +135,13 @@ impl russh::client::Handler for SshFirstConnectionHandler {
         })
     }
 }
+
+// #[derive(Deserialize)]
+// struct ScriptVersion {
+//     version: String,
+//     sha256: String,
+// }
+
 impl SshClient {
     pub fn new(conn: ConnectionPool, key: PrivateKeyWithHashAlg, config: SshConfig) -> Self {
         Self {
@@ -343,27 +352,43 @@ impl SshClient {
         &self,
         handle: &russh::client::Handle<SshHandler>,
     ) -> Result<(), SshClientError> {
-        let script = include_bytes!("./script.sh");
-
-        match self
+        let push_new = self
             .execute_with_data(
                 handle,
-                &script[..],
-                "cat - > .ssh/ssm.sh; chmod +x .ssh/ssm.sh",
+                SCRIPT_SRC,
+                "cat - > .ssh/ssm.sh.new; chmod u-w,u+rx,go-rwx .ssh/ssm.sh.new",
             )
-            .await
-        {
-            Ok((code, _)) => {
-                if code != 0 {
-                    Err(SshClientError::ExecutionError(String::from(
-                        "Failed to install script.",
-                    )))
-                } else {
-                    Ok(())
-                }
-            }
-            Err(error) => Err(error),
+            .await?;
+
+        if push_new.0 != 0 {
+            error!(
+                "Failed to push new script on to host: Errno {}: {}",
+                push_new.0, push_new.1
+            );
+            return Err(SshClientError::ExecutionError(
+                "Failed to install/update script.".to_owned(),
+            ));
         }
+
+        let is_correct_version = self.check_version(handle, ".ssh/ssm.sh.new").await?;
+
+        if !is_correct_version {
+            return Err(SshClientError::ExecutionError(
+                "Couldn't install correct script version".to_owned(),
+            ));
+        }
+
+        let (move_exit_code, move_out) = self
+            .execute(handle, "mv .ssh/ssm.sh.new .ssh/ssm.sh")
+            .await?;
+        if move_exit_code != 0 {
+            warn!("Failed to move script into position ({move_exit_code}): {move_out}");
+            return Err(SshClientError::ExecutionError(
+                "Couldnt install script to original location".to_owned(),
+            ));
+        }
+
+        Ok(())
     }
 
     pub async fn get_authorized_keys(&self, host: Host) -> Result<SshKeyfiles, SshClientError> {
@@ -379,17 +404,50 @@ impl SshClient {
         Ok(parsed)
     }
 
+    async fn check_version(
+        &self,
+        handle: &russh::client::Handle<SshHandler>,
+        script_path: &str,
+    ) -> Result<bool, SshClientError> {
+        debug!("Checking scrip version at '{script_path}'");
+        let (exit_code, cmd_out) = self
+            .execute(handle, format!("cat {script_path}").as_ref())
+            .await?;
+
+        if exit_code != 0 {
+            warn!("Failed to check script version ({exit_code}): {cmd_out}");
+            return Err(SshClientError::ExecutionError("Invalid script".to_owned()));
+        }
+
+        // let version = match serde_json::from_str::<ScriptVersion>(&cmd_out) {
+        //     Ok(version) => version,
+        //     Err(e) => {
+        //         warn!("Failed to deserialize version response: {e}");
+        //         return Ok(false);
+        //     }
+        // };
+
+        use sha2::{Digest, Sha256};
+        // TODO: i would like to precompute this, but sha2 doesn't seem to work in const context
+        let own_script_hash = Sha256::digest(SCRIPT_SRC);
+
+        let is_script_hash = Sha256::digest(cmd_out);
+        let script_is_correct = own_script_hash.eq(&is_script_hash);
+        if !script_is_correct {
+            debug!("Invalid script found.");
+            return Ok(false);
+        }
+        Ok(true)
+    }
+
     async fn execute_bash(
         &self,
         handle: &russh::client::Handle<SshHandler>,
         command: BashCommand,
     ) -> Result<BashResult, SshClientError> {
-        let (exit_code, result) = self
-            .execute(handle, BashCommand::Version.to_string().as_str())
-            .await?;
-        // TODO: checksums
-        if exit_code != 0 || !result.contains("Secure SSH Manager") {
-            warn!("Script on host seems to be invalid. Trying to install");
+        let is_correct_version = self.check_version(handle, ".ssh/ssm.sh").await?;
+
+        if !is_correct_version {
             match self.install_script(handle).await {
                 Ok(()) => {
                     debug!("Succesfully installed script");
@@ -406,11 +464,10 @@ impl SshClient {
         let command_str = command.to_string();
         debug!("Executing bash command {}", &command_str);
 
+        use BashCommand as BC;
         let stdin: Option<String> = match command {
-            BashCommand::SetAuthorizedKeyfile(_, new_keyfile) => Some(new_keyfile),
-            BashCommand::Update(new_script) => Some(new_script),
-
-            BashCommand::GetSshKeyfiles | BashCommand::Version => None,
+            BC::SetAuthorizedKeyfile(_, new_keyfile) => Some(new_keyfile),
+            BC::GetSshKeyfiles | BC::_Update(_) | BC::_Version => None,
         };
 
         let (exit_code, result) = match stdin {
@@ -427,7 +484,10 @@ impl SshClient {
 
         Ok(match exit_code {
             0 => BashResult::Ok(result),
-            _ => BashResult::Err(result),
+            _ => {
+                warn!("Failed to execute bash command ({exit_code}): {result}");
+                BashResult::Err(result)
+            }
         })
     }
 
@@ -541,11 +601,13 @@ pub enum BashCommand {
     /// Set authorized keys for a user
     SetAuthorizedKeyfile(User, String),
 
+    // NOTE: these are currently unused since we can do this from the rust side.
+    // In the future we may want to use 2fa when executing script commands, then
+    // this will be needed.
     /// Update the bash script on the server
-    Update(String),
-
+    _Update(String),
     /// Check the script version
-    Version,
+    _Version,
 }
 
 impl std::fmt::Display for BashCommand {
@@ -556,8 +618,8 @@ impl std::fmt::Display for BashCommand {
                 write!(f, "set_authorized_keyfile {user}")
             }
             Self::GetSshKeyfiles => write!(f, "get_ssh_keyfiles"),
-            Self::Update(_script) => write!(f, "update_script"),
-            Self::Version => write!(f, "version"),
+            Self::_Update(_script) => write!(f, "update_script"),
+            Self::_Version => write!(f, "version"),
         }
     }
 }

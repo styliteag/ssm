@@ -2867,6 +2867,7 @@ dependencies = [
  "russh",
  "serde",
  "serde_json",
+ "sha2",
  "similar",
  "ssh-encoding",
  "ssh-key",
