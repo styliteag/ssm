@@ -4,9 +4,12 @@ use crate::{
     templates::AsHTML,
 };
 use actix_web::{
-    get, post,
+    body::BoxBody,
+    get,
+    http::StatusCode,
+    post,
     web::{self, Data, Path},
-    Responder,
+    HttpResponse, Responder,
 };
 use askama_actix::{Template, TemplateToResponse};
 use serde::Deserialize;
@@ -51,12 +54,18 @@ struct RenderDiffTemplate {
     diff: HostDiff,
 }
 
+#[derive(Deserialize)]
+struct ShowEmptyQuery {
+    show_empty: Option<bool>,
+}
+
 #[get("/{host_name}.htm")]
 async fn render_diff(
     conn: Data<ConnectionPool>,
     caching_ssh_client: Data<CachingSshClient>,
     host_name: Path<String>,
     force_update: ForceUpdate,
+    show_empty: web::Query<ShowEmptyQuery>,
 ) -> actix_web::Result<impl Responder> {
     let res = Host::get_from_name(conn.get().unwrap(), host_name.to_string()).await;
 
@@ -77,7 +86,14 @@ async fn render_diff(
         .get_host_diff(host.clone(), should_update(force_update))
         .await;
 
-    Ok(RenderDiffTemplate { host, diff }.to_response())
+    let show_empty = show_empty.0.show_empty.is_some_and(|b| b);
+
+    match diff {
+        (_, Ok(diff)) if diff.is_empty() && !show_empty => {
+            Ok(HttpResponse::with_body(StatusCode::OK, BoxBody::new("")))
+        }
+        _ => Ok(RenderDiffTemplate { host, diff }.to_response()),
+    }
 }
 
 #[derive(Template)]
