@@ -161,7 +161,12 @@
     {% when crate::ssh::SshClientError::NoHostkey %}
     <div class="diff-status error">
       <i>No hostkey available.</i>
-      <button hx-swap="none" hx-post="/hosts/{{ host.id }}/add_hostkey">Add one</button>
+      <button hx-swap="none" hx-post="/hosts/{{ host.id }}/add_hostkey">Add a hostkey</button>
+    </div>
+    {% when crate::ssh::SshClientError::UnknownKey %}
+    <div class="diff-status error">
+      <i>Server presented unknown hostkey.</i>
+      <button hx-swap="none" hx-post="/hosts/{{ host.id }}/add_hostkey">Update the hostkey</button>
     </div>
     {% else %}
     <div class="diff-status error">
