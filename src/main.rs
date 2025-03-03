@@ -21,8 +21,7 @@ use diesel::r2d2::ConnectionManager;
 use diesel::r2d2::Pool;
 
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
-use russh::keys::key::PrivateKeyWithHashAlg;
-use ssh_key::PrivateKey;
+use russh::keys::load_secret_key;
 use tokio_cron_scheduler::{JobBuilder, JobScheduler};
 
 mod db;
@@ -228,31 +227,11 @@ async fn main() -> Result<(), std::io::Error> {
 
     let key_path = &configuration.ssh.private_key_file;
 
-    let mut key =
-        PrivateKey::read_openssh_file(key_path).expect("Failed to read key from '{key_path}'.");
-
-    if let Some(key_passphrase) = configuration.ssh.private_key_passphrase.as_ref() {
-        key = match key.decrypt(key_passphrase) {
-            Ok(k) => k,
-            Err(ssh_key::Error::Decrypted) => {
-                error!("Tried to decrypt ssh key, but it is already decrypted.");
-                std::process::exit(4);
-            }
-            Err(e) => {
-                error!("Failed to decrypt ssh key: {e}");
-                std::process::exit(4);
-            }
-        };
-    };
-
-    let hash = match key.algorithm() {
-        ssh_key::Algorithm::Rsa { hash } => hash,
-        _ => None,
-    };
-
-    // TODO: maybe a better error message
-    let key = PrivateKeyWithHashAlg::new(Arc::new(key), hash)
-        .expect("Failed to convert key to Private key");
+    let key = load_secret_key(
+        key_path,
+        configuration.ssh.private_key_passphrase.as_deref(),
+    )
+    .expect("Failed to load private key:");
 
     let config = Data::new(configuration.clone());
     let ssh_client = SshClient::new(pool.clone(), key, configuration.ssh.clone());
