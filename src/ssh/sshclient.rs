@@ -1,5 +1,4 @@
 use actix_web::error::BlockingError;
-use async_trait::async_trait;
 use core::fmt;
 use futures::future::BoxFuture;
 use futures::AsyncWriteExt;
@@ -8,11 +7,11 @@ use log::debug;
 use log::error;
 use log::warn;
 use russh::keys::key::PrivateKeyWithHashAlg;
+use russh::keys::PrivateKey;
+use russh::keys::PublicKey;
 use russh::keys::PublicKeyBase64;
-use ssh_key::PublicKey;
 use std::io::Cursor;
-use std::ops::Deref;
-use std::sync::mpsc;
+use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::io::AsyncRead;
 
@@ -86,7 +85,6 @@ struct SshHandler {
     hostkey_fingerprint: String,
 }
 
-#[async_trait]
 impl russh::client::Handler for SshHandler {
     type Error = SshClientError;
 
@@ -94,45 +92,11 @@ impl russh::client::Handler for SshHandler {
         &mut self,
         server_public_key: &PublicKey,
     ) -> Result<bool, Self::Error> {
-        let fingerprint = server_public_key.fingerprint(ssh_key::HashAlg::default());
+        let fingerprint = server_public_key
+            .fingerprint(russh::keys::HashAlg::default())
+            .to_string();
 
         Ok(fingerprint.to_string().eq(&self.hostkey_fingerprint))
-    }
-}
-
-enum FirstConnectionState {
-    KeySender(mpsc::Sender<String>),
-    Hostkey(String),
-}
-struct SshFirstConnectionHandler {
-    state: FirstConnectionState,
-}
-
-#[async_trait]
-impl russh::client::Handler for SshFirstConnectionHandler {
-    type Error = SshClientError;
-
-    async fn check_server_key(
-        &mut self,
-        server_public_key: &PublicKey,
-    ) -> Result<bool, Self::Error> {
-        Ok(match &self.state {
-            FirstConnectionState::KeySender(tx) => {
-                tx.send(
-                    server_public_key
-                        .fingerprint(ssh_key::HashAlg::default())
-                        .to_string(),
-                )
-                .map_err(|_| {
-                    SshClientError::ExecutionError(String::from("Failed to send data over mpsc"))
-                })?;
-                false
-            }
-            FirstConnectionState::Hostkey(known_fingerprint) => server_public_key
-                .fingerprint(ssh_key::HashAlg::default())
-                .to_string()
-                .eq(known_fingerprint),
-        })
     }
 }
 
@@ -143,7 +107,7 @@ impl russh::client::Handler for SshFirstConnectionHandler {
 // }
 
 impl SshClient {
-    pub fn new(conn: ConnectionPool, key: PrivateKeyWithHashAlg, config: SshConfig) -> Self {
+    pub fn new(conn: ConnectionPool, key: PrivateKey, config: SshConfig) -> Self {
         Self {
             conn,
             key: key.into(),
@@ -152,9 +116,6 @@ impl SshClient {
         }
     }
 
-    fn get_key(&self) -> PrivateKeyWithHashAlg {
-        Arc::clone(&self.key).deref().to_owned()
-    }
     pub fn get_own_key_openssh(&self) -> String {
         let b64 = self.key.public_key_base64();
         let algo = self.key.algorithm();
@@ -445,6 +406,8 @@ impl SshClient {
         handle: &russh::client::Handle<SshHandler>,
         command: BashCommand,
     ) -> Result<BashResult, SshClientError> {
+        use BashCommand as BC;
+
         let is_correct_version = self.check_version(handle, ".ssh/ssm.sh").await?;
 
         if !is_correct_version {
@@ -464,7 +427,6 @@ impl SshClient {
         let command_str = command.to_string();
         debug!("Executing bash command {}", &command_str);
 
-        use BashCommand as BC;
         let stdin: Option<String> = match command {
             BC::SetAuthorizedKeyfile(_, new_keyfile) => Some(new_keyfile),
             BC::GetSshKeyfiles | BC::_Update(_) | BC::_Version => None,

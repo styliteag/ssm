@@ -5,7 +5,6 @@ use actix_web::{
 };
 use askama_actix::{Template, TemplateToResponse};
 use serde::Deserialize;
-use ssh_key::PublicKey;
 
 use crate::{
     db::UserAndOptions,
@@ -132,8 +131,8 @@ async fn render_user_keys(
             let public_keys: Vec<(PublicUserKey, Result<String, String>)> = keys
                 .into_iter()
                 .map(|key| {
-                    let fingerprint = PublicKey::try_from(&key)
-                        .map(|k| k.fingerprint(ssh_key::HashAlg::Sha256).to_string());
+                    let fingerprint = russh::keys::PublicKey::try_from(&key)
+                        .map(|k| k.fingerprint(russh::keys::HashAlg::Sha256).to_string());
 
                     (key, fingerprint)
                 })
@@ -182,7 +181,7 @@ async fn assign_key_to_user(
     conn: Data<ConnectionPool>,
     form: web::Form<AssignKeyDialogForm>,
 ) -> actix_web::Result<impl Responder> {
-    let Ok(algo) = ssh_key::Algorithm::new(&form.key_type) else {
+    let Ok(algo) = russh::keys::Algorithm::new(&form.key_type) else {
         return Ok(FormResponseBuilder::error(
             "Invalid key algorithm".to_owned(),
         ));

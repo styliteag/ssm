@@ -92,7 +92,7 @@ pub struct NewPublicUserKey {
 
 impl NewPublicUserKey {
     pub fn new(
-        algorithm: ssh_key::Algorithm,
+        algorithm: russh::keys::Algorithm,
         base64: String,
         comment: Option<String>,
         user: i32,
@@ -143,7 +143,7 @@ impl PublicUserKey {
     }
 }
 
-impl TryFrom<&PublicUserKey> for ssh_key::public::PublicKey {
+impl TryFrom<&PublicUserKey> for russh::keys::PublicKey {
     type Error = String;
     fn try_from(value: &PublicUserKey) -> Result<Self, Self::Error> {
         Self::from_openssh(&value.to_openssh()).map_err(|e| e.to_string())
