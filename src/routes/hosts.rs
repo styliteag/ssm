@@ -1,17 +1,19 @@
+use std::sync::Arc;
+
 use actix_web::{
     get, post,
     web::{self, Data, Path},
     Responder,
 };
 use askama_actix::{Template, TemplateToResponse};
-use log::{debug, info};
+use log::{debug, error, info};
 use serde::Deserialize;
 
 use crate::{
     db::UserAndOptions,
     forms::{FormResponseBuilder, Modal},
     routes::{should_update, ErrorTemplate, ForceUpdate, RenderErrorTemplate},
-    ssh::{CachingSshClient, ConnectionDetails, KeyDiffItem, SshClient, SshClientError},
+    ssh::{CachingSshClient, KeyDiffItem, SshClient, SshClientError, SshFirstConnectionHandler},
     ConnectionPool, DbConnection,
 };
 
@@ -159,89 +161,98 @@ async fn add_host_key(
     host_id: Path<i32>,
     new_hostkey: web::Form<AddHostkeyForm>,
 ) -> actix_web::Result<impl Responder> {
-    let cloned_conn = conn.clone();
-
     let host = match Host::get_from_id(conn.get().unwrap(), *host_id).await {
-        Ok(h) => h,
+        Ok(Some(h)) => h,
+        Ok(None) => return Ok(FormResponseBuilder::not_found("Host not found.".to_owned())),
         Err(e) => return Ok(FormResponseBuilder::error(e)),
     };
+    let port = host
+        .port
+        .try_into()
+        .expect("Somehow a non u16 port made its way into the database");
 
-    match host {
-        Some(host) => {
-            if let Some(ref new_hostkey) = new_hostkey.key_fingerprint {
-                let res =
-                    host.update_fingerprint(&mut cloned_conn.get().unwrap(), new_hostkey.clone());
-                return Ok(match res {
-                    Ok(()) => FormResponseBuilder::created("Added hostkey".to_owned())
-                        .add_trigger("reloadDiff".to_owned()),
-                    Err(e) => FormResponseBuilder::error(e),
-                });
-            }
+    let handler = SshFirstConnectionHandler::new(
+        Arc::clone(&conn),
+        host.name.clone(),
+        host.username.clone(),
+        host.address.clone(),
+        port,
+        host.jump_via,
+    )
+    .await;
 
-            let target = host.to_connection().unwrap();
-            let maybe_jumphost = host
-                .jump_via
-                .map(|jump| Host::get_from_id_sync(&mut cloned_conn.get().unwrap(), jump));
-
-            let connection_res = match maybe_jumphost {
-                Some(Ok(None)) => {
-                    return Ok(FormResponseBuilder::error("Jump host not found".to_owned()));
-                }
-                Some(Err(e)) => {
-                    return Ok(FormResponseBuilder::error(e));
-                }
-                Some(Ok(Some(jump))) => ssh_client.get_hostkey_via(jump, target).await,
-                None => ssh_client.get_hostkey(target).await,
-            };
-
-            let key_receiver = match connection_res {
-                Ok(r) => r,
-                Err(e) => return Ok(FormResponseBuilder::error(e.to_string())),
-            };
-
-            let Ok(key_fingerprint) = web::block(move || key_receiver.recv()).await? else {
-                return Ok(FormResponseBuilder::error(String::from(
-                    "Connection timed out",
-                )));
-            };
-
-            Ok(FormResponseBuilder::dialog(Modal {
-                title: "Check the hostkey".to_owned(),
-                request_target: format!("/hosts/{}/add_hostkey", host.id),
-                template: HostkeyDialog {
-                    name: host.name,
-                    username: host.username,
-                    address: host.address,
-                    port: host.port,
-                    jumphost: host.jump_via,
-                    key_fingerprint,
-                }
-                .to_string(),
-            }))
+    let handler = match handler {
+        Ok(handler) => handler,
+        Err(e) => {
+            return Ok(FormResponseBuilder::error(e.to_string()));
         }
-        None => Ok(FormResponseBuilder::not_found(
-            "Couldn't find host".to_owned(),
-        )),
+    };
+
+    let Some(ref key_fingerprint) = new_hostkey.key_fingerprint else {
+        let res = handler.get_hostkey(ssh_client.into_inner()).await;
+
+        let recv_result = match res {
+            Ok(receiver) => receiver.await,
+            Err(e) => {
+                return Ok(FormResponseBuilder::error(e.to_string()));
+            }
+        };
+
+        let key_fingerprint = match recv_result {
+            Ok(key_fingerprint) => key_fingerprint,
+            Err(e) => {
+                error!("Error receiving key: {e}");
+                return Ok(FormResponseBuilder::error(e.to_string()));
+            }
+        };
+
+        return Ok(FormResponseBuilder::dialog(Modal {
+            title: String::from("Please check the hostkey"),
+            request_target: format!("/hosts/{}/add_hostkey", host.id),
+            template: HostkeyDialog {
+                host_name: host.name,
+                login: host.username,
+                address: host.address,
+                port,
+                jumphost: host.jump_via,
+                key_fingerprint,
+            }
+            .to_string(),
+        }));
+    };
+
+    let handler = handler.set_hostkey(key_fingerprint.to_owned());
+
+    let res = handler.try_authenticate(&ssh_client).await;
+    if let Err(e) = res {
+        return Ok(FormResponseBuilder::error(e.to_string()));
     }
+
+    Ok(
+        match host.update_fingerprint(&mut conn.get().unwrap(), key_fingerprint.to_owned()) {
+            Ok(()) => FormResponseBuilder::success("Set hostkey".to_owned()),
+            Err(e) => FormResponseBuilder::error(e),
+        },
+    )
 }
 
 #[derive(Template)]
 #[template(path = "hosts/hostkey_dialog.htm")]
 struct HostkeyDialog {
-    name: String,
-    username: String,
+    host_name: String,
+    login: String,
     address: String,
-    port: i32,
+    port: u16,
     key_fingerprint: String,
     jumphost: Option<i32>,
 }
 
 #[derive(Deserialize)]
 struct HostAddForm {
-    name: String,
-    username: String,
+    host_name: String,
+    login: String,
     address: String,
-    port: i32,
+    port: u16,
     jumphost: Option<i32>,
     key_fingerprint: Option<String>,
 }
@@ -254,56 +265,51 @@ async fn add_host(
 ) -> actix_web::Result<impl Responder> {
     let form = form.0;
 
-    // TODO: better error handling for jumphost (serde deserialize opt)
-    let cloned_conn = conn.clone();
-    let maybe_jumphost: Option<Host> = if let Some(via) = form.jumphost {
-        if via < 0 {
-            None
-        } else {
-            match Host::get_from_id(cloned_conn.get().unwrap(), via).await {
-                Ok(j) => j,
-                Err(_) => {
-                    return Ok(FormResponseBuilder::not_found(String::from(
-                        "Couldn't find jump host",
-                    )));
-                }
-            }
+    let jumphost = form
+        .jumphost
+        .and_then(|host| if host < 0 { None } else { Some(host) });
+
+    let handler = SshFirstConnectionHandler::new(
+        Arc::clone(&conn),
+        form.host_name.clone(),
+        form.login.clone(),
+        form.address.clone(),
+        form.port,
+        jumphost,
+    )
+    .await;
+
+    let handler = match handler {
+        Ok(handler) => handler,
+        Err(e) => {
+            return Ok(FormResponseBuilder::error(e.to_string()));
         }
-    } else {
-        None
     };
-    let Ok(address) = ConnectionDetails::new_from_signed(form.address.clone(), form.port) else {
-        return Ok(FormResponseBuilder::error(String::from(
-            "Invalid port number",
-        )));
-    };
-    debug!(
-        "Trying to connect to {} on port {} via jumphost: {:?}",
-        &address.hostname, &address.port, maybe_jumphost
-    );
+
     let Some(key_fingerprint) = form.key_fingerprint else {
-        let connection_res = match maybe_jumphost {
-            Some(via) => ssh_client.get_hostkey_via(via, address).await,
-            None => ssh_client.get_hostkey(address).await,
+        let res = handler.get_hostkey(ssh_client.into_inner()).await;
+
+        let recv_result = match res {
+            Ok(receiver) => receiver.await,
+            Err(e) => {
+                return Ok(FormResponseBuilder::error(e.to_string()));
+            }
         };
 
-        let key_receiver = match connection_res {
-            Ok(r) => r,
-            Err(e) => return Ok(FormResponseBuilder::error(e.to_string())),
-        };
-
-        let Ok(key_fingerprint) = web::block(move || key_receiver.recv()).await? else {
-            return Ok(FormResponseBuilder::error(String::from(
-                "Connection timed out",
-            )));
+        let key_fingerprint = match recv_result {
+            Ok(key_fingerprint) => key_fingerprint,
+            Err(e) => {
+                error!("Error receiving key: {e}");
+                return Ok(FormResponseBuilder::error(e.to_string()));
+            }
         };
 
         return Ok(FormResponseBuilder::dialog(Modal {
             title: String::from("Please check the hostkey"),
             request_target: String::from("/hosts/add"),
             template: HostkeyDialog {
-                name: form.name,
-                username: form.username,
+                host_name: form.host_name,
+                login: form.login,
                 address: form.address,
                 port: form.port,
                 jumphost: form.jumphost,
@@ -313,35 +319,23 @@ async fn add_host(
         }));
     };
 
-    if let Err(error) = {
-        match maybe_jumphost {
-            Some(ref via) => {
-                ssh_client
-                    .try_authenticate_via(
-                        via.clone(),
-                        address,
-                        key_fingerprint.clone(),
-                        form.username.clone(),
-                    )
-                    .await
-            }
-            None => {
-                ssh_client
-                    .try_authenticate(address, key_fingerprint.clone(), form.username.clone())
-                    .await
-            }
+    // We already have a hostkey, check it
+    let handler = handler.set_hostkey(key_fingerprint.clone());
+    let res = handler.try_authenticate(&ssh_client).await;
+    match res {
+        Ok(()) => {}
+        Err(e) => {
+            return Ok(FormResponseBuilder::error(e.to_string()));
         }
-    } {
-        return Ok(FormResponseBuilder::error(error.to_string()));
     };
 
     let new_host = NewHost {
-        name: form.name.clone(),
+        name: form.host_name.clone(),
         address: form.address,
-        port: form.port,
-        username: form.username,
+        port: form.port.into(),
+        username: form.login,
         key_fingerprint,
-        jump_via: maybe_jumphost.map(|h| h.id),
+        jump_via: jumphost.map(|id| id),
     };
     let res = web::block(move || Host::add_host(&mut conn.get().unwrap(), &new_host)).await?;
 
@@ -380,17 +374,20 @@ async fn render_hosts(conn: Data<ConnectionPool>) -> actix_web::Result<impl Resp
 
     Ok(match all_hosts {
         Ok(hosts) => {
-            let view_hosts = hosts.into_iter().map(|host| ListHostView {
-                id: host.id,
-                name: host.name,
-                address: host.address,
-                username: host.username,
-                port: host.port,
-                key_fingerprint: host.key_fingerprint.unwrap_or_default(),
-                jump_via: host.jump_via.map(|v| v.to_string()).unwrap_or_default(),
-            }).collect();
+            let view_hosts = hosts
+                .into_iter()
+                .map(|host| ListHostView {
+                    id: host.id,
+                    name: host.name,
+                    address: host.address,
+                    username: host.username,
+                    port: host.port,
+                    key_fingerprint: host.key_fingerprint.unwrap_or_default(),
+                    jump_via: host.jump_via.map(|v| v.to_string()).unwrap_or_default(),
+                })
+                .collect();
             RenderHostsTemplate { hosts: view_hosts }.to_response()
-        },
+        }
         Err(error) => RenderErrorTemplate { error }.to_response(),
     })
 }
@@ -627,12 +624,16 @@ async fn edit_host_form(
     conn: actix_web::web::Data<crate::ConnectionPool>,
     host_name: actix_web::web::Path<String>,
 ) -> actix_web::Result<impl actix_web::Responder> {
-    let host_result = crate::models::Host::get_from_name(conn.get().unwrap(), host_name.to_string())
-        .await
-        .map_err(actix_web::error::ErrorInternalServerError)?;
+    let host_result =
+        crate::models::Host::get_from_name(conn.get().unwrap(), host_name.to_string())
+            .await
+            .map_err(actix_web::error::ErrorInternalServerError)?;
 
     if let Some(host) = host_result {
-        debug!("ssm::routes::hosts: Display edit form for host {}", host.name);
+        debug!(
+            "ssm::routes::hosts: Display edit form for host {}",
+            host.name
+        );
         let view = EditHostView {
             name: host.name,
             address: host.address,
@@ -643,7 +644,10 @@ async fn edit_host_form(
         };
         Ok(EditHostTemplate { host: view }.to_response())
     } else {
-        Ok(crate::routes::ErrorTemplate { error: "Host not found".to_string() }.to_response())
+        Ok(crate::routes::ErrorTemplate {
+            error: "Host not found".to_string(),
+        }
+        .to_response())
     }
 }
 
@@ -702,9 +706,17 @@ async fn edit_host(
         form.jump_via,
     ) {
         Ok(()) => {
-            info!("ssm::routes::hosts: Host {} updated successfully", host_name);
-            Ok(actix_web::HttpResponse::Found().append_header(("Location", "/hosts")).finish())
-        },
-        Err(e) => Ok(crate::routes::ErrorTemplate { error: e.to_string() }.to_response()),
+            info!(
+                "ssm::routes::hosts: Host {} updated successfully",
+                host_name
+            );
+            Ok(actix_web::HttpResponse::Found()
+                .append_header(("Location", "/hosts"))
+                .finish())
+        }
+        Err(e) => Ok(crate::routes::ErrorTemplate {
+            error: e.to_string(),
+        }
+        .to_response()),
     }
 }

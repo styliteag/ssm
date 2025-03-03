@@ -7,7 +7,9 @@ use serde::Deserialize;
 #[diesel(belongs_to(Host, foreign_key = jump_via))]
 pub struct Host {
     pub id: i32,
+    /// Host name
     pub name: String,
+    /// Login
     pub username: String,
     pub address: String,
     pub port: i32,

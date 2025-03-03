@@ -15,40 +15,40 @@
 </div>
 
 <div class="host-section">
-    <div class="host-header">
-        <h2 class="host-name">➕ Add New Host</h2>
-        <div class="host-info">Configure a new SSH connection</div>
+  <div class="host-header">
+    <h2 class="host-name">➕ Add New Host</h2>
+    <div class="host-info">Configure a new SSH connection</div>
+  </div>
+
+  {% call components::form_head("/hosts/add") %}
+  <div class="form-grid">
+    <div class="form-group">
+      <label>Name</label>
+      <input required="true" type="text" name="host_name" placeholder="e.g., production-server">
     </div>
-    
-    {% call components::form_head("/hosts/add") %}
-    <div class="form-grid">
-        <div class="form-group">
-            <label>Name</label>
-            <input required="true" type="text" name="name" placeholder="e.g., production-server">
-        </div>
-        
-        <div class="form-group">
-            <label>Username</label>
-            <input required="true" type="text" name="username" placeholder="Authentication username">
-        </div>
-        
-        <div class="form-group">
-            <label>Address</label>
-            <input required="true" type="text" name="address" placeholder="hostname or IP address">
-        </div>
-        
-        <div class="form-group">
-            <label>Port</label>
-            <input required="true" type="number" name="port" min="1" max="65535" value="22">
-        </div>
-        
-        <div class="form-group">
-            <label>Jump via</label>
-            <select id="jumphost_selection" name="jumphost">
-            </select>
-        </div>
+
+    <div class="form-group">
+      <label>Login</label>
+      <input required="true" type="text" name="login" placeholder="Authentication username">
     </div>
-    {% call components::form_tail("Add host") %}
+
+    <div class="form-group">
+      <label>Address</label>
+      <input required="true" type="text" name="address" placeholder="hostname or IP address">
+    </div>
+
+    <div class="form-group">
+      <label>Port</label>
+      <input required="true" type="number" name="port" min="1" max="65535" value="22">
+    </div>
+
+    <div class="form-group">
+      <label>Jump via</label>
+      <select id="jumphost_selection" name="jumphost">
+      </select>
+    </div>
+  </div>
+  {% call components::form_tail("Add host") %}
 </div>
 <style>
 .host-section {

@@ -27,10 +27,13 @@ const SCRIPT_SRC: &[u8] = include_bytes!("./script.sh");
 #[derive(Debug, Clone)]
 pub struct SshClient {
     conn: ConnectionPool,
-    key: Arc<PrivateKeyWithHashAlg>,
-    config: Arc<SshConfig>,
-    connection_config: Arc<russh::client::Config>,
+    key: Arc<PrivateKey>,
+    pub(super) config: Arc<SshConfig>,
+    pub(super) connection_config: Arc<russh::client::Config>,
 }
+
+type CommandOutput = String;
+type ExpectedOutput = String;
 
 #[derive(Debug, Clone)]
 pub enum SshClientError {
@@ -38,7 +41,14 @@ pub enum SshClientError {
     NoSuchHost,
     PortCastFailed,
     NoHostkey,
+    /// Failed to get address from name lookup
+    LookupFailure,
     Timeout,
+    /// A command didn't provide the expected result
+    CommandFailed(CommandOutput, ExpectedOutput),
+
+    /// Can't connect because jump host isn't working
+    IndirectError(String, Box<SshClientError>),
 
     // Because russh::Error doesn't impl Clone we copy all Errors we care about
     // from russh, the rest gets converted to Strings
@@ -54,7 +64,14 @@ impl fmt::Display for SshClientError {
             Self::NoSuchHost => write!(f, "The host doesn't exist in the database."),
             Self::PortCastFailed => write!(f, "Couldn't convert an i32 to u32."),
             Self::NoHostkey => write!(f, "No hostkey available for this host."),
+            Self::LookupFailure => write!(f, "Failed to lookup IP address from hostname"),
             Self::Timeout => write!(f, "Connection to this host timed out."),
+            Self::CommandFailed(out, expected) => {
+                write!(f, "Command failed. Expected: {expected}, got: '{out}'")
+            }
+            Self::IndirectError(host, original_error) => {
+                write!(f, "Jump host {host} is not reachable: {original_error}")
+            }
             Self::UnknownKey => write!(f, "Host responded with an unknown hostkey."),
             Self::NotAuthenticated => write!(f, "Couldn't authenticate on the host."),
             Self::ExecutionError(t) | Self::SshError(t) => {
@@ -81,7 +98,7 @@ impl From<BlockingError> for SshClientError {
 }
 
 #[derive(Debug)]
-struct SshHandler {
+pub(super) struct SshHandler {
     hostkey_fingerprint: String,
 }
 
@@ -125,115 +142,34 @@ impl SshClient {
         self.key.public_key_base64()
     }
 
-    /// Tries to connect to a host and returns hostkeys to validate
-    pub async fn get_hostkey(
-        &self,
-        target: ConnectionDetails,
-    ) -> Result<mpsc::Receiver<String>, SshClientError> {
-        let (tx, rx) = mpsc::channel();
-
-        let handler = SshFirstConnectionHandler {
-            state: FirstConnectionState::KeySender(tx),
-        };
-        match russh::client::connect(
-            Arc::new(russh::client::Config::default()),
-            target.into_addr(),
-            handler,
-        )
-        .await
-        {
-            Ok(_) | Err(SshClientError::UnknownKey) => Ok(rx),
-            Err(e) => Err(e),
-        }
-    }
-
-    /// Tries to connect to a host via a jumphost and returns hostkeys to validate
-    pub async fn get_hostkey_via(
-        &self,
-        host: Host,
-        target: ConnectionDetails,
-    ) -> Result<mpsc::Receiver<String>, SshClientError> {
-        let stream = self.connect_via(host, target).await?;
-
-        let (tx, rx) = mpsc::channel();
-
-        let handler = SshFirstConnectionHandler {
-            state: FirstConnectionState::KeySender(tx),
-        };
-        match russh::client::connect_stream(
-            Arc::new(russh::client::Config::default()),
-            stream,
-            handler,
-        )
-        .await
-        {
-            Ok(_) | Err(SshClientError::UnknownKey) => Ok(rx),
-            Err(e) => Err(e),
-        }
-    }
-
-    pub async fn try_authenticate(
-        &self,
-        address: ConnectionDetails,
-        hostkey: String,
-        user: String,
-    ) -> Result<(), SshClientError> {
-        let handler = SshFirstConnectionHandler {
-            state: FirstConnectionState::Hostkey(hostkey),
-        };
-
-        let mut handle =
-            russh::client::connect(self.connection_config.clone(), address.into_addr(), handler)
-                .await?;
-
-        if handle.authenticate_publickey(user, self.get_key()).await? {
-            Ok(())
-        } else {
-            Err(SshClientError::NotAuthenticated)
-        }
-    }
-
-    pub async fn try_authenticate_via(
-        &self,
-        host: Host,
-        address: ConnectionDetails,
-        hostkey: String,
-        user: String,
-    ) -> Result<(), SshClientError> {
-        let stream = self.connect_via(host, address).await?;
-
-        let handler = SshFirstConnectionHandler {
-            state: FirstConnectionState::Hostkey(hostkey),
-        };
-
-        let mut handle =
-            russh::client::connect_stream(self.connection_config.clone(), stream, handler).await?;
-
-        if handle.authenticate_publickey(user, self.get_key()).await? {
-            Ok(())
-        } else {
-            Err(SshClientError::NotAuthenticated)
-        }
-    }
-
-    fn connect(
+    pub(super) fn connect(
         self,
-        host: Host,
+        connection_details: ConnectionDetails,
     ) -> BoxFuture<'static, Result<russh::client::Handle<SshHandler>, SshClientError>> {
-        let Some(ref key_fingerprint) = host.key_fingerprint else {
-            return Box::pin(async { Err(SshClientError::NoHostkey) });
-        };
         let handler = SshHandler {
-            hostkey_fingerprint: key_fingerprint.clone(),
+            hostkey_fingerprint: connection_details.key_fingerprint.clone(),
         };
+
+        connection_details.log_connection();
 
         async move {
-            let mut handle = match host.jump_via {
+            let mut handle = match connection_details.jump_via {
                 Some(via) => {
                     let jump_host = Host::get_from_id(self.conn.get().unwrap(), via)
                         .await?
-                        .ok_or(SshClientError::NoSuchHost)?;
-                    let stream = self.connect_via(jump_host, host.to_connection()?).await?;
+                        .ok_or(SshClientError::IndirectError(
+                            via.to_string(),
+                            Box::new(SshClientError::NoSuchHost),
+                        ))?;
+                    let stream = self
+                        .connect_via(
+                            jump_host.to_connection().await.map_err(|e| {
+                                SshClientError::IndirectError(jump_host.name.clone(), Box::new(e))
+                            })?,
+                            connection_details.address,
+                        )
+                        .await
+                        .map_err(|e| SshClientError::IndirectError(jump_host.name, Box::new(e)))?;
 
                     russh::client::connect_stream(self.connection_config.clone(), stream, handler)
                         .await
@@ -242,7 +178,7 @@ impl SshClient {
                     self.config.timeout,
                     russh::client::connect(
                         self.connection_config.clone(),
-                        host.to_connection()?.into_addr(),
+                        connection_details.address,
                         handler,
                     ),
                 )
@@ -250,9 +186,15 @@ impl SshClient {
                 .map_err(|_| SshClientError::Timeout)?,
             }?;
 
+            let hash_alg = handle.best_supported_rsa_hash().await?;
+
             if !handle
-                .authenticate_publickey(host.username.clone(), self.get_key())
+                .authenticate_publickey(
+                    connection_details.login.clone(),
+                    PrivateKeyWithHashAlg::new(self.key, hash_alg.flatten()),
+                )
                 .await?
+                .success()
             {
                 return Err(SshClientError::NotAuthenticated);
             };
@@ -262,18 +204,22 @@ impl SshClient {
         .boxed()
     }
 
-    async fn connect_via(
+    pub(super) async fn connect_via(
         &self,
-        via: Host,
-        to: ConnectionDetails,
+        via: ConnectionDetails,
+        to: SocketAddr,
     ) -> Result<russh::ChannelStream<russh::client::Msg>, SshClientError> {
+        via.log_channel_open(&to);
         let jump_handle = self.clone().connect(via).await?;
-
-        debug!("Got handle for jump host targeting {}", to.hostname);
 
         tokio::time::timeout(
             self.config.timeout,
-            jump_handle.channel_open_direct_tcpip(to.hostname, to.port, "127.0.0.1", 0),
+            jump_handle.channel_open_direct_tcpip(
+                to.ip().to_string(),
+                to.port().into(),
+                "127.0.0.1",
+                0,
+            ),
         )
         .await
         .map_err(|_| SshClientError::Timeout)?
@@ -290,7 +236,7 @@ impl SshClient {
         let host = Host::get_from_name(self.conn.get().unwrap(), host_name)
             .await?
             .ok_or(SshClientError::NoSuchHost)?;
-        let handle = self.clone().connect(host.clone()).await?;
+        let handle = self.clone().connect(host.to_connection().await?).await?;
         self.execute_bash(
             &handle,
             BashCommand::SetAuthorizedKeyfile(login, authorized_keys),
@@ -304,7 +250,7 @@ impl SshClient {
         let host = Host::get_from_id(self.conn.get().unwrap(), host)
             .await?
             .ok_or(SshClientError::NoSuchHost)?;
-        let handle = self.clone().connect(host).await?;
+        let handle = self.clone().connect(host.to_connection().await?).await?;
 
         self.install_script(&handle).await
     }
@@ -353,7 +299,7 @@ impl SshClient {
     }
 
     pub async fn get_authorized_keys(&self, host: Host) -> Result<SshKeyfiles, SshClientError> {
-        let handle = self.clone().connect(host).await?;
+        let handle = self.clone().connect(host.to_connection().await?).await?;
         let keyfiles_response = self
             .execute_bash(&handle, BashCommand::GetSshKeyfiles)
             .await?
@@ -453,7 +399,7 @@ impl SshClient {
         })
     }
 
-    async fn execute(
+    pub(super) async fn execute(
         &self,
         handle: &russh::client::Handle<SshHandler>,
         command: &str,
@@ -528,7 +474,7 @@ impl SshClient {
             return Err(SshClientError::NoSuchHost);
         };
 
-        let handle = self.clone().connect(host).await?;
+        let handle = self.clone().connect(host.to_connection().await?).await?;
 
         let keyfiles_response = self
             .execute_bash(&handle, BashCommand::GetSshKeyfiles)
