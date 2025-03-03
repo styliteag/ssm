@@ -21,13 +21,21 @@ use super::AuthorizedKeysList;
 use super::UserAndOptions;
 
 impl Host {
-    pub fn to_connection(&self) -> Result<ConnectionDetails, SshClientError> {
-        Ok(ConnectionDetails::new(
+    pub async fn to_connection(&self) -> Result<ConnectionDetails, SshClientError> {
+        let Some(ref key_fingerprint) = self.key_fingerprint else {
+            return Err(SshClientError::NoHostkey);
+        };
+        ConnectionDetails::new(
+            self.name.clone(),
             self.address.clone(),
             self.port
                 .try_into()
                 .map_err(|_| SshClientError::PortCastFailed)?,
-        ))
+            self.username.clone(),
+            self.jump_via,
+            key_fingerprint.to_owned(),
+        )
+        .await
     }
 
     /// Adds a new host to the database

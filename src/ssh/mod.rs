@@ -4,11 +4,14 @@ use russh::keys::{ssh_key::authorized_keys::ConfigOpts, Algorithm};
 use serde::Deserialize;
 use std::{collections::HashMap, net::SocketAddr, str::FromStr};
 use time::OffsetDateTime;
+use tokio::net::lookup_host;
 
 mod caching_client;
+mod init;
 mod sshclient;
 
 pub use caching_client::CachingSshClient;
+pub use init::SshFirstConnectionHandler;
 pub use sshclient::{SshClient, SshClientError};
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -41,24 +44,71 @@ impl std::fmt::Display for SshPublicKey {
 
 #[derive(Debug, Clone)]
 pub struct ConnectionDetails {
-    pub hostname: String,
-    pub port: u32,
+    pub host_name: String,
+    pub address: SocketAddr,
+    pub login: String,
+    //TODO: this should be a plain name
+    pub jump_via: Option<i32>,
+    pub key_fingerprint: String,
 }
 
 impl ConnectionDetails {
-    pub const fn new(hostname: String, port: u32) -> Self {
-        Self { hostname, port }
+    pub async fn new(
+        host_name: String,
+        address: String,
+        port: u16,
+        login: String,
+        jump_via: Option<i32>,
+        key_fingerprint: String,
+    ) -> Result<Self, SshClientError> {
+        let lookup = format!("{address}:{port}");
+        info!("{host_name}: Trying to resolve address {lookup}");
+        match lookup_host(lookup.clone()).await {
+            Ok(mut socket) => {
+                let resolved_addr = socket.next().ok_or(SshClientError::LookupFailure)?;
+                info!("{host_name}: Resolved {lookup} to {resolved_addr}");
+
+                Ok(Self {
+                    host_name,
+                    address: resolved_addr,
+                    login,
+                    jump_via,
+                    key_fingerprint,
+                })
+            }
+            Err(e) => {
+                info!("{host_name}: Lookup failed: {}", e.to_string());
+                Err(SshClientError::LookupFailure)
+            }
+        }
     }
-    pub fn new_from_signed(hostname: String, port: i32) -> Result<Self, SshClientError> {
-        Ok(Self {
-            hostname,
-            port: port
-                .try_into()
-                .map_err(|_| SshClientError::PortCastFailed)?,
-        })
+
+    pub fn log_connection(&self) {
+        let &Self {
+            ref host_name,
+            ref address,
+            ref login,
+            ref jump_via,
+            key_fingerprint: _,
+        } = self;
+        match jump_via {
+            Some(jumphost) => {
+                info!("{host_name}: Connection attempt to {address} via {jumphost} as {login}");
+            }
+            None => info!("{host_name}: Connection attempt to {address} as {login}"),
+        }
     }
-    pub fn into_addr(self) -> String {
-        format!("{}:{}", self.hostname, self.port)
+
+    pub fn log_channel_open(&self, target: &SocketAddr) {
+        let &Self {
+            ref host_name,
+            address: _,
+            login: _,
+            jump_via: _,
+            key_fingerprint: _,
+        } = self;
+
+        info!("{host_name}: Trying to open jump channel to {target}")
     }
 }
 
