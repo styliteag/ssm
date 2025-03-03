@@ -1,7 +1,8 @@
+use log::info;
+use russh::keys::ssh_encoding::{Base64Writer, Encode};
+use russh::keys::{ssh_key::authorized_keys::ConfigOpts, Algorithm};
 use serde::Deserialize;
-use ssh_encoding::{Base64Writer, Encode};
-use ssh_key::{authorized_keys::ConfigOpts, Algorithm};
-use std::{collections::HashMap, str::FromStr};
+use std::{collections::HashMap, net::SocketAddr, str::FromStr};
 use time::OffsetDateTime;
 
 mod caching_client;
@@ -148,7 +149,7 @@ impl<'de> Deserialize<'de> for SshKeyfileResponse {
 
 impl From<&str> for AuthorizedKeyEntry {
     fn from(value: &str) -> Self {
-        match ssh_key::authorized_keys::Entry::from_str(value) {
+        match russh::keys::ssh_key::authorized_keys::Entry::from_str(value) {
             Ok(entry) => {
                 //TODO: algorithm to estimate size
                 let mut buf = vec![0u8; 1024];

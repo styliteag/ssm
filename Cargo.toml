@@ -24,7 +24,6 @@ cookie = { version = "0.16", features = ["secure"] }
 futures-util = "0.3"
 askama = { version = "0.12.1", features = ["with-actix-web"] }
 askama_actix = "0.14.0"
-async-trait = "0.1.81"
 color-eyre = { version = "0.6.3", default-features = false }
 config = { version = "0.14.0", default-features = false, features = ["toml"] }
 diesel = { version = "2.2.0", features = ["sqlite", "r2d2"] }
@@ -32,12 +31,10 @@ diesel_migrations = { version = "2.2.0", features = ["sqlite"] }
 futures = "0.3.30"
 log = "0.4.21"
 pretty_env_logger = "0.5.0"
-russh = "0.49.2"
+russh = "0.50.4"
 serde = "1.0.203"
 tokio = { version = "1", features = ["full"] }
 bcrypt = "0.15"
-ssh-key = { version = "0.6.7", features = ["alloc", "ed25519", "serde"] }
-ssh-encoding = { version = "0.2.0", features = ["alloc", "base64", "std"] }
 similar = { version = "2.6.0", features = ["inline"] }
 time = "0.3.37"
 tokio-cron-scheduler = "0.13.0"
