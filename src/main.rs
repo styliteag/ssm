@@ -338,7 +338,6 @@ async fn main() -> Result<(), std::io::Error> {
             .app_data(config.clone())
             .app_data(web::Data::new(pool.clone()))
             .service(ResourceFiles::new("/", generated).skip_handler_when_not_found())
-            .service(web::scope("/auth").configure(routes::auth::auth_config))
             .configure(routes::route_config)
     })
     .bind((configuration.listen, configuration.port))?
