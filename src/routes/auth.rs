@@ -10,7 +10,7 @@ use log::error;
 use serde::Deserialize;
 use std::fs;
 
-use crate::{Configuration, ConnectionPool};
+use crate::Configuration;
 
 use super::ErrorTemplate;
 
@@ -55,7 +55,6 @@ async fn login_page() -> impl Responder {
 async fn login(
     req: HttpRequest,
     form: Form<LoginForm>,
-    _pool: Data<ConnectionPool>,
     config: Data<Configuration>,
 ) -> actix_web::Result<impl Responder> {
     let htpasswd_path = config.htpasswd_path.as_path();
@@ -103,6 +102,7 @@ async fn login(
             .insert_header(("Location", "/"))
             .finish())
     } else {
+        // TODO: this should show the login page again?
         Ok(ErrorTemplate {
             error: "Invalid credentials".to_owned(),
         }
