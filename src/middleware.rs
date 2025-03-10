@@ -1,93 +1,49 @@
 use actix_identity::Identity;
 use actix_web::{
-    body::{BoxBody, MessageBody},
-    dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
+    body::BoxBody,
+    dev::{ServiceRequest, ServiceResponse},
     http::header,
+    middleware::Next,
     Error, FromRequest, HttpResponse,
 };
-use futures_util::future::LocalBoxFuture;
-use log::warn;
-use std::future::{ready, Ready};
-use std::rc::Rc;
+use log::info;
 
-pub struct AuthMiddleware;
+const LOG_TARGET: &str = "ssm:webserver";
 
-impl<S, B> Transform<S, ServiceRequest> for AuthMiddleware
-where
-    S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error> + 'static,
-    S::Future: 'static,
-    B: MessageBody + 'static,
-{
-    type Response = ServiceResponse<BoxBody>;
-    type Error = Error;
-    type InitError = ();
-    type Transform = AuthMiddlewareService<S>;
-    type Future = Ready<Result<Self::Transform, Self::InitError>>;
+pub async fn authentication(
+    request: ServiceRequest,
+    next: Next<BoxBody>,
+) -> Result<ServiceResponse<BoxBody>, Error> {
+    let path = request.path();
+    let method = request.method();
 
-    fn new_transform(&self, service: S) -> Self::Future {
-        ready(Ok(AuthMiddlewareService {
-            service: Rc::new(service),
-        }))
+    // Skip authentication for login page, static files, and assets
+    if path.starts_with("/auth/")
+        || path.starts_with("/static/")
+        || path.ends_with(".css")
+        || path.ends_with(".js")
+    {
+        info!(target: LOG_TARGET, "{} {} (public path)", method, path);
+        return next.call(request).await;
     }
-}
 
-pub struct AuthMiddlewareService<S> {
-    service: Rc<S>,
-}
+    let identity = Identity::extract(request.parts().0);
 
-impl<S, B> Service<ServiceRequest> for AuthMiddlewareService<S>
-where
-    S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error> + 'static,
-    S::Future: 'static,
-    B: MessageBody + 'static,
-{
-    type Response = ServiceResponse<BoxBody>;
-    type Error = Error;
-    type Future = LocalBoxFuture<'static, Result<Self::Response, Self::Error>>;
+    let Ok(id) = identity.await else {
+        info!(target: LOG_TARGET, "{} {} (unauthorized)", method, path);
+        let response = HttpResponse::Found()
+            .append_header((header::LOCATION, "/auth/login"))
+            .insert_header(("HX-Redirect", "/auth/login"))
+            .body("<a href=\"/auth/login\">Login</a>");
+        return Ok(ServiceResponse::new(request.into_parts().0, response));
+    };
 
-    forward_ready!(service);
-
-    fn call(&self, request: ServiceRequest) -> Self::Future {
-        let path = request.path().to_owned();
-        let method = request.method().to_owned();
-
-        // Skip authentication for login page, static files, and assets
-        if request.path().starts_with("/auth/")
-            || request.path().starts_with("/static/")
-            || request.path().ends_with(".css")
-            || request.path().ends_with(".js")
-        {
-            warn!("[Web] {} {} (public path)", method, path);
-            let fut = self.service.call(request);
-            return Box::pin(async move {
-                let res = fut.await?;
-                Ok(res.map_into_boxed_body())
-            });
-        }
-
-        let (http_req, payload) = request.into_parts();
-        let identity = Identity::extract(&http_req);
-        let service = self.service.clone();
-
-        Box::pin(async move {
-            let Ok(id) = identity.await else {
-                warn!("[Web] {} {} (unauthorized)", method, path);
-                let response = HttpResponse::Found()
-                    .append_header((header::LOCATION, "/auth/login"))
-                    .insert_header(("HX-Redirect", "/auth/login"))
-                    .body("<a href=\"/auth/login\">Login</a>");
-                return Ok(ServiceResponse::new(http_req, response).map_into_boxed_body());
-            };
-
-            warn!(
-                "[Web] {} {} (authenticated user: {})",
-                method,
-                path,
-                id.id().unwrap_or_else(|_| "unknown".to_owned())
-            );
-            let req = ServiceRequest::from_parts(http_req, payload);
-            let res = service.call(req).await?;
-            Ok(res.map_into_boxed_body())
-        })
-    }
+    info!(
+        target: LOG_TARGET,
+        "{} {} (authenticated user: {})",
+        method,
+        path,
+        id.id().unwrap_or_else(|_| "unknown".to_owned())
+    );
+    next.call(request).await
 }
