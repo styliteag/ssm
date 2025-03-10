@@ -314,15 +314,13 @@ async fn main() -> Result<(), std::io::Error> {
         let generated = generate();
 
         App::new()
-            .wrap(middleware::AuthMiddleware)
+            .wrap(actix_web::middleware::from_fn(middleware::authentication))
+            .wrap(IdentityMiddleware::default())
             .wrap(
                 SessionMiddleware::builder(CookieSessionStore::default(), secret_key.clone())
                     .cookie_name("ssm_session".to_owned())
-                    .cookie_secure(false) // Set to true in production
-                    .cookie_http_only(true)
                     .build(),
             )
-            .wrap(IdentityMiddleware::default())
             .wrap(
                 ErrorHandlers::new().handler(StatusCode::UNAUTHORIZED, |res: ServiceResponse| {
                     let req = res.request().clone();
