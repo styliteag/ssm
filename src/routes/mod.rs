@@ -1,4 +1,4 @@
-pub mod auth;
+mod auth;
 mod diff;
 mod hosts;
 mod keys;
@@ -19,6 +19,7 @@ pub fn route_config(cfg: &mut web::ServiceConfig) {
         .service(web::scope("/users").configure(users::users_config))
         .service(web::scope("/keys").configure(keys::keys_config))
         .service(web::scope("/diff").configure(diff::diff_config))
+        .service(web::scope("/auth").configure(auth::auth_config))
         .default_service(web::to(not_found));
 }
 
