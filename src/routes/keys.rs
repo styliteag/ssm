@@ -77,7 +77,7 @@ pub async fn update_key_comment(
     })
 }
 
-pub fn keys_config(cfg: &mut web::ServiceConfig) {
+pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(list_keys)
         .service(delete)
         .service(update_key_comment);

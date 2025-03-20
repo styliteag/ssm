@@ -16,11 +16,11 @@ use serde::Deserialize;
 
 pub fn route_config(cfg: &mut web::ServiceConfig) {
     cfg.service(index)
-        .service(web::scope("/hosts").configure(hosts::hosts_config))
-        .service(web::scope("/users").configure(users::users_config))
-        .service(web::scope("/keys").configure(keys::keys_config))
-        .service(web::scope("/diff").configure(diff::diff_config))
-        .service(web::scope("/auth").configure(auth::auth_config))
+        .service(web::scope("/hosts").configure(hosts::config))
+        .service(web::scope("/users").configure(users::config))
+        .service(web::scope("/keys").configure(keys::config))
+        .service(web::scope("/diff").configure(diff::config))
+        .service(web::scope("/auth").configure(auth::config))
         .service(web::scope("/authorization").configure(authorization::config))
         .default_service(web::to(not_found));
 }
