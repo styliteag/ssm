@@ -118,6 +118,8 @@ pub enum KeyDiffItem {
     Removed(String),
 }
 
+type Expected = ConfigOpts;
+
 type Login = String;
 type ReadonlyCondition = Option<String>;
 pub type HostDiff = (
@@ -135,6 +137,8 @@ pub enum DiffItem {
     UnauthorizedKey(AuthorizedKey, String),
     /// There is a duplicate key
     DuplicateKey(AuthorizedKey),
+    /// There are incorrect options set
+    IncorrectOptions(AuthorizedKey, Expected),
     /// There was an error Parsing this entry,
     FaultyKey(ErrorMsg, Line),
     /// The Pragma is missing, meaning this file is not yet managed

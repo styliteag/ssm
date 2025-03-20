@@ -114,9 +114,10 @@
               </details>
             </td>
             <td>
-              <button hx-swap="none" hx-post="/diff/authorize_user_dialog" hx-vals='{
+              <button hx-swap="none" hx-post="/authorization/add_dialog" hx-vals='{
           "username": "{{ username }}",
-          "login": "{{ login }}"
+          "login": "{{ login }}",
+          "options": "{{ key.options }}"
           }'>Authorize '{{username }}'</button>
             </td>
             {% when crate::ssh::DiffItem::FaultyKey with (error, entry) %}
@@ -133,6 +134,29 @@
               </details>
             </td>
             <td></td>
+            {% when crate::ssh::DiffItem::IncorrectOptions with (key, expected) %}
+            <td>Incorrect Options</td>
+            <td>
+              <details>
+                <summary>
+                  {% call components::maybe(key.comment, "Key has no comment") %}
+                </summary>
+                <hr>
+                Key options are incorrectly set.
+                <br>
+                <p>Expected:</p>
+                <code>{{ expected }}</code>
+                <br>
+                <p>Got</p>
+                <code>{{ key.options }}</code>
+              </details>
+            </td>
+            <td>
+              <button hx-swap="none" hx-post="/authorization/change_options" hx-vals='{
+          "login": "{{ login }}",
+          "options": "{{ key.options }}"
+          }'>Update options</button>
+            </td>
             {% when crate::ssh::DiffItem::PragmaMissing %}
             <td>Pragma missing</td>
             <td>
