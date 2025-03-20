@@ -37,35 +37,35 @@ struct FormResponseTemplate {
 }
 
 impl FormResponseBuilder {
-    pub const fn success(message: String) -> Self {
+    pub fn success(message: impl Into<String>) -> Self {
         Self {
             triggers: Vec::new(),
             status: StatusCode::OK,
-            response: FormResponse::Success(message),
+            response: FormResponse::Success(message.into()),
         }
     }
 
-    pub const fn created(message: String) -> Self {
+    pub fn created(message: impl Into<String>) -> Self {
         Self {
             triggers: Vec::new(),
             status: StatusCode::CREATED,
-            response: FormResponse::Success(message),
+            response: FormResponse::Success(message.into()),
         }
     }
 
-    pub const fn error(message: String) -> Self {
+    pub fn error(message: impl Into<String>) -> Self {
         Self {
             triggers: Vec::new(),
             status: StatusCode::UNPROCESSABLE_ENTITY,
-            response: FormResponse::Error(message),
+            response: FormResponse::Error(message.into()),
         }
     }
 
-    pub const fn not_found(message: String) -> Self {
+    pub fn not_found(message: impl Into<String>) -> Self {
         Self {
             triggers: Vec::new(),
             status: StatusCode::NOT_FOUND,
-            response: FormResponse::Error(message),
+            response: FormResponse::Error(message.into()),
         }
     }
 
@@ -82,8 +82,8 @@ impl FormResponseBuilder {
         self
     }
 
-    pub fn add_trigger(mut self, trigger: String) -> Self {
-        self.triggers.push(trigger);
+    pub fn add_trigger(mut self, trigger: impl Into<String>) -> Self {
+        self.triggers.push(trigger.into());
         self
     }
 
