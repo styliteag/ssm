@@ -8,8 +8,9 @@ use serde::Deserialize;
 
 use crate::{
     db::UserAndOptions,
-    forms::FormResponseBuilder,
+    forms::{FormResponseBuilder, Modal},
     routes::{ErrorTemplate, RenderErrorTemplate},
+    ssh::SshPublicKey,
     ConnectionPool,
 };
 
@@ -24,7 +25,8 @@ pub fn users_config(cfg: &mut web::ServiceConfig) {
         .service(add_user)
         .service(assign_key_to_user)
         .service(delete_user)
-        .service(edit_user);
+        .service(edit_user)
+        .service(add_key_dialog);
 }
 
 #[derive(Template)]
@@ -232,4 +234,28 @@ async fn edit_user(
             .add_trigger("reload".to_owned())
             .into_response()),
     }
+}
+
+#[derive(Template)]
+#[template(path = "diff/assign_key_dialog.htm")]
+struct AddKeyDialog {
+    key: SshPublicKey,
+    users: Vec<User>,
+}
+
+#[post("/add_key")]
+async fn add_key_dialog(
+    conn: Data<ConnectionPool>,
+    key: web::Form<SshPublicKey>,
+) -> actix_web::Result<impl Responder> {
+    let res = web::block(move || User::get_all_users(&mut conn.get().unwrap())).await?;
+
+    Ok(match res {
+        Ok(users) => FormResponseBuilder::dialog(Modal {
+            title: String::from("Assign this key to a user"),
+            request_target: String::from("/users/assign_key"),
+            template: AddKeyDialog { key: key.0, users }.to_string(),
+        }),
+        Err(error) => FormResponseBuilder::error(error),
+    })
 }
