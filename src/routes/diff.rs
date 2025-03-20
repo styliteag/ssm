@@ -26,9 +26,7 @@ use crate::models::{Host, User};
 pub fn diff_config(cfg: &mut web::ServiceConfig) {
     cfg.service(diff_page)
         .service(render_diff)
-        .service(show_diff)
-        .service(assign_key_dialog)
-        .service(authorize_user_dialog);
+        .service(show_diff);
 }
 
 #[derive(Template)]
@@ -121,84 +119,4 @@ async fn show_diff(
             Err(error) => ErrorTemplate { error }.to_response(),
         },
     )
-}
-
-#[derive(Template)]
-#[template(path = "diff/assign_key_dialog.htm")]
-struct AssignKeyDialog {
-    key: SshPublicKey,
-    users: Vec<User>,
-}
-
-#[post("/assign_key_dialog")]
-async fn assign_key_dialog(
-    conn: Data<ConnectionPool>,
-    key: web::Form<SshPublicKey>,
-) -> actix_web::Result<impl Responder> {
-    let res = web::block(move || User::get_all_users(&mut conn.get().unwrap())).await?;
-
-    Ok(match res {
-        Ok(users) => FormResponseBuilder::dialog(Modal {
-            title: String::from("Assign this key to a user"),
-            request_target: String::from("/users/assign_key"),
-            template: AssignKeyDialog { key: key.0, users }.to_string(),
-        }),
-        Err(error) => FormResponseBuilder::error(error),
-    })
-}
-
-#[derive(Template)]
-#[template(path = "diff/authorize_user_dialog.htm")]
-struct AuthorizeUserDialog {
-    host: (String, i32),
-    user: (String, i32),
-    login: String,
-}
-
-#[derive(Deserialize)]
-struct AuthorizeUserForm {
-    /// Host name in key-manager
-    host_name: String,
-    /// Username in key-manager
-    username: String,
-    /// Username on the host
-    login: String,
-}
-
-#[post("/authorize_user_dialog")]
-async fn authorize_user_dialog(
-    conn: Data<ConnectionPool>,
-    form: web::Form<AuthorizeUserForm>,
-) -> actix_web::Result<impl Responder> {
-    let login = form.login.clone();
-    let (user, host) = web::block(move || {
-        let mut connection = conn.get().unwrap();
-
-        let user = User::get_user(&mut connection, form.username.clone());
-        let host = Host::get_from_name_sync(&mut connection, form.host_name.clone());
-        (
-            user.map(|u| (u.username, u.id)),
-            host.map(|h| h.map(|h| (h.name, h.id))),
-        )
-    })
-    .await?;
-
-    let user = match user {
-        Ok(u) => u,
-        Err(error) => return Ok(FormResponseBuilder::error(error)),
-    };
-
-    let host = match host {
-        Ok(h) => match h {
-            Some(h) => h,
-            None => return Ok(FormResponseBuilder::error(String::from("Host not found"))),
-        },
-        Err(error) => return Ok(FormResponseBuilder::error(error)),
-    };
-
-    Ok(FormResponseBuilder::dialog(Modal {
-        title: String::from("Authorize user"),
-        request_target: String::from("/hosts/user/authorize"),
-        template: AuthorizeUserDialog { host, user, login }.to_string(),
-    }))
 }

@@ -78,7 +78,7 @@
               </details>
             </td>
             <td>
-              <button hx-swap="none" hx-post="/diff/assign_key_dialog" hx-vals='{
+              <button hx-swap="none" hx-post="/users/add_key" hx-vals='{
             "key_type": "{{ key.algorithm }}",
             "key_base64": "{{ key.base64 }}"
             {% match key.comment %}
