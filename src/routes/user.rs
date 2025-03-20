@@ -104,7 +104,9 @@ async fn delete_user(
     let res =
         web::block(move || User::delete_user(&mut conn.get().unwrap(), username.as_str())).await?;
     Ok(match res {
-        Ok(()) => FormResponseBuilder::success(String::from("Deleted user")),
+        Ok(()) => {
+            FormResponseBuilder::success(String::from("Deleted user")).add_trigger("reload-users")
+        }
         Err(e) => FormResponseBuilder::error(e),
     })
 }
