@@ -273,7 +273,7 @@ async fn main() -> Result<(), std::io::Error> {
                 ErrorHandlers::new().handler(StatusCode::UNAUTHORIZED, |res: ServiceResponse| {
                     let req = res.request().clone();
                     let response = HttpResponse::Found()
-                        .insert_header((header::LOCATION, "/auth/login"))
+                        .insert_header((header::LOCATION, "/authentication/login"))
                         .finish();
                     Ok(ErrorHandlerResponse::Response(ServiceResponse::new(
                         req,

@@ -5,7 +5,7 @@
 {% block content %}
 <div class="content-container">
     <h2>Edit Host: {{ host.name }}</h2>
-    <form action="/hosts/{{ host.name }}/edit" method="post" class="form-grid">
+    <form action="/host/{{ host.name }}/edit" method="post" class="form-grid">
         <div class="form-group">
             <label for="name">Name:</label>
             <input type="text" id="name" name="name" value="{{ host.name }}" required />

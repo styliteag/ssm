@@ -9,7 +9,7 @@
     </div>
     
     <div class="table-container">
-        <table class="key-table" hx-trigger="load, reload-hosts from:body" hx-get="/hosts/list.htm" placeholder="Loading" hx-swap="innerHTML">
+        <table class="key-table" hx-trigger="load, reload-hosts from:body" hx-get="/host/list.htm" placeholder="Loading" hx-swap="innerHTML">
         </table>
     </div>
 </div>
@@ -20,7 +20,7 @@
     <div class="host-info">Configure a new SSH connection</div>
   </div>
 
-  {% call components::form_head("/hosts/add") %}
+  {% call components::form_head("/host/add") %}
   <div class="form-grid">
     <div class="form-group">
       <label>Name</label>

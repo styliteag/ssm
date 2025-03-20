@@ -14,16 +14,16 @@
 <body>
 	<div class="header-container">
 		<h1>Secure SSH Manager</h1>
-		<div class="auth-status" hx-get="/auth/status" hx-trigger="load">
-			<a href="/auth/login">Login</a>
+		<div class="auth-status" hx-get="/authentication/status" hx-trigger="load">
+			<a href="/authentication/login">Login</a>
 		</div>
 	</div>
 	<nav>
 		<a href="/">Overview</a>
-		<a href="/hosts">List hosts</a>
+		<a href="/host">List hosts</a>
 		<a href="/diff">Issues</a>
-		<a href="/users">List Users</a>
-		<a href="/keys">List keys</a>
+		<a href="/user">List Users</a>
+		<a href="/key">List keys</a>
 	</nav>
 
 	<main style="margin-top: 2rem;">

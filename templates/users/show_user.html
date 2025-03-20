@@ -9,7 +9,7 @@
 <button id="edit-user-btn" class="button">Edit User</button>
 
 <div id="edit-user-form" style="display: none;">
-    <form action="/users/edit" method="post" data-reload-on-success>
+    <form action="/user/edit" method="post" data-reload-on-success>
         <input type="hidden" name="old_username" value="{{ username }}">
         <div class="form-grid">
             <div class="form-group">
@@ -34,10 +34,10 @@
 </div>
 
 <h3>Authorizations:</h3>
-<div hx-trigger="load, reload-authorizations from:body" hx-get="/users/{{ user.username }}/list_authorizations.htm">
+<div hx-trigger="load, reload-authorizations from:body" hx-get="/user/{{ user.username }}/list_authorizations.htm">
 </div>
 <h3> SSH Keys:</h3>
-<div hx-trigger="load, reload-keys from:body" hx-get="/users/{{ user.username }}/list_keys.htm"></div>
+<div hx-trigger="load, reload-keys from:body" hx-get="/user/{{ user.username }}/list_keys.htm"></div>
 
 <script>
 document.getElementById('edit-user-btn').addEventListener('click', function() {
