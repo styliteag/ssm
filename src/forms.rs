@@ -28,6 +28,7 @@ pub struct FormResponseBuilder {
     triggers: Vec<String>,
     status: StatusCode,
     response: FormResponse,
+    redirect: Option<String>,
 }
 
 #[derive(Template)]
@@ -42,6 +43,7 @@ impl FormResponseBuilder {
             triggers: Vec::new(),
             status: StatusCode::OK,
             response: FormResponse::Success(message.into()),
+            redirect: None,
         }
     }
 
@@ -50,6 +52,7 @@ impl FormResponseBuilder {
             triggers: Vec::new(),
             status: StatusCode::CREATED,
             response: FormResponse::Success(message.into()),
+            redirect: None,
         }
     }
 
@@ -58,6 +61,7 @@ impl FormResponseBuilder {
             triggers: Vec::new(),
             status: StatusCode::UNPROCESSABLE_ENTITY,
             response: FormResponse::Error(message.into()),
+            redirect: None,
         }
     }
 
@@ -66,6 +70,7 @@ impl FormResponseBuilder {
             triggers: Vec::new(),
             status: StatusCode::NOT_FOUND,
             response: FormResponse::Error(message.into()),
+            redirect: None,
         }
     }
 
@@ -74,6 +79,7 @@ impl FormResponseBuilder {
             triggers: Vec::new(),
             status: StatusCode::OK,
             response: FormResponse::Dialog(modal),
+            redirect: None,
         }
     }
 
@@ -87,13 +93,12 @@ impl FormResponseBuilder {
         self
     }
 
-    pub fn _with_redirect(mut self, location: &str) -> Self {
-        self.status = StatusCode::FOUND;
-        self.triggers.push(format!("redirect {location}"));
+    pub fn with_redirect(mut self, location: impl Into<String>) -> Self {
+        self.redirect = Some(location.into());
         self
     }
 
-    pub fn into_response(self) -> HttpResponse<actix_web::body::BoxBody> {
+    pub fn into_response(mut self) -> HttpResponse<actix_web::body::BoxBody> {
         let mut builder = HttpResponseBuilder::new(self.status);
         builder.insert_header(("X-FORM", "true"));
 
@@ -103,6 +108,15 @@ impl FormResponseBuilder {
         if !self.triggers.is_empty() {
             builder.insert_header((String::from("HX-Trigger"), self.triggers.join(",")));
         };
+
+        if let Some(redirect) = self.redirect {
+            builder.insert_header((String::from("HX-Redirect"), redirect));
+
+            // HTMX doesn't process headers on 3xx codes
+            if self.status.is_redirection() {
+                self.status = StatusCode::OK;
+            }
+        }
 
         builder.body(FormResponseTemplate { res: self.response }.to_string())
     }
