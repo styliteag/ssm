@@ -65,9 +65,16 @@ fn deserialize_cron<'de, D>(deserializer: D) -> Result<Option<Cron>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
-    let pat = String::deserialize(deserializer)?;
+    let mut pat = String::deserialize(deserializer)?;
 
-    match Cron::new(pat.as_str()).with_seconds_optional().parse() {
+    // Set seconds to 0 if omitted
+    // tokio-cron-scheduler only works with seconds.
+    let num_parts = pat.split_whitespace().count();
+    if num_parts == 5 {
+        pat = format!("0 {pat}");
+    }
+
+    match Cron::new(pat.as_str()).with_seconds_required().parse() {
         Ok(cron) => Ok(Some(cron)),
         Err(e) => {
             eprintln!("Failed to parse Cron syntax '{pat}': {e}");
