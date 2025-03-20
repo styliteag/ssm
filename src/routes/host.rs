@@ -549,7 +549,8 @@ async fn delete(
         return match host.delete(&mut conn.get().unwrap()) {
             Ok(amt) => {
                 caching_ssh_client.remove(host_name.as_str()).await;
-                return FormResponseBuilder::success(format!("Deleted {amt} record(s)"));
+                return FormResponseBuilder::success(format!("Deleted {amt} record(s)"))
+                    .with_redirect("/host");
             }
             Err(e) => FormResponseBuilder::error(format!("Failed to delete host: {e}")),
         };
