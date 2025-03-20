@@ -22,32 +22,7 @@
 {% when None %}
 {% endmatch %}
 <p>Allowed users:</p>
-<table>
-  <thead>
-    <tr>
-      <th>Login</th>
-      <th>User</th>
-      <th>Options</th>
-      <th>Tasks</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for (authId, username, login, sshOpts) in authorized_users %}
-    <tr>
-      <td>{{ login }}</td>
-      <td><a href="/user/{{ username }}">{{ username }}</a></td>
-      <td>
-        {% call components::maybe(sshOpts, "No options set") %}
-      </td>
-      <td>
-        {% let s = format!("\"authorization_id\": {}", authId) %}
-        {% call components::post("Edit", "/host/edit_authorization", s) %}
-        {% call components::post_confirm("Delete","Are you sure you want to delete this authorization?",
-        "/host/delete_authorization", s) %}
-      </td>
-    </tr>
-    {% endfor %}
-  </tbody>
+<table hx-trigger="load, reload-authorizations from:body" hx-get="/host/{{ host.name }}/authorizations.htm" placeholder="Loading" hx-swap="innerHTML">
 </table>
 {% call components::form_head("/host/user/authorize") %}
 <h2>Authorize a user on this host</h2>
