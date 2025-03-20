@@ -30,7 +30,7 @@
       </td>
       {%endmatch %}
       <td>
-        {% call components::post_confirm("Delete this key", "Are you sure you want to delete this key?", "/keys/delete",
+        {% call components::post_confirm("Delete this key", "Are you sure you want to delete this key?", "/key/delete",
         format!("\"id\": {}", key.id)) %}
       </td>
     </tr>

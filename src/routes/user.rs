@@ -226,7 +226,7 @@ async fn edit_user(
     ) {
         Ok(_) => {
             let response = actix_web::HttpResponse::Found()
-                .insert_header(("Location", format!("/users/{}", form.new_username)))
+                .insert_header(("Location", format!("/user/{}", form.new_username)))
                 .finish();
             Ok(response)
         }
@@ -253,7 +253,7 @@ async fn add_key_dialog(
     Ok(match res {
         Ok(users) => FormResponseBuilder::dialog(Modal {
             title: String::from("Assign this key to a user"),
-            request_target: String::from("/users/assign_key"),
+            request_target: String::from("/user/assign_key"),
             template: AddKeyDialog { key: key.0, users }.to_string(),
         }),
         Err(error) => FormResponseBuilder::error(error),

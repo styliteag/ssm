@@ -107,7 +107,17 @@ impl CachingSshClient {
                     if host_entry.base64.eq(&db_entry.key.key_base64)
                         && entry.login.eq(&db_entry.login)
                     {
-                        // TODO: check options
+                        let db_opts =
+                            ConfigOpts::new(db_entry.options.clone().unwrap_or(String::new()))
+                                .unwrap_or_else(|e| {
+                                    error!("Error parsing key options from database: {e}");
+                                    ConfigOpts::default()
+                                });
+                        // NOTE: This check fails if the options are in the wrong order, since ConfigOpts is just a wrapper for a String
+                        if !db_opts.eq(&host_entry.options) {
+                            this_user_diff
+                                .push(DiffItem::IncorrectOptions(host_entry.clone(), db_opts));
+                        }
                         if used_indecies.contains(&i) {
                             this_user_diff.push(DiffItem::DuplicateKey(host_entry));
                         } else {

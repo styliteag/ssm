@@ -1,9 +1,9 @@
-mod auth;
+mod authentication;
 mod authorization;
 mod diff;
-mod hosts;
-mod keys;
-mod users;
+mod host;
+mod key;
+mod user;
 
 use actix_web::{
     get,
@@ -16,11 +16,11 @@ use serde::Deserialize;
 
 pub fn route_config(cfg: &mut web::ServiceConfig) {
     cfg.service(index)
-        .service(web::scope("/hosts").configure(hosts::config))
-        .service(web::scope("/users").configure(users::config))
-        .service(web::scope("/keys").configure(keys::config))
+        .service(web::scope("/host").configure(host::config))
+        .service(web::scope("/user").configure(user::config))
+        .service(web::scope("/key").configure(key::config))
         .service(web::scope("/diff").configure(diff::config))
-        .service(web::scope("/auth").configure(auth::config))
+        .service(web::scope("/authentication").configure(authentication::config))
         .service(web::scope("/authorization").configure(authorization::config))
         .default_service(web::to(not_found));
 }

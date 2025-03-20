@@ -208,7 +208,7 @@ async fn add_host_key(
 
         return Ok(FormResponseBuilder::dialog(Modal {
             title: String::from("Please check the hostkey"),
-            request_target: format!("/hosts/{}/add_hostkey", host.id),
+            request_target: format!("/host/{}/add_hostkey", host.id),
             template: HostkeyDialog {
                 host_name: host.name,
                 login: host.username,
@@ -306,7 +306,7 @@ async fn add_host(
 
         return Ok(FormResponseBuilder::dialog(Modal {
             title: String::from("Please check the hostkey"),
-            request_target: String::from("/hosts/add"),
+            request_target: String::from("/host/add"),
             template: HostkeyDialog {
                 host_name: form.host_name,
                 login: form.login,
@@ -478,7 +478,7 @@ async fn gen_authorized_keys(
 
     Ok(FormResponseBuilder::dialog(Modal {
         title: format!("These changes will be applied for '{login}' on '{host_name}':"),
-        request_target: format!("/hosts/{host_name}/set_authorized_keys"),
+        request_target: format!("/host/{host_name}/set_authorized_keys"),
         template: AuthorizedKeyfileDialog {
             login: login.to_owned(),
             diff: key_diff,
@@ -568,7 +568,7 @@ async fn delete(
     match res {
         Ok((authorizations, affected_hosts)) => FormResponseBuilder::dialog(Modal {
             title: format!("In addition to {host_name}, these entries will be affected"),
-            request_target: format!("/hosts/{host_name}/delete"),
+            request_target: format!("/host/{host_name}/delete"),
             template: DeleteHostTemplate {
                 authorizations,
                 affected_hosts,
@@ -711,7 +711,7 @@ async fn edit_host(
                 host_name
             );
             Ok(actix_web::HttpResponse::Found()
-                .append_header(("Location", "/hosts"))
+                .append_header(("Location", "/host"))
                 .finish())
         }
         Err(e) => Ok(crate::routes::ErrorTemplate {

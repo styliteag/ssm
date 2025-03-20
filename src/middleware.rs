@@ -18,7 +18,7 @@ pub async fn authentication(
     let method = request.method();
 
     // Skip authentication for login page, static files, and assets
-    if path.starts_with("/auth/")
+    if path.starts_with("/authentication/")
         || path.starts_with("/static/")
         || path.ends_with(".css")
         || path.ends_with(".js")
@@ -32,9 +32,9 @@ pub async fn authentication(
     let Ok(id) = identity.await else {
         info!(target: LOG_TARGET, "{} {} (unauthorized)", method, path);
         let response = HttpResponse::Found()
-            .append_header((header::LOCATION, "/auth/login"))
-            .insert_header(("HX-Redirect", "/auth/login"))
-            .body("<a href=\"/auth/login\">Login</a>");
+            .append_header((header::LOCATION, "/authentication/login"))
+            .insert_header(("HX-Redirect", "/authentication/login"))
+            .body("<a href=\"/authentication/login\">Login</a>");
         return Ok(ServiceResponse::new(request.into_parts().0, response));
     };
 
