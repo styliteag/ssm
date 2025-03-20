@@ -19,7 +19,7 @@ use crate::{
 
 use crate::models::{Host, NewHost, User};
 
-pub fn hosts_config(cfg: &mut web::ServiceConfig) {
+pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(hosts_page)
         .service(render_hosts)
         .service(show_host)
