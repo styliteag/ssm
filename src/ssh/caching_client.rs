@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
 use diesel::r2d2::{ConnectionManager, PooledConnection};
+use log::error;
+use russh::keys::ssh_key::authorized_keys::ConfigOpts;
 use time::OffsetDateTime;
 use tokio::sync::RwLock;
 

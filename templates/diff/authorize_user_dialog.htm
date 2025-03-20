@@ -3,5 +3,5 @@
 <input type=hidden name="host_id" value="{{ host.1 }}" />
 <input type=hidden name="login" value="{{ login }}" />
 <label>SSH Options</label>
-<input type=text name="options" />
+<input type=text name="options" value="{{ options.clone().unwrap_or(String::new()) }}" />
 <button>Authorize</button>
