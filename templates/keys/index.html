@@ -341,7 +341,7 @@ dialog .action-button:hover {
                                 {% include "keys/delete_key_dialog.htm" %}
                             </dialog>
                             <dialog id="edit-dialog-{{ key.id }}" class="edit-dialog">
-                                <form hx-post="/keys/update_comment/{{ key.id }}" hx-swap="none" style="width: 100%;">
+                                <form hx-post="/key/update_comment/{{ key.id }}" hx-swap="none" style="width: 100%;">
                                     <h2>Edit Comment</h2>
                                     <div class="form-group" style="width: 100%;">
                                         <label for="comment-{{ key.id }}">Comment</label>

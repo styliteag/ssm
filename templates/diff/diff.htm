@@ -37,7 +37,7 @@
       {% when Some with (condition) %}
       <h4>Keyfile is readonly: {{ condition }}</h4>
       {% when None %}
-      <button class="inline-button" hx-swap="none" hx-post="/hosts/gen_authorized_keys" hx-vals='{
+      <button class="inline-button" hx-swap="none" hx-post="/host/gen_authorized_keys" hx-vals='{
           "login": "{{ login }}"
         }'>Generate authorized_keys</button>
       {% endmatch %}
@@ -78,7 +78,7 @@
               </details>
             </td>
             <td>
-              <button hx-swap="none" hx-post="/users/add_key" hx-vals='{
+              <button hx-swap="none" hx-post="/user/add_key" hx-vals='{
             "key_type": "{{ key.algorithm }}",
             "key_base64": "{{ key.base64 }}"
             {% match key.comment %}
@@ -96,20 +96,20 @@
                   {% call components::maybe(key.comment, "Key has no comment") %}
                 </summary>
                 <hr>
-                This key, owned by <a href="/users/{{ username }}">{{ username }}</a>, is missing:
+                This key, owned by <a href="/user/{{ username }}">{{ username }}</a>, is missing:
                 {{ key.as_html()|safe }}
               </details>
             </td>
             <td></td>
             {% when crate::ssh::DiffItem::UnauthorizedKey with (key, username) %}
-            <td>Unauthorized key owned by <a href="/users/{{ username }}">{{ username }}</a></td>
+            <td>Unauthorized key owned by <a href="/user/{{ username }}">{{ username }}</a></td>
             <td>
               <details>
                 <summary>
                   {% call components::maybe(key.comment, "Key has no comment") %}
                 </summary>
                 <hr>
-                This key, owned by <a href="/users/{{ username }}">{{ username }}</a>, is not authorized on this host:
+                This key, owned by <a href="/user/{{ username }}">{{ username }}</a>, is not authorized on this host:
                 {{ key.as_html()|safe }}
               </details>
             </td>
@@ -185,12 +185,12 @@
     {% when crate::ssh::SshClientError::NoHostkey %}
     <div class="diff-status error">
       <i>No hostkey available.</i>
-      <button hx-swap="none" hx-post="/hosts/{{ host.id }}/add_hostkey">Add a hostkey</button>
+      <button hx-swap="none" hx-post="/host/{{ host.id }}/add_hostkey">Add a hostkey</button>
     </div>
     {% when crate::ssh::SshClientError::UnknownKey %}
     <div class="diff-status error">
       <i>Server presented unknown hostkey.</i>
-      <button hx-swap="none" hx-post="/hosts/{{ host.id }}/add_hostkey">Update the hostkey</button>
+      <button hx-swap="none" hx-post="/host/{{ host.id }}/add_hostkey">Update the hostkey</button>
     </div>
     {% else %}
     <div class="diff-status error">

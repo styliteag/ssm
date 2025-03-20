@@ -9,7 +9,7 @@
 <tbody>
   {% for host in hosts %}
   <tr>
-    <td><a href="/hosts/{{ host.name }}">{{ host.name }}</a></td>
+    <td><a href="/host/{{ host.name }}">{{ host.name }}</a></td>
     <td>{{ host.address }}</td>
     <td><a class="button" href="/diff/{{ host.name }}">Diff</a></td>
     <td>
@@ -18,7 +18,7 @@
   </tr>
   <tr id="edit-form-{{ host.name }}" class="edit-form-row" style="display: none;">
     <td colspan="4">
-      <form action="/hosts/{{ host.name }}/edit" method="post">
+      <form action="/host/{{ host.name }}/edit" method="post">
           <div>
               <label for="name-{{ host.name }}">Name:</label>
               <input type="text" id="name-{{ host.name }}" name="name" value="{{ host.name }}" required>

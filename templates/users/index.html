@@ -9,7 +9,7 @@
     </div>
     
     <div class="table-container">
-        <table class="key-table" hx-trigger="load, reload-users from:body" hx-get="/users/list.htm" placeholder="Loading">
+        <table class="key-table" hx-trigger="load, reload-users from:body" hx-get="/user/list.htm" placeholder="Loading">
         </table>
     </div>
 </div>
@@ -20,7 +20,7 @@
         <div class="host-info">Create a new SSH user</div>
     </div>
     
-    {% call components::form_head("/users/add") %}
+    {% call components::form_head("/user/add") %}
     <div class="form-grid">
         <div class="form-group">
             <label>Name</label>

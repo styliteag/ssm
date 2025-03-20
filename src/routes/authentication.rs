@@ -15,11 +15,11 @@ use crate::Configuration;
 use super::ErrorTemplate;
 
 #[derive(Template)]
-#[template(path = "auth/login.html")]
+#[template(path = "authentication/login.html")]
 struct LoginTemplate {}
 
 #[derive(Template)]
-#[template(path = "auth/status.html")]
+#[template(path = "authentication/status.html")]
 struct StatusTemplate {
     logged_in: bool,
 }
@@ -114,8 +114,8 @@ async fn login(
 async fn logout(identity: Identity) -> impl Responder {
     identity.logout();
     HttpResponse::Ok()
-        .insert_header(("HX-Redirect", "/auth/login"))
-        .body("<a href=\"/auth/login\">Login</a>")
+        .insert_header(("HX-Redirect", "/authentication/login"))
+        .body("<a href=\"/authentication/login\">Login</a>")
 }
 
 #[get("/status")]

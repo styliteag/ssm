@@ -10,14 +10,13 @@
 <tbody>
   {% for user in users %}
   <tr>
-    <td><a href="/users/{{ user.username }}">{{ user.username }}</a></td>
+    <td><a href="/user/{{ user.username }}">{{ user.username }}</a></td>
     <td>{{ user.enabled }}</td>
     <td>
-
       {% let confirmation = format!("Are you sure you want to delete {}? This will also remove all associated
       authorizations.", user.username) %}
       {% let opts = format!("\"username\": \"{}\"", user.username) %}
-      {% call components::post_confirm("Delete user", confirmation,"/users/delete", opts) %}
+      {% call components::post_confirm("Delete user", confirmation,"/user/delete", opts) %}
     </td>
   </tr>
 
