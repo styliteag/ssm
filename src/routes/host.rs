@@ -31,6 +31,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(add_host_key)
         .service(delete)
         .service(delete_authorization)
+        .service(list_host_authorizations)
         .service(edit_host_form)
         .service(edit_host);
 }
@@ -44,7 +45,7 @@ async fn hosts_page() -> impl Responder {
     HostsTemplate {}
 }
 
-type HostData = (Host, Option<String>, Vec<UserAndOptions>, Vec<User>);
+type HostData = (Host, Option<String>, Vec<User>);
 
 enum HostDataError {
     HostNotFound,
@@ -66,18 +67,14 @@ fn get_all_host_data(conn: &mut DbConnection, host: String) -> Result<HostData, 
         None
     };
 
-    let authorized_users = host
-        .get_authorized_users(conn)
-        .map_err(HostDataError::DatabaseError)?;
-
     // Skip getting users if we can't connect
     if host.key_fingerprint.is_none() {
-        return Ok((host, jumphost, authorized_users, vec![]));
+        return Ok((host, jumphost, vec![]));
     }
 
     let user_list = User::get_all_users(conn).map_err(HostDataError::DatabaseError)?;
 
-    Ok((host, jumphost, authorized_users, user_list))
+    Ok((host, jumphost, user_list))
 }
 
 #[derive(Template)]
@@ -115,7 +112,6 @@ async fn get_logins(
 struct ShowHostTemplate {
     host: Host,
     jumphost: Option<String>,
-    authorized_users: Vec<UserAndOptions>,
     user_list: Vec<User>,
 }
 
@@ -127,7 +123,7 @@ async fn show_host(
     let res =
         web::block(move || get_all_host_data(&mut conn.get().unwrap(), host.to_string())).await?;
 
-    let (host, jumphost, authorized_users, user_list) = match res {
+    let (host, jumphost, user_list) = match res {
         Ok(host_data) => host_data,
         Err(e) => {
             return Ok(match e {
@@ -143,7 +139,6 @@ async fn show_host(
     Ok(ShowHostTemplate {
         host,
         jumphost,
-        authorized_users,
         user_list,
     }
     .to_response())
@@ -418,8 +413,9 @@ async fn authorize_user(
     .await?;
 
     Ok(match res {
-        Ok(()) => FormResponseBuilder::success(String::from("Authorized user"))
-            .add_trigger("reloadDiff".to_owned()),
+        Ok(()) => FormResponseBuilder::success("Authorized user")
+            .add_trigger("reloadDiff")
+            .add_trigger("reload-authorizations"),
         Err(e) => FormResponseBuilder::error(e),
     })
 }
@@ -578,6 +574,29 @@ async fn delete(
         }),
         Err(error) => FormResponseBuilder::error(format!("Failed to get authorizations: {error}")),
     }
+}
+
+#[derive(askama_actix::Template)]
+#[template(path = "hosts/list_authorizations.htm")]
+struct ListHostAuthorizations {
+    authorizations: Vec<UserAndOptions>,
+}
+
+#[get("/{name}/authorizations.htm")]
+async fn list_host_authorizations(
+    host_name: actix_web::web::Path<String>,
+    conn: Data<ConnectionPool>,
+) -> actix_web::Result<impl Responder> {
+    let host = Host::get_from_name(conn.get().unwrap(), host_name.to_string())
+        .await
+        .unwrap()
+        .unwrap();
+    let res = web::block(move || host.get_authorized_users(&mut conn.get().unwrap())).await?;
+
+    Ok(match res {
+        Ok(authorizations) => ListHostAuthorizations { authorizations }.to_response(),
+        Err(error) => RenderErrorTemplate { error }.to_response(),
+    })
 }
 
 #[derive(Deserialize)]

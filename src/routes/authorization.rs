@@ -105,5 +105,6 @@ async fn authorize_user_dialog(
             options,
         }
         .to_string(),
-    }))
+    })
+    .add_trigger("reload-authorizations"))
 }
