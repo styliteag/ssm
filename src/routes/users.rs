@@ -16,7 +16,7 @@ use crate::{
 
 use crate::models::{NewPublicUserKey, NewUser, PublicUserKey, User};
 
-pub fn users_config(cfg: &mut web::ServiceConfig) {
+pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(users_page)
         .service(render_users)
         .service(show_user)

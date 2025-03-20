@@ -23,7 +23,7 @@ use crate::{
 
 use crate::models::{Host, User};
 
-pub fn diff_config(cfg: &mut web::ServiceConfig) {
+pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(diff_page)
         .service(render_diff)
         .service(show_diff);

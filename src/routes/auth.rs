@@ -126,7 +126,7 @@ async fn auth_status(identity: Option<Identity>) -> impl Responder {
     .to_response()
 }
 
-pub fn auth_config(cfg: &mut web::ServiceConfig) {
+pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(login_page)
         .service(login)
         .service(logout)
