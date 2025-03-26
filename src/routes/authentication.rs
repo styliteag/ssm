@@ -16,7 +16,9 @@ use super::ErrorTemplate;
 
 #[derive(Template)]
 #[template(path = "authentication/login.html")]
-struct LoginTemplate {}
+struct LoginTemplate {
+    failed_login: bool,
+}
 
 #[derive(Template)]
 #[template(path = "authentication/status.html")]
@@ -48,7 +50,10 @@ fn verify_apache_password(password: &str, hash: &str) -> Result<bool, BcryptErro
 
 #[get("/login")]
 async fn login_page() -> impl Responder {
-    LoginTemplate {}.to_response()
+    LoginTemplate {
+        failed_login: false,
+    }
+    .to_response()
 }
 
 #[post("/login")]
@@ -102,11 +107,7 @@ async fn login(
             .insert_header(("Location", "/"))
             .finish())
     } else {
-        // TODO: this should show the login page again?
-        Ok(ErrorTemplate {
-            error: "Invalid credentials".to_owned(),
-        }
-        .to_response())
+        Ok(LoginTemplate { failed_login: true }.to_response())
     }
 }
 
