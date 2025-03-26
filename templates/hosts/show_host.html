@@ -28,7 +28,7 @@
 <h2>Authorize a user on this host</h2>
 <input type="hidden" name="host_id" value="{{ host.id }}" />
 <label>User</label>
-{% call components::user_selection(user_list) %}
+<select hx-get="/user/select.htm" hx-swap="innerHTML" hx-trigger="load, reload-users from:body" name="user_id"></select>
 <label>Login</label>
 {# TODO: insert a placeholder here #}
 <select id="host_login_selection" hx-get="/host/{{ host.name }}/logins" hx-trigger="load" hx-swap="outerHTML"

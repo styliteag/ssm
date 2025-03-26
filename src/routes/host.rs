@@ -14,10 +14,10 @@ use crate::{
     forms::{FormResponseBuilder, Modal},
     routes::{should_update, ErrorTemplate, ForceUpdate, RenderErrorTemplate},
     ssh::{CachingSshClient, KeyDiffItem, SshClient, SshClientError, SshFirstConnectionHandler},
-    ConnectionPool, DbConnection,
+    ConnectionPool,
 };
 
-use crate::models::{Host, NewHost, User};
+use crate::models::{Host, NewHost};
 
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(hosts_page)
@@ -43,38 +43,6 @@ struct HostsTemplate {}
 #[get("")]
 async fn hosts_page() -> impl Responder {
     HostsTemplate {}
-}
-
-type HostData = (Host, Option<String>, Vec<User>);
-
-enum HostDataError {
-    HostNotFound,
-    DatabaseError(String),
-}
-
-fn get_all_host_data(conn: &mut DbConnection, host: String) -> Result<HostData, HostDataError> {
-    let maybe_host = Host::get_from_name_sync(conn, host).map_err(HostDataError::DatabaseError)?;
-
-    let Some(host) = maybe_host else {
-        return Err(HostDataError::HostNotFound);
-    };
-
-    let jumphost = if let Some(id) = host.jump_via {
-        Host::get_from_id_sync(conn, id)
-            .map_err(HostDataError::DatabaseError)?
-            .map(|h| h.name)
-    } else {
-        None
-    };
-
-    // Skip getting users if we can't connect
-    if host.key_fingerprint.is_none() {
-        return Ok((host, jumphost, vec![]));
-    }
-
-    let user_list = User::get_all_users(conn).map_err(HostDataError::DatabaseError)?;
-
-    Ok((host, jumphost, user_list))
 }
 
 #[derive(Template)]
@@ -112,7 +80,6 @@ async fn get_logins(
 struct ShowHostTemplate {
     host: Host,
     jumphost: Option<String>,
-    user_list: Vec<User>,
 }
 
 #[get("/{name}")]
@@ -120,26 +87,39 @@ async fn show_host(
     conn: Data<ConnectionPool>,
     host: Path<String>,
 ) -> actix_web::Result<impl Responder> {
-    let res =
-        web::block(move || get_all_host_data(&mut conn.get().unwrap(), host.to_string())).await?;
-
-    let (host, jumphost, user_list) = match res {
-        Ok(host_data) => host_data,
-        Err(e) => {
-            return Ok(match e {
-                HostDataError::HostNotFound => ErrorTemplate {
-                    error: String::from("Host not found"),
-                }
-                .to_response(),
-                HostDataError::DatabaseError(e) => ErrorTemplate { error: e }.to_response(),
-            });
+    let host = match Host::get_from_name(conn.get().unwrap(), host.to_string()).await {
+        Ok(Some(host)) => host,
+        Ok(None) => {
+            return Ok(ErrorTemplate {
+                error: String::from("Host not found"),
+            }
+            .to_response());
+        }
+        Err(error) => {
+            return Ok(ErrorTemplate { error }.to_response());
         }
     };
 
+    if let Some(jumphost) = host.jump_via {
+        return Ok(
+            match Host::get_from_id(conn.get().unwrap(), jumphost).await {
+                Ok(Some(jumphost)) => ShowHostTemplate {
+                    host,
+                    jumphost: Some(jumphost.name),
+                }
+                .to_response(),
+                Ok(None) => ErrorTemplate {
+                    error: String::from("Jumphost not found"),
+                }
+                .to_response(),
+                Err(error) => ErrorTemplate { error }.to_response(),
+            },
+        );
+    }
+
     Ok(ShowHostTemplate {
         host,
-        jumphost,
-        user_list,
+        jumphost: None,
     }
     .to_response())
 }

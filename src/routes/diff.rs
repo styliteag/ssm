@@ -7,7 +7,6 @@ use actix_web::{
     body::BoxBody,
     get,
     http::StatusCode,
-    post,
     web::{self, Data, Path},
     HttpResponse, Responder,
 };
@@ -15,13 +14,11 @@ use askama_actix::{Template, TemplateToResponse};
 use serde::Deserialize;
 
 use crate::{
-    forms::{FormResponseBuilder, Modal},
     routes::{ErrorTemplate, RenderErrorTemplate},
-    ssh::SshPublicKey,
     ConnectionPool,
 };
 
-use crate::models::{Host, User};
+use crate::models::Host;
 
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(diff_page)
