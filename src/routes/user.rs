@@ -20,7 +20,6 @@ use crate::models::{NewPublicUserKey, NewUser, PublicUserKey, User};
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(users_page)
         .service(render_users)
-        .service(show_user)
         .service(select_users)
         .service(render_user_keys)
         .service(list_user_authorizations)
@@ -29,7 +28,8 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(delete_user)
         .service(add_user_dialog)
         .service(edit_user)
-        .service(add_key_dialog);
+        .service(add_key_dialog)
+        .service(show_user);
 }
 
 #[derive(Template)]
