@@ -14,21 +14,7 @@
     </div>
 </div>
 
-<div class="host-section">
-    <div class="host-header">
-        <h2 class="host-name">Add New User</h2>
-        <div class="host-info">Create a new SSH user</div>
-    </div>
-    
-    {% call components::form_head("/user/add") %}
-    <div class="form-grid">
-        <div class="form-group">
-            <label>Name</label>
-            <input type="text" required=true name="username" placeholder="Username">
-        </div>
-    </div>
-    {% call components::form_tail("Add user") %}
-</div>
+<button hx-get="/user/add_dialog" hx-swap="none">Add a user</button>
 
 <style>
 .host-section {
