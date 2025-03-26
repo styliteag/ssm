@@ -25,6 +25,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(add_user)
         .service(assign_key_to_user)
         .service(delete_user)
+        .service(add_user_dialog)
         .service(edit_user)
         .service(add_key_dialog);
 }
@@ -71,6 +72,20 @@ async fn show_user(
     Ok(match maybe_user {
         Ok(user) => ShowUserTemplate { user }.to_response(),
         Err(error) => ErrorTemplate { error }.to_response(),
+    })
+}
+
+#[derive(Template)]
+#[template(path = "users/add_dialog.htm")]
+struct AddUserDialog {}
+
+#[get("/add_dialog")]
+async fn add_user_dialog() -> impl Responder {
+    error!("User dialog handler");
+    FormResponseBuilder::dialog(Modal {
+        title: "Add a user".to_string(),
+        request_target: "/user/add".to_string(),
+        template: AddUserDialog {}.to_string(),
     })
 }
 
