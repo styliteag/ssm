@@ -4,6 +4,7 @@ use actix_web::{
     Responder,
 };
 use askama_actix::{Template, TemplateToResponse};
+use log::error;
 use serde::Deserialize;
 
 use crate::{
@@ -20,6 +21,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(users_page)
         .service(render_users)
         .service(show_user)
+        .service(select_users)
         .service(render_user_keys)
         .service(list_user_authorizations)
         .service(add_user)
@@ -51,6 +53,22 @@ async fn render_users(conn: Data<ConnectionPool>) -> actix_web::Result<impl Resp
 
     Ok(match all_users {
         Ok(users) => RenderUsersTemplate { users }.to_response(),
+        Err(error) => RenderErrorTemplate { error }.to_response(),
+    })
+}
+
+#[derive(Template)]
+#[template(path = "users/selection_list.htm")]
+struct UserSelectionTemplate {
+    users: Vec<User>,
+}
+
+#[get("/select.htm")]
+async fn select_users(conn: Data<ConnectionPool>) -> actix_web::Result<impl Responder> {
+    let all_users = web::block(move || User::get_all_users(&mut conn.get().unwrap())).await?;
+
+    Ok(match all_users {
+        Ok(users) => UserSelectionTemplate { users }.to_response(),
         Err(error) => RenderErrorTemplate { error }.to_response(),
     })
 }
@@ -257,22 +275,13 @@ async fn edit_user(
 #[template(path = "diff/assign_key_dialog.htm")]
 struct AddKeyDialog {
     key: SshPublicKey,
-    users: Vec<User>,
 }
 
 #[post("/add_key")]
-async fn add_key_dialog(
-    conn: Data<ConnectionPool>,
-    key: web::Form<SshPublicKey>,
-) -> actix_web::Result<impl Responder> {
-    let res = web::block(move || User::get_all_users(&mut conn.get().unwrap())).await?;
-
-    Ok(match res {
-        Ok(users) => FormResponseBuilder::dialog(Modal {
-            title: String::from("Assign this key to a user"),
-            request_target: String::from("/user/assign_key"),
-            template: AddKeyDialog { key: key.0, users }.to_string(),
-        }),
-        Err(error) => FormResponseBuilder::error(error),
+async fn add_key_dialog(key: web::Form<SshPublicKey>) -> impl Responder {
+    FormResponseBuilder::dialog(Modal {
+        title: String::from("Assign this key to a user"),
+        request_target: String::from("/user/assign_key"),
+        template: AddKeyDialog { key: key.0 }.to_string(),
     })
 }

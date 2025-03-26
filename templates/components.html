@@ -31,23 +31,6 @@
 {% endmatch %}
 {% endmacro %}
 
-{% macro basic_user_selection(users, name) %}
-<select name="{{ name }}">
-  {% for user in users %}
-  <option value="{{ user }}">{{ user }}</option>
-  {% endfor %}
-</select>
-{% endmacro %}
-
-{% macro user_selection(users) %}
-<select name="user_id">
-  {% for user in users %}
-  <option value="{{ user.id }}">{{ user.username }} {% if user.enabled == false %} (Disabled) {% endif %}
-  </option>
-  {% endfor %}
-</select>
-{% endmacro %}
-
 {# TODO: delete me #}
 {% macro form_head(target) %}
 <form hx-post="{{ target }}" hx-swap="none">
