@@ -22,7 +22,6 @@ use crate::models::{Host, NewHost};
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(hosts_page)
         .service(render_hosts)
-        .service(show_host)
         .service(get_logins)
         .service(add_host)
         .service(authorize_user)
@@ -33,7 +32,8 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(delete_authorization)
         .service(list_host_authorizations)
         .service(edit_host_form)
-        .service(edit_host);
+        .service(edit_host)
+        .service(show_host);
 }
 
 #[derive(Template)]
