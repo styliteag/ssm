@@ -69,9 +69,8 @@ htmx.on("htmx:afterRequest", (event) => {
 
   const doOpenModal = event.detail.xhr.getResponseHeader("X-MODAL") === "open";
   if (!doOpenModal) {
-    if (closeModal()) {
-      show_response_toast(event.detail.xhr.response, true);
-    }
+    closeModal() && show_response_toast(event.detail.xhr.response, true);
+    return;
   }
   const is_open = form_response_dialog.open;
 
