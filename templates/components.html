@@ -31,16 +31,6 @@
 {% endmatch %}
 {% endmacro %}
 
-{# TODO: delete me #}
-{% macro form_head(target) %}
-<form hx-post="{{ target }}" hx-swap="none">
-  {% endmacro %}}}
-
-  {% macro form_tail(message) %}
-  <button>{{ message }}</button>
-</form>
-{% endmacro %}
-
 {% macro post(name, target, opts) %}
 <button hx-swap="none" hx-post="{{ target }}" hx-vals='{ {{ opts }} }'>{{ name }}</button>
 {% endmacro %}
