@@ -3,12 +3,21 @@ const snackbar = document.querySelector("#snackbar");
 const modal_stack = document.getElementById("modal_stack");
 let lastXhr = "";
 
+/* Remove all children of elem */
+function removeChildren(elem) {
+  while (elem.firstChild) {
+    elem.removeChild(elem.firstChild);
+  }
+}
+
 /* Closes the current modal, and returns wether all Modals are closed */
-function closeModal() {
+function closeModal(force = false) {
+  if (force) {
+    removeChildren(modal_stack);
+  }
+
   if (modal_stack.childElementCount > 0) {
-    while (form_response_dialog.firstChild) {
-      form_response_dialog.removeChild(form_response_dialog.firstChild);
-    }
+    removeChildren(form_response_dialog);
 
     const stackPop = modal_stack.lastChild;
     while (stackPop.firstChild) {
@@ -67,9 +76,11 @@ htmx.on("htmx:afterRequest", (event) => {
 
   if (!isFormResponse) return;
 
-  const doOpenModal = event.detail.xhr.getResponseHeader("X-MODAL") === "open";
-  if (!doOpenModal) {
-    closeModal() && show_response_toast(event.detail.xhr.response, true);
+  const modal_header = event.detail.xhr.getResponseHeader("X-MODAL");
+  // When modal_header is null we pop the stack, when close we force-close
+  if (modal_header !== "open") {
+    closeModal(modal_header === "close") &&
+      show_response_toast(event.detail.xhr.response, true);
     return;
   }
   const is_open = form_response_dialog.open;
