@@ -12,5 +12,6 @@
   {{ dialog.template|safe }}
 </form>
 <hr>
-<button onClick="closeModal()">Abort</button>
+<button id="modal_back" onClick="closeModal(false)">Back</button>
+<button onClick="closeModal(true)">Abort</button>
 {%- endmatch %}

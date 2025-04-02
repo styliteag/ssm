@@ -21,6 +21,15 @@
   --hover-secondary: #4f46e5;
 }
 
+#modal_stack {
+  display: none;
+}
+
+/* TODO: this doesn't work for some reason */
+#modal_stack:empty~#form_response_dialog #modal_back {
+  display: none;
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
     /* Dark theme colors */
