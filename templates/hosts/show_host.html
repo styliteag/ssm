@@ -6,6 +6,7 @@
 <h1>Host: {{ host.name }}</h1>
 {% set path="/host/" .to_owned() + host.name.as_str() + "/delete" %}
 {% call components::post("Delete this host", path.as_str(), "" ) %}
+<button hx-get="/host/{{ host.name }}/edit" hx-swap="none">Edit</button>
 <a class="button" href="/diff/{{ host.name }}">View diff</a>
 <p>Address: {{ host.address}}</p>
 <p>Port: {{ host.port }}</p>
@@ -24,19 +25,5 @@
 <p>Allowed users:</p>
 <table hx-trigger="load, reload-authorizations from:body" hx-get="/host/{{ host.name }}/authorizations.htm" placeholder="Loading" hx-swap="innerHTML">
 </table>
-{% call components::form_head("/host/user/authorize") %}
-<h2>Authorize a user on this host</h2>
-<input type="hidden" name="host_id" value="{{ host.id }}" />
-<label>User</label>
-<select hx-get="/user/select.htm" hx-swap="innerHTML" hx-trigger="load, reload-users from:body" name="user_id"></select>
-<label>Login</label>
-{# TODO: insert a placeholder here #}
-<select id="host_login_selection" hx-get="/host/{{ host.name }}/logins" hx-trigger="load" hx-swap="outerHTML"
-  name="login"></select>
-<button type="button" hx-get="/host/{{ host.name }}/logins?force_update=true" hx-swap="outerHTML"
-  hx-target="#host_login_selection">Reload
-  logins</button>
-<label>Options</label>
-<input name="options">
-{% call components::form_tail("Authorize user") %}
+<button hx-vals='{"host_id":"{{ host.id }}", "host_name":"{{ host.name}}"}' hx-get="/host/authorize" hx-swap="none">Add authorization to this host</button>
 {% endblock %}

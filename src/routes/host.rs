@@ -6,7 +6,7 @@ use actix_web::{
     Responder,
 };
 use askama_actix::{Template, TemplateToResponse};
-use log::{debug, error, info};
+use log::error;
 use serde::Deserialize;
 
 use crate::{
@@ -23,6 +23,8 @@ pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(hosts_page)
         .service(render_hosts)
         .service(get_logins)
+        .service(add_host_dialog)
+        .service(authorize_user_dialog)
         .service(add_host)
         .service(authorize_user)
         .service(gen_authorized_keys)
@@ -211,6 +213,41 @@ async fn add_host_key(
 }
 
 #[derive(Template)]
+#[template(path = "hosts/add_dialog.htm")]
+struct AddHostDialog {
+    hosts: Vec<Host>,
+}
+
+#[get("/add")]
+async fn add_host_dialog(conn: Data<ConnectionPool>) -> actix_web::Result<impl Responder> {
+    Ok(
+        match web::block(move || Host::get_all_hosts(&mut conn.get().unwrap())).await? {
+            Ok(hosts) => {
+                FormResponseBuilder::dialog("Add a new Host", "/host/add", AddHostDialog { hosts })
+            }
+            Err(error) => FormResponseBuilder::error(error),
+        },
+    )
+}
+
+// NOTE: im not sure if it is a good idea to use the same struct as template and form
+#[derive(Template, Deserialize)]
+#[template(path = "hosts/authorize_user_dialog.htm")]
+struct AuthorizeUserDialog {
+    host_id: u32,
+    host_name: String,
+}
+
+#[get("/authorize")]
+async fn authorize_user_dialog(form: web::Query<AuthorizeUserDialog>) -> impl Responder {
+    FormResponseBuilder::dialog(
+        "Authorize a user on this host",
+        "/host/user/authorize",
+        form.0,
+    )
+}
+
+#[derive(Template)]
 #[template(path = "hosts/hostkey_dialog.htm")]
 struct HostkeyDialog {
     host_name: String,
@@ -323,45 +360,18 @@ async fn add_host(
     })
 }
 
-// Added view model for host list rendering to convert optional fields
-struct ListHostView {
-    pub id: i32,
-    pub name: String,
-    pub address: String,
-    pub username: String,
-    pub port: i32,
-    pub key_fingerprint: String,
-    pub jump_via: String,
-}
-
-// Update RenderHostsTemplate to use ListHostView instead of Host
 #[derive(Template)]
 #[template(path = "hosts/list.htm")]
 struct RenderHostsTemplate {
-    hosts: Vec<ListHostView>,
+    hosts: Vec<Host>,
 }
 
-// Modify the render_hosts function to map Host to ListHostView
 #[get("/list.htm")]
 async fn render_hosts(conn: Data<ConnectionPool>) -> actix_web::Result<impl Responder> {
     let all_hosts = web::block(move || Host::get_all_hosts(&mut conn.get().unwrap())).await?;
 
     Ok(match all_hosts {
-        Ok(hosts) => {
-            let view_hosts = hosts
-                .into_iter()
-                .map(|host| ListHostView {
-                    id: host.id,
-                    name: host.name,
-                    address: host.address,
-                    username: host.username,
-                    port: host.port,
-                    key_fingerprint: host.key_fingerprint.unwrap_or_default(),
-                    jump_via: host.jump_via.map(|v| v.to_string()).unwrap_or_default(),
-                })
-                .collect();
-            RenderHostsTemplate { hosts: view_hosts }.to_response()
-        }
+        Ok(hosts) => RenderHostsTemplate { hosts }.to_response(),
         Err(error) => RenderErrorTemplate { error }.to_response(),
     })
 }
@@ -604,17 +614,7 @@ async fn delete_authorization(
 #[derive(askama_actix::Template)]
 #[template(path = "hosts/edit_host.html")]
 struct EditHostTemplate {
-    host: EditHostView,
-}
-
-// A view model for rendering the edit host form with types that implement Display
-struct EditHostView {
-    name: String,
-    address: String,
-    username: String,
-    port: i32,
-    key_fingerprint: String,
-    jump_via: String,
+    host: Host,
 }
 
 #[get("/{name}/edit")]
@@ -622,31 +622,18 @@ async fn edit_host_form(
     conn: actix_web::web::Data<crate::ConnectionPool>,
     host_name: actix_web::web::Path<String>,
 ) -> actix_web::Result<impl actix_web::Responder> {
-    let host_result =
-        crate::models::Host::get_from_name(conn.get().unwrap(), host_name.to_string())
-            .await
-            .map_err(actix_web::error::ErrorInternalServerError)?;
+    let host_result = Host::get_from_name(conn.get().unwrap(), host_name.to_string())
+        .await
+        .map_err(FormResponseBuilder::error)?;
 
-    if let Some(host) = host_result {
-        debug!(
-            "ssm::routes::hosts: Display edit form for host {}",
-            host.name
-        );
-        let view = EditHostView {
-            name: host.name,
-            address: host.address,
-            username: host.username,
-            port: host.port,
-            key_fingerprint: host.key_fingerprint.unwrap_or_default(),
-            jump_via: host.jump_via.map(|v| v.to_string()).unwrap_or_default(),
-        };
-        Ok(EditHostTemplate { host: view }.to_response())
-    } else {
-        Ok(crate::routes::ErrorTemplate {
-            error: "Host not found".to_string(),
-        }
-        .to_response())
-    }
+    Ok(match host_result {
+        Some(host) => FormResponseBuilder::dialog(
+            "Edit host",
+            format!("/host/{host_name}/edit"),
+            EditHostTemplate { host },
+        ),
+        None => FormResponseBuilder::error("No such host"),
+    })
 }
 
 // Custom deserialization to treat empty strings as None
@@ -693,28 +680,20 @@ async fn edit_host(
     form: actix_web::web::Form<EditHostForm>,
 ) -> actix_web::Result<impl actix_web::Responder> {
     let mut db_conn = conn.get().unwrap();
-    match crate::models::Host::update_host(
-        &mut db_conn,
-        host_name.to_string(),
-        form.name.clone(),
-        form.address.clone(),
-        form.username.clone(),
-        form.port,
-        form.key_fingerprint.clone(),
-        form.jump_via,
-    ) {
-        Ok(()) => {
-            info!(
-                "ssm::routes::hosts: Host {} updated successfully",
-                host_name
-            );
-            Ok(actix_web::HttpResponse::Found()
-                .append_header(("Location", "/host"))
-                .finish())
-        }
-        Err(e) => Ok(crate::routes::ErrorTemplate {
-            error: e.to_string(),
-        }
-        .to_response()),
-    }
+    Ok(
+        match Host::update_host(
+            &mut db_conn,
+            host_name.to_string(),
+            form.name.clone(),
+            form.address.clone(),
+            form.username.clone(),
+            form.port,
+            form.key_fingerprint.clone(),
+            form.jump_via,
+        ) {
+            Ok(()) => FormResponseBuilder::success("Updated host.")
+                .with_redirect(format!("/host/{}", form.name)),
+            Err(e) => FormResponseBuilder::error(e),
+        },
+    )
 }

@@ -1,0 +1,20 @@
+<label>Name</label>
+<input required="true" type="text" name="host_name" placeholder="e.g., production-server">
+
+<label>Login</label>
+<input required="true" type="text" name="login" placeholder="Authentication username">
+
+<label>Address</label>
+<input required="true" type="text" name="address" placeholder="hostname or IP address">
+
+<label>Port</label>
+<input required="true" type="number" name="port" min="1" max="65535" value="22">
+
+<label>Jump via</label>
+<select id="jumphost_selection" name="jumphost">
+  <option value="-1">none</option>
+  {% for host in hosts %}
+  <option value="{{ host.id }}">{{ host.name }}</option>
+  {% endfor %}
+</select>
+<button>Check connection</button>
