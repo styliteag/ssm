@@ -45,13 +45,13 @@ pub(super) async fn init_scheduler(
                         let next = sched.next_tick_for_job(uuid).await;
                         match next {
                             Ok(Some(next_tick)) => {
-                                info!("Succeeded check job. Next run: {}", next_tick)
+                                info!("Succeeded check job. Next run: {}", next_tick);
                             }
                             Ok(None) => {
-                                info!("Succeeded check job. Won't run again.")
+                                info!("Succeeded check job. Won't run again.");
                             }
                             Err(e) => {
-                                info!("Succeeded check job. Error finding next time: {e}")
+                                info!("Succeeded check job. Error finding next time: {e}");
                             }
                         }
                         // TODO: do something with data
@@ -81,13 +81,13 @@ pub(super) async fn init_scheduler(
                         let next = sched.next_tick_for_job(uuid).await;
                         match next {
                             Ok(Some(next_tick)) => {
-                                info!("Succeeded update job. Next run: {}", next_tick)
+                                info!("Succeeded update job. Next run: {}", next_tick);
                             }
                             Ok(None) => {
-                                info!("Succeeded update job. Won't run again.")
+                                info!("Succeeded update job. Won't run again.");
                             }
                             Err(e) => {
-                                info!("Succeeded update job. Error finding next time: {e}")
+                                info!("Succeeded update job. Error finding next time: {e}");
                             }
                         }
                     }
