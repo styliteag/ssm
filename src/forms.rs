@@ -3,8 +3,8 @@ use askama::Template;
 
 use crate::ssh::SshClientError;
 
-#[derive(Debug)]
-pub struct Modal {
+#[derive(Debug, Clone)]
+struct Modal {
     /// Title displayed at the top
     pub title: String,
     /// Where to direct requests from the modal
@@ -13,7 +13,7 @@ pub struct Modal {
     pub template: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum FormResponse {
     /// A successful Response with a message
     Success(String),
@@ -23,12 +23,13 @@ enum FormResponse {
     Dialog(Modal),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FormResponseBuilder {
     triggers: Vec<String>,
     status: StatusCode,
     response: FormResponse,
     redirect: Option<String>,
+    close_modal: bool,
 }
 
 #[derive(Template)]
@@ -37,50 +38,70 @@ struct FormResponseTemplate {
     res: FormResponse,
 }
 
+impl Default for FormResponseBuilder {
+    fn default() -> Self {
+        Self {
+            triggers: vec![],
+            status: StatusCode::INTERNAL_SERVER_ERROR,
+            response: FormResponse::Error("No response message set.".to_owned()),
+            redirect: None,
+            close_modal: false,
+        }
+    }
+}
+
 impl FormResponseBuilder {
     pub fn success(message: impl Into<String>) -> Self {
         Self {
-            triggers: Vec::new(),
             status: StatusCode::OK,
             response: FormResponse::Success(message.into()),
-            redirect: None,
+            ..Default::default()
         }
     }
 
     pub fn created(message: impl Into<String>) -> Self {
         Self {
-            triggers: Vec::new(),
             status: StatusCode::CREATED,
             response: FormResponse::Success(message.into()),
-            redirect: None,
+            ..Default::default()
         }
     }
 
-    pub fn error(message: impl Into<String>) -> Self {
+    pub fn error(message: impl ToString) -> Self {
         Self {
-            triggers: Vec::new(),
             status: StatusCode::UNPROCESSABLE_ENTITY,
-            response: FormResponse::Error(message.into()),
-            redirect: None,
+            response: FormResponse::Error(message.to_string()),
+            ..Default::default()
         }
     }
 
     pub fn not_found(message: impl Into<String>) -> Self {
         Self {
-            triggers: Vec::new(),
             status: StatusCode::NOT_FOUND,
             response: FormResponse::Error(message.into()),
-            redirect: None,
+            ..Default::default()
         }
     }
 
-    pub const fn dialog(modal: Modal) -> Self {
+    pub fn dialog(
+        title: impl Into<String>,
+        request_target: impl Into<String>,
+        template: impl ToString,
+    ) -> Self {
         Self {
-            triggers: Vec::new(),
             status: StatusCode::OK,
-            response: FormResponse::Dialog(modal),
-            redirect: None,
+            response: FormResponse::Dialog(Modal {
+                title: title.into(),
+                request_target: request_target.into(),
+                template: template.to_string(),
+            }),
+            ..Default::default()
         }
+    }
+
+    pub fn close_modal(mut self) -> Self {
+        self.close_modal = true;
+        self
     }
 
     pub fn _set_status(mut self, status: StatusCode) -> Self {
@@ -105,6 +126,10 @@ impl FormResponseBuilder {
         if matches!(self.response, FormResponse::Dialog(_)) {
             builder.insert_header(("X-MODAL", "open"));
         };
+        if self.close_modal {
+            builder.insert_header(("X-MODAL", "close"));
+        }
+
         if !self.triggers.is_empty() {
             builder.insert_header((String::from("HX-Trigger"), self.triggers.join(",")));
         };
@@ -122,11 +147,35 @@ impl FormResponseBuilder {
     }
 }
 
+impl std::fmt::Display for FormResponseBuilder {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.response {
+            FormResponse::Success(message) => write!(f, "Success: {message}"),
+            FormResponse::Error(message) => write!(f, "Error: {message}"),
+            FormResponse::Dialog(Modal { title, .. }) => write!(f, "Dialog: {title}"),
+        }
+    }
+}
+
 impl actix_web::Responder for FormResponseBuilder {
     type Body = actix_web::body::BoxBody;
 
     fn respond_to(self, _req: &actix_web::HttpRequest) -> HttpResponse<Self::Body> {
         self.into_response()
+    }
+}
+
+impl actix_web::ResponseError for FormResponseBuilder {
+    fn status_code(&self) -> StatusCode {
+        if !(self.status.is_client_error() || self.status.is_server_error()) {
+            StatusCode::INTERNAL_SERVER_ERROR
+        } else {
+            self.status
+        }
+    }
+
+    fn error_response(&self) -> HttpResponse<actix_web::body::BoxBody> {
+        self.clone().into_response()
     }
 }
 

@@ -11,7 +11,7 @@ use serde::Deserialize;
 
 use crate::{
     db::UserAndOptions,
-    forms::{FormResponseBuilder, Modal},
+    forms::FormResponseBuilder,
     routes::{should_update, ErrorTemplate, ForceUpdate, RenderErrorTemplate},
     ssh::{CachingSshClient, KeyDiffItem, SshClient, SshClientError, SshFirstConnectionHandler},
     ConnectionPool,
@@ -181,19 +181,18 @@ async fn add_host_key(
             }
         };
 
-        return Ok(FormResponseBuilder::dialog(Modal {
-            title: String::from("Please check the hostkey"),
-            request_target: format!("/host/{}/add_hostkey", host.id),
-            template: HostkeyDialog {
+        return Ok(FormResponseBuilder::dialog(
+            "Please check the hostkey",
+            format!("/host/{}/add_hostkey", host.id),
+            HostkeyDialog {
                 host_name: host.name,
                 login: host.username,
                 address: host.address,
                 port,
                 jumphost: host.jump_via,
                 key_fingerprint,
-            }
-            .to_string(),
-        }));
+            },
+        ));
     };
 
     let handler = handler.set_hostkey(key_fingerprint.to_owned());
@@ -279,19 +278,18 @@ async fn add_host(
             }
         };
 
-        return Ok(FormResponseBuilder::dialog(Modal {
-            title: String::from("Please check the hostkey"),
-            request_target: String::from("/host/add"),
-            template: HostkeyDialog {
+        return Ok(FormResponseBuilder::dialog(
+            "Please check the hostkey",
+            "/host/add",
+            HostkeyDialog {
                 host_name: form.host_name,
                 login: form.login,
                 address: form.address,
                 port: form.port,
                 jumphost: form.jumphost,
                 key_fingerprint,
-            }
-            .to_string(),
-        }));
+            },
+        ));
     };
 
     // We already have a hostkey, check it
@@ -317,6 +315,7 @@ async fn add_host(
     Ok(match res {
         Ok(id) => match ssh_client.install_script_on_host(id).await {
             Ok(()) => FormResponseBuilder::created(String::from("Added host"))
+                .close_modal()
                 .add_trigger(String::from("reload-hosts")),
             Err(error) => FormResponseBuilder::error(format!("Failed to install script: {error}")),
         },
@@ -394,6 +393,7 @@ async fn authorize_user(
 
     Ok(match res {
         Ok(()) => FormResponseBuilder::success("Authorized user")
+            .close_modal()
             .add_trigger("reloadDiff")
             .add_trigger("reload-authorizations"),
         Err(e) => FormResponseBuilder::error(e),
@@ -452,16 +452,15 @@ async fn gen_authorized_keys(
         ));
     };
 
-    Ok(FormResponseBuilder::dialog(Modal {
-        title: format!("These changes will be applied for '{login}' on '{host_name}':"),
-        request_target: format!("/host/{host_name}/set_authorized_keys"),
-        template: AuthorizedKeyfileDialog {
+    Ok(FormResponseBuilder::dialog(
+        format!("These changes will be applied for '{login}' on '{host_name}':"),
+        format!("/host/{host_name}/set_authorized_keys"),
+        AuthorizedKeyfileDialog {
             login: login.to_owned(),
             diff: key_diff,
             authorized_keys,
-        }
-        .to_string(),
-    }))
+        },
+    ))
 }
 
 #[derive(Deserialize)]
@@ -543,15 +542,14 @@ async fn delete(
 
     // TODO: resolve authorizations of dependant hosts
     match res {
-        Ok((authorizations, affected_hosts)) => FormResponseBuilder::dialog(Modal {
-            title: format!("In addition to {host_name}, these entries will be affected"),
-            request_target: format!("/host/{host_name}/delete"),
-            template: DeleteHostTemplate {
+        Ok((authorizations, affected_hosts)) => FormResponseBuilder::dialog(
+            format!("In addition to {host_name}, these entries will be affected"),
+            format!("/host/{host_name}/delete"),
+            DeleteHostTemplate {
                 authorizations,
                 affected_hosts,
-            }
-            .to_string(),
-        }),
+            },
+        ),
         Err(error) => FormResponseBuilder::error(format!("Failed to get authorizations: {error}")),
     }
 }
