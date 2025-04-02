@@ -7,7 +7,7 @@ use askama::Template;
 use serde::Deserialize;
 
 use crate::{
-    forms::{FormResponseBuilder, Modal},
+    forms::FormResponseBuilder,
     models::{Host, User},
     ConnectionPool,
 };
@@ -94,17 +94,16 @@ async fn authorize_user_dialog(
         Err(error) => return Ok(FormResponseBuilder::error(error)),
     };
 
-    Ok(FormResponseBuilder::dialog(Modal {
-        title: String::from("Authorize user"),
+    Ok(FormResponseBuilder::dialog(
+        "Authorize user",
         // TODO: move this
-        request_target: String::from("/host/user/authorize"),
-        template: AuthorizeUserDialog {
+        "/host/user/authorize",
+        AuthorizeUserDialog {
             host,
             user,
             login,
             options,
-        }
-        .to_string(),
-    })
+        },
+    )
     .add_trigger("reload-authorizations"))
 }

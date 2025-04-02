@@ -9,7 +9,7 @@ use serde::Deserialize;
 
 use crate::{
     db::UserAndOptions,
-    forms::{FormResponseBuilder, Modal},
+    forms::FormResponseBuilder,
     routes::{ErrorTemplate, RenderErrorTemplate},
     ssh::SshPublicKey,
     ConnectionPool,
@@ -100,11 +100,7 @@ struct AddUserDialog {}
 #[get("/add_dialog")]
 async fn add_user_dialog() -> impl Responder {
     error!("User dialog handler");
-    FormResponseBuilder::dialog(Modal {
-        title: "Add a user".to_string(),
-        request_target: "/user/add".to_string(),
-        template: AddUserDialog {}.to_string(),
-    })
+    FormResponseBuilder::dialog("Add a user", "/user/add", AddUserDialog {})
 }
 
 #[post("/add")]
@@ -279,9 +275,9 @@ struct AddKeyDialog {
 
 #[post("/add_key")]
 async fn add_key_dialog(key: web::Form<SshPublicKey>) -> impl Responder {
-    FormResponseBuilder::dialog(Modal {
-        title: String::from("Assign this key to a user"),
-        request_target: String::from("/user/assign_key"),
-        template: AddKeyDialog { key: key.0 }.to_string(),
-    })
+    FormResponseBuilder::dialog(
+        "Assign this key to a user",
+        "/user/assign_key",
+        AddKeyDialog { key: key.0 },
+    )
 }
