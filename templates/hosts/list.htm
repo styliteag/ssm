@@ -11,9 +11,9 @@
   <tr>
     <td><a href="/host/{{ host.name }}">{{ host.name }}</a></td>
     <td>{{ host.address }}</td>
-    <td><a class="button" href="/diff/{{ host.name }}">Diff</a></td>
+    <td><a class="btn btn-small" href="/diff/{{ host.name }}">Diff</a></td>
     <td>
-      <button hx-get="/host/{{ host.name }}/edit" hx-swap="none" >Edit</button>
+      <button hx-get="/host/{{ host.name }}/edit" hx-swap="none" class="btn btn-secondary btn-small">Edit</button>
     </td>
   </tr>
   {% endfor %}

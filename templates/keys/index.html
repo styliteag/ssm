@@ -34,8 +34,8 @@
                             <span class="key-type">{{ key.key_type }}</span><span class="separator"> / </span><span class="key-preview" title="{{ key.key_base64 }}">{{ key.key_preview() }}</span>
                         </td>
                         <td>
-                            <button type="button" class="button-small primary" onclick="editKey('{{ key.id }}', '{% match key.comment %}{% when Some with (comment) %}{{ comment }}{% when None %}{% endmatch %}')">Edit</button>
-                            <button type="button" class="button-small danger" onclick="showDeleteDialog('{{ key.id }}', this)">Delete</button>
+                            <button type="button" class="btn btn-small btn-primary" onclick="editKey('{{ key.id }}', '{% match key.comment %}{% when Some with (comment) %}{{ comment }}{% when None %}{% endmatch %}')">Edit</button>
+                            <button type="button" class="btn btn-small btn-danger" onclick="showDeleteDialog('{{ key.id }}', this)">Delete</button>
                             <dialog id="delete-dialog-{{ key.id }}">
                                 {% let username = username %}
                                 {% include "keys/delete_key_dialog.htm" %}
@@ -53,8 +53,8 @@
                                             </div>
                                         </div>
                                         <div class="form-actions">
-                                            <button type="button" onclick="closeDialog(this)" class="button button-secondary">Cancel</button>
-                                            <button type="submit" class="button">Save Changes</button>
+                                            <button type="button" onclick="closeDialog(this)" class="btn btn-secondary">Cancel</button>
+                                            <button type="submit" class="btn">Save Changes</button>
                                         </div>
                                     </div>
                                 </form>

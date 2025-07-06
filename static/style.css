@@ -1187,27 +1187,31 @@ dialog::backdrop {
 }
 
 .btn {
-  padding: 0.75rem 2rem;
+  padding: 0.5rem 1rem;
   border-radius: 6px;
   cursor: pointer;
-  font-weight: 600;
-  font-size: 1rem;
-  border: none;
+  font-weight: 500;
+  font-size: 0.9rem;
+  border: 1px solid var(--accent-primary);
+  background-color: var(--accent-primary);
+  color: white;
   transition: background-color 0.2s, transform 0.1s;
 }
 
-.btn-primary {
-  background-color: #0066cc;
-  color: white;
-}
+.btn:hover { background-color: var(--hover-primary); transform: translateY(-1px); }
 
-.btn-primary:hover {
-  background-color: #0052a3;
-}
+/* Variant modifiers */
+.btn-primary { background-color: var(--accent-primary); border-color: var(--accent-primary); color: white; }
+.btn-primary:hover { background-color: var(--hover-primary); }
 
-.btn-primary:active {
-  transform: translateY(1px);
-}
+.btn-secondary { background-color: transparent; color: var(--accent-primary); border-color: var(--accent-primary); }
+.btn-secondary:hover { background-color: var(--accent-primary); color: white; }
+
+.btn-danger { background-color: var(--accent-danger); border-color: var(--accent-danger); color: white; }
+.btn-danger:hover { background-color: color-mix(in srgb, var(--accent-danger) 80%, black); }
+
+/* Size modifier */
+.btn-small { padding: 0.25rem 0.5rem; font-size: 0.75rem; border-radius: 4px; }
 
 /* SSH Keys page */
 .section-content { margin-top: 1rem; }
