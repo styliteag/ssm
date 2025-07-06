@@ -630,8 +630,10 @@ textarea:focus {
 #form_response_dialog[open] {
   height: fit-content;
   width: fit-content;
+  min-width: 400px;
+  max-width: 95vw;
   margin: auto;
-  padding: 24px;
+  padding: 2rem;
   border-radius: 12px;
   border: 1px solid var(--border-color);
   background-color: var(--bg-color);
@@ -639,13 +641,36 @@ textarea:focus {
 
   display: flex;
   flex-direction: column;
-  justify-content: space-around;
-  align-items: center;
+  justify-content: flex-start;
+  align-items: stretch;
 }
 
 #form_response_dialog>* {
-  width: 95%;
+  width: 100%;
 }
+
+/* Dialog title styling */
+.dialog-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-color);
+  margin: 0 0 1rem 0;
+  text-align: center;
+  line-height: 1.4;
+  white-space: normal;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+/* Dialog separator styling */
+#form_response_dialog hr {
+  border: none;
+  height: 1px;
+  background-color: var(--border-color);
+  margin: 1.5rem 0;
+  width: 100%;
+}
+
 
 .unknown-key {
   color: var(--warning-color);
@@ -815,10 +840,57 @@ textarea:focus {
   padding: 0.75rem;
   border-radius: 6px;
   border: 1px solid var(--border-color);
-  background-color: rgba(255, 255, 255, 0.05);
+  background-color: var(--bg-color);
   color: var(--text-color);
   font-size: 0.95rem;
   transition: border-color 0.2s, box-shadow 0.2s;
+  width: 100%;
+  text-align: left !important;
+}
+
+.form-group select {
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=UTF-8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path fill='%23666' d='M6 8L2 4h8z'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 12px;
+  padding-right: 2.5rem;
+}
+
+/* Dark theme select arrow */
+:root[data-theme="dark"] .form-group select {
+  background-image: url("data:image/svg+xml;charset=UTF-8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path fill='%23ccc' d='M6 8L2 4h8z'/></svg>");
+}
+
+/* Searchable select styling */
+.form-group input[list] {
+  background-image: url("data:image/svg+xml;charset=UTF-8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path fill='%23666' d='M5 2C6.66 2 8 3.34 8 5c0 .74-.29 1.41-.76 1.91l2.42 2.42-.71.71-2.42-2.42C6.41 7.71 5.74 8 5 8 3.34 8 2 6.66 2 5s1.34-3 3-3m0 1C3.9 3 3 3.9 3 5s.9 2 2 2 2-.9 2-2-.9-2-2-2z'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 16px;
+  padding-right: 2.5rem;
+  text-align: left !important;
+  direction: ltr;
+}
+
+/* Dark theme searchable select */
+:root[data-theme="dark"] .form-group input[list] {
+  background-image: url("data:image/svg+xml;charset=UTF-8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path fill='%23ccc' d='M5 2C6.66 2 8 3.34 8 5c0 .74-.29 1.41-.76 1.91l2.42 2.42-.71.71-2.42-2.42C6.41 7.71 5.74 8 5 8 3.34 8 2 6.66 2 5s1.34-3 3-3m0 1C3.9 3 3 3.9 3 5s.9 2 2 2 2-.9 2-2-.9-2-2-2z'/></svg>");
+  text-align: left !important;
+  direction: ltr;
+}
+
+/* Hide datalist options styling - browser specific */
+datalist {
+  display: none;
+}
+
+/* Force left alignment for searchable inputs in dialogs */
+#form_response_dialog .form-group input[list],
+#form_response_dialog input[list] {
+  text-align: left !important;
+  direction: ltr !important;
 }
 
 .form-group input:focus,
@@ -830,6 +902,89 @@ textarea:focus {
 
 .form-group input::placeholder {
   color: rgba(255, 255, 255, 0.4);
+}
+
+/* Enhanced form container styles */
+.form-container {
+  padding: 1rem;
+  max-width: 100%;
+}
+
+.form-group-full {
+  grid-column: 1 / -1;
+}
+
+.form-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.form-help {
+  color: var(--text-color);
+  opacity: 0.7;
+  font-size: 0.8rem;
+  margin-top: 0.25rem;
+  display: block;
+  line-height: 1.4;
+}
+
+/* Dialog-specific form improvements */
+dialog .form-container {
+  min-width: 500px;
+  max-width: 700px;
+  width: 100%;
+}
+
+#form_response_dialog .dialog-title {
+  max-width: 100%;
+  word-break: break-word;
+  hyphens: auto;
+}
+
+dialog .form-grid {
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+dialog .form-grid-wide {
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+
+/* Input field enhancements */
+.form-group input:invalid {
+  border-color: var(--accent-danger);
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.1);
+}
+
+.form-group input:valid {
+  border-color: var(--border-color);
+}
+
+/* Responsive form layout */
+@media (max-width: 700px) {
+  dialog .form-container {
+    min-width: 320px;
+    max-width: 95vw;
+  }
+  
+  dialog .form-grid,
+  dialog .form-grid-wide {
+    grid-template-columns: 1fr;
+  }
+  
+  #form_response_dialog[open] {
+    min-width: 300px;
+    padding: 1.5rem;
+  }
+  
+  .form-actions {
+    flex-direction: column;
+  }
 }
 
 /* Status badges for different key states */

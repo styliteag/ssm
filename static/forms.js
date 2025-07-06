@@ -60,7 +60,73 @@ class ThemeManager {
 // Initialize theme manager when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
   window.themeManager = new ThemeManager();
+  initializeSearchableSelects();
 });
+
+// Reinitialize searchable selects when HTMX loads new content
+document.addEventListener('htmx:afterSettle', () => {
+  initializeSearchableSelects();
+});
+
+// Searchable select functionality
+function initializeSearchableSelects() {
+  // Initialize jumphost searchable select
+  const jumphostInput = document.getElementById('jumphost_selection');
+  const jumphostValue = document.getElementById('jumphost_value');
+  const jumphostList = document.getElementById('jumphost_list');
+  
+  if (jumphostInput && jumphostValue && jumphostList) {
+    setupSearchableSelect(jumphostInput, jumphostValue, jumphostList);
+  }
+}
+
+function setupSearchableSelect(input, hiddenInput, datalist) {
+  // Handle input change to update hidden field
+  input.addEventListener('input', () => {
+    const value = input.value.trim();
+    const options = datalist.querySelectorAll('option');
+    let foundId = '-1'; // Default to "none"
+    
+    // Find matching option
+    for (const option of options) {
+      if (option.value.toLowerCase() === value.toLowerCase()) {
+        foundId = option.getAttribute('data-id');
+        break;
+      }
+    }
+    
+    hiddenInput.value = foundId;
+  });
+  
+  // Handle selection from datalist
+  input.addEventListener('change', () => {
+    const value = input.value.trim();
+    const options = datalist.querySelectorAll('option');
+    
+    // Check if it's a valid selection
+    let found = false;
+    for (const option of options) {
+      if (option.value.toLowerCase() === value.toLowerCase()) {
+        hiddenInput.value = option.getAttribute('data-id');
+        found = true;
+        break;
+      }
+    }
+    
+    // If not found and not empty, reset
+    if (!found && value !== '') {
+      input.value = '';
+      hiddenInput.value = '-1';
+    }
+  });
+  
+  // Clear selection when input is empty
+  input.addEventListener('blur', () => {
+    if (input.value.trim() === '') {
+      hiddenInput.value = '-1';
+    }
+  });
+}
 
 const form_response_dialog = document.querySelector("#form_response_dialog");
 const snackbar = document.querySelector("#snackbar");
