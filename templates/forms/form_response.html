@@ -6,12 +6,9 @@
 <b>An error occured:</b><br>
 <i>{{ message }}</i>
 {%- when crate::forms::FormResponse::Dialog with (dialog) -%}
-<p>{{ dialog.title }}</p>
+<p class="dialog-title">{{ dialog.title }}</p>
 <hr>
 <form hx-post="{{ dialog.request_target }}" hx-swap="none">
   {{ dialog.template|safe }}
 </form>
-<hr>
-<button id="modal_back" onClick="closeModal(false)">Back</button>
-<button onClick="closeModal(true)">Abort</button>
 {%- endmatch %}

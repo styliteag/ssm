@@ -1,20 +1,45 @@
-<label>Name</label>
-<input required="true" type="text" name="host_name" placeholder="e.g., production-server">
+<div class="form-container">
+    <div class="form-grid form-grid-wide">
+        <div class="form-group form-group-full">
+            <label for="host_name">Name:</label>
+            <input required="true" type="text" id="host_name" name="host_name" placeholder="e.g., production-server">
+        </div>
 
-<label>Login</label>
-<input required="true" type="text" name="login" placeholder="Authentication username">
+        <div class="form-group form-group-full">
+            <label for="address">Address:</label>
+            <input required="true" type="text" id="address" name="address" placeholder="hostname or IP address">
+        </div>
 
-<label>Address</label>
-<input required="true" type="text" name="address" placeholder="hostname or IP address">
+        <div class="form-group">
+            <label for="login">Login:</label>
+            <input required="true" type="text" id="login" name="login" placeholder="Authentication username">
+        </div>
 
-<label>Port</label>
-<input required="true" type="number" name="port" min="1" max="65535" value="22">
+        <div class="form-group">
+            <label for="port">Port:</label>
+            <input required="true" type="number" id="port" name="port" min="1" max="65535" value="22">
+        </div>
 
-<label>Jump via</label>
-<select id="jumphost_selection" name="jumphost">
-  <option value="-1">none</option>
-  {% for host in hosts %}
-  <option value="{{ host.id }}">{{ host.name }}</option>
-  {% endfor %}
-</select>
-<button>Check connection</button>
+        <div class="form-group form-group-full">
+            <label for="jumphost_selection">Jump via:</label>
+            <input type="text" 
+                   id="jumphost_selection" 
+                   name="jumphost_display" 
+                   list="jumphost_list"
+                   placeholder="Type to search hosts or leave empty for none"
+                   autocomplete="off">
+            <input type="hidden" name="jumphost" id="jumphost_value" value="-1">
+            <datalist id="jumphost_list">
+                <option value="none" data-id="-1">none</option>
+                {% for host in hosts %}
+                <option value="{{ host.name }}" data-id="{{ host.id }}">{{ host.name }}</option>
+                {% endfor %}
+            </datalist>
+        </div>
+    </div>
+
+    <div class="form-actions">
+        <button type="button" onClick="closeModal(true)" class="button button-secondary">Cancel</button>
+        <button type="submit" class="button">Add Host</button>
+    </div>
+</div>

@@ -126,3 +126,78 @@ SSM (Secure SSH Manager) is a Rust-based web application that manages SSH keys a
 - All SSH commands go through `SshClient` or `CachingSshClient`
 - Use connection pooling for database operations
 - Handle SSH errors gracefully with user-friendly messages
+
+## UI/UX Development Guide
+
+### Theme System
+- **CSS Variables**: Use standardized theme variables in `static/style.css`
+  - Light/Dark themes: `--text-color`, `--bg-color`, `--bg-color-alt`, `--border-color`
+  - Accent colors: `--accent-primary`, `--accent-secondary`, `--accent-success`, `--accent-warning`, `--accent-danger`
+  - Hover states: `--hover-primary`, `--hover-secondary`
+- **Theme Toggle**: JavaScript theme manager in `static/forms.js` with localStorage persistence
+- **Implementation**: Use `data-theme` attribute on `<html>` element
+
+### Dialog System
+- **Standard Structure**: All dialogs follow consistent pattern:
+  ```html
+  <dialog class="edit-dialog">
+      <p class="dialog-title">Title Here</p>
+      <hr>
+      <form hx-post="/endpoint" hx-swap="none">
+          <div class="form-container">
+              <div class="form-grid form-grid-wide">
+                  <div class="form-group form-group-full">
+                      <label>Label:</label>
+                      <input type="text" autocomplete="off">
+                      <small class="form-help">Help text</small>
+                  </div>
+              </div>
+              <div class="form-actions">
+                  <button type="button" class="button button-secondary">Cancel</button>
+                  <button type="submit" class="button">Save Changes</button>
+              </div>
+          </div>
+      </form>
+  </dialog>
+  ```
+
+### Key Dialog Locations
+- **Host Management**: 
+  - Main page: `templates/hosts/index.html`
+  - Add dialog: `templates/hosts/add_dialog.htm`
+  - Edit dialog: `templates/hosts/edit_host.html`
+- **User Management**:
+  - Main page: `templates/users/index.html`  
+  - Add dialog: `templates/users/add_dialog.htm`
+- **SSH Key Management**:
+  - Main page: `templates/keys/index.html` (contains inline edit dialogs)
+  - Delete dialog: `templates/keys/delete_key_dialog.htm`
+- **Form Response Builder**: `templates/forms/form_response.html`
+
+### CSS Class Standards
+- **Buttons**: `.button` (primary), `.button-secondary`, `.button-small`
+- **Forms**: `.form-container`, `.form-grid`, `.form-group`, `.form-actions`, `.form-help`
+- **Layouts**: `.form-grid-wide` (2-column), `.form-group-full` (span all columns)
+- **Dialog**: `.dialog-title`, custom dialog classes (`.edit-dialog`, etc.)
+
+### Searchable Select Implementation
+- **Pattern**: Use `<input type="text" list="datalist-id">` with `<datalist>`
+- **JavaScript**: Auto-population and search functionality in `static/forms.js`
+- **CSS**: Force left alignment with `text-align: left !important; direction: ltr;`
+
+### Password Manager Prevention
+- **Attributes**: Add `autocomplete="off"` and `data-1p-ignore` to inputs
+- **Use Cases**: Username fields, search fields, technical inputs
+
+### Common Issues & Solutions
+- **Text Alignment**: For searchable inputs, use multiple CSS rules with `!important`
+- **Dialog Width**: Use `min-width` and `max-width` with `form-grid-wide` for optimal layout
+- **Theme Variables**: Always use CSS variables, never hardcode colors
+- **Button Consistency**: Use standard button classes, avoid custom styling
+
+### File Search Patterns
+- **Routes**: Look in `src/routes/` - each feature has its own module
+- **Templates**: Organized by feature in `templates/` subdirectories
+- **Dialogs**: Often inline in main templates or separate `.htm` files
+- **CSS**: Global styles in `static/style.css`, component styles in template `<style>` blocks
+- **JavaScript**: Theme and form logic in `static/forms.js`
