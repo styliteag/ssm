@@ -1,127 +1,6 @@
 {% extends "base.html" %}
 
 {% block content %}
-<style>
-.section-content {
-    margin-top: 1rem;
-}
-
-.table-container {
-    background: var(--bg-color);
-    border-radius: 8px;
-    overflow: hidden;
-    border: 1px solid var(--border-color);
-}
-
-.compact-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.875rem;
-}
-
-.compact-table th,
-.compact-table td {
-    padding: 0.5rem 0.75rem;
-    text-align: left;
-}
-
-.compact-table th {
-    background: var(--bg-color-alt);
-    font-weight: 500;
-    color: var(--text-color);
-    opacity: 0.8;
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-
-.compact-table tbody tr:nth-child(even) {
-    background: var(--bg-color-alt);
-}
-
-.compact-table tbody tr:hover {
-    background: rgba(255, 255, 255, 0.1);
-}
-
-.button-small {
-    padding: 0.25rem 0.5rem;
-    border: none;
-    border-radius: 4px;
-    font-size: 0.75rem;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.button-small.danger {
-    background: var(--accent-danger);
-    color: white;
-}
-
-.button-small.danger:hover {
-    background: var(--hover-primary);
-    transform: translateY(-1px);
-}
-
-.button-small.primary {
-    background: var(--accent-primary);
-    color: white;
-}
-
-.button-small.primary:hover {
-    background: var(--hover-primary);
-    transform: translateY(-1px);
-}
-
-.link {
-    color: var(--accent-primary);
-    text-decoration: none;
-}
-
-.link:hover {
-    color: var(--hover-primary);
-    text-decoration: underline;
-}
-
-.key-type {
-    font-weight: 500;
-    color: var(--text-color);
-    display: inline-block;
-}
-
-.separator {
-    color: var(--text-color);
-    opacity: 0.5;
-    display: inline-block;
-}
-
-.key-preview {
-    font-family: monospace;
-    color: var(--text-color);
-    opacity: 0.7;
-    font-size: 0.875rem;
-    display: inline-block;
-}
-
-/* SSH Key Edit Dialog */
-.edit-dialog {
-    border: none;
-    border-radius: 12px;
-    padding: 2rem;
-    background-color: var(--bg-color);
-    border: 1px solid var(--border-color);
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
-    min-width: 500px;
-    max-width: 700px;
-    width: fit-content;
-    margin: auto;
-}
-
-.edit-dialog::backdrop {
-    backdrop-filter: blur(1px);
-    background: rgba(0, 0, 0, 0.5);
-}
-</style>
-
 <section>
     <h2>SSH Keys</h2>
     <div class="section-content">
@@ -149,7 +28,7 @@
                             {% endmatch %}
                         </td>
                         <td>
-                            <a href="/users/{{ username }}" class="link">{{ username }}</a>
+                            <a href="/user/{{ username }}" class="link">{{ username }}</a>
                         </td>
                         <td>
                             <span class="key-type">{{ key.key_type }}</span><span class="separator"> / </span><span class="key-preview" title="{{ key.key_base64 }}">{{ key.key_preview() }}</span>
