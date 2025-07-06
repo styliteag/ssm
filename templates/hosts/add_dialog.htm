@@ -28,7 +28,7 @@
                    list="jumphost_list"
                    placeholder="Type to search hosts or leave empty for none"
                    autocomplete="off">
-            <input type="hidden" name="jumphost" id="jumphost_value" value="-1">
+            <input type="hidden" name="jumphost" id="jumphost_value" autocomplete="off" data-1p-ignore name="jumphost" value="-1">
             <datalist id="jumphost_list">
                 <option value="none" data-id="-1">none</option>
                 {% for host in hosts %}
