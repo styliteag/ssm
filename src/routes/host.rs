@@ -628,7 +628,7 @@ async fn edit_host_form(
 
     Ok(match host_result {
         Some(host) => FormResponseBuilder::dialog(
-            "Edit host",
+            "Edit Host",
             format!("/host/{host_name}/edit"),
             EditHostTemplate { host },
         ),
