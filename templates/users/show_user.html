@@ -4,7 +4,7 @@
 <h3>User: {{ username }}</h3>
 <p> Enabled: {{ user.enabled }}</p>
 
-<button id="edit-user-btn" class="button">Edit User</button>
+<button id="edit-user-btn" class="btn btn-secondary btn-small">Edit User</button>
 
 <div id="edit-user-form" style="display: none;">
     <form action="/user/edit" method="post" data-reload-on-success>
@@ -27,7 +27,7 @@
                 </select>
             </div>
         </div>
-        <button type="submit">Save Changes</button>
+        <button type="submit" class="btn">Save Changes</button>
     </form>
 </div>
 
