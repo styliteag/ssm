@@ -1,4 +1,6 @@
-:root {
+/* Default light theme */
+:root,
+:root[data-theme="light"] {
   /* Light theme colors */
   --text-color: #1a1a1a;
   --text-color-alt: #2563eb;
@@ -41,8 +43,44 @@
   display: none;
 }
 
+/* Dark theme */
+:root[data-theme="dark"] {
+  /* Dark theme colors */
+  --text-color: #f3f4f6;
+  --text-color-alt: #60a5fa;
+  --bg-color: #1a1a1a;
+  --bg-color-alt: #2d2d2d;
+  --bg-color-error: #dc2626;
+  --bg-color-success: #16a34a;
+  --border-color: #404040;
+
+  /* Accent colors - adjusted for dark mode */
+  --accent-primary: #3b82f6;
+  --accent-secondary: #818cf8;
+  --accent-success: #34d399;
+  --accent-warning: #fbbf24;
+  --accent-danger: #f87171;
+  --accent-info: #22d3ee;
+
+  /* Hover states */
+  --hover-primary: #60a5fa;
+  --hover-secondary: #a5b4fc;
+
+  /* Status colors (aliases for consistency) */
+  --warning-color: var(--accent-warning);
+  --error-color: var(--accent-danger);
+  --success-color: var(--accent-success);
+
+  /* Material Design-like aliases */
+  --surface: var(--bg-color-alt);
+  --surface-variant: var(--bg-color-alt);
+  --outline: var(--border-color);
+  --on-surface-variant: var(--text-color);
+}
+
+/* Fallback for system preference when no manual theme is set */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme]) {
     /* Dark theme colors */
     --text-color: #f3f4f6;
     --text-color-alt: #60a5fa;
@@ -90,15 +128,9 @@ body {
   line-height: 1.6;
   margin: 0;
   padding: 0;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-/* App header */
-.app-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0 1rem;
-}
 
 .auth-status {
   font-size: 0.9rem;
@@ -115,6 +147,54 @@ body {
   text-decoration: underline;
 }
 
+/* Theme toggle button */
+.theme-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-color-alt);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-color);
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-decoration: none;
+  margin-left: 1rem;
+}
+
+.theme-toggle:hover {
+  background: var(--accent-primary);
+  color: white;
+  border-color: var(--accent-primary);
+  transform: translateY(-1px);
+}
+
+.theme-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.theme-text {
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+/* Header layout adjustment for theme toggle */
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 1rem;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+}
+
 .container {
   max-width: 1200px;
   margin: 0 auto;
@@ -129,6 +209,7 @@ body {
   background: var(--bg-color-alt);
   border-radius: 12px;
   border: 1px solid var(--border-color);
+  transition: background-color 0.3s ease, border-color 0.3s ease;
 }
 
 .welcome-hero h2 {
@@ -172,7 +253,7 @@ body {
   border: 1px solid var(--border-color);
   border-radius: 8px;
   padding: 1.5rem;
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition: transform 0.2s, box-shadow 0.2s, background-color 0.3s ease, border-color 0.3s ease;
 }
 
 .card-interactive:hover {
