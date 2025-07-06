@@ -6,8 +6,8 @@
 <h1>Host: {{ host.name }}</h1>
 {% set path="/host/" .to_owned() + host.name.as_str() + "/delete" %}
 {% call components::post("Delete this host", path.as_str(), "" ) %}
-<button hx-get="/host/{{ host.name }}/edit" hx-swap="none">Edit</button>
-<a class="button" href="/diff/{{ host.name }}">View diff</a>
+<button hx-get="/host/{{ host.name }}/edit" hx-swap="none" class="btn btn-secondary">Edit</button>
+<a class="btn btn-small" href="/diff/{{ host.name }}">View diff</a>
 <p>Address: {{ host.address}}</p>
 <p>Port: {{ host.port }}</p>
 <p>Username: {{ host.username }}</p>
