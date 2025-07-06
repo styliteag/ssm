@@ -1,5 +1,54 @@
 {% extends "base.html" %}
 
 {% block content %}
-Welcome to ssh-key-manager!
+<div class="container">
+    <section class="welcome-hero">
+        <h2>Welcome to Secure SSH Manager!</h2>
+        <p>Your centralized solution for managing SSH public keys across multiple servers. Keep your infrastructure secure with automated key deployment and monitoring.</p>
+    </section>
+
+    <section class="content-section">
+        <h3>Quick Start</h3>
+        <div class="card-grid">
+            <div class="card card-interactive">
+                <h4><a href="/host">🖥️ Manage Hosts</a></h4>
+                <p>Add new servers, view existing hosts, and configure SSH connections.</p>
+            </div>
+            <div class="card card-interactive">
+                <h4><a href="/user">👥 Manage Users</a></h4>
+                <p>Create users, assign SSH keys, and control access permissions.</p>
+            </div>
+            <div class="card card-interactive">
+                <h4><a href="/key">🔑 Manage Keys</a></h4>
+                <p>Upload, organize, and deploy SSH public keys across your infrastructure.</p>
+            </div>
+            <div class="card card-interactive">
+                <h4><a href="/diff">🔍 View Issues</a></h4>
+                <p>Monitor key differences and resolve configuration conflicts.</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="content-section">
+        <h3>Key Features</h3>
+        <ul class="feature-list">
+            <li><strong>Centralized Management:</strong> Control SSH keys for all your servers from one place</li>
+            <li><strong>Automated Deployment:</strong> Push key changes to multiple hosts simultaneously</li>
+            <li><strong>Diff Monitoring:</strong> Track changes and identify configuration drift</li>
+            <li><strong>User Permissions:</strong> Fine-grained access control per host and user</li>
+            <li><strong>Audit Trail:</strong> Keep track of who has access to what and when</li>
+        </ul>
+    </section>
+
+    <section class="content-section">
+        <h3>Getting Started</h3>
+        <ol class="step-list">
+            <li><strong>Add a Host:</strong> Start by <a href="/host">adding your first server</a> to manage</li>
+            <li><strong>Create Users:</strong> <a href="/user">Set up user accounts</a> for your team members</li>
+            <li><strong>Upload Keys:</strong> <a href="/key">Add SSH public keys</a> for authentication</li>
+            <li><strong>Assign Access:</strong> Link users and keys to specific hosts</li>
+            <li><strong>Deploy & Monitor:</strong> Push changes and <a href="/diff">monitor for issues</a></li>
+        </ol>
+    </section>
+</div>
 {% endblock %}

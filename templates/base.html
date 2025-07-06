@@ -12,7 +12,7 @@
 </head>
 
 <body>
-	<div class="header-container">
+	<div class="app-header">
 		<h1>Secure SSH Manager</h1>
 		<div class="auth-status" hx-get="/authentication/status" hx-trigger="load">
 			<a href="/authentication/login">Login</a>
@@ -46,24 +46,6 @@
 	</footer>
 	{% endblock %}
 
-	<style>
-		.header-container {
-			display: flex;
-			justify-content: space-between;
-			align-items: center;
-			padding: 0 1rem;
-		}
-		.auth-status {
-			font-size: 0.9rem;
-		}
-		.auth-status a {
-			color: #0066cc;
-			text-decoration: none;
-		}
-		.auth-status a:hover {
-			text-decoration: underline;
-		}
-	</style>
 </body>
 
 </html>
