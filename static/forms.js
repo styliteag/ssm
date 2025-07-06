@@ -1,3 +1,67 @@
+// Theme management
+class ThemeManager {
+  constructor() {
+    this.init();
+  }
+
+  init() {
+    // Get stored theme or default to system preference
+    const storedTheme = localStorage.getItem('theme');
+    const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    
+    if (storedTheme) {
+      this.setTheme(storedTheme);
+    } else if (systemPrefersDark) {
+      this.setTheme('dark');
+    } else {
+      this.setTheme('light');
+    }
+
+    // Listen for system theme changes when no manual override
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+      if (!localStorage.getItem('theme')) {
+        this.setTheme(e.matches ? 'dark' : 'light');
+      }
+    });
+  }
+
+  setTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    this.updateToggleButton(theme);
+  }
+
+  toggleTheme() {
+    const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+    const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+    
+    this.setTheme(newTheme);
+    localStorage.setItem('theme', newTheme);
+  }
+
+  updateToggleButton(theme) {
+    const button = document.querySelector('.theme-toggle');
+    if (button) {
+      const icon = button.querySelector('.theme-icon');
+      const text = button.querySelector('.theme-text');
+      
+      if (theme === 'dark') {
+        icon.textContent = '☀️';
+        text.textContent = 'Light';
+        button.setAttribute('aria-label', 'Switch to light theme');
+      } else {
+        icon.textContent = '🌙';
+        text.textContent = 'Dark';
+        button.setAttribute('aria-label', 'Switch to dark theme');
+      }
+    }
+  }
+}
+
+// Initialize theme manager when DOM is loaded
+document.addEventListener('DOMContentLoaded', () => {
+  window.themeManager = new ThemeManager();
+});
+
 const form_response_dialog = document.querySelector("#form_response_dialog");
 const snackbar = document.querySelector("#snackbar");
 const modal_stack = document.getElementById("modal_stack");
