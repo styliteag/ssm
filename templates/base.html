@@ -14,8 +14,14 @@
 <body>
 	<div class="app-header">
 		<h1>Secure SSH Manager</h1>
-		<div class="auth-status" hx-get="/authentication/status" hx-trigger="load">
-			<a href="/authentication/login">Login</a>
+		<div class="header-right">
+			<button class="theme-toggle" onclick="window.themeManager?.toggleTheme()" aria-label="Toggle theme">
+				<span class="theme-icon">🌙</span>
+				<span class="theme-text">Dark</span>
+			</button>
+			<div class="auth-status" hx-get="/authentication/status" hx-trigger="load">
+				<a href="/authentication/login">Login</a>
+			</div>
 		</div>
 	</div>
 	<nav>
