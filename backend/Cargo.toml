@@ -17,6 +17,7 @@ mysql = ["diesel/mysql", "diesel_migrations/mysql"]
 actix = "0.13"
 actix-web = "4.9"
 actix-web-static-files = "4.0"
+actix-cors = "0.7"
 static-files = "0.2"
 actix-identity = "0.8"
 actix-session = { version = "0.10", features = ["cookie-session"] }

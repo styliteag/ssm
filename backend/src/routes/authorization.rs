@@ -1,19 +1,19 @@
 use actix_web::{
     post,
-    web::{self, Data},
-    Responder,
+    web::{self, Data, Json},
+    HttpResponse, Responder, Result,
 };
-use askama::Template;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::{
-    forms::FormResponseBuilder,
+    api_types::*,
     models::{Host, User},
     ConnectionPool,
 };
 
 pub fn config(cfg: &mut web::ServiceConfig) {
-    cfg.service(change_options).service(authorize_user_dialog);
+    cfg.service(change_options)
+        .service(get_authorization_dialog_data);
 }
 
 // #[derive(Deserialize)]
@@ -23,35 +23,23 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 // TODO: do this
 
 #[post("/change_options")]
-async fn change_options(// form: web::Form<DeleteAuthorizationForm>,
-    // conn: Data<ConnectionPool>,
-) -> actix_web::Result<impl Responder> {
-    // let res = web::block(move || {
-    //     let mut connection = conn.get().unwrap();
-
-    //     Host::delete_authorization(&mut connection, form.authorization_id)
-    // })
-    // .await?;
-    Ok(FormResponseBuilder::error("Not implemented".to_owned()))
-
-    // Ok(match res {
-    //     Ok(()) => FormResponseBuilder::success("Deleted authorization.".to_owned())
-    //         .add_trigger("reload-authorizations".to_owned()),
-    //     Err(e) => FormResponseBuilder::error(e),
-    // })
+async fn change_options() -> Result<impl Responder> {
+    // TODO: Implement authorization options change
+    Ok(HttpResponse::NotImplemented().json(ApiError::new("Not implemented".to_string())))
 }
 
-#[derive(Template)]
-#[template(path = "diff/authorize_user_dialog.htm")]
-struct AuthorizeUserDialog {
-    host: (String, i32),
-    user: (String, i32),
-    options: Option<String>,
+#[derive(Serialize)]
+struct AuthorizationDialogResponse {
+    host_name: String,
+    host_id: i32,
+    username: String,
+    user_id: i32,
     login: String,
+    options: Option<String>,
 }
 
 #[derive(Deserialize)]
-struct AuthorizeUserForm {
+struct AuthorizeUserRequest {
     /// Host name in key-manager
     host_name: String,
     /// Username in key-manager
@@ -62,18 +50,18 @@ struct AuthorizeUserForm {
     options: Option<String>,
 }
 
-#[post("/add_dialog")]
-async fn authorize_user_dialog(
+#[post("/dialog_data")]
+async fn get_authorization_dialog_data(
     conn: Data<ConnectionPool>,
-    form: web::Form<AuthorizeUserForm>,
-) -> actix_web::Result<impl Responder> {
-    let options = form.options.clone();
-    let login = form.login.clone();
+    json: Json<AuthorizeUserRequest>,
+) -> Result<impl Responder> {
+    let options = json.options.clone();
+    let login = json.login.clone();
     let (user, host) = web::block(move || {
         let mut connection = conn.get().unwrap();
 
-        let user = User::get_user(&mut connection, form.username.clone());
-        let host = Host::get_from_name_sync(&mut connection, form.host_name.clone());
+        let user = User::get_user(&mut connection, json.username.clone());
+        let host = Host::get_from_name_sync(&mut connection, json.host_name.clone());
         (
             user.map(|u| (u.username, u.id)),
             host.map(|h| h.map(|h| (h.name, h.id))),
@@ -83,27 +71,23 @@ async fn authorize_user_dialog(
 
     let user = match user {
         Ok(u) => u,
-        Err(error) => return Ok(FormResponseBuilder::error(error)),
+        Err(error) => return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error))),
     };
 
     let host = match host {
         Ok(h) => match h {
             Some(h) => h,
-            None => return Ok(FormResponseBuilder::error(String::from("Host not found"))),
+            None => return Ok(HttpResponse::NotFound().json(ApiError::not_found("Host not found".to_string()))),
         },
-        Err(error) => return Ok(FormResponseBuilder::error(error)),
+        Err(error) => return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error))),
     };
 
-    Ok(FormResponseBuilder::dialog(
-        "Authorize user",
-        // TODO: move this
-        "/host/user/authorize",
-        AuthorizeUserDialog {
-            host,
-            user,
-            login,
-            options,
-        },
-    )
-    .add_trigger("reload-authorizations"))
+    Ok(HttpResponse::Ok().json(ApiResponse::success(AuthorizationDialogResponse {
+        host_name: host.0,
+        host_id: host.1,
+        username: user.0,
+        user_id: user.1,
+        login,
+        options,
+    })))
 }

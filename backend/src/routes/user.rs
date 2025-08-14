@@ -1,16 +1,13 @@
 use actix_web::{
-    get, post,
-    web::{self, Data, Path},
-    Responder,
+    delete, get, post, put,
+    web::{self, Data, Json, Path, Query},
+    HttpResponse, Responder, Result,
 };
-use askama_actix::{Template, TemplateToResponse};
-use log::error;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::{
+    api_types::*,
     db::UserAndOptions,
-    forms::FormResponseBuilder,
-    routes::{ErrorTemplate, RenderErrorTemplate},
     ssh::SshPublicKey,
     ConnectionPool,
 };
@@ -18,191 +15,174 @@ use crate::{
 use crate::models::{NewPublicUserKey, NewUser, PublicUserKey, User};
 
 pub fn config(cfg: &mut web::ServiceConfig) {
-    cfg.service(users_page)
-        .service(render_users)
-        .service(select_users)
-        .service(render_user_keys)
-        .service(list_user_authorizations)
-        .service(add_user)
-        .service(assign_key_to_user)
+    cfg.service(get_all_users)
+        .service(get_user)
+        .service(create_user)
+        .service(update_user)
         .service(delete_user)
-        .service(add_user_dialog)
-        .service(edit_user)
-        .service(add_key_dialog)
-        .service(show_user);
+        .service(get_user_keys)
+        .service(get_user_authorizations)
+        .service(assign_key_to_user)
+        .service(add_key_dialog);
 }
 
-#[derive(Template)]
-#[template(path = "users/index.html")]
-struct UsersTemplate {}
+#[derive(Serialize)]
+struct UserResponse {
+    id: i32,
+    username: String,
+    enabled: bool,
+}
+
+impl From<User> for UserResponse {
+    fn from(user: User) -> Self {
+        Self {
+            id: user.id,
+            username: user.username,
+            enabled: user.enabled,
+        }
+    }
+}
 
 #[get("")]
-async fn users_page() -> impl Responder {
-    UsersTemplate {}
-}
-
-#[derive(Template)]
-#[template(path = "users/list.htm")]
-struct RenderUsersTemplate {
-    users: Vec<User>,
-}
-
-#[get("/list.htm")]
-async fn render_users(conn: Data<ConnectionPool>) -> actix_web::Result<impl Responder> {
+async fn get_all_users(
+    conn: Data<ConnectionPool>,
+    pagination: Query<PaginationQuery>,
+) -> Result<impl Responder> {
     let all_users = web::block(move || User::get_all_users(&mut conn.get().unwrap())).await?;
 
-    Ok(match all_users {
-        Ok(users) => RenderUsersTemplate { users }.to_response(),
-        Err(error) => RenderErrorTemplate { error }.to_response(),
-    })
+    match all_users {
+        Ok(users) => {
+            let user_responses: Vec<UserResponse> = users.into_iter().map(UserResponse::from).collect();
+            Ok(HttpResponse::Ok().json(ApiResponse::success(user_responses)))
+        }
+        Err(error) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error))),
+    }
 }
 
-#[derive(Template)]
-#[template(path = "users/selection_list.htm")]
-struct UserSelectionTemplate {
-    users: Vec<User>,
-}
 
-#[get("/select.htm")]
-async fn select_users(conn: Data<ConnectionPool>) -> actix_web::Result<impl Responder> {
-    let all_users = web::block(move || User::get_all_users(&mut conn.get().unwrap())).await?;
-
-    Ok(match all_users {
-        Ok(users) => UserSelectionTemplate { users }.to_response(),
-        Err(error) => RenderErrorTemplate { error }.to_response(),
-    })
-}
-
-#[derive(Template)]
-#[template(path = "users/show_user.html")]
-struct ShowUserTemplate {
-    user: User,
-}
 
 #[get("/{name}")]
-async fn show_user(
-    conn: Data<ConnectionPool>,
-    user: Path<String>,
-) -> actix_web::Result<impl Responder> {
-    let mut conn = conn.clone().get().unwrap();
-    let maybe_user = web::block(move || User::get_user(&mut conn, user.to_string())).await?;
-
-    Ok(match maybe_user {
-        Ok(user) => ShowUserTemplate { user }.to_response(),
-        Err(error) => ErrorTemplate { error }.to_response(),
-    })
-}
-
-#[derive(Template)]
-#[template(path = "users/add_dialog.htm")]
-struct AddUserDialog {}
-
-#[get("/add_dialog")]
-async fn add_user_dialog() -> impl Responder {
-    error!("User dialog handler");
-    FormResponseBuilder::dialog("Add a user", "/user/add", AddUserDialog {})
-}
-
-#[post("/add")]
-async fn add_user(
-    conn: Data<ConnectionPool>,
-    form: web::Form<NewUser>,
-) -> actix_web::Result<impl Responder> {
-    let new_user = form.0;
-
-    let res = web::block(move || User::add_user(&mut conn.get().unwrap(), new_user)).await?;
-    Ok(match res {
-        Ok(_) => FormResponseBuilder::created(String::from("Added user"))
-            .add_trigger(String::from("reload-users")),
-        Err(e) => FormResponseBuilder::error(e),
-    })
-}
-
-#[derive(Deserialize)]
-struct DeleteUserForm {
-    username: String,
-}
-
-#[post("/delete")]
-async fn delete_user(
-    conn: Data<ConnectionPool>,
-    form: web::Form<DeleteUserForm>,
-) -> actix_web::Result<impl Responder> {
-    let username = form.0.username;
-
-    let res =
-        web::block(move || User::delete_user(&mut conn.get().unwrap(), username.as_str())).await?;
-    Ok(match res {
-        Ok(()) => {
-            FormResponseBuilder::success(String::from("Deleted user")).add_trigger("reload-users")
-        }
-        Err(e) => FormResponseBuilder::error(e),
-    })
-}
-
-#[derive(Template)]
-#[template(path = "users/list_keys.htm")]
-struct ListUserKeysTemplate {
-    keys: Vec<(PublicUserKey, Result<String, String>)>,
-}
-
-#[get("/{username}/list_keys.htm")]
-async fn render_user_keys(
+async fn get_user(
     conn: Data<ConnectionPool>,
     username: Path<String>,
-) -> actix_web::Result<impl Responder> {
+) -> Result<impl Responder> {
+    let mut conn = conn.clone().get().unwrap();
+    let maybe_user = web::block(move || User::get_user(&mut conn, username.to_string())).await?;
+
+    match maybe_user {
+        Ok(user) => Ok(HttpResponse::Ok().json(ApiResponse::success(UserResponse::from(user)))),
+        Err(error) => Ok(HttpResponse::NotFound().json(ApiError::not_found(error))),
+    }
+}
+
+
+#[post("")]
+async fn create_user(
+    conn: Data<ConnectionPool>,
+    json: Json<NewUser>,
+) -> Result<impl Responder> {
+    let new_user = json.into_inner();
+
+    let res = web::block(move || User::add_user(&mut conn.get().unwrap(), new_user)).await?;
+    match res {
+        Ok(user_id) => {
+            Ok(HttpResponse::Created().json(ApiResponse::success_with_message(
+                serde_json::json!({"id": user_id}),
+                "User created successfully".to_string(),
+            )))
+        }
+        Err(e) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e))),
+    }
+}
+
+
+#[delete("/{username}")]
+async fn delete_user(
+    conn: Data<ConnectionPool>,
+    username: Path<String>,
+) -> Result<impl Responder> {
+    let res = web::block(move || User::delete_user(&mut conn.get().unwrap(), username.as_str())).await?;
+    match res {
+        Ok(()) => Ok(HttpResponse::Ok().json(ApiResponse::success_message("User deleted successfully".to_string()))),
+        Err(e) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e))),
+    }
+}
+
+#[derive(Serialize)]
+struct UserKeyResponse {
+    id: i32,
+    key_type: String,
+    key_base64: String,
+    key_comment: Option<String>,
+    fingerprint: Option<String>,
+}
+
+#[derive(Serialize)]
+struct UserKeysResponse {
+    keys: Vec<UserKeyResponse>,
+}
+
+#[get("/{username}/keys")]
+async fn get_user_keys(
+    conn: Data<ConnectionPool>,
+    username: Path<String>,
+) -> Result<impl Responder> {
     let maybe_user_keys = web::block(move || {
         let mut connection = conn.get().unwrap();
         let user = User::get_user(&mut connection, username.to_string())?;
-
         user.get_keys(&mut connection)
     })
     .await?;
 
-    Ok(match maybe_user_keys {
+    match maybe_user_keys {
         Ok(keys) => {
-            let public_keys: Vec<(PublicUserKey, Result<String, String>)> = keys
+            let key_responses: Vec<UserKeyResponse> = keys
                 .into_iter()
                 .map(|key| {
                     let fingerprint = russh::keys::PublicKey::try_from(&key)
-                        .map(|k| k.fingerprint(russh::keys::HashAlg::Sha256).to_string());
+                        .map(|k| k.fingerprint(russh::keys::HashAlg::Sha256).to_string())
+                        .ok();
 
-                    (key, fingerprint)
+                    UserKeyResponse {
+                        id: key.id,
+                        key_type: key.key_type,
+                        key_base64: key.key_base64,
+                        key_comment: key.comment,
+                        fingerprint,
+                    }
                 })
                 .collect();
-            ListUserKeysTemplate { keys: public_keys }.to_response()
+            Ok(HttpResponse::Ok().json(ApiResponse::success(UserKeysResponse { keys: key_responses })))
         }
-        Err(error) => RenderErrorTemplate { error }.to_response(),
-    })
+        Err(error) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error))),
+    }
 }
 
-#[derive(Template)]
-#[template(path = "users/list_authorizations.htm")]
-struct ListUserAuthorizationsTemplate {
+#[derive(Serialize)]
+struct UserAuthorizationsResponse {
     authorizations: Vec<UserAndOptions>,
 }
 
-#[get("/{username}/list_authorizations.htm")]
-async fn list_user_authorizations(
+#[get("/{username}/authorizations")]
+async fn get_user_authorizations(
     conn: Data<ConnectionPool>,
     username: Path<String>,
-) -> actix_web::Result<impl Responder> {
+) -> Result<impl Responder> {
     let maybe_user_auth = web::block(move || {
         let mut connection = conn.get().unwrap();
         let user = User::get_user(&mut connection, username.to_string())?;
-
         user.get_authorizations(&mut connection)
     })
     .await?;
 
-    Ok(match maybe_user_auth {
-        Ok(authorizations) => ListUserAuthorizationsTemplate { authorizations }.to_response(),
-        Err(error) => RenderErrorTemplate { error }.to_response(),
-    })
+    match maybe_user_auth {
+        Ok(authorizations) => Ok(HttpResponse::Ok().json(ApiResponse::success(UserAuthorizationsResponse { authorizations }))),
+        Err(error) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error))),
+    }
 }
 
 #[derive(Deserialize)]
-struct AssignKeyDialogForm {
+struct AssignKeyRequest {
     user_id: i32,
     key_type: String,
     key_base64: String,
@@ -212,72 +192,63 @@ struct AssignKeyDialogForm {
 #[post("/assign_key")]
 async fn assign_key_to_user(
     conn: Data<ConnectionPool>,
-    form: web::Form<AssignKeyDialogForm>,
-) -> actix_web::Result<impl Responder> {
-    let Ok(algo) = russh::keys::Algorithm::new(&form.key_type) else {
-        return Ok(FormResponseBuilder::error(
-            "Invalid key algorithm".to_owned(),
-        ));
+    json: Json<AssignKeyRequest>,
+) -> Result<impl Responder> {
+    let Ok(algo) = russh::keys::Algorithm::new(&json.key_type) else {
+        return Ok(HttpResponse::BadRequest().json(ApiError::bad_request(
+            "Invalid key algorithm".to_string(),
+        )));
     };
 
     let new_key = NewPublicUserKey::new(
         algo,
-        form.key_base64.clone(),
-        form.key_comment.clone(),
-        form.user_id,
+        json.key_base64.clone(),
+        json.key_comment.clone(),
+        json.user_id,
     );
 
     let res = web::block(move || PublicUserKey::add_key(&mut conn.get().unwrap(), new_key)).await?;
 
-    Ok(match res {
-        Ok(()) => FormResponseBuilder::created(String::from("Added key"))
-            .add_trigger("reloadDiff".to_owned()),
-        Err(e) => FormResponseBuilder::error(e),
-    })
-}
-
-#[derive(Deserialize)]
-struct EditUserForm {
-    old_username: String,
-    new_username: String,
-    enabled: bool,
-}
-
-#[post("/edit")]
-async fn edit_user(
-    conn: Data<ConnectionPool>,
-    form: web::Form<EditUserForm>,
-) -> actix_web::Result<impl Responder> {
-    let mut conn = conn.get().unwrap();
-    match User::update_user(
-        &mut conn,
-        &form.old_username,
-        &form.new_username,
-        form.enabled,
-    ) {
-        Ok(_) => {
-            let response = actix_web::HttpResponse::Found()
-                .insert_header(("Location", format!("/user/{}", form.new_username)))
-                .finish();
-            Ok(response)
-        }
-        Err(error) => Ok(FormResponseBuilder::error(error)
-            .add_trigger("reload".to_owned())
-            .into_response()),
+    match res {
+        Ok(()) => Ok(HttpResponse::Created().json(ApiResponse::success_message("Key assigned successfully".to_string()))),
+        Err(e) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e))),
     }
 }
 
-#[derive(Template)]
-#[template(path = "diff/assign_key_dialog.htm")]
-struct AddKeyDialog {
+#[derive(Deserialize)]
+struct UpdateUserRequest {
+    username: String,
+    enabled: bool,
+}
+
+#[put("/{old_username}")]
+async fn update_user(
+    conn: Data<ConnectionPool>,
+    old_username: Path<String>,
+    json: Json<UpdateUserRequest>,
+) -> Result<impl Responder> {
+    let mut conn = conn.get().unwrap();
+    match User::update_user(
+        &mut conn,
+        &old_username,
+        &json.username,
+        json.enabled,
+    ) {
+        Ok(_) => Ok(HttpResponse::Ok().json(ApiResponse::success_message("User updated successfully".to_string()))),
+        Err(error) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error))),
+    }
+}
+
+#[derive(Serialize)]
+struct AddKeyResponse {
     key: SshPublicKey,
+    suggested_action: String,
 }
 
 #[post("/add_key")]
-async fn add_key_dialog(key: web::Form<SshPublicKey>) -> impl Responder {
-    FormResponseBuilder::dialog(
-        "Assign this key to a user",
-        "/user/assign_key",
-        AddKeyDialog { key: key.0 },
-    )
+async fn add_key_dialog(json: Json<SshPublicKey>) -> Result<impl Responder> {
+    Ok(HttpResponse::Ok().json(ApiResponse::success(AddKeyResponse {
+        key: json.into_inner(),
+        suggested_action: "Assign this key to a user".to_string(),
+    })))
 }

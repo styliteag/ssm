@@ -14,7 +14,7 @@ pub use caching_client::CachingSshClient;
 pub use init::SshFirstConnectionHandler;
 pub use sshclient::{SshClient, SshClientError};
 
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct SshPublicKey {
     pub key_type: String,
     pub key_base64: String,

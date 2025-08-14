@@ -7,21 +7,24 @@ mod user;
 
 use actix_web::{
     get,
-    http::StatusCode,
     web::{self},
-    Responder,
+    HttpResponse, Responder, Result,
 };
-use askama_actix::Template;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+
+use crate::api_types::*;
 
 pub fn route_config(cfg: &mut web::ServiceConfig) {
-    cfg.service(index)
-        .service(web::scope("/host").configure(host::config))
-        .service(web::scope("/user").configure(user::config))
-        .service(web::scope("/key").configure(key::config))
-        .service(web::scope("/diff").configure(diff::config))
-        .service(web::scope("/authentication").configure(authentication::config))
-        .service(web::scope("/authorization").configure(authorization::config))
+    cfg.service(api_info)
+        .service(
+            web::scope("/api")
+                .service(web::scope("/host").configure(host::config))
+                .service(web::scope("/user").configure(user::config))
+                .service(web::scope("/key").configure(key::config))
+                .service(web::scope("/diff").configure(diff::config))
+                .service(web::scope("/authentication").configure(authentication::config))
+                .service(web::scope("/authorization").configure(authorization::config))
+        )
         .default_service(web::to(not_found));
 }
 
@@ -36,33 +39,23 @@ fn should_update(force_update: ForceUpdate) -> bool {
     force_update.force_update.is_some_and(|update| update)
 }
 
-#[derive(Template)]
-#[template(path = "error.html")]
-struct ErrorTemplate {
-    error: String,
+#[derive(Serialize)]
+struct ApiInfo {
+    name: String,
+    version: String,
+    description: String,
 }
 
-#[derive(Template)]
-#[template(path = "render/error.html")]
-struct RenderErrorTemplate {
-    error: String,
+
+async fn not_found() -> Result<impl Responder> {
+    Ok(HttpResponse::NotFound().json(ApiError::not_found("Endpoint not found".to_string())))
 }
-
-#[derive(Template)]
-#[template(path = "404.html")]
-struct NotFoundTemplate {}
-
-async fn not_found() -> impl Responder {
-    NotFoundTemplate {}
-        .customize()
-        .with_status(StatusCode::NOT_FOUND)
-}
-
-#[derive(Template)]
-#[template(path = "index.html")]
-struct IndexTemplate {}
 
 #[get("/")]
-async fn index() -> impl Responder {
-    IndexTemplate {}
+async fn api_info() -> Result<impl Responder> {
+    Ok(HttpResponse::Ok().json(ApiResponse::success(ApiInfo {
+        name: "SSH Key Manager API".to_string(),
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        description: "REST API for managing SSH keys across multiple hosts".to_string(),
+    })))
 }
