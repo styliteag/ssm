@@ -8,8 +8,10 @@ use actix_web::{
 };
 use log::info;
 
+#[allow(dead_code)]
 const LOG_TARGET: &str = "ssm:webserver";
 
+#[allow(dead_code)]
 pub async fn authentication(
     request: ServiceRequest,
     next: Next<BoxBody>,

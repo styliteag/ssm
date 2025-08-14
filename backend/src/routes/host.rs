@@ -63,7 +63,7 @@ impl From<Host> for HostResponse {
 #[get("")]
 async fn get_all_hosts(
     conn: Data<ConnectionPool>,
-    pagination: Query<PaginationQuery>,
+    _pagination: Query<PaginationQuery>,
 ) -> Result<impl Responder> {
     let hosts = web::block(move || Host::get_all_hosts(&mut conn.get().unwrap())).await?;
     
@@ -533,6 +533,7 @@ async fn list_host_authorizations(
 }
 
 #[derive(Deserialize)]
+#[allow(dead_code)]
 struct DeleteAuthorizationRequest {
     authorization_id: i32,
 }

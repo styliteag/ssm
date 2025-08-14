@@ -29,6 +29,7 @@ impl<T: Serialize> ApiResponse<T> {
 }
 
 impl ApiResponse<()> {
+    #[allow(dead_code)]
     pub fn success_empty() -> Self {
         Self {
             success: true,
@@ -45,6 +46,7 @@ impl ApiResponse<()> {
         }
     }
 
+    #[allow(dead_code)]
     pub fn error(message: String) -> Self {
         Self {
             success: false,
@@ -81,10 +83,12 @@ impl ApiError {
         Self::new(message)
     }
 
+    #[allow(dead_code)]
     pub fn unauthorized() -> Self {
         Self::new("Unauthorized".to_string())
     }
 
+    #[allow(dead_code)]
     pub fn forbidden() -> Self {
         Self::new("Forbidden".to_string())
     }
@@ -110,6 +114,7 @@ impl ResponseError for ApiError {
 }
 
 /// Helper trait to convert results to API responses
+#[allow(dead_code)]
 pub trait ToApiResponse<T> {
     fn to_api_response(self) -> Result<HttpResponse, ApiError>;
 }
@@ -132,6 +137,7 @@ pub struct TokenResponse {
 
 /// Login request structure
 #[derive(Deserialize)]
+#[allow(dead_code)]
 pub struct LoginRequest {
     pub username: String,
     pub password: String,
@@ -139,6 +145,7 @@ pub struct LoginRequest {
 
 /// Authentication status response
 #[derive(Serialize)]
+#[allow(dead_code)]
 pub struct AuthStatusResponse {
     pub logged_in: bool,
     pub username: Option<String>,
@@ -146,6 +153,7 @@ pub struct AuthStatusResponse {
 
 /// Paginated list response
 #[derive(Serialize)]
+#[allow(dead_code)]
 pub struct PaginatedResponse<T> {
     pub items: Vec<T>,
     pub total: u64,
@@ -155,6 +163,7 @@ pub struct PaginatedResponse<T> {
 }
 
 impl<T> PaginatedResponse<T> {
+    #[allow(dead_code)]
     pub fn new(items: Vec<T>, total: u64, page: u32, per_page: u32) -> Self {
         let total_pages = (total as f64 / per_page as f64).ceil() as u32;
         Self {
@@ -169,6 +178,7 @@ impl<T> PaginatedResponse<T> {
 
 /// Query parameters for pagination
 #[derive(Deserialize)]
+#[allow(dead_code)]
 pub struct PaginationQuery {
     pub page: Option<u32>,
     pub per_page: Option<u32>,
@@ -184,14 +194,17 @@ impl Default for PaginationQuery {
 }
 
 impl PaginationQuery {
+    #[allow(dead_code)]
     pub fn page(&self) -> u32 {
         self.page.unwrap_or(1).max(1)
     }
 
+    #[allow(dead_code)]
     pub fn per_page(&self) -> u32 {
         self.per_page.unwrap_or(20).min(100).max(1)
     }
 
+    #[allow(dead_code)]
     pub fn offset(&self) -> u32 {
         (self.page() - 1) * self.per_page()
     }

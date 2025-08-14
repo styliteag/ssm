@@ -46,7 +46,7 @@ impl From<User> for UserResponse {
 #[get("")]
 async fn get_all_users(
     conn: Data<ConnectionPool>,
-    pagination: Query<PaginationQuery>,
+    _pagination: Query<PaginationQuery>,
 ) -> Result<impl Responder> {
     let all_users = web::block(move || User::get_all_users(&mut conn.get().unwrap())).await?;
 
