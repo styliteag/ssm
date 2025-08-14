@@ -51,7 +51,7 @@ impl User {
         conn: &mut DbConnection,
         old_username: &str,
         new_username: &str,
-        _enabled: bool,
+        enabled_status: bool,
     ) -> Result<(), String> {
         use crate::schema::user::dsl::*;
         use diesel::prelude::*;
@@ -59,7 +59,7 @@ impl User {
         // Update username and enabled status
         diesel::update(user)
             .filter(username.eq(old_username))
-            .set((username.eq(new_username), enabled.eq(enabled)))
+            .set((username.eq(new_username), enabled.eq(enabled_status)))
             .execute(conn)
             .map_err(|e| e.to_string())?;
 

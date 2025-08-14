@@ -309,7 +309,7 @@ async fn create_host(
         address: json.address.clone(),
         port: json.port.into(),
         username: json.username.clone(),
-        key_fingerprint: key_fingerprint.clone(),
+        key_fingerprint: Some(key_fingerprint.clone()),
         jump_via: jumphost,
     };
     let res = web::block(move || Host::add_host(&mut conn.get().unwrap(), &new_host)).await?;

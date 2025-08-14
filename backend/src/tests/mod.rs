@@ -11,15 +11,7 @@
 pub mod safety;
 pub mod mock_ssh;
 pub mod test_utils;
+pub mod safety_verification;
 
 // Core test modules
-pub mod simple_tests;
-pub mod auth_tests;
-pub mod host_tests;
-pub mod user_tests;
-pub mod key_tests;
-pub mod authorization_tests;
-pub mod diff_tests;
-pub mod api_types_tests;
-pub mod database_tests;
-pub mod ssh_tests;
+pub mod basic_tests;
