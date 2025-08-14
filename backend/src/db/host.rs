@@ -133,6 +133,7 @@ impl Host {
     }
 
     /// Get a host from an id
+    #[allow(dead_code)]
     pub fn get_from_id_sync(conn: &mut DbConnection, host: i32) -> Result<Option<Self>, String> {
         query(
             host::table

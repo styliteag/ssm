@@ -43,7 +43,7 @@ struct KeysResponse {
 #[get("")]
 pub async fn get_all_keys(
     conn: Data<ConnectionPool>,
-    pagination: Query<PaginationQuery>,
+    _pagination: Query<PaginationQuery>,
 ) -> Result<impl Responder> {
     let all_keys =
         web::block(move || PublicUserKey::get_all_keys_with_username(&mut conn.get().unwrap()))

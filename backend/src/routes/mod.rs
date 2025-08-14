@@ -22,7 +22,7 @@ pub fn route_config(cfg: &mut web::ServiceConfig) {
                 .service(web::scope("/user").configure(user::config))
                 .service(web::scope("/key").configure(key::config))
                 .service(web::scope("/diff").configure(diff::config))
-                .service(web::scope("/authentication").configure(authentication::config))
+                .service(web::scope("/auth").configure(authentication::config))
                 .service(web::scope("/authorization").configure(authorization::config))
         )
         .default_service(web::to(not_found));
@@ -33,8 +33,10 @@ struct ForceUpdateQuery {
     force_update: Option<bool>,
 }
 
+#[allow(dead_code)]
 type ForceUpdate = web::Query<ForceUpdateQuery>;
 
+#[allow(dead_code)]
 fn should_update(force_update: ForceUpdate) -> bool {
     force_update.force_update.is_some_and(|update| update)
 }
