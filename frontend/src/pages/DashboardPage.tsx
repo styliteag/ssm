@@ -125,7 +125,7 @@ const DashboardPage: React.FC = () => {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {statCards.map((card) => (
           <Link key={card.title} to={card.link}>
-            <Card className="hover:shadow-lg transition-shadow cursor-pointer">
+            <Card className="hover:shadow-lg transition-shadow cursor-pointer bg-white dark:bg-gray-800">
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
