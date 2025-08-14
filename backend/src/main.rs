@@ -8,7 +8,6 @@ use actix_web::{
     web::{self, Data},
     App, HttpServer,
 };
-use actix_web_static_files::ResourceFiles;
 use config::Config;
 use croner::Cron;
 use diesel::prelude::QueryResult;
@@ -24,16 +23,13 @@ use russh::keys::load_secret_key;
 
 mod api_types;
 mod db;
-mod forms;
 mod middleware;
 mod models;
 mod routes;
 mod scheduler;
 mod schema;
 mod ssh;
-mod templates;
 
-include!(concat!(env!("OUT_DIR"), "/generated.rs"));
 
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!();
 
@@ -259,8 +255,6 @@ async fn main() -> Result<(), std::io::Error> {
     };
 
     HttpServer::new(move || {
-        let generated = generate();
-
         // Configure CORS for frontend
         let cors = Cors::default()
             .allowed_origin("http://localhost:3000") // React dev server
@@ -302,7 +296,6 @@ async fn main() -> Result<(), std::io::Error> {
             .app_data(caching_ssh_client.clone())
             .app_data(config.clone())
             .app_data(web::Data::new(pool.clone()))
-            .service(ResourceFiles::new("/static", generated).skip_handler_when_not_found())
             .configure(routes::route_config)
     })
     .bind((configuration.listen, configuration.port))?
