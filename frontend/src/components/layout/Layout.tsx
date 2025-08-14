@@ -10,7 +10,8 @@ import {
   X, 
   LogOut,
   Sun,
-  Moon
+  Moon,
+  GitCompare
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -52,6 +53,12 @@ const navigationItems: NavigationItem[] = [
     icon: 'Shield',
     requiresAuth: true,
   },
+  {
+    label: 'Diff Viewer',
+    path: '/diff',
+    icon: 'GitCompare',
+    requiresAuth: true,
+  },
 ];
 
 const iconComponents = {
@@ -60,6 +67,7 @@ const iconComponents = {
   Users,
   Key,
   Shield,
+  GitCompare,
 };
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {

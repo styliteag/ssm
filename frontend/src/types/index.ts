@@ -171,11 +171,89 @@ export interface KeyDifference {
   action: 'add' | 'remove' | 'modify';
   key: AllowedUserOnHost;
   existing_key?: AllowedUserOnHost;
+  line_number?: number;
 }
 
 export interface HostKeyDifferences {
   host: Host;
   differences: KeyDifference[];
+}
+
+// Diff viewer types
+export interface DiffLine {
+  type: 'added' | 'removed' | 'unchanged' | 'modified';
+  content: string;
+  line_number_old?: number;
+  line_number_new?: number;
+  key_fingerprint?: string;
+}
+
+export interface FileDiff {
+  expected_content: string;
+  actual_content: string;
+  lines: DiffLine[];
+  summary: {
+    added: number;
+    removed: number;
+    modified: number;
+    unchanged: number;
+  };
+}
+
+export interface HostDiffStatus {
+  host_id: number;
+  host: Host;
+  status: 'synchronized' | 'out_of_sync' | 'error' | 'unknown';
+  last_checked?: string;
+  error_message?: string;
+  file_diff?: FileDiff;
+  key_differences?: KeyDifference[];
+  difference_count: number;
+}
+
+export interface DiffDeployment {
+  host_id: number;
+  selected_differences: KeyDifference[];
+  create_backup: boolean;
+  dry_run: boolean;
+}
+
+export interface DeploymentResult {
+  host_id: number;
+  success: boolean;
+  message: string;
+  backup_file?: string;
+  deployed_keys?: number;
+  errors?: string[];
+}
+
+export interface BatchDeploymentStatus {
+  total_hosts: number;
+  completed_hosts: number;
+  successful_deploys: number;
+  failed_deploys: number;
+  results: DeploymentResult[];
+  in_progress: boolean;
+}
+
+// Filter types for diff page
+export interface DiffPageFilters {
+  status?: 'all' | 'out_of_sync' | 'error' | 'synchronized';
+  search?: string;
+  show_zero_diff?: boolean;
+}
+
+// Deployment history types
+export interface DeploymentHistoryEntry {
+  id: number;
+  host_id: number;
+  host_name: string;
+  timestamp: string;
+  user?: string;
+  keys_deployed: number;
+  backup_file?: string;
+  success: boolean;
+  message?: string;
 }
 
 // Theme and UI types
