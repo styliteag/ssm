@@ -1,7 +1,8 @@
-/target
-/result
-/result-lib
+target/*
+backend/target
+backend/result
+backend/result-lib
 .direnv
-ssm.db
-config.toml
-.htpasswd
+backend/ssm.db
+backend/config.toml
+backend/.htpasswd
