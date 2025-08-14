@@ -39,4 +39,8 @@ croner = "2.1.0"
 serde_json = "1.0.138"
 sha2 = "0.10.8"
 chrono = "0.4.40"
+uuid = { version = "1.0", features = ["v4"] }
+tempfile = "3.8"
+serial_test = "3.0"
+env_logger = "0.11"
 

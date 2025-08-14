@@ -30,6 +30,8 @@ mod scheduler;
 mod schema;
 mod ssh;
 
+#[cfg(test)]
+mod tests;
 
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!();
 

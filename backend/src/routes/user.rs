@@ -26,11 +26,16 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(add_key_dialog);
 }
 
-#[derive(Serialize)]
-struct UserResponse {
-    id: i32,
-    username: String,
-    enabled: bool,
+#[derive(Serialize, Deserialize, Debug)]
+pub struct DeleteUserResponse {
+    pub message: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct UserResponse {
+    pub id: i32,
+    pub username: String,
+    pub enabled: bool,
 }
 
 impl From<User> for UserResponse {
@@ -108,18 +113,18 @@ async fn delete_user(
     }
 }
 
-#[derive(Serialize)]
-struct UserKeyResponse {
-    id: i32,
-    key_type: String,
-    key_base64: String,
-    key_comment: Option<String>,
-    fingerprint: Option<String>,
+#[derive(Serialize, Deserialize, Debug)]
+pub struct UserKeyResponse {
+    pub id: i32,
+    pub key_type: String,
+    pub key_base64: String,
+    pub key_comment: Option<String>,
+    pub fingerprint: Option<String>,
 }
 
-#[derive(Serialize)]
-struct UserKeysResponse {
-    keys: Vec<UserKeyResponse>,
+#[derive(Serialize, Deserialize, Debug)]
+pub struct UserKeysResponse {
+    pub keys: Vec<UserKeyResponse>,
 }
 
 #[get("/{username}/keys")]
@@ -158,9 +163,9 @@ async fn get_user_keys(
     }
 }
 
-#[derive(Serialize)]
-struct UserAuthorizationsResponse {
-    authorizations: Vec<UserAndOptions>,
+#[derive(Serialize, Deserialize, Debug)]
+pub struct UserAuthorizationsResponse {
+    pub authorizations: Vec<UserAndOptions>,
 }
 
 #[get("/{username}/authorizations")]
@@ -194,14 +199,18 @@ async fn assign_key_to_user(
     conn: Data<ConnectionPool>,
     json: Json<AssignKeyRequest>,
 ) -> Result<impl Responder> {
-    let Ok(algo) = russh::keys::Algorithm::new(&json.key_type) else {
-        return Ok(HttpResponse::BadRequest().json(ApiError::bad_request(
-            "Invalid key algorithm".to_string(),
-        )));
+    // Validate that the key type is valid
+    let algorithm = match russh::keys::Algorithm::new(&json.key_type) {
+        Ok(algo) => algo,
+        Err(_) => {
+            return Ok(HttpResponse::BadRequest().json(ApiError::bad_request(
+                "Invalid key algorithm".to_string(),
+            )));
+        }
     };
 
     let new_key = NewPublicUserKey::new(
-        algo,
+        algorithm,
         json.key_base64.clone(),
         json.key_comment.clone(),
         json.user_id,

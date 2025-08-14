@@ -40,7 +40,22 @@ impl Host {
 
     /// Adds a new host to the database
     pub fn add_host(conn: &mut DbConnection, host: &NewHost) -> Result<i32, String> {
-        query(insert_into(host::table).values(host.clone()).execute(conn)).map(|id| (id as i32))
+        use diesel::result::QueryResult;
+        
+        // Insert the host
+        insert_into(host::table)
+            .values(host.clone())
+            .execute(conn)
+            .map_err(|e| format!("Failed to insert host: {}", e))?;
+        
+        // Get the inserted host by name to get its ID
+        let inserted_host = host::table
+            .filter(host::name.eq(&host.name))
+            .select(host::id)
+            .first::<i32>(conn)
+            .map_err(|e| format!("Failed to get inserted host ID: {}", e))?;
+        
+        Ok(inserted_host)
     }
 
     pub fn authorize_user(

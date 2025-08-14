@@ -65,7 +65,7 @@ pub struct NewHost {
     pub address: String,
     pub port: i32,
     pub username: String,
-    pub key_fingerprint: String,
+    pub key_fingerprint: Option<String>,
     pub jump_via: Option<i32>,
 }
 

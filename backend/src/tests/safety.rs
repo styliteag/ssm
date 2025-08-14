@@ -45,7 +45,7 @@ pub fn assert_ssh_operations_allowed() -> Result<(), TestSafetyError> {
 }
 
 /// Validate that a host configuration is safe for testing
-pub fn validate_test_host_config(address: &str, port: u16, key_fingerprint: &str) -> Result<(), TestSafetyError> {
+pub fn validate_test_host_config(address: &str, _port: u16, key_fingerprint: &str) -> Result<(), TestSafetyError> {
     if !is_test_mode() {
         return Ok(()); // Allow any config in production
     }
@@ -112,29 +112,32 @@ pub fn validate_test_database_url(url: &str) -> Result<(), TestSafetyError> {
     Ok(())
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug)]
 pub enum TestSafetyError {
-    #[error("SSH operations are blocked during testing")]
     SshOperationBlocked,
-    
-    #[error("Test mode is active - production operations not allowed")]
     TestModeActive,
-    
-    #[error("Invalid IP address format")]
     InvalidAddress,
-    
-    #[error("Unsafe address for testing: {0} (only localhost/private ranges allowed)")]
     UnsafeTestAddress(String),
-    
-    #[error("Unsafe SSH key fingerprint for testing: {0} (must contain 'test' or start with 'TEST_')")]
     UnsafeTestFingerprint(String),
-    
-    #[error("Unsafe SSH key path for testing: {0} (must be in temp/test directory)")]
     UnsafeTestKeyPath(String),
-    
-    #[error("Unsafe database URL for testing: {0} (must contain 'test', 'tmp', or 'temp')")]
     UnsafeTestDatabase(String),
 }
+
+impl std::fmt::Display for TestSafetyError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TestSafetyError::SshOperationBlocked => write!(f, "SSH operations are blocked during testing"),
+            TestSafetyError::TestModeActive => write!(f, "Test mode is active - production operations not allowed"),
+            TestSafetyError::InvalidAddress => write!(f, "Invalid IP address format"),
+            TestSafetyError::UnsafeTestAddress(addr) => write!(f, "Unsafe address for testing: {} (only localhost/private ranges allowed)", addr),
+            TestSafetyError::UnsafeTestFingerprint(fp) => write!(f, "Unsafe SSH key fingerprint for testing: {} (must contain 'test' or start with 'TEST_')", fp),
+            TestSafetyError::UnsafeTestKeyPath(path) => write!(f, "Unsafe SSH key path for testing: {} (must be in temp/test directory)", path),
+            TestSafetyError::UnsafeTestDatabase(url) => write!(f, "Unsafe database URL for testing: {} (must contain 'test', 'tmp', or 'temp')", url),
+        }
+    }
+}
+
+impl std::error::Error for TestSafetyError {}
 
 /// Macro to ensure a function can only be called in test mode
 #[macro_export]

@@ -233,6 +233,14 @@ impl SshClient {
         login: String,
         authorized_keys: String,
     ) -> Result<(), SshClientError> {
+        // 🛡️ SAFETY: Block SSH operations during testing
+        #[cfg(test)]
+        {
+            if std::env::var("SSH_KEY_MANAGER_TEST_MODE").is_ok() {
+                return Err(SshClientError::ExecutionError("🛡️ Real SSH operations blocked during testing. Use MockSshClient instead.".to_string()));
+            }
+        }
+        
         let host = Host::get_from_name(self.conn.get().unwrap(), host_name)
             .await?
             .ok_or(SshClientError::NoSuchHost)?;
@@ -247,6 +255,14 @@ impl SshClient {
     }
 
     pub async fn install_script_on_host(&self, host: i32) -> Result<(), SshClientError> {
+        // 🛡️ SAFETY: Block SSH operations during testing
+        #[cfg(test)]
+        {
+            if std::env::var("SSH_KEY_MANAGER_TEST_MODE").is_ok() {
+                return Err(SshClientError::ExecutionError("🛡️ Real SSH operations blocked during testing. Use MockSshClient instead.".to_string()));
+            }
+        }
+        
         let host = Host::get_from_id(self.conn.get().unwrap(), host)
             .await?
             .ok_or(SshClientError::NoSuchHost)?;
@@ -299,6 +315,14 @@ impl SshClient {
     }
 
     pub async fn get_authorized_keys(&self, host: Host) -> Result<SshKeyfiles, SshClientError> {
+        // 🛡️ SAFETY: Block SSH operations during testing
+        #[cfg(test)]
+        {
+            if std::env::var("SSH_KEY_MANAGER_TEST_MODE").is_ok() {
+                return Err(SshClientError::ExecutionError("🛡️ Real SSH operations blocked during testing. Use MockSshClient instead.".to_string()));
+            }
+        }
+        
         let handle = self.clone().connect(host.to_connection().await?).await?;
         let keyfiles_response = self
             .execute_bash(&handle, BashCommand::GetSshKeyfiles)
@@ -470,6 +494,14 @@ impl SshClient {
         host_name: String,
         login: String,
     ) -> Result<Vec<KeyDiffItem>, SshClientError> {
+        // 🛡️ SAFETY: Block SSH operations during testing
+        #[cfg(test)]
+        {
+            if std::env::var("SSH_KEY_MANAGER_TEST_MODE").is_ok() {
+                return Err(SshClientError::ExecutionError("🛡️ Real SSH operations blocked during testing. Use MockSshClient instead.".to_string()));
+            }
+        }
+        
         let Some(host) = Host::get_from_name(self.conn.get().unwrap(), host_name).await? else {
             return Err(SshClientError::NoSuchHost);
         };

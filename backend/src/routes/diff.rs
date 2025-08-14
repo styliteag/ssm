@@ -22,7 +22,31 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 }
 
 #[derive(Serialize)]
-struct DiffHostResponse {
+struct DiffResponse {
+    host_name: String,
+    logins: Vec<LoginDiff>,
+}
+
+#[derive(Serialize)]
+struct LoginDiff {
+    login: String,
+    changes: Vec<String>,
+}
+
+#[derive(Serialize)]
+struct AuthorizedKeysResponse {
+    login: String,
+    content: String,
+}
+
+#[derive(Serialize)]
+struct KeyComparisonResponse {
+    identical: bool,
+    changes: Vec<String>,
+}
+
+#[derive(Serialize)]
+pub struct DiffHostResponse {
     id: i32,
     name: String,
     address: String,
