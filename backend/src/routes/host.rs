@@ -1,56 +1,84 @@
 use std::sync::Arc;
 
 use actix_web::{
-    get, post,
-    web::{self, Data, Path},
-    Responder,
+    delete, get, post, put,
+    web::{self, Data, Json, Path, Query},
+    HttpResponse, Responder, Result,
 };
-use askama_actix::{Template, TemplateToResponse};
 use log::error;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::{
+    api_types::*,
     db::UserAndOptions,
-    forms::FormResponseBuilder,
-    routes::{should_update, ErrorTemplate, ForceUpdate, RenderErrorTemplate},
-    ssh::{CachingSshClient, KeyDiffItem, SshClient, SshClientError, SshFirstConnectionHandler},
+    routes::ForceUpdateQuery,
+    ssh::{CachingSshClient, SshClient, SshFirstConnectionHandler},
     ConnectionPool,
 };
 
 use crate::models::{Host, NewHost};
 
 pub fn config(cfg: &mut web::ServiceConfig) {
-    cfg.service(hosts_page)
-        .service(render_hosts)
+    cfg.service(get_all_hosts)
+        .service(get_host)
+        .service(create_host)
+        .service(update_host)
+        .service(delete_host)
         .service(get_logins)
-        .service(add_host_dialog)
-        .service(authorize_user_dialog)
-        .service(add_host)
         .service(authorize_user)
         .service(gen_authorized_keys)
         .service(set_authorized_keys)
         .service(add_host_key)
-        .service(delete)
         .service(delete_authorization)
-        .service(list_host_authorizations)
-        .service(edit_host_form)
-        .service(edit_host)
-        .service(show_host);
+        .service(list_host_authorizations);
 }
 
-#[derive(Template)]
-#[template(path = "hosts/index.html")]
-struct HostsTemplate {}
+#[derive(Serialize)]
+struct HostResponse {
+    id: i32,
+    name: String,
+    address: String,
+    port: i32,
+    username: String,
+    key_fingerprint: Option<String>,
+    jump_via: Option<i32>,
+    jumphost_name: Option<String>,
+}
+
+impl From<Host> for HostResponse {
+    fn from(host: Host) -> Self {
+        Self {
+            id: host.id,
+            name: host.name,
+            address: host.address,
+            port: host.port,
+            username: host.username,
+            key_fingerprint: host.key_fingerprint,
+            jump_via: host.jump_via,
+            jumphost_name: None, // Will be populated separately if needed
+        }
+    }
+}
 
 #[get("")]
-async fn hosts_page() -> impl Responder {
-    HostsTemplate {}
+async fn get_all_hosts(
+    conn: Data<ConnectionPool>,
+    pagination: Query<PaginationQuery>,
+) -> Result<impl Responder> {
+    let hosts = web::block(move || Host::get_all_hosts(&mut conn.get().unwrap())).await?;
+    
+    match hosts {
+        Ok(hosts) => {
+            let host_responses: Vec<HostResponse> = hosts.into_iter().map(HostResponse::from).collect();
+            Ok(HttpResponse::Ok().json(ApiResponse::success(host_responses)))
+        }
+        Err(error) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error))),
+    }
 }
 
-#[derive(Template)]
-#[template(path = "hosts/logins.htm")]
-struct LoginsTemplate {
-    logins: Result<Vec<String>, SshClientError>,
+#[derive(Serialize)]
+struct LoginsResponse {
+    logins: Vec<String>,
 }
 
 #[get("/{name}/logins")]
@@ -58,77 +86,83 @@ async fn get_logins(
     conn: Data<ConnectionPool>,
     caching_ssh_client: Data<CachingSshClient>,
     host_name: Path<String>,
-    update: ForceUpdate,
-) -> actix_web::Result<impl Responder> {
+    update: Query<ForceUpdateQuery>,
+) -> Result<impl Responder> {
     let host = Host::get_from_name(conn.get().unwrap(), host_name.to_string()).await;
 
     match host {
-        Err(error) => Ok(RenderErrorTemplate { error }.to_response()),
-        Ok(None) => Ok(RenderErrorTemplate {
-            error: "Host not found".to_owned(),
-        }
-        .to_response()),
+        Err(error) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error))),
+        Ok(None) => Ok(HttpResponse::NotFound().json(ApiError::not_found("Host not found".to_string()))),
         Ok(Some(host)) => {
             let logins = caching_ssh_client
-                .get_logins(host, should_update(update))
+                .get_logins(host, update.force_update.unwrap_or(false))
                 .await;
-            Ok(LoginsTemplate { logins }.to_response())
+            match logins {
+                Ok(logins) => Ok(HttpResponse::Ok().json(ApiResponse::success(LoginsResponse { logins }))),
+                Err(error) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error.to_string()))),
+            }
         }
     }
-}
-
-#[derive(Template)]
-#[template(path = "hosts/show_host.html")]
-struct ShowHostTemplate {
-    host: Host,
-    jumphost: Option<String>,
 }
 
 #[get("/{name}")]
-async fn show_host(
+async fn get_host(
     conn: Data<ConnectionPool>,
-    host: Path<String>,
-) -> actix_web::Result<impl Responder> {
-    let host = match Host::get_from_name(conn.get().unwrap(), host.to_string()).await {
+    host_name: Path<String>,
+) -> Result<impl Responder> {
+    let host = match Host::get_from_name(conn.get().unwrap(), host_name.to_string()).await {
         Ok(Some(host)) => host,
         Ok(None) => {
-            return Ok(ErrorTemplate {
-                error: String::from("Host not found"),
-            }
-            .to_response());
+            return Ok(HttpResponse::NotFound().json(ApiError::not_found("Host not found".to_string())));
         }
         Err(error) => {
-            return Ok(ErrorTemplate { error }.to_response());
+            return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error)));
         }
     };
 
-    if let Some(jumphost) = host.jump_via {
-        return Ok(
-            match Host::get_from_id(conn.get().unwrap(), jumphost).await {
-                Ok(Some(jumphost)) => ShowHostTemplate {
-                    host,
-                    jumphost: Some(jumphost.name),
-                }
-                .to_response(),
-                Ok(None) => ErrorTemplate {
-                    error: String::from("Jumphost not found"),
-                }
-                .to_response(),
-                Err(error) => ErrorTemplate { error }.to_response(),
-            },
-        );
+    let mut host_response = HostResponse::from(host.clone());
+    
+    if let Some(jumphost_id) = host.jump_via {
+        match Host::get_from_id(conn.get().unwrap(), jumphost_id).await {
+            Ok(Some(jumphost)) => {
+                host_response.jumphost_name = Some(jumphost.name);
+            }
+            Ok(None) => {
+                return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error("Jumphost not found".to_string())));
+            }
+            Err(error) => {
+                return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error)));
+            }
+        }
     }
 
-    Ok(ShowHostTemplate {
-        host,
-        jumphost: None,
-    }
-    .to_response())
+    Ok(HttpResponse::Ok().json(ApiResponse::success(host_response)))
 }
 
 #[derive(Deserialize)]
-struct AddHostkeyForm {
+struct AddHostkeyRequest {
     key_fingerprint: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct CreateHostRequest {
+    name: String,
+    address: String,
+    port: u16,
+    username: String,
+    key_fingerprint: Option<String>,
+    jump_via: Option<i32>,
+}
+
+#[derive(Serialize)]
+struct HostkeyConfirmation {
+    host_name: String,
+    login: String,
+    address: String,
+    port: u16,
+    key_fingerprint: String,
+    jumphost: Option<i32>,
+    requires_confirmation: bool,
 }
 
 #[post("/{id}/add_hostkey")]
@@ -136,12 +170,12 @@ async fn add_host_key(
     conn: Data<ConnectionPool>,
     ssh_client: Data<SshClient>,
     host_id: Path<i32>,
-    new_hostkey: web::Form<AddHostkeyForm>,
-) -> actix_web::Result<impl Responder> {
+    json: Json<AddHostkeyRequest>,
+) -> Result<impl Responder> {
     let host = match Host::get_from_id(conn.get().unwrap(), *host_id).await {
         Ok(Some(h)) => h,
-        Ok(None) => return Ok(FormResponseBuilder::not_found("Host not found.".to_owned())),
-        Err(e) => return Ok(FormResponseBuilder::error(e)),
+        Ok(None) => return Ok(HttpResponse::NotFound().json(ApiError::not_found("Host not found".to_string()))),
+        Err(e) => return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e))),
     };
     let port = host
         .port
@@ -161,17 +195,17 @@ async fn add_host_key(
     let handler = match handler {
         Ok(handler) => handler,
         Err(e) => {
-            return Ok(FormResponseBuilder::error(e.to_string()));
+            return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e.to_string())));
         }
     };
 
-    let Some(ref key_fingerprint) = new_hostkey.key_fingerprint else {
+    let Some(ref key_fingerprint) = json.key_fingerprint else {
         let res = handler.get_hostkey(ssh_client.into_inner()).await;
 
         let recv_result = match res {
             Ok(receiver) => receiver.await,
             Err(e) => {
-                return Ok(FormResponseBuilder::error(e.to_string()));
+                return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e.to_string())));
             }
         };
 
@@ -179,113 +213,50 @@ async fn add_host_key(
             Ok(key_fingerprint) => key_fingerprint,
             Err(e) => {
                 error!("Error receiving key: {e}");
-                return Ok(FormResponseBuilder::error(e.to_string()));
+                return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e.to_string())));
             }
         };
 
-        return Ok(FormResponseBuilder::dialog(
-            "Please check the hostkey",
-            format!("/host/{}/add_hostkey", host.id),
-            HostkeyDialog {
-                host_name: host.name,
-                login: host.username,
-                address: host.address,
-                port,
-                jumphost: host.jump_via,
-                key_fingerprint,
-            },
-        ));
+        return Ok(HttpResponse::Ok().json(ApiResponse::success(HostkeyConfirmation {
+            host_name: host.name,
+            login: host.username,
+            address: host.address,
+            port,
+            jumphost: host.jump_via,
+            key_fingerprint,
+            requires_confirmation: true,
+        })));
     };
 
     let handler = handler.set_hostkey(key_fingerprint.to_owned());
 
     let res = handler.try_authenticate(&ssh_client).await;
     if let Err(e) = res {
-        return Ok(FormResponseBuilder::error(e.to_string()));
+        return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e.to_string())));
     }
 
-    Ok(
-        match host.update_fingerprint(&mut conn.get().unwrap(), key_fingerprint.to_owned()) {
-            Ok(()) => FormResponseBuilder::success("Set hostkey".to_owned()),
-            Err(e) => FormResponseBuilder::error(e),
-        },
-    )
+    match host.update_fingerprint(&mut conn.get().unwrap(), key_fingerprint.to_owned()) {
+        Ok(()) => Ok(HttpResponse::Ok().json(ApiResponse::success_message("Host key updated successfully".to_string()))),
+        Err(e) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e.to_string()))),
+    }
 }
 
-#[derive(Template)]
-#[template(path = "hosts/add_dialog.htm")]
-struct AddHostDialog {
-    hosts: Vec<Host>,
-}
 
-#[get("/add")]
-async fn add_host_dialog(conn: Data<ConnectionPool>) -> actix_web::Result<impl Responder> {
-    Ok(
-        match web::block(move || Host::get_all_hosts(&mut conn.get().unwrap())).await? {
-            Ok(hosts) => {
-                FormResponseBuilder::dialog("Add a new Host", "/host/add", AddHostDialog { hosts })
-            }
-            Err(error) => FormResponseBuilder::error(error),
-        },
-    )
-}
-
-// NOTE: im not sure if it is a good idea to use the same struct as template and form
-#[derive(Template, Deserialize)]
-#[template(path = "hosts/authorize_user_dialog.htm")]
-struct AuthorizeUserDialog {
-    host_id: u32,
-    host_name: String,
-}
-
-#[get("/authorize")]
-async fn authorize_user_dialog(form: web::Query<AuthorizeUserDialog>) -> impl Responder {
-    FormResponseBuilder::dialog(
-        "Authorize a user on this host",
-        "/host/user/authorize",
-        form.0,
-    )
-}
-
-#[derive(Template)]
-#[template(path = "hosts/hostkey_dialog.htm")]
-struct HostkeyDialog {
-    host_name: String,
-    login: String,
-    address: String,
-    port: u16,
-    key_fingerprint: String,
-    jumphost: Option<i32>,
-}
-
-#[derive(Deserialize)]
-struct HostAddForm {
-    host_name: String,
-    login: String,
-    address: String,
-    port: u16,
-    jumphost: Option<i32>,
-    key_fingerprint: Option<String>,
-}
-
-#[post("/add")]
-async fn add_host(
+#[post("")]
+async fn create_host(
     conn: Data<ConnectionPool>,
     ssh_client: Data<SshClient>,
-    form: web::Form<HostAddForm>,
-) -> actix_web::Result<impl Responder> {
-    let form = form.0;
-
-    let jumphost = form
-        .jumphost
+    json: Json<CreateHostRequest>,
+) -> Result<impl Responder> {
+    let jumphost = json.jump_via
         .and_then(|host| if host < 0 { None } else { Some(host) });
 
     let handler = SshFirstConnectionHandler::new(
         Arc::clone(&conn),
-        form.host_name.clone(),
-        form.login.clone(),
-        form.address.clone(),
-        form.port,
+        json.name.clone(),
+        json.username.clone(),
+        json.address.clone(),
+        json.port,
         jumphost,
     )
     .await;
@@ -293,17 +264,17 @@ async fn add_host(
     let handler = match handler {
         Ok(handler) => handler,
         Err(e) => {
-            return Ok(FormResponseBuilder::error(e.to_string()));
+            return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e.to_string())));
         }
     };
 
-    let Some(key_fingerprint) = form.key_fingerprint else {
+    let Some(key_fingerprint) = json.key_fingerprint.clone() else {
         let res = handler.get_hostkey(ssh_client.into_inner()).await;
 
         let recv_result = match res {
             Ok(receiver) => receiver.await,
             Err(e) => {
-                return Ok(FormResponseBuilder::error(e.to_string()));
+                return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e.to_string())));
             }
         };
 
@@ -311,73 +282,61 @@ async fn add_host(
             Ok(key_fingerprint) => key_fingerprint,
             Err(e) => {
                 error!("Error receiving key: {e}");
-                return Ok(FormResponseBuilder::error(e.to_string()));
+                return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e.to_string())));
             }
         };
 
-        return Ok(FormResponseBuilder::dialog(
-            "Please check the hostkey",
-            "/host/add",
-            HostkeyDialog {
-                host_name: form.host_name,
-                login: form.login,
-                address: form.address,
-                port: form.port,
-                jumphost: form.jumphost,
-                key_fingerprint,
-            },
-        ));
+        return Ok(HttpResponse::Ok().json(ApiResponse::success(HostkeyConfirmation {
+            host_name: json.name.clone(),
+            login: json.username.clone(),
+            address: json.address.clone(),
+            port: json.port,
+            jumphost: json.jump_via,
+            key_fingerprint,
+            requires_confirmation: true,
+        })));
     };
 
     // We already have a hostkey, check it
     let handler = handler.set_hostkey(key_fingerprint.clone());
     let res = handler.try_authenticate(&ssh_client).await;
-    match res {
-        Ok(()) => {}
-        Err(e) => {
-            return Ok(FormResponseBuilder::error(e.to_string()));
-        }
-    };
+    if let Err(e) = res {
+        return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e.to_string())));
+    }
 
     let new_host = NewHost {
-        name: form.host_name.clone(),
-        address: form.address,
-        port: form.port.into(),
-        username: form.login,
-        key_fingerprint,
-        jump_via: jumphost.map(|id| id),
+        name: json.name.clone(),
+        address: json.address.clone(),
+        port: json.port.into(),
+        username: json.username.clone(),
+        key_fingerprint: key_fingerprint.clone(),
+        jump_via: jumphost,
     };
     let res = web::block(move || Host::add_host(&mut conn.get().unwrap(), &new_host)).await?;
 
-    Ok(match res {
+    match res {
         Ok(id) => match ssh_client.install_script_on_host(id).await {
-            Ok(()) => FormResponseBuilder::created(String::from("Added host"))
-                .close_modal()
-                .add_trigger(String::from("reload-hosts")),
-            Err(error) => FormResponseBuilder::error(format!("Failed to install script: {error}")),
+            Ok(()) => Ok(HttpResponse::Created().json(ApiResponse::success_with_message(
+                HostResponse::from(Host {
+                    id,
+                    name: json.name.clone(),
+                    address: json.address.clone(),
+                    port: json.port.into(),
+                    username: json.username.clone(),
+                    key_fingerprint: Some(key_fingerprint.clone()),
+                    jump_via: jumphost,
+                }),
+                "Host created successfully".to_string(),
+            ))),
+            Err(error) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(format!("Failed to install script: {error}")))),
         },
-        Err(e) => FormResponseBuilder::error(e),
-    })
+        Err(e) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e.to_string()))),
+    }
 }
 
-#[derive(Template)]
-#[template(path = "hosts/list.htm")]
-struct RenderHostsTemplate {
-    hosts: Vec<Host>,
-}
-
-#[get("/list.htm")]
-async fn render_hosts(conn: Data<ConnectionPool>) -> actix_web::Result<impl Responder> {
-    let all_hosts = web::block(move || Host::get_all_hosts(&mut conn.get().unwrap())).await?;
-
-    Ok(match all_hosts {
-        Ok(hosts) => RenderHostsTemplate { hosts }.to_response(),
-        Err(error) => RenderErrorTemplate { error }.to_response(),
-    })
-}
 
 #[derive(Deserialize)]
-struct AuthorizeUserForm {
+struct AuthorizeUserRequest {
     host_id: i32,
     user_id: i32,
     login: String,
@@ -387,59 +346,54 @@ struct AuthorizeUserForm {
 #[post("/user/authorize")]
 async fn authorize_user(
     conn: Data<ConnectionPool>,
-
-    form: web::Form<AuthorizeUserForm>,
-) -> actix_web::Result<impl Responder> {
+    json: Json<AuthorizeUserRequest>,
+) -> Result<impl Responder> {
     let res = web::block(move || {
         Host::authorize_user(
             &mut conn.get().unwrap(),
-            form.host_id,
-            form.user_id,
-            form.login.clone(),
-            form.options.clone(),
+            json.host_id,
+            json.user_id,
+            json.login.clone(),
+            json.options.clone(),
         )
     })
     .await?;
 
-    Ok(match res {
-        Ok(()) => FormResponseBuilder::success("Authorized user")
-            .close_modal()
-            .add_trigger("reloadDiff")
-            .add_trigger("reload-authorizations"),
-        Err(e) => FormResponseBuilder::error(e),
-    })
+    match res {
+        Ok(()) => Ok(HttpResponse::Ok().json(ApiResponse::success_message("User authorized successfully".to_string()))),
+        Err(e) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e.to_string()))),
+    }
 }
 
 #[derive(Deserialize)]
-struct GenAuthorizedKeysForm {
+struct GenAuthorizedKeysRequest {
     host_name: String,
     login: String,
 }
 
-#[derive(Template)]
-#[template(path = "hosts/authorized_keyfile_dialog.htm")]
-struct AuthorizedKeyfileDialog {
+#[derive(Serialize)]
+struct AuthorizedKeysResponse {
     login: String,
     authorized_keys: String,
-    diff: Vec<KeyDiffItem>,
+    diff_summary: String,
 }
 
 #[post("/gen_authorized_keys")]
 async fn gen_authorized_keys(
     conn: Data<ConnectionPool>,
     ssh_client: Data<SshClient>,
-    form: web::Form<GenAuthorizedKeysForm>,
-) -> actix_web::Result<impl Responder> {
-    let host_name = &form.host_name;
-    let login = &form.login;
+    json: Json<GenAuthorizedKeysRequest>,
+) -> Result<impl Responder> {
+    let host_name = &json.host_name;
+    let login = &json.login;
 
     let authorized_keys = match Host::get_from_name(conn.get().unwrap(), host_name.to_owned()).await
     {
         Err(error) => {
-            return Ok(FormResponseBuilder::error(error));
+            return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error)));
         }
         Ok(None) => {
-            return Ok(FormResponseBuilder::error("No such host.".to_owned()));
+            return Ok(HttpResponse::NotFound().json(ApiError::not_found("Host not found".to_string())));
         }
         Ok(Some(host)) => {
             host.get_authorized_keys_file_for(&ssh_client, &mut conn.get().unwrap(), login.as_ref())
@@ -449,95 +403,89 @@ async fn gen_authorized_keys(
     let authorized_keys = match authorized_keys {
         Ok(keys) => keys,
         Err(error) => {
-            return Ok(FormResponseBuilder::error(error));
+            return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error)));
         }
     };
 
-    let Ok(key_diff) = ssh_client
+    let key_diff = match ssh_client
         .key_diff(authorized_keys.as_ref(), host_name.clone(), login.clone())
         .await
-    else {
-        return Ok(FormResponseBuilder::error(
-            "Couldn't calculate key diff".to_owned(),
-        ));
+    {
+        Ok(diff) => diff,
+        Err(_) => {
+            return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error("Couldn't calculate key diff".to_string())));
+        }
     };
 
-    Ok(FormResponseBuilder::dialog(
-        format!("These changes will be applied for '{login}' on '{host_name}':"),
-        format!("/host/{host_name}/set_authorized_keys"),
-        AuthorizedKeyfileDialog {
-            login: login.to_owned(),
-            diff: key_diff,
-            authorized_keys,
-        },
-    ))
+    Ok(HttpResponse::Ok().json(ApiResponse::success(AuthorizedKeysResponse {
+        login: login.to_owned(),
+        diff_summary: format!("Found {} differences", key_diff.len()),
+        authorized_keys,
+    })))
 }
 
 #[derive(Deserialize)]
-struct SetAuthorizedKeysForm {
+struct SetAuthorizedKeysRequest {
     login: String,
     authorized_keys: String,
 }
 
 #[post("/{name}/set_authorized_keys")]
 async fn set_authorized_keys(
-    form: web::Form<SetAuthorizedKeysForm>,
-    host: Path<String>,
+    json: Json<SetAuthorizedKeysRequest>,
+    host_name: Path<String>,
     ssh_client: Data<SshClient>,
-) -> actix_web::Result<impl Responder> {
+) -> Result<impl Responder> {
     let res = ssh_client
         .set_authorized_keys(
-            host.to_string(),
-            form.login.clone(),
-            form.authorized_keys.clone(),
+            host_name.to_string(),
+            json.login.clone(),
+            json.authorized_keys.clone(),
         )
         .await;
 
-    Ok(match res {
-        Ok(()) => FormResponseBuilder::success(String::from("Applied authorized_keys"))
-            .add_trigger("reloadDiff".to_owned()),
-        Err(error) => FormResponseBuilder::error(error.to_string()),
-    })
+    match res {
+        Ok(()) => Ok(HttpResponse::Ok().json(ApiResponse::success_message("Authorized keys applied successfully".to_string()))),
+        Err(error) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error.to_string()))),
+    }
 }
 
-#[derive(Template)]
-#[template(path = "hosts/delete_dialog.htm")]
-struct DeleteHostTemplate {
+#[derive(Serialize)]
+struct DeleteHostResponse {
     authorizations: Vec<UserAndOptions>,
     affected_hosts: Vec<String>,
 }
 
 #[derive(Deserialize)]
-struct HostDeleteForm {
+struct HostDeleteRequest {
     #[serde(default)]
     confirm: bool,
 }
 
-#[post("/{name}/delete")]
-async fn delete(
+#[delete("/{name}")]
+async fn delete_host(
     conn: Data<ConnectionPool>,
     caching_ssh_client: Data<CachingSshClient>,
-    form: web::Form<HostDeleteForm>,
+    json: Json<HostDeleteRequest>,
     host_name: Path<String>,
-) -> impl Responder {
+) -> Result<impl Responder> {
     let host = match Host::get_from_name(conn.get().unwrap(), host_name.to_owned()).await {
         Ok(None) => {
-            return FormResponseBuilder::error("Host not found".to_owned());
+            return Ok(HttpResponse::NotFound().json(ApiError::not_found("Host not found".to_string())));
         }
         Err(error) => {
-            return FormResponseBuilder::error(format!("Database error: {error}"));
+            return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(format!("Database error: {error}"))));
         }
         Ok(Some(host)) => host,
     };
 
-    if form.confirm {
+    if json.confirm {
         return match host.delete(&mut conn.get().unwrap()) {
             Ok(amt) => {
                 caching_ssh_client.remove(host_name.as_str()).await;
-                return FormResponseBuilder::success(format!("Deleted {amt} record(s)"))
-                    .with_redirect("/host");
+                Ok(HttpResponse::Ok().json(ApiResponse::success_message(format!("Deleted {amt} record(s)"))))
             }
-            Err(e) => FormResponseBuilder::error(format!("Failed to delete host: {e}")),
+            Err(e) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(format!("Failed to delete host: {e}")))),
         };
     }
 
@@ -552,89 +500,60 @@ async fn delete(
 
     // TODO: resolve authorizations of dependant hosts
     match res {
-        Ok((authorizations, affected_hosts)) => FormResponseBuilder::dialog(
-            format!("In addition to {host_name}, these entries will be affected"),
-            format!("/host/{host_name}/delete"),
-            DeleteHostTemplate {
-                authorizations,
-                affected_hosts,
-            },
-        ),
-        Err(error) => FormResponseBuilder::error(format!("Failed to get authorizations: {error}")),
+        Ok((authorizations, affected_hosts)) => Ok(HttpResponse::Ok().json(ApiResponse::success(DeleteHostResponse {
+            authorizations,
+            affected_hosts,
+        }))),
+        Err(error) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(format!("Failed to get authorizations: {error}")))),
     }
 }
 
-#[derive(askama_actix::Template)]
-#[template(path = "hosts/list_authorizations.htm")]
-struct ListHostAuthorizations {
+#[derive(Serialize)]
+struct HostAuthorizationsResponse {
     authorizations: Vec<UserAndOptions>,
 }
 
-#[get("/{name}/authorizations.htm")]
+#[get("/{name}/authorizations")]
 async fn list_host_authorizations(
-    host_name: actix_web::web::Path<String>,
+    host_name: Path<String>,
     conn: Data<ConnectionPool>,
-) -> actix_web::Result<impl Responder> {
-    let host = Host::get_from_name(conn.get().unwrap(), host_name.to_string())
-        .await
-        .unwrap()
-        .unwrap();
+) -> Result<impl Responder> {
+    let host = match Host::get_from_name(conn.get().unwrap(), host_name.to_string()).await {
+        Ok(Some(host)) => host,
+        Ok(None) => return Ok(HttpResponse::NotFound().json(ApiError::not_found("Host not found".to_string()))),
+        Err(error) => return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error))),
+    };
+    
     let res = web::block(move || host.get_authorized_users(&mut conn.get().unwrap())).await?;
 
-    Ok(match res {
-        Ok(authorizations) => ListHostAuthorizations { authorizations }.to_response(),
-        Err(error) => RenderErrorTemplate { error }.to_response(),
-    })
+    match res {
+        Ok(authorizations) => Ok(HttpResponse::Ok().json(ApiResponse::success(HostAuthorizationsResponse { authorizations }))),
+        Err(error) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error))),
+    }
 }
 
 #[derive(Deserialize)]
-struct DeleteAuthorizationForm {
+struct DeleteAuthorizationRequest {
     authorization_id: i32,
 }
 
-#[post("/delete_authorization")]
+#[delete("/authorization/{id}")]
 async fn delete_authorization(
-    form: web::Form<DeleteAuthorizationForm>,
+    authorization_id: Path<i32>,
     conn: Data<ConnectionPool>,
-) -> actix_web::Result<impl Responder> {
+) -> Result<impl Responder> {
     let res = web::block(move || {
         let mut connection = conn.get().unwrap();
-
-        Host::delete_authorization(&mut connection, form.authorization_id)
+        Host::delete_authorization(&mut connection, *authorization_id)
     })
     .await?;
 
-    Ok(match res {
-        Ok(()) => FormResponseBuilder::success("Deleted authorization.".to_owned())
-            .add_trigger("reload-authorizations".to_owned()),
-        Err(e) => FormResponseBuilder::error(e),
-    })
+    match res {
+        Ok(()) => Ok(HttpResponse::Ok().json(ApiResponse::success_message("Authorization deleted successfully".to_string()))),
+        Err(e) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e.to_string()))),
+    }
 }
 
-#[derive(askama_actix::Template)]
-#[template(path = "hosts/edit_host.html")]
-struct EditHostTemplate {
-    host: Host,
-}
-
-#[get("/{name}/edit")]
-async fn edit_host_form(
-    conn: actix_web::web::Data<crate::ConnectionPool>,
-    host_name: actix_web::web::Path<String>,
-) -> actix_web::Result<impl actix_web::Responder> {
-    let host_result = Host::get_from_name(conn.get().unwrap(), host_name.to_string())
-        .await
-        .map_err(FormResponseBuilder::error)?;
-
-    Ok(match host_result {
-        Some(host) => FormResponseBuilder::dialog(
-            "Edit Host",
-            format!("/host/{host_name}/edit"),
-            EditHostTemplate { host },
-        ),
-        None => FormResponseBuilder::error("No such host"),
-    })
-}
 
 // Custom deserialization to treat empty strings as None
 fn empty_string_as_none<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
@@ -661,8 +580,8 @@ where
     }
 }
 
-#[derive(serde::Deserialize)]
-struct EditHostForm {
+#[derive(Deserialize)]
+struct UpdateHostRequest {
     name: String,
     address: String,
     username: String,
@@ -673,27 +592,24 @@ struct EditHostForm {
     jump_via: Option<i32>,
 }
 
-#[post("/{name}/edit")]
-async fn edit_host(
-    conn: actix_web::web::Data<crate::ConnectionPool>,
-    host_name: actix_web::web::Path<String>,
-    form: actix_web::web::Form<EditHostForm>,
-) -> actix_web::Result<impl actix_web::Responder> {
+#[put("/{name}")]
+async fn update_host(
+    conn: Data<crate::ConnectionPool>,
+    host_name: Path<String>,
+    json: Json<UpdateHostRequest>,
+) -> Result<impl Responder> {
     let mut db_conn = conn.get().unwrap();
-    Ok(
-        match Host::update_host(
-            &mut db_conn,
-            host_name.to_string(),
-            form.name.clone(),
-            form.address.clone(),
-            form.username.clone(),
-            form.port,
-            form.key_fingerprint.clone(),
-            form.jump_via,
-        ) {
-            Ok(()) => FormResponseBuilder::success("Updated host.")
-                .with_redirect(format!("/host/{}", form.name)),
-            Err(e) => FormResponseBuilder::error(e),
-        },
-    )
+    match Host::update_host(
+        &mut db_conn,
+        host_name.to_string(),
+        json.name.clone(),
+        json.address.clone(),
+        json.username.clone(),
+        json.port,
+        json.key_fingerprint.clone(),
+        json.jump_via,
+    ) {
+        Ok(()) => Ok(HttpResponse::Ok().json(ApiResponse::success_message("Host updated successfully".to_string()))),
+        Err(e) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e.to_string()))),
+    }
 }
