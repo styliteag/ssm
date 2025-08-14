@@ -1,0 +1,647 @@
+{
+  "info": {
+    "name": "SSH Key Manager API",
+    "description": "Complete API collection for SSH Key Manager with React frontend and Rust backend",
+    "version": "1.0.0",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{auth_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "prod_url",
+      "value": "http://localhost/api",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"password\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "login"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/auth/logout",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "logout"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Check Auth Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/auth/status",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "status"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Hosts",
+      "item": [
+        {
+          "name": "List All Hosts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/hosts?page=1&per_page=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "hosts"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "per_page",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Host by Name",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/hosts/web-server-01",
+              "host": ["{{base_url}}"],
+              "path": ["api", "hosts", "web-server-01"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Host",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"new-server\",\n  \"address\": \"192.168.1.150\",\n  \"port\": 22,\n  \"username\": \"deploy\",\n  \"key_fingerprint\": null,\n  \"jump_via\": null\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/hosts",
+              "host": ["{{base_url}}"],
+              "path": ["api", "hosts"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Host with Key Fingerprint",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"secure-server\",\n  \"address\": \"192.168.1.200\",\n  \"port\": 22,\n  \"username\": \"admin\",\n  \"key_fingerprint\": \"SHA256:abc123def456...\",\n  \"jump_via\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/hosts",
+              "host": ["{{base_url}}"],
+              "path": ["api", "hosts"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Host",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"updated-server\",\n  \"address\": \"192.168.1.151\",\n  \"username\": \"deploy\",\n  \"port\": 2222,\n  \"key_fingerprint\": \"SHA256:new_fingerprint...\",\n  \"jump_via\": null\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/hosts/new-server",
+              "host": ["{{base_url}}"],
+              "path": ["api", "hosts", "new-server"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Host (Preview)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"confirm\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/hosts/test-server",
+              "host": ["{{base_url}}"],
+              "path": ["api", "hosts", "test-server"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Host (Confirmed)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"confirm\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/hosts/test-server",
+              "host": ["{{base_url}}"],
+              "path": ["api", "hosts", "test-server"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Host Logins",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/hosts/web-server-01/logins?force_update=false",
+              "host": ["{{base_url}}"],
+              "path": ["api", "hosts", "web-server-01", "logins"],
+              "query": [
+                {
+                  "key": "force_update",
+                  "value": "false"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Host Authorizations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/hosts/web-server-01/authorizations",
+              "host": ["{{base_url}}"],
+              "path": ["api", "hosts", "web-server-01", "authorizations"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Add Host Key",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"key_fingerprint\": \"SHA256:new_host_key_fingerprint...\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/hosts/1/add_hostkey",
+              "host": ["{{base_url}}"],
+              "path": ["api", "hosts", "1", "add_hostkey"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "List All Users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/users?page=1&per_page=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "per_page",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get User by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/users/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "1"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"new.user\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/users",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"updated.user\",\n  \"enabled\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/users/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "1"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete User",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/users/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "1"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "SSH Keys",
+      "item": [
+        {
+          "name": "List All Keys",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/keys",
+              "host": ["{{base_url}}"],
+              "path": ["api", "keys"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Add SSH Key",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": 1,\n  \"public_key\": \"ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQ... user@hostname\",\n  \"comment\": \"User laptop key\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/keys",
+              "host": ["{{base_url}}"],
+              "path": ["api", "keys"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Add SSH Key (Ed25519)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": 1,\n  \"public_key\": \"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGbWf... user@desktop\",\n  \"comment\": \"User desktop key\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/keys",
+              "host": ["{{base_url}}"],
+              "path": ["api", "keys"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete SSH Key",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/keys/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "keys", "1"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Authorizations",
+      "item": [
+        {
+          "name": "List All Authorizations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/authorizations",
+              "host": ["{{base_url}}"],
+              "path": ["api", "authorizations"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Authorize User on Host",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"host_id\": 1,\n  \"user_id\": 1,\n  \"login\": \"deploy\",\n  \"options\": \"no-port-forwarding\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/hosts/user/authorize",
+              "host": ["{{base_url}}"],
+              "path": ["api", "hosts", "user", "authorize"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Authorize User (No Options)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"host_id\": 1,\n  \"user_id\": 2,\n  \"login\": \"backup\",\n  \"options\": null\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/hosts/user/authorize",
+              "host": ["{{base_url}}"],
+              "path": ["api", "hosts", "user", "authorize"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Authorization",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/hosts/authorization/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "hosts", "authorization", "1"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "SSH Key Deployment",
+      "item": [
+        {
+          "name": "Generate Authorized Keys",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"host_name\": \"web-server-01\",\n  \"login\": \"deploy\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/hosts/gen_authorized_keys",
+              "host": ["{{base_url}}"],
+              "path": ["api", "hosts", "gen_authorized_keys"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Deploy Authorized Keys",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"login\": \"deploy\",\n  \"authorized_keys\": \"ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQ... john@laptop\\nssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGbWf... jane@desktop\\n\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/hosts/web-server-01/set_authorized_keys",
+              "host": ["{{base_url}}"],
+              "path": ["api", "hosts", "web-server-01", "set_authorized_keys"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Key Differences",
+      "item": [
+        {
+          "name": "Get Key Differences",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/diff",
+              "host": ["{{base_url}}"],
+              "path": ["api", "diff"]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Set current timestamp for testing",
+          "pm.globals.set('timestamp', Math.floor(Date.now() / 1000));"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Basic response validation",
+          "pm.test('Status code is success', function () {",
+          "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204]);",
+          "});",
+          "",
+          "// Check response structure for JSON responses",
+          "if (pm.response.headers.get('Content-Type')?.includes('application/json')) {",
+          "    pm.test('Response has success field', function () {",
+          "        const jsonData = pm.response.json();",
+          "        pm.expect(jsonData).to.have.property('success');",
+          "    });",
+          "    ",
+          "    pm.test('Response structure is valid', function () {",
+          "        const jsonData = pm.response.json();",
+          "        pm.expect(jsonData).to.have.property('success');",
+          "        if (jsonData.success) {",
+          "            pm.expect(jsonData).to.have.property('data');",
+          "        } else {",
+          "            pm.expect(jsonData).to.have.property('message');",
+          "        }",
+          "    });",
+          "}"
+        ]
+      }
+    }
+  ]
+}
