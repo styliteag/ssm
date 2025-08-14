@@ -196,8 +196,30 @@ SSM (Secure SSH Manager) is a Rust-based web application that manages SSH keys a
 - **Button Consistency**: Use standard button classes, avoid custom styling
 
 ### File Search Patterns
-- **Routes**: Look in `src/routes/` - each feature has its own module
-- **Templates**: Organized by feature in `templates/` subdirectories
-- **Dialogs**: Often inline in main templates or separate `.htm` files
-- **CSS**: Global styles in `static/style.css`, component styles in template `<style>` blocks
-- **JavaScript**: Theme and form logic in `static/forms.js`
+- **Frontend Routes**: Look in `frontend/src/pages/` for page components
+- **Backend API Routes**: Look in `backend/src/routes/` - each feature has its own module
+- **Components**: Organized by type in `frontend/src/components/` subdirectories
+- **Legacy Templates**: Organized by feature in `templates/` subdirectories (being phased out)
+- **Styling**: Tailwind classes in React components, legacy CSS in `static/style.css`
+- **TypeScript Types**: Defined in `frontend/src/types/` and `backend/src/api_types.rs`
+
+## Migration from Monolithic to Frontend/Backend
+
+### Completed Migration Steps
+1. ✅ **Frontend Extraction**: Moved from Askama templates to React SPA
+2. ✅ **Backend API**: Converted web routes to REST API endpoints
+3. ✅ **Docker Multi-stage**: Combined frontend + backend into single container
+4. ✅ **Development Workflow**: Concurrent frontend/backend development
+5. ✅ **Authentication**: Maintained session-based auth across API
+
+### Current Architecture Benefits
+- **Modern Development**: React + TypeScript for better developer experience
+- **API-First**: Clean separation enables future mobile apps or integrations
+- **Performance**: Static frontend assets served by nginx
+- **Scalability**: Frontend and backend can be scaled independently
+- **Deployment**: Single container deployment maintains simplicity
+
+### Legacy Components (Being Phased Out)
+- `templates/` - HTML templates (replaced by React components)
+- `static/` - CSS/JS assets (replaced by Vite bundled assets)
+- Some template-specific styling patterns
