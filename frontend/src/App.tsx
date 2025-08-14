@@ -11,6 +11,7 @@ import HostsPage from './pages/HostsPage';
 import UsersPage from './pages/UsersPage';
 import KeysPage from './pages/KeysPage';
 import AuthorizationsPage from './pages/AuthorizationsPage';
+import DiffPage from './pages/DiffPage';
 
 // Components
 import Layout from './components/layout/Layout';
@@ -85,6 +86,14 @@ const AppRouter: React.FC = () => {
           <ProtectedRoute>
             <Layout>
               <AuthorizationsPage />
+            </Layout>
+          </ProtectedRoute>
+        } />
+        
+        <Route path="/diff" element={
+          <ProtectedRoute>
+            <Layout>
+              <DiffPage />
             </Layout>
           </ProtectedRoute>
         } />
