@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   Users,
   Plus,
@@ -50,6 +51,7 @@ interface UserDetailsData {
 }
 
 const UsersPage: React.FC = () => {
+  const location = useLocation();
   const { showSuccess, showError } = useNotifications();
   
   // State management
@@ -447,6 +449,7 @@ const UsersPage: React.FC = () => {
             emptyMessage="No users found. Add your first user to get started."
             searchPlaceholder="Search users by username..."
             initialSort={{ key: 'username', direction: 'asc' }}
+            initialSearch={(location.state as any)?.searchTerm || ''}
           />
         </CardContent>
       </Card>
