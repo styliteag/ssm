@@ -1,7 +1,8 @@
-import React, { useMemo } from 'react';
-import { Users, Server, Shield, UserCheck, AlertTriangle, TrendingUp } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Users, Server, Shield, UserCheck, AlertTriangle, TrendingUp, Search } from 'lucide-react';
 import { Authorization, User, Host } from '../types';
 import { Card, CardContent, CardHeader, CardTitle } from './ui';
+import Input from './ui/Input';
 import { cn } from '../utils/cn';
 
 interface AuthorizationStatsProps {
@@ -40,40 +41,81 @@ const AuthorizationStats: React.FC<AuthorizationStatsProps> = ({
   hosts,
   className,
 }) => {
+  const [searchTerm, setSearchTerm] = useState('');
+  
+  // Filter data based on search term
+  const filteredData = useMemo(() => {
+    let filteredUsers = users;
+    let filteredHosts = hosts;
+    let filteredAuthorizations = authorizations;
+    
+    if (searchTerm.trim()) {
+      const searchLower = searchTerm.toLowerCase();
+      
+      // Filter users
+      filteredUsers = users.filter(user => 
+        user.username.toLowerCase().includes(searchLower)
+      );
+      
+      // Filter hosts
+      filteredHosts = hosts.filter(host => 
+        host.name.toLowerCase().includes(searchLower) || 
+        host.address.toLowerCase().includes(searchLower)
+      );
+      
+      // Get IDs for filtered users and hosts
+      const filteredUserIds = new Set(filteredUsers.map(u => u.id));
+      const filteredHostIds = new Set(filteredHosts.map(h => h.id));
+      
+      // Filter authorizations to only include filtered users and hosts
+      filteredAuthorizations = authorizations.filter(auth => 
+        filteredUserIds.has(auth.user_id) || filteredHostIds.has(auth.host_id)
+      );
+    }
+    
+    return { 
+      users: filteredUsers, 
+      hosts: filteredHosts, 
+      authorizations: filteredAuthorizations 
+    };
+  }, [users, hosts, authorizations, searchTerm]);
+  
   // Calculate comprehensive statistics
   const stats = useMemo(() => {
-    const activeUsers = users.filter(user => user.enabled);
-    const activeAuthorizations = authorizations.filter(auth => {
-      const user = users.find(u => u.id === auth.user_id);
+    const { users: filteredUsers, hosts: filteredHosts, authorizations: filteredAuthorizations } = filteredData;
+    
+    const activeUsers = filteredUsers.filter(user => user.enabled);
+    const activeAuthorizations = filteredAuthorizations.filter(auth => {
+      const user = filteredUsers.find(u => u.id === auth.user_id);
       return user?.enabled ?? true;
     });
 
     // Basic counts
-    const totalAuthorizations = authorizations.length;
+    const totalAuthorizations = filteredAuthorizations.length;
     const activeAuthorizationsCount = activeAuthorizations.length;
     const inactiveAuthorizationsCount = totalAuthorizations - activeAuthorizationsCount;
 
     // User-related stats
-    const usersWithAccess = new Set(authorizations.map(auth => auth.user_id)).size;
+    const usersWithAccess = new Set(filteredAuthorizations.map(auth => auth.user_id)).size;
     const activeUsersWithAccess = new Set(
       activeAuthorizations.map(auth => auth.user_id)
     ).size;
 
     // Host-related stats
-    const hostsWithUsers = new Set(authorizations.map(auth => auth.host_id)).size;
+    const hostsWithUsers = new Set(filteredAuthorizations.map(auth => auth.host_id)).size;
     const hostsWithActiveUsers = new Set(
       activeAuthorizations.map(auth => auth.host_id)
     ).size;
 
     // Coverage percentages
-    const userCoverage = users.length > 0 ? (usersWithAccess / users.length) * 100 : 0;
-    const hostCoverage = hosts.length > 0 ? (hostsWithUsers / hosts.length) * 100 : 0;
+    const userCoverage = filteredUsers.length > 0 ? (usersWithAccess / filteredUsers.length) * 100 : 0;
+    const hostCoverage = filteredHosts.length > 0 ? (hostsWithUsers / filteredHosts.length) * 100 : 0;
 
-    // Top hosts by user count
-    const hostUserCounts: HostUserCount[] = hosts.map(host => {
-      const hostAuths = authorizations.filter(auth => auth.host_id === host.id);
+    // Top hosts by user count (using filtered data)
+    const hostUserCounts: HostUserCount[] = filteredHosts.map(host => {
+      const hostAuths = filteredAuthorizations.filter(auth => auth.host_id === host.id);
       const activeHostAuths = hostAuths.filter(auth => {
-        const user = users.find(u => u.id === auth.user_id);
+        const user = filteredUsers.find(u => u.id === auth.user_id);
         return user?.enabled ?? true;
       });
       
@@ -84,9 +126,9 @@ const AuthorizationStats: React.FC<AuthorizationStatsProps> = ({
       };
     }).sort((a, b) => b.activeUserCount - a.activeUserCount);
 
-    // Top users by host count
-    const userHostCounts: UserHostCount[] = users.map(user => {
-      const userAuths = authorizations.filter(auth => auth.user_id === user.id);
+    // Top users by host count (using filtered data)
+    const userHostCounts: UserHostCount[] = filteredUsers.map(user => {
+      const userAuths = filteredAuthorizations.filter(auth => auth.user_id === user.id);
       return {
         user,
         hostCount: userAuths.length,
@@ -106,7 +148,7 @@ const AuthorizationStats: React.FC<AuthorizationStatsProps> = ({
       topHosts: hostUserCounts.slice(0, 5),
       topUsers: userHostCounts.slice(0, 5),
     };
-  }, [authorizations, users, hosts]);
+  }, [filteredData]);
 
   // Create stat items for display
   const statItems: StatItem[] = [
@@ -158,6 +200,18 @@ const AuthorizationStats: React.FC<AuthorizationStatsProps> = ({
 
   return (
     <div className={cn('space-y-6', className)}>
+      {/* Search Input */}
+      <div className="flex justify-center">
+        <Input
+          type="text"
+          placeholder="Search users, hosts, or addresses..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          leftIcon={<Search size={16} />}
+          className="max-w-md"
+        />
+      </div>
+      
       {/* Main Statistics Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {statItems.map((stat, index) => (

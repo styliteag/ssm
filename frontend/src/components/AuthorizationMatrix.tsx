@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Check, X, Loader2, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { Check, X, Loader2, AlertCircle, Eye, EyeOff, Search } from 'lucide-react';
 import { cn } from '../utils/cn';
 import { User, Host, Authorization } from '../types';
 import { authorizationsService } from '../services/api/authorizations';
 import { Card, CardContent, CardHeader, CardTitle } from './ui';
 import Button from './ui/Button';
+import Input from './ui/Input';
 
 interface AuthorizationMatrixProps {
   users: User[];
@@ -36,6 +37,7 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
   const [selectedUsers, setSelectedUsers] = useState<Set<number>>(new Set());
   const [selectedHosts, setSelectedHosts] = useState<Set<number>>(new Set());
   const [showOnlyAuthorized, setShowOnlyAuthorized] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
 
   // Create matrix data structure
   const matrixData = useMemo(() => {
@@ -68,26 +70,53 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
     return matrix;
   }, [users, hosts, authorizations, cellStates]);
 
-  // Filter data based on show only authorized
+  // Filter data based on show only authorized and search term
   const filteredUsers = useMemo(() => {
-    if (!showOnlyAuthorized) return users;
+    let filtered = users;
     
-    return users.filter(user => 
-      hosts.some(host => 
-        authorizations.some(auth => auth.user_id === user.id && auth.host_id === host.id)
-      )
-    );
-  }, [users, hosts, authorizations, showOnlyAuthorized]);
+    // Filter by search term
+    if (searchTerm.trim()) {
+      const searchLower = searchTerm.toLowerCase();
+      filtered = filtered.filter(user => 
+        user.username.toLowerCase().includes(searchLower)
+      );
+    }
+    
+    // Filter by authorized only
+    if (showOnlyAuthorized) {
+      filtered = filtered.filter(user => 
+        hosts.some(host => 
+          authorizations.some(auth => auth.user_id === user.id && auth.host_id === host.id)
+        )
+      );
+    }
+    
+    return filtered;
+  }, [users, hosts, authorizations, showOnlyAuthorized, searchTerm]);
 
   const filteredHosts = useMemo(() => {
-    if (!showOnlyAuthorized) return hosts;
+    let filtered = hosts;
     
-    return hosts.filter(host =>
-      users.some(user =>
-        authorizations.some(auth => auth.user_id === user.id && auth.host_id === host.id)
-      )
-    );
-  }, [users, hosts, authorizations, showOnlyAuthorized]);
+    // Filter by search term
+    if (searchTerm.trim()) {
+      const searchLower = searchTerm.toLowerCase();
+      filtered = filtered.filter(host => 
+        host.name.toLowerCase().includes(searchLower) || 
+        host.address.toLowerCase().includes(searchLower)
+      );
+    }
+    
+    // Filter by authorized only
+    if (showOnlyAuthorized) {
+      filtered = filtered.filter(host =>
+        users.some(user =>
+          authorizations.some(auth => auth.user_id === user.id && auth.host_id === host.id)
+        )
+      );
+    }
+    
+    return filtered;
+  }, [users, hosts, authorizations, showOnlyAuthorized, searchTerm]);
 
   // Handle cell click to toggle authorization
   const handleCellClick = async (userId: number, hostId: number, isAuthorized: boolean) => {
@@ -261,6 +290,18 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
               {showOnlyAuthorized ? 'Show All' : 'Show Authorized Only'}
             </Button>
           </div>
+        </div>
+        
+        {/* Search Input */}
+        <div className="mt-4">
+          <Input
+            type="text"
+            placeholder="Search users, hosts, or addresses..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            leftIcon={<Search size={16} />}
+            className="max-w-md"
+          />
         </div>
         
         {/* Bulk Actions */}

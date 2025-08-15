@@ -31,7 +31,7 @@ const AuthorizationList: React.FC<AuthorizationListProps> = ({
   // Create columns for the data table
   const columns: Column<AuthorizationWithDetails>[] = useMemo(() => [
     {
-      key: 'user',
+      key: 'user_name',
       header: 'User',
       sortable: true,
       searchable: true,
@@ -56,7 +56,7 @@ const AuthorizationList: React.FC<AuthorizationListProps> = ({
       ),
     },
     {
-      key: 'host',
+      key: 'host_search',
       header: 'Host',
       sortable: true,
       searchable: true,
@@ -192,6 +192,7 @@ const AuthorizationList: React.FC<AuthorizationListProps> = ({
       user_name: auth.user?.username || '',
       host_name: auth.host?.name || '',
       host_address: auth.host?.address || '',
+      host_search: `${auth.host?.name || ''} ${auth.host?.address || ''}`.trim(),
       status_text: auth.user?.enabled ? 'Active' : 'Disabled',
     }));
   }, [authorizations]);
