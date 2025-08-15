@@ -12,6 +12,7 @@ use crate::{
         http_test_helpers::{extract_json, assert_not_found_response},
     },
     create_inline_test_service,
+    authenticated_request,
 };
 
 #[tokio::test]
@@ -28,9 +29,7 @@ async fn test_get_all_users_with_data_validation() {
     let mut conn = test_config.db_pool.get().unwrap();
     let _username = User::add_user(&mut conn, new_user).expect("Failed to create test user");
     
-    let req = test::TestRequest::get()
-        .uri("/api/user")
-        .to_request();
+    let req = authenticated_request!(&app, get, "/api/user").to_request();
     
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), StatusCode::OK);

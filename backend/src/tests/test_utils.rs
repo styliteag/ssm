@@ -71,8 +71,8 @@ impl TestConfig {
             htpasswd_path: temp_dir.path().join(".htpasswd"),
         };
         
-        // Create a dummy htpasswd file
-        std::fs::write(&config.htpasswd_path, "test:$2y$10$test").unwrap();
+        // Create a dummy htpasswd file with a valid bcrypt hash for password "testpass"
+        std::fs::write(&config.htpasswd_path, "testuser:$2b$12$QsNIPx3LLqyA/Wx2EGKnAe1PuXh1A5C.J/ztqwN9l67cqVJRwKoX6").unwrap();
         
         // Create a valid test SSH key file (Ed25519 private key in OpenSSH format)
         let test_ssh_key = "-----BEGIN OPENSSH PRIVATE KEY-----

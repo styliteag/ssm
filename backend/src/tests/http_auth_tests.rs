@@ -98,7 +98,7 @@ async fn test_login_endpoint() {
     if resp.status() == StatusCode::OK {
         let body = test::read_body(resp).await;
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(json["status"], "success");
+        assert_eq!(json["success"], true);
         log::info!("✅ Login succeeded");
     } else {
         log::warn!("Login failed with status: {} - this might be expected if test user doesn't exist", resp.status());
