@@ -11,6 +11,8 @@ export interface DiffHost {
   total_items?: number;
   loading?: boolean;
   error?: string;
+  // Index signature for DataTable compatibility
+  [key: string]: unknown;
 }
 
 // Detailed diff response structures
