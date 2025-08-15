@@ -280,9 +280,17 @@ const UsersPage: React.FC = () => {
       sortable: true,
       render: (value, user) => (
         <div className="flex items-center space-x-2">
-          <div className="font-medium text-gray-900 dark:text-gray-100">
+          <button
+            className="font-medium text-gray-900 dark:text-gray-100 hover:text-blue-600 dark:hover:text-blue-400 text-left cursor-pointer"
+            onClick={(e) => {
+              e.stopPropagation();
+              setSelectedUser(user);
+              setShowEditModal(true);
+            }}
+            title="Click to edit user"
+          >
             {value as string}
-          </div>
+          </button>
           {!(user as ExtendedUser).enabled && (
             <XCircle size={14} className="text-red-500" />
           )}
