@@ -95,7 +95,6 @@ COPY templates /app/templates
 RUN mkdir -p /var/cache/nginx /var/run/nginx /app/db /app/keys /var/log/nginx && \
     chmod +x /app/health-check.sh && \
     chmod +x /app/ssm && \
-    rm -rf /app/.htpasswd && \
     printf '#!/bin/sh\n' > /app/start.sh && \
     printf 'set -e\n' >> /app/start.sh && \
     printf 'echo "Starting SSH Key Manager"\n' >> /app/start.sh && \
