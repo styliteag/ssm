@@ -701,10 +701,10 @@ const KeysPage: React.FC = () => {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Unassigned</p>
-                <p className="text-2xl font-bold text-yellow-600">{unassignedKeys.length}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Active Users</p>
+                <p className="text-2xl font-bold text-purple-600">{users.filter(u => u.enabled).length}</p>
               </div>
-              <UserX size={24} className="text-yellow-600" />
+              <Users size={24} className="text-purple-600" />
             </div>
           </CardContent>
         </Card>
@@ -713,13 +713,14 @@ const KeysPage: React.FC = () => {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Active Users</p>
-                <p className="text-2xl font-bold text-purple-600">{users.filter(u => u.enabled).length}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Unassigned</p>
+                <p className="text-2xl font-bold text-yellow-600">{unassignedKeys.length}</p>
               </div>
-              <Users size={24} className="text-purple-600" />
+              <UserX size={24} className="text-yellow-600" />
             </div>
           </CardContent>
         </Card>
+
       </div>
 
       {/* Filters */}
