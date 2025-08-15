@@ -1,645 +1,372 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import {
-  RefreshCw,
-  Upload,
-  CheckCircle,
-  XCircle,
-  AlertTriangle,
-  Clock,
-  Eye,
-  Download,
-  Pause,
-  WifiOff,
-  X,
-} from 'lucide-react';
-import { cn } from '../utils/cn';
-import {
-  HostDiffStatus,
-  DiffPageFilters,
-  DiffDeployment,
-  BatchDeploymentStatus,
-} from '../types';
-import {
-  DataTable,
-  Button,
-  Card,
-  Loading,
-  Input,
-} from '../components/ui';
-import { useNotifications } from '../contexts/NotificationContext';
-import { diffApi } from '../services/api';
-import DiffViewer from '../components/diff/DiffViewer';
-import KeyDiffTable from '../components/diff/KeyDiffTable';
-import DeploymentModal from '../components/diff/DeploymentModal';
-import type { Column } from '../components/ui/DataTable';
+import React, { useState, useEffect } from 'react';
+import { diffApi, DiffHost } from '../services/api/diff';
 
 const DiffPage: React.FC = () => {
-  // State management
-  const [hostDiffs, setHostDiffs] = useState<HostDiffStatus[]>([]);
+  const [hosts, setHosts] = useState<DiffHost[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [selectedHostId, setSelectedHostId] = useState<number | null>(null);
-  const [filters, setFilters] = useState<DiffPageFilters>({
-    status: 'all',
-    search: '',
-    show_zero_diff: false,
-  });
-  const [selectedHosts, setSelectedHosts] = useState<Set<number>>(new Set());
-  const [selectedDifferences, setSelectedDifferences] = useState<Map<number, Set<number>>>(new Map());
-  const [deploymentModalOpen, setDeploymentModalOpen] = useState(false);
-  const [autoRefresh, setAutoRefresh] = useState(false);
-  const [refreshInterval] = useState(30000); // 30 seconds
-  
-  const { addNotification } = useNotifications();
+  const [error, setError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortBy, setSortBy] = useState<'name' | 'address'>('name');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [selectedHost, setSelectedHost] = useState<DiffHost | null>(null);
+  const [hostDetails, setHostDetails] = useState<any>(null);
+  const [detailsLoading, setDetailsLoading] = useState(false);
 
-  const loadHostDiffs = useCallback(async () => {
-    try {
-      setLoading(true);
-      const diffs = await diffApi.refreshAllHostDiffs();
-      setHostDiffs(diffs);
-    } catch (error) {
-      console.error('Failed to load host diffs:', error);
-      addNotification({
-        type: 'error',
-        title: 'Failed to load diffs',
-        message: error instanceof Error ? error.message : 'Unknown error occurred',
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, [addNotification]);
+  useEffect(() => {
+    const fetchHosts = async () => {
+      try {
+        setLoading(true);
+        const hostData = await diffApi.getAllHosts();
+        
+        // Mark all hosts as loading diff data initially
+        const hostsWithLoading = hostData.map(host => ({ ...host, loading: true }));
+        setHosts(hostsWithLoading);
+        setLoading(false);
 
-  const handleRefreshAll = useCallback(async (silent = false) => {
-    try {
-      if (!silent) setRefreshing(true);
-      const diffs = await diffApi.refreshAllHostDiffs();
-      setHostDiffs(diffs);
-      if (!silent) {
-        addNotification({
-          type: 'success',
-          title: 'Refreshed all hosts',
-          message: `Updated diff status for ${diffs.length} hosts`,
-        });
+        // Fetch diff data for each host in the background
+        fetchDiffDataForHosts(hostData);
+      } catch (err) {
+        setError('Failed to load hosts');
+        console.error('Error fetching hosts:', err);
+        setLoading(false);
       }
-    } catch (error) {
-      console.error('Failed to refresh host diffs:', error);
-      if (!silent) {
-        addNotification({
-          type: 'error',
-          title: 'Failed to refresh',
-          message: error instanceof Error ? error.message : 'Unknown error occurred',
-        });
-      }
-    } finally {
-      if (!silent) setRefreshing(false);
-    }
-  }, [addNotification]);
+    };
 
-  const handleRefreshHost = async (hostId: number) => {
-    try {
-      const hostDiff = hostDiffs.find(diff => diff.host_id === hostId);
-      if (!hostDiff) return;
+    const fetchDiffDataForHosts = async (hosts: DiffHost[]) => {
+      // Process hosts in batches to avoid overwhelming the server
+      const batchSize = 5;
       
-      const updatedDiff = await diffApi.refreshHostDiff(hostDiff.host.name);
-      setHostDiffs(prev => prev.map(diff => 
-        diff.host_id === hostId ? updatedDiff : diff
-      ));
-      addNotification({
-        type: 'success',
-        title: 'Host refreshed',
-        message: `Updated diff status for ${updatedDiff.host.name}`,
-      });
-    } catch (error) {
-      console.error('Failed to refresh host:', error);
-      addNotification({
-        type: 'error',
-        title: 'Failed to refresh host',
-        message: error instanceof Error ? error.message : 'Unknown error occurred',
-      });
-    }
-  };
-
-  const handleRefreshSelected = async () => {
-    if (selectedHosts.size === 0) return;
-    
-    try {
-      setRefreshing(true);
-      const hostIds = Array.from(selectedHosts);
-      const hostNames = hostIds.map(id => {
-        const hostDiff = hostDiffs.find(diff => diff.host_id === id);
-        return hostDiff?.host.name;
-      }).filter(Boolean) as string[];
-      const updatedDiffs = await diffApi.refreshHostDiffs(hostNames);
-      
-      setHostDiffs(prev => prev.map(diff => {
-        const updated = updatedDiffs.find(u => u.host_id === diff.host_id);
-        return updated || diff;
-      }));
-      
-      addNotification({
-        type: 'success',
-        title: 'Selected hosts refreshed',
-        message: `Updated diff status for ${updatedDiffs.length} hosts`,
-      });
-    } catch (error) {
-      console.error('Failed to refresh selected hosts:', error);
-      addNotification({
-        type: 'error',
-        title: 'Failed to refresh hosts',
-        message: error instanceof Error ? error.message : 'Unknown error occurred',
-      });
-    } finally {
-      setRefreshing(false);
-    }
-  };
-
-  const handleSelectDifference = (hostId: number, differenceIndex: number, selected: boolean) => {
-    setSelectedDifferences(prev => {
-      const newMap = new Map(prev);
-      const hostDiffs = newMap.get(hostId) || new Set();
-      
-      if (selected) {
-        hostDiffs.add(differenceIndex);
-      } else {
-        hostDiffs.delete(differenceIndex);
-      }
-      
-      if (hostDiffs.size > 0) {
-        newMap.set(hostId, hostDiffs);
-      } else {
-        newMap.delete(hostId);
-      }
-      
-      return newMap;
-    });
-  };
-
-  // Removed unused function handleSelectAllDifferences
-
-  const handleDeploy = async (deployments: DiffDeployment[]): Promise<BatchDeploymentStatus> => {
-    try {
-      const result = await diffApi.batchDeploy(deployments);
-      
-      // Refresh affected hosts
-      const hostIds = deployments.map(d => d.host_id);
-      const hostNames = hostIds.map(id => {
-        const hostDiff = hostDiffs.find(diff => diff.host_id === id);
-        return hostDiff?.host.name;
-      }).filter(Boolean) as string[];
-      const refreshedDiffs = await diffApi.refreshHostDiffs(hostNames);
-      setHostDiffs(prev => prev.map(diff => {
-        const refreshed = refreshedDiffs.find(r => r.host_id === diff.host_id);
-        return refreshed || diff;
-      }));
-      
-      // Clear selections for successfully deployed hosts
-      setSelectedDifferences(prev => {
-        const newMap = new Map(prev);
-        result.results.forEach(res => {
-          if (res.success) {
-            newMap.delete(res.host_id);
+      for (let i = 0; i < hosts.length; i += batchSize) {
+        const batch = hosts.slice(i, i + batchSize);
+        
+        // Process batch in parallel
+        const promises = batch.map(async (host) => {
+          try {
+            const diffData = await diffApi.getHostDiff(host.name);
+            
+            // Update the specific host with diff data
+            setHosts(prevHosts => 
+              prevHosts.map(h => 
+                h.id === host.id 
+                  ? { 
+                      ...h, 
+                      diff_summary: diffData.host ? `Found ${diffData.total_items} differences` : diffData.total_items.toString(),
+                      is_empty: diffData.is_empty,
+                      total_items: diffData.total_items,
+                      loading: false 
+                    }
+                  : h
+              )
+            );
+          } catch (err) {
+            console.error(`Error fetching diff for ${host.name}:`, err);
+            
+            // Update host with error state
+            setHosts(prevHosts => 
+              prevHosts.map(h => 
+                h.id === host.id 
+                  ? { ...h, loading: false, error: 'Failed to load diff' }
+                  : h
+              )
+            );
           }
         });
-        return newMap;
-      });
-      
-      addNotification({
-        type: result.successful_deploys === result.total_hosts ? 'success' : 'warning',
-        title: 'Deployment completed',
-        message: `${result.successful_deploys}/${result.total_hosts} hosts deployed successfully`,
-      });
-      
-      return result;
-    } catch (error) {
-      console.error('Deployment failed:', error);
-      addNotification({
-        type: 'error',
-        title: 'Deployment failed',
-        message: error instanceof Error ? error.message : 'Unknown error occurred',
-      });
-      throw error;
-    }
-  };
 
-  const handleExportReport = async () => {
-    try {
-      const hostIds = filteredHostDiffs.map(h => h.host_id);
-      const blob = await diffApi.exportDiffReport(hostIds, 'html');
-      
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `ssh-diff-report-${new Date().toISOString().split('T')[0]}.html`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      
-      addNotification({
-        type: 'success',
-        title: 'Report exported',
-        message: 'Diff report has been downloaded',
-      });
-    } catch (error) {
-      console.error('Failed to export report:', error);
-      addNotification({
-        type: 'error',
-        title: 'Export failed',
-        message: error instanceof Error ? error.message : 'Unknown error occurred',
-      });
-    }
-  };
-
-  // Auto-refresh effect
-  useEffect(() => {
-    if (!autoRefresh) return;
-
-    const interval = setInterval(() => {
-      handleRefreshAll(true); // Silent refresh
-    }, refreshInterval);
-
-    return () => clearInterval(interval);
-  }, [autoRefresh, refreshInterval, handleRefreshAll]);
-
-  // Load initial data
-  useEffect(() => {
-    loadHostDiffs();
-  }, [loadHostDiffs]);
-
-  // Filter and sort host diffs
-  const filteredHostDiffs = React.useMemo(() => {
-    return hostDiffs.filter(hostDiff => {
-      // Status filter
-      if (filters.status !== 'all' && hostDiff.status !== filters.status) {
-        return false;
-      }
-      
-      // Search filter
-      if (filters.search) {
-        const searchLower = filters.search.toLowerCase();
-        const searchableText = [
-          hostDiff.host.name,
-          hostDiff.host.address,
-          hostDiff.host.username,
-        ].join(' ').toLowerCase();
+        await Promise.all(promises);
         
-        if (!searchableText.includes(searchLower)) {
-          return false;
+        // Small delay between batches to be nice to the server
+        if (i + batchSize < hosts.length) {
+          await new Promise(resolve => setTimeout(resolve, 100));
         }
       }
-      
-      // Zero diff filter
-      if (!filters.show_zero_diff && hostDiff.difference_count === 0) {
-        return false;
-      }
-      
-      return true;
+    };
+
+    fetchHosts();
+  }, []);
+
+  const filteredAndSortedHosts = React.useMemo(() => {
+    let filtered = hosts.filter(host =>
+      host.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      host.address.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+    filtered.sort((a, b) => {
+      const aValue = a[sortBy];
+      const bValue = b[sortBy];
+      const comparison = aValue.localeCompare(bValue);
+      return sortOrder === 'asc' ? comparison : -comparison;
     });
-  }, [hostDiffs, filters]);
 
-  // Removed unused getStatusIcon function
+    return filtered;
+  }, [hosts, searchTerm, sortBy, sortOrder]);
 
-  const getStatusBadge = (status: HostDiffStatus['status']) => {
-    const baseClasses = "inline-flex items-center px-2 py-1 rounded-full text-xs font-medium";
-    
-    switch (status) {
-      case 'synchronized':
-        return (
-          <span className={cn(baseClasses, "bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400")}>
-            <CheckCircle size={12} className="mr-1" />
-            Synchronized
-          </span>
-        );
-      case 'out_of_sync':
-        return (
-          <span className={cn(baseClasses, "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400")}>
-            <AlertTriangle size={12} className="mr-1" />
-            Out of Sync
-          </span>
-        );
-      case 'error':
-        return (
-          <span className={cn(baseClasses, "bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400")}>
-            <XCircle size={12} className="mr-1" />
-            Error
-          </span>
-        );
-      case 'unknown':
-        return (
-          <span className={cn(baseClasses, "bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400")}>
-            <WifiOff size={12} className="mr-1" />
-            Unknown
-          </span>
-        );
-      default:
-        return (
-          <span className={cn(baseClasses, "bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400")}>
-            <Clock size={12} className="mr-1" />
-            Checking...
-          </span>
-        );
+  const handleSort = (column: 'name' | 'address') => {
+    if (sortBy === column) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(column);
+      setSortOrder('asc');
     }
   };
 
-  const selectedHostDiff = selectedHostId ? hostDiffs.find(h => h.host_id === selectedHostId) : null;
-  const totalSelectedDifferences = Array.from(selectedDifferences.values())
-    .reduce((sum, set) => sum + set.size, 0);
+  const getSortIcon = (column: 'name' | 'address') => {
+    if (sortBy !== column) return '↕️';
+    return sortOrder === 'asc' ? '↑' : '↓';
+  };
 
-  const columns: Column<HostDiffStatus>[] = [
-    {
-      key: 'select',
-      header: '',
-      width: '50px',
-      sortable: false,
-      render: (_: unknown, item: HostDiffStatus) => (
-        <input
-          type="checkbox"
-          checked={selectedHosts.has(item.host_id)}
-          onChange={(e) => {
-            const newSelected = new Set(selectedHosts);
-            if (e.target.checked) {
-              newSelected.add(item.host_id);
-            } else {
-              newSelected.delete(item.host_id);
-            }
-            setSelectedHosts(newSelected);
-          }}
-          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-        />
-      ),
-    },
-    {
-      key: 'host',
-      header: 'Host',
-      render: (_: unknown, item: HostDiffStatus) => (
-        <div>
-          <div className="font-medium text-gray-900 dark:text-gray-100">
-            {item.host?.name || 'Unknown Host'}
-          </div>
-          <div className="text-sm text-gray-500 dark:text-gray-400">
-            {item.host?.address || 'Unknown'}:{item.host?.port || '22'}
-          </div>
-        </div>
-      ),
-    },
-    {
-      key: 'status',
-      header: 'Status',
-      width: '150px',
-      render: (_: unknown, item: HostDiffStatus) => getStatusBadge(item.status),
-    },
-    {
-      key: 'difference_count',
-      header: 'Differences',
-      width: '120px',
-      render: (value: unknown) => (
-        <div className="text-center">
-          {(value as number) === 0 ? (
-            <span className="text-green-600 dark:text-green-400 font-medium">0</span>
-          ) : (
-            <span className="text-yellow-600 dark:text-yellow-400 font-medium">{value as number}</span>
-          )}
-        </div>
-      ),
-    },
-    {
-      key: 'last_checked',
-      header: 'Last Checked',
-      width: '150px',
-      render: (value: unknown) => (
-        <span className="text-sm text-gray-600 dark:text-gray-400">
-          {(value as string) ? new Date(value as string).toLocaleString() : 'Never'}
-        </span>
-      ),
-    },
-    {
-      key: 'actions',
-      header: 'Actions',
-      width: '200px',
-      sortable: false,
-      render: (_: unknown, item: HostDiffStatus) => (
-        <div className="flex items-center space-x-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => handleRefreshHost(item.host_id)}
-            leftIcon={<RefreshCw size={16} />}
-          >
-            Refresh
-          </Button>
-          {item.difference_count > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setSelectedHostId(item.host_id)}
-              leftIcon={<Eye size={16} />}
-            >
-              View Diff
-            </Button>
-          )}
-        </div>
-      ),
-    },
-  ];
+  const handleHostClick = async (host: DiffHost) => {
+    setSelectedHost(host);
+    setDetailsLoading(true);
+    
+    try {
+      // Fetch both diff details and basic host details
+      const [diffData, hostData] = await Promise.all([
+        diffApi.getHostDiff(host.name),
+        diffApi.getHostDiffDetails(host.name)
+      ]);
+      
+      setHostDetails({
+        host: hostData,
+        diff: diffData
+      });
+    } catch (err) {
+      console.error('Error fetching host details:', err);
+      setHostDetails({
+        error: 'Failed to load host details'
+      });
+    } finally {
+      setDetailsLoading(false);
+    }
+  };
+
+  const closeModal = () => {
+    setSelectedHost(null);
+    setHostDetails(null);
+  };
 
   if (loading) {
     return (
-      <div className="p-6">
-        <div className="text-center py-12">
-          <Loading size="lg" text="Loading host diff status..." />
-        </div>
+      <div className="flex justify-center items-center h-64">
+        <div className="text-lg">Loading hosts...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="text-red-600 text-lg">{error}</div>
       </div>
     );
   }
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-            SSH Key Diff Viewer
-          </h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-1">
-            Compare expected vs actual authorized_keys files across hosts
-          </p>
-        </div>
-        
-        <div className="flex items-center space-x-3">
-          <Button
-            variant="ghost"
-            onClick={handleExportReport}
-            leftIcon={<Download size={16} />}
-          >
-            Export Report
-          </Button>
-          
-          {totalSelectedDifferences > 0 && (
-            <Button
-              onClick={() => setDeploymentModalOpen(true)}
-              leftIcon={<Upload size={16} />}
-            >
-              Deploy Changes ({totalSelectedDifferences})
-            </Button>
-          )}
-        </div>
+    <div className="p-6">
+      <h1 className="text-2xl font-bold mb-6">Hosts Diff Overview</h1>
+      
+      <div className="mb-4">
+        <input
+          type="text"
+          placeholder="Search hosts by name or address..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
       </div>
 
-      {/* Controls */}
-      <Card className="p-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            {/* Search */}
-            <div className="w-80">
-              <Input
-                type="text"
-                placeholder="Search hosts..."
-                value={filters.search}
-                onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
-                className="w-full"
-              />
-            </div>
-
-            {/* Status filter */}
-            <select
-              value={filters.status}
-              onChange={(e) => setFilters(prev => ({ 
-                ...prev, 
-                status: e.target.value as DiffPageFilters['status'] 
-              }))}
-              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-            >
-              <option value="all">All Hosts</option>
-              <option value="out_of_sync">Out of Sync</option>
-              <option value="error">Error</option>
-              <option value="synchronized">Synchronized</option>
-            </select>
-
-            {/* Show zero diff toggle */}
-            <label className="flex items-center space-x-2">
-              <input
-                type="checkbox"
-                checked={filters.show_zero_diff}
-                onChange={(e) => setFilters(prev => ({ ...prev, show_zero_diff: e.target.checked }))}
-                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-              />
-              <span className="text-sm text-gray-700 dark:text-gray-300">Show synchronized hosts</span>
-            </label>
-          </div>
-
-          <div className="flex items-center space-x-3">
-            {/* Auto-refresh toggle */}
-            <label className="flex items-center space-x-2">
-              <input
-                type="checkbox"
-                checked={autoRefresh}
-                onChange={(e) => setAutoRefresh(e.target.checked)}
-                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-              />
-              <span className="text-sm text-gray-700 dark:text-gray-300">Auto-refresh</span>
-              {autoRefresh && (
-                <Pause size={16} className="text-blue-600 dark:text-blue-400" />
-              )}
-            </label>
-
-            {/* Refresh buttons */}
-            {selectedHosts.size > 0 && (
-              <Button
-                variant="ghost"
-                onClick={handleRefreshSelected}
-                disabled={refreshing}
-                leftIcon={<RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />}
+      <div className="bg-white shadow-md rounded-lg overflow-hidden">
+        <table className="min-w-full">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                ID
+              </th>
+              <th 
+                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                onClick={() => handleSort('name')}
               >
-                Refresh Selected
-              </Button>
-            )}
+                Name {getSortIcon('name')}
+              </th>
+              <th 
+                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                onClick={() => handleSort('address')}
+              >
+                Address {getSortIcon('address')}
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Status
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Differences
+              </th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {filteredAndSortedHosts.map((host) => (
+              <tr 
+                key={host.id} 
+                className="hover:bg-gray-50 cursor-pointer transition-colors"
+                onClick={() => handleHostClick(host)}
+              >
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  {host.id}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                  {host.name}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  {host.address}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm">
+                  {host.loading ? (
+                    <div className="flex items-center">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-900"></div>
+                      <span className="ml-2 text-gray-500">Loading...</span>
+                    </div>
+                  ) : host.error ? (
+                    <span className="text-red-600">Error</span>
+                  ) : host.is_empty === false ? (
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                      Needs Sync
+                    </span>
+                  ) : host.is_empty === true ? (
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                      Synchronized
+                    </span>
+                  ) : (
+                    <span className="text-gray-400">Unknown</span>
+                  )}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  {host.loading ? (
+                    '-'
+                  ) : host.error ? (
+                    'Error'
+                  ) : host.total_items !== undefined ? (
+                    <span className={host.total_items > 0 ? 'text-red-600 font-medium' : 'text-gray-500'}>
+                      {host.total_items} {host.total_items === 1 ? 'difference' : 'differences'}
+                    </span>
+                  ) : (
+                    '-'
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        
+        {filteredAndSortedHosts.length === 0 && (
+          <div className="text-center py-8 text-gray-500">
+            {searchTerm ? 'No hosts match your search criteria' : 'No hosts found'}
+          </div>
+        )}
+      </div>
+      
+      <div className="mt-4 text-sm text-gray-600">
+        Showing {filteredAndSortedHosts.length} of {hosts.length} hosts
+      </div>
+
+      {/* Host Details Modal */}
+      {selectedHost && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          onClick={closeModal}
+        >
+          <div 
+            className="bg-white rounded-lg shadow-xl max-w-2xl w-full m-4 max-h-[80vh] overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center p-6 border-b border-gray-200">
+              <h2 className="text-xl font-semibold text-gray-900">
+                Host Details: {selectedHost.name}
+              </h2>
+              <button
+                onClick={closeModal}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
             
-            <Button
-              variant="ghost"
-              onClick={() => handleRefreshAll()}
-              disabled={refreshing}
-              leftIcon={<RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />}
-            >
-              Refresh All
-            </Button>
+            <div className="p-6 overflow-y-auto">
+              {detailsLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+                  <span className="ml-3">Loading host details...</span>
+                </div>
+              ) : hostDetails?.error ? (
+                <div className="text-red-600 py-4">
+                  Error: {hostDetails.error}
+                </div>
+              ) : hostDetails ? (
+                <div className="space-y-6">
+                  {/* Basic Host Information */}
+                  <div>
+                    <h3 className="text-lg font-medium text-gray-900 mb-3">Host Information</h3>
+                    <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+                      <div className="flex justify-between">
+                        <span className="font-medium text-gray-700">ID:</span>
+                        <span className="text-gray-900">{hostDetails.host?.id || selectedHost.id}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="font-medium text-gray-700">Name:</span>
+                        <span className="text-gray-900">{hostDetails.host?.name || selectedHost.name}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="font-medium text-gray-700">Address:</span>
+                        <span className="text-gray-900">{hostDetails.host?.address || selectedHost.address}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Diff Information */}
+                  <div>
+                    <h3 className="text-lg font-medium text-gray-900 mb-3">Diff Status</h3>
+                    <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+                      <div className="flex justify-between">
+                        <span className="font-medium text-gray-700">Status:</span>
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          hostDetails.diff?.is_empty 
+                            ? 'bg-green-100 text-green-800' 
+                            : 'bg-red-100 text-red-800'
+                        }`}>
+                          {hostDetails.diff?.is_empty ? 'Synchronized' : 'Needs Sync'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="font-medium text-gray-700">Differences:</span>
+                        <span className={`text-gray-900 ${hostDetails.diff?.total_items > 0 ? 'font-medium text-red-600' : ''}`}>
+                          {hostDetails.diff?.total_items || 0}
+                        </span>
+                      </div>
+                      {hostDetails.diff?.diff_summary && (
+                        <div className="flex justify-between">
+                          <span className="font-medium text-gray-700">Summary:</span>
+                          <span className="text-gray-900">{hostDetails.diff.diff_summary}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Additional Actions */}
+                  <div className="pt-4 border-t border-gray-200">
+                    <div className="flex space-x-3">
+                      <button className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
+                        View Full Diff
+                      </button>
+                      <button className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors">
+                        Sync Keys
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
-      </Card>
-
-      {/* Host Table */}
-      <Card className="overflow-hidden">
-        <DataTable
-          data={filteredHostDiffs}
-          columns={columns}
-          loading={refreshing}
-          searchable={false}
-          emptyMessage="No hosts found matching the current filters"
-        />
-      </Card>
-
-      {/* Detailed Diff View */}
-      {selectedHostDiff && (
-        <Card className="p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-              Detailed Diff: {selectedHostDiff.host.name}
-            </h2>
-            <Button
-              variant="ghost"
-              onClick={() => setSelectedHostId(null)}
-              leftIcon={<X size={16} />}
-            >
-              Close
-            </Button>
-          </div>
-
-          {selectedHostDiff.error_message && (
-            <Card className="p-4 mb-6 bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800">
-              <div className="flex items-center space-x-2">
-                <XCircle size={16} className="text-red-600 dark:text-red-400" />
-                <span className="text-red-800 dark:text-red-200 font-medium">Error</span>
-              </div>
-              <p className="text-red-700 dark:text-red-300 mt-2">
-                {selectedHostDiff.error_message}
-              </p>
-            </Card>
-          )}
-
-          {selectedHostDiff.file_diff && (
-            <div className="mb-6">
-              <DiffViewer
-                fileDiff={selectedHostDiff.file_diff}
-                hostName={selectedHostDiff.host.name}
-              />
-            </div>
-          )}
-
-          {selectedHostDiff.key_differences && selectedHostDiff.key_differences.length > 0 && (
-            <KeyDiffTable
-              differences={selectedHostDiff.key_differences}
-              hostName={selectedHostDiff.host.name}
-              selectable={true}
-              onSelectDifference={(diff, selected) => {
-                const index = selectedHostDiff.key_differences?.indexOf(diff) ?? -1;
-                if (index >= 0) {
-                  handleSelectDifference(selectedHostDiff.host_id, index, selected);
-                }
-              }}
-              selectedDifferences={selectedDifferences.get(selectedHostDiff.host_id) || new Set()}
-              showDetails={true}
-            />
-          )}
-        </Card>
       )}
-
-      {/* Deployment Modal */}
-      <DeploymentModal
-        isOpen={deploymentModalOpen}
-        onClose={() => setDeploymentModalOpen(false)}
-        hostDiffs={hostDiffs.filter(h => selectedDifferences.has(h.host_id))}
-        selectedDifferences={selectedDifferences}
-        onDeploy={handleDeploy}
-      />
     </div>
   );
 };
