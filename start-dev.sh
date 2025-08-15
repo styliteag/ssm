@@ -36,7 +36,8 @@ fi
 # Start backend server
 echo "🦀 Starting Rust backend server..."
 cd backend
-cargo run &
+#RUST_LOG=debug cargo run &
+just dev &
 BACKEND_PID=$!
 cd ..
 
