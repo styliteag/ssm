@@ -7,7 +7,7 @@
 /// - Dummy SSH keys that never connect anywhere
 /// - Mock SSH client to prevent any real connections
 
-use actix_web::{test, web, App, dev::ServiceResponse, http::StatusCode, middleware, body::MessageBody};
+use actix_web::{test, web, App, dev::ServiceResponse, http::StatusCode, middleware};
 use actix_session::{SessionMiddleware, storage::CookieSessionStore};
 use actix_web::cookie::Key;
 use actix_identity::IdentityMiddleware;
@@ -15,13 +15,13 @@ use serde_json::Value;
 use tempfile::TempDir;
 use std::sync::Arc;
 use diesel::r2d2::{self, ConnectionManager};
-use diesel::SqliteConnection;
 
 use crate::{
     Configuration, ConnectionPool, SshConfig,
     ssh::{SshClient, CachingSshClient},
     tests::{safety::init_test_mode, mock_ssh::MockSshClient},
 };
+use russh::keys::load_secret_key;
 
 /// HTTP Test context with complete isolation
 pub struct HttpTestContext {
@@ -78,7 +78,7 @@ impl HttpTestContext {
         };
         
         // Create connection pool
-        let manager = ConnectionManager::<SqliteConnection>::new(&database_url);
+        let manager = ConnectionManager::<crate::DbConnection>::new(&database_url);
         let pool = r2d2::Pool::builder()
             .build(manager)
             .expect("Failed to create pool");
@@ -107,40 +107,39 @@ impl HttpTestContext {
         }
     }
     
-    /// Create the test app
-    fn create_app(&self) -> App<
-        impl actix_web::dev::ServiceFactory<
-            actix_web::dev::ServiceRequest,
-            Config = (),
-            Response = actix_web::dev::ServiceResponse,
-            Error = actix_web::Error,
-            InitError = (),
-        >,
+    /// Create the test app service
+    async fn create_app_service(&self) -> impl actix_web::dev::Service<
+        actix_web::dev::ServiceRequest,
+        Response = actix_web::dev::ServiceResponse,
+        Error = actix_web::Error,
     > {
-        let mock_ssh = MockSshClient::new(self.pool.clone(), self.config.ssh.clone());
-        let caching_ssh = CachingSshClient::new(MockSshClient::new(self.pool.clone(), self.config.ssh.clone()));
+        // Create SSH client like in main.rs using test key file
+        let test_key = load_secret_key(&self.config.ssh.private_key_file, None)
+            .expect("Failed to load test SSH key");
+        let ssh_client = SshClient::new(self.pool.clone(), test_key, self.config.ssh.clone());
+        let caching_ssh = CachingSshClient::new(self.pool.clone(), ssh_client);
         
-        App::new()
-            .app_data(web::Data::new(self.pool.clone()))
-            .app_data(web::Data::new(Arc::new(self.config.clone())))
-            .app_data(web::Data::new(mock_ssh))
-            .app_data(web::Data::new(caching_ssh))
-            .wrap(IdentityMiddleware::default())
-            .wrap(
-                SessionMiddleware::builder(
-                    CookieSessionStore::default(),
-                    Key::from(self.config.session_key.as_bytes()),
+        test::init_service(
+            App::new()
+                .app_data(web::Data::new(self.pool.clone()))
+                .app_data(web::Data::new(Arc::new(self.config.clone())))
+                .app_data(web::Data::new(caching_ssh))
+                .wrap(IdentityMiddleware::default())
+                .wrap(
+                    SessionMiddleware::builder(
+                        CookieSessionStore::default(),
+                        Key::from(self.config.session_key.as_bytes()),
+                    )
+                    .cookie_secure(false)
+                    .build(),
                 )
-                .cookie_secure(false)
-                .build(),
-            )
-            .wrap(middleware::Logger::default())
-            .configure(crate::routes::route_config)
+                .configure(crate::routes::route_config)
+        ).await
     }
     
     /// Login as test user and store session cookie
     pub async fn login(&mut self, username: &str, password: &str) -> Result<(), String> {
-        let app = test::init_service(self.create_app()).await;
+        let app = self.create_app_service().await;
         
         let req = test::TestRequest::post()
             .uri("/api/auth/login")
@@ -148,7 +147,7 @@ impl HttpTestContext {
                 "username": username,
                 "password": password
             }))
-            .to_request();
+            .to_srv_request();
         
         let resp = test::call_service(&app, req).await;
         
@@ -166,19 +165,19 @@ impl HttpTestContext {
     
     /// Make authenticated GET request
     pub async fn get(&self, uri: &str) -> ServiceResponse {
-        let app = test::init_service(self.create_app()).await;
+        let app = self.create_app_service().await;
         let mut req = test::TestRequest::get().uri(uri);
         
         if let Some(ref cookie) = self.session_cookie {
             req = req.append_header(("Cookie", cookie.as_str()));
         }
         
-        test::call_service(&app, req.to_request()).await
+        test::call_service(&app, req.to_srv_request()).await
     }
     
     /// Make authenticated POST request with JSON body
     pub async fn post_json(&self, uri: &str, json: Value) -> ServiceResponse {
-        let app = test::init_service(self.create_app()).await;
+        let app = self.create_app_service().await;
         let mut req = test::TestRequest::post()
             .uri(uri)
             .set_json(&json);
@@ -187,12 +186,12 @@ impl HttpTestContext {
             req = req.append_header(("Cookie", cookie.as_str()));
         }
         
-        test::call_service(&app, req.to_request()).await
+        test::call_service(&app, req.to_srv_request()).await
     }
     
     /// Make authenticated PUT request with JSON body
     pub async fn put_json(&self, uri: &str, json: Value) -> ServiceResponse {
-        let app = test::init_service(self.create_app()).await;
+        let app = self.create_app_service().await;
         let mut req = test::TestRequest::put()
             .uri(uri)
             .set_json(&json);
@@ -201,24 +200,24 @@ impl HttpTestContext {
             req = req.append_header(("Cookie", cookie.as_str()));
         }
         
-        test::call_service(&app, req.to_request()).await
+        test::call_service(&app, req.to_srv_request()).await
     }
     
     /// Make authenticated DELETE request
     pub async fn delete(&self, uri: &str) -> ServiceResponse {
-        let app = test::init_service(self.create_app()).await;
+        let app = self.create_app_service().await;
         let mut req = test::TestRequest::delete().uri(uri);
         
         if let Some(ref cookie) = self.session_cookie {
             req = req.append_header(("Cookie", cookie.as_str()));
         }
         
-        test::call_service(&app, req.to_request()).await
+        test::call_service(&app, req.to_srv_request()).await
     }
     
     /// Make authenticated DELETE request with JSON body
     pub async fn delete_json(&self, uri: &str, json: Value) -> ServiceResponse {
-        let app = test::init_service(self.create_app()).await;
+        let app = self.create_app_service().await;
         let mut req = test::TestRequest::delete()
             .uri(uri)
             .set_json(&json);
@@ -227,7 +226,7 @@ impl HttpTestContext {
             req = req.append_header(("Cookie", cookie.as_str()));
         }
         
-        test::call_service(&app, req.to_request()).await
+        test::call_service(&app, req.to_srv_request()).await
     }
     
     /// Extract JSON response body
