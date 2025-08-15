@@ -88,7 +88,7 @@ const AuthorizationStats: React.FC<AuthorizationStatsProps> = ({
       if (response.success && response.data) {
         setShowEditHostModal(false);
         setSelectedHost(null);
-        showSuccess('Host updated', `${response.data.name} has been updated successfully`);
+        showSuccess('Host updated', `${String(response.data.name)} has been updated successfully`);
       }
     } catch (error) {
       showError('Failed to update host', 'Please check your input and try again');
@@ -105,13 +105,13 @@ const AuthorizationStats: React.FC<AuthorizationStatsProps> = ({
       setSubmitting(true);
       const userData = {
         username: selectedUser.username, // Keep original username
-        enabled: values.enabled === 'true' || values.enabled === true
+        enabled: typeof values.enabled === 'string' ? values.enabled === 'true' : Boolean(values.enabled)
       };
       const response = await usersService.updateUser(selectedUser.id, userData);
       if (response.success && response.data) {
         setShowEditUserModal(false);
         setSelectedUser(null);
-        showSuccess('User updated', `${response.data.username} has been updated successfully`);
+        showSuccess('User updated', `${String(response.data.username)} has been updated successfully`);
       }
     } catch (error) {
       showError('Failed to update user', 'Please check your input and try again');
@@ -161,7 +161,6 @@ const AuthorizationStats: React.FC<AuthorizationStatsProps> = ({
   const stats = useMemo(() => {
     const { users: filteredUsers, hosts: filteredHosts, authorizations: filteredAuthorizations } = filteredData;
     
-    const activeUsers = filteredUsers.filter(user => user.enabled);
     const activeAuthorizations = filteredAuthorizations.filter(auth => {
       const user = filteredUsers.find(u => u.id === auth.user_id);
       return user?.enabled ?? true;
@@ -344,7 +343,7 @@ const AuthorizationStats: React.FC<AuthorizationStatsProps> = ({
                     key={item.host.id}
                     className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"
                   >
-                    <div className="flex items-center space-x-3">
+                    <div className="flex items-center space-x-3 flex-1">
                       <div className={cn(
                         'flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium',
                         index === 0 ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' :
@@ -354,32 +353,30 @@ const AuthorizationStats: React.FC<AuthorizationStatsProps> = ({
                       )}>
                         {index + 1}
                       </div>
-                      <div className="flex items-center space-x-2 flex-1">
-                        <div>
-                          <button
-                            onClick={() => handleHostClick(item.host.name)}
-                            className="font-medium text-left hover:text-blue-600 dark:hover:text-blue-400 transition-colors underline-offset-2 hover:underline text-gray-900 dark:text-white"
-                          >
-                            {item.host.name}
-                          </button>
-                          <div className="text-sm text-gray-500 dark:text-gray-400">
-                            {item.host.address}
-                          </div>
-                        </div>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleEditHost(item.host);
-                          }}
-                          className="h-6 w-6 p-0 text-gray-400 hover:text-gray-600"
-                          title="Edit host"
+                      <div>
+                        <button
+                          onClick={() => handleHostClick(item.host.name)}
+                          className="font-medium text-left hover:text-blue-600 dark:hover:text-blue-400 transition-colors underline-offset-2 hover:underline text-gray-900 dark:text-white"
                         >
-                          <Edit2 size={12} />
-                        </Button>
+                          {item.host.name}
+                        </button>
+                        <div className="text-sm text-gray-500 dark:text-gray-400">
+                          {item.host.address}
+                        </div>
                       </div>
                     </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleEditHost(item.host);
+                      }}
+                      className="h-10 w-10 p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                      title="Edit host"
+                    >
+                      <Edit2 size={20} />
+                    </Button>
                     <div className="text-right">
                       <div className="font-semibold text-gray-900 dark:text-white">
                         {item.activeUserCount}
@@ -418,7 +415,7 @@ const AuthorizationStats: React.FC<AuthorizationStatsProps> = ({
                     key={item.user.id}
                     className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"
                   >
-                    <div className="flex items-center space-x-3">
+                    <div className="flex items-center space-x-3 flex-1">
                       <div className={cn(
                         'flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium',
                         index === 0 ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' :
@@ -428,41 +425,39 @@ const AuthorizationStats: React.FC<AuthorizationStatsProps> = ({
                       )}>
                         {index + 1}
                       </div>
-                      <div className="flex items-center space-x-2 flex-1">
-                        <div className="flex items-center space-x-2">
-                          <div className={cn(
-                            'w-2 h-2 rounded-full',
-                            item.user.enabled ? 'bg-green-500' : 'bg-red-500'
-                          )} />
-                          <button
-                            onClick={() => handleUserClick(item.user.username)}
-                            className={cn(
-                              'font-medium text-left hover:text-blue-600 dark:hover:text-blue-400 transition-colors underline-offset-2 hover:underline',
-                              !item.user.enabled && 'text-gray-500 line-through hover:text-gray-700 dark:hover:text-gray-400'
-                            )}
-                          >
-                            {item.user.username}
-                          </button>
-                          {!item.user.enabled && (
-                            <span className="text-xs text-gray-400 bg-gray-100 dark:bg-gray-700 px-1 rounded">
-                              disabled
-                            </span>
+                      <div className="flex items-center space-x-2">
+                        <div className={cn(
+                          'w-2 h-2 rounded-full',
+                          item.user.enabled ? 'bg-green-500' : 'bg-red-500'
+                        )} />
+                        <button
+                          onClick={() => handleUserClick(item.user.username)}
+                          className={cn(
+                            'font-medium text-left hover:text-blue-600 dark:hover:text-blue-400 transition-colors underline-offset-2 hover:underline',
+                            !item.user.enabled && 'text-gray-500 line-through hover:text-gray-700 dark:hover:text-gray-400'
                           )}
-                        </div>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleEditUser(item.user);
-                          }}
-                          className="h-6 w-6 p-0 text-gray-400 hover:text-gray-600"
-                          title="Edit user"
                         >
-                          <Edit2 size={12} />
-                        </Button>
+                          {item.user.username}
+                        </button>
+                        {!item.user.enabled && (
+                          <span className="text-xs text-gray-400 bg-gray-100 dark:bg-gray-700 px-1 rounded">
+                            disabled
+                          </span>
+                        )}
                       </div>
                     </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleEditUser(item.user);
+                      }}
+                      className="h-10 w-10 p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                      title="Edit user"
+                    >
+                      <Edit2 size={20} />
+                    </Button>
                     <div className="text-right">
                       <div className="font-semibold text-gray-900 dark:text-white">
                         {item.hostCount}
