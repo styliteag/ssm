@@ -43,7 +43,7 @@ fi
 
 # Check 4: Rust backend process (SSM)
 echo -n "4. Checking SSH Key Manager backend process... "
-if pgrep -f "./ssm" > /dev/null; then
+if pgrep -f "ssm" > /dev/null; then
     echo -e "${GREEN}✓ Running${NC}"
 else
     echo -e "${RED}✗ Not running${NC}"

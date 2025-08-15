@@ -71,10 +71,11 @@ Thumbs.db
 *~
 
 # Docker and compose files (to avoid recursive copying)
-docker/
-Dockerfile
+docker/data/
+docker/compose*.yml
 docker-compose*.yml
 compose*.yml
+!docker/app/
 
 # Build and CI artifacts
 .github/
