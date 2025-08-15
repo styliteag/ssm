@@ -124,8 +124,10 @@ async fn login(
     )
 )]
 #[post("/logout")]
-async fn logout(identity: Identity) -> impl Responder {
-    identity.logout();
+async fn logout(identity: Option<Identity>) -> impl Responder {
+    if let Some(id) = identity {
+        id.logout();
+    }
     HttpResponse::Ok().json(ApiResponse::success_message(
         "Logged out successfully".to_string(),
     ))

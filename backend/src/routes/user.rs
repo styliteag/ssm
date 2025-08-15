@@ -126,7 +126,9 @@ async fn get_user(
 async fn create_user(
     conn: Data<ConnectionPool>,
     json: Json<NewUser>,
+    identity: Option<Identity>,
 ) -> Result<impl Responder> {
+    require_auth(identity)?;
     let new_user = json.into_inner();
 
     let res = web::block(move || User::add_user(&mut conn.get().unwrap(), new_user)).await?;
@@ -251,7 +253,9 @@ pub struct UserAuthorizationsResponse {
 async fn get_user_authorizations(
     conn: Data<ConnectionPool>,
     username: Path<String>,
+    identity: Option<Identity>,
 ) -> Result<impl Responder> {
+    require_auth(identity)?;
     let maybe_user_auth = web::block(move || {
         let mut connection = conn.get().unwrap();
         let user = User::get_user(&mut connection, username.to_string())?;
@@ -287,7 +291,9 @@ pub struct AssignKeyRequest {
 async fn assign_key_to_user(
     conn: Data<ConnectionPool>,
     json: Json<AssignKeyRequest>,
+    identity: Option<Identity>,
 ) -> Result<impl Responder> {
+    require_auth(identity)?;
     // Validate that the key type is valid
     let algorithm = match russh::keys::Algorithm::new(&json.key_type) {
         Ok(algo) => algo,
@@ -337,7 +343,9 @@ async fn update_user(
     conn: Data<ConnectionPool>,
     old_username: Path<String>,
     json: Json<UpdateUserRequest>,
+    identity: Option<Identity>,
 ) -> Result<impl Responder> {
+    require_auth(identity)?;
     let mut conn = conn.get().unwrap();
     match User::update_user(
         &mut conn,
