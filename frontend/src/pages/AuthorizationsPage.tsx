@@ -26,7 +26,7 @@ type ViewMode = 'stats' | 'matrix' | 'list';
 
 const AuthorizationsPage: React.FC = () => {
   // State management
-  const [viewMode, setViewMode] = useState<ViewMode>('matrix');
+  const [viewMode, setViewMode] = useState<ViewMode>('stats');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   
@@ -76,9 +76,32 @@ const AuthorizationsPage: React.FC = () => {
 
   // Create authorizations with details for list view
   useEffect(() => {
+    console.log('Creating authorizationsWithDetails...');
+    console.log('Authorizations count:', authorizations.length);
+    console.log('Users count:', users.length);
+    console.log('Hosts count:', hosts.length);
+    
+    if (authorizations.length > 0) {
+      console.log('Sample authorization:', authorizations[0]);
+    }
+    if (users.length > 0) {
+      console.log('Sample user:', users[0]);
+    }
+    if (hosts.length > 0) {
+      console.log('Sample host:', hosts[0]);
+    }
+    
     const withDetails = authorizations.map(auth => {
       const user = users.find(u => u.id === auth.user_id);
       const host = hosts.find(h => h.id === auth.host_id);
+      
+      if (!user) {
+        console.log(`No user found for user_id: ${auth.user_id}`);
+      }
+      if (!host) {
+        console.log(`No host found for host_id: ${auth.host_id}`);
+      }
+      
       return {
         ...auth,
         user: user!,
@@ -241,21 +264,21 @@ const AuthorizationsPage: React.FC = () => {
             </Button>
             <Button
               size="sm"
-              variant={viewMode === 'matrix' ? 'primary' : 'ghost'}
-              onClick={() => setViewMode('matrix')}
-              leftIcon={<Grid3X3 size={16} />}
-              className="h-8"
-            >
-              Matrix
-            </Button>
-            <Button
-              size="sm"
               variant={viewMode === 'list' ? 'primary' : 'ghost'}
               onClick={() => setViewMode('list')}
               leftIcon={<List size={16} />}
               className="h-8"
             >
               List
+            </Button>
+            <Button
+              size="sm"
+              variant={viewMode === 'matrix' ? 'primary' : 'ghost'}
+              onClick={() => setViewMode('matrix')}
+              leftIcon={<Grid3X3 size={16} />}
+              className="h-8"
+            >
+              Matrix
             </Button>
           </div>
           

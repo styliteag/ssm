@@ -59,21 +59,43 @@ export const authorizationsService = {
   // Get all authorizations by fetching from all users
   getAuthorizations: async (params?: PaginationQuery & { host_id?: number; user_id?: number }): Promise<ApiResponse<PaginatedResponse<Authorization>>> => {
     try {
-      // Get all users first
-      const usersResponse = await api.get<any[]>('/user');
+      // Get all users and hosts first to create lookup maps
+      const [usersResponse, hostsResponse] = await Promise.all([
+        api.get<any[]>('/user'),
+        api.get<any[]>('/host')
+      ]);
+      
       if (!usersResponse.success || !usersResponse.data) {
         return { success: false, message: 'Failed to fetch users' };
       }
+      
+      if (!hostsResponse.success || !hostsResponse.data) {
+        return { success: false, message: 'Failed to fetch hosts' };
+      }
 
       const users = usersResponse.data;
+      const hosts = hostsResponse.data;
+      
+      // Create lookup maps for efficient lookup
+      const userNameToId = new Map(users.map(u => [u.username, u.id]));
+      const hostNameToId = new Map(hosts.map(h => [h.name, h.id]));
+      
       const allAuthorizations: Authorization[] = [];
 
       // Get authorizations for each user
       for (const user of users) {
         try {
-          const userAuthResponse = await api.get<{ authorizations: Authorization[] }>(`/user/${encodeURIComponent(user.username)}/authorizations`);
+          const userAuthResponse = await api.get<{ authorizations: any[] }>(`/user/${encodeURIComponent(user.username)}/authorizations`);
           if (userAuthResponse.success && userAuthResponse.data) {
-            allAuthorizations.push(...userAuthResponse.data.authorizations);
+            // Convert UserAndOptions format to Authorization format
+            const userAuths: Authorization[] = userAuthResponse.data.authorizations.map((auth: any) => ({
+              id: auth.id,
+              user_id: user.id, // Current user's ID
+              host_id: hostNameToId.get(auth.username) || 0, // auth.username is actually hostname in this context
+              login: auth.login,
+              options: auth.options
+            }));
+            allAuthorizations.push(...userAuths);
           }
         } catch (error) {
           // Continue with other users if one fails
