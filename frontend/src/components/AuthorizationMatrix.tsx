@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Check, X, Loader2, AlertCircle, Eye, EyeOff, Search } from 'lucide-react';
 import { cn } from '../utils/cn';
@@ -14,6 +14,7 @@ interface AuthorizationMatrixProps {
   onToggleAuthorization: (userId: number, hostId: number, isAuthorized: boolean) => Promise<void>;
   loading?: boolean;
   className?: string;
+  onViewModeChange?: (mode: string) => void; // Callback to change view mode in parent
 }
 
 interface MatrixCell {
@@ -31,15 +32,38 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
   onToggleAuthorization,
   loading = false,
   className,
+  onViewModeChange,
 }) => {
   const navigate = useNavigate();
   const [cellStates, setCellStates] = useState<Map<string, boolean>>(new Map());
   const [hoveredCell, setHoveredCell] = useState<{ userId: number; hostId: number } | null>(null);
-  const [selectedUsers, setSelectedUsers] = useState<Set<number>>(new Set());
-  const [selectedHosts, setSelectedHosts] = useState<Set<number>>(new Set());
   const [showOnlyAuthorized, setShowOnlyAuthorized] = useState(false);
   const [userSearchTerm, setUserSearchTerm] = useState('');
   const [hostSearchTerm, setHostSearchTerm] = useState('');
+
+  // Restore state from localStorage if returning from navigation
+  useEffect(() => {
+    const savedState = localStorage.getItem('matrixNavigationState');
+    if (savedState) {
+      try {
+        const state = JSON.parse(savedState);
+        setUserSearchTerm(state.userSearchTerm || '');
+        setHostSearchTerm(state.hostSearchTerm || '');
+        setShowOnlyAuthorized(state.showOnlyAuthorized || false);
+        
+        // Switch to matrix view if needed
+        if (state.viewMode === 'matrix' && onViewModeChange) {
+          onViewModeChange('matrix');
+        }
+        
+        // Clear the saved state after restoring
+        localStorage.removeItem('matrixNavigationState');
+      } catch (error) {
+        console.error('Error restoring matrix state:', error);
+        localStorage.removeItem('matrixNavigationState');
+      }
+    }
+  }, [onViewModeChange]);
 
   // Create authorization lookup map
   const authMap = useMemo(() => {
@@ -52,12 +76,24 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
 
   // Navigation handlers
   const handleUserClick = (username: string) => {
-    console.log('handleUserClick called with:', username);
+    // Save current state to localStorage for back navigation
+    const matrixState = {
+      userSearchTerm,
+      hostSearchTerm,
+      showOnlyAuthorized,
+    };
+    localStorage.setItem('matrixNavigationState', JSON.stringify(matrixState));
     navigate('/users', { state: { searchTerm: username } });
   };
 
   const handleHostClick = (hostname: string) => {
-    console.log('handleHostClick called with:', hostname);
+    // Save current state to localStorage for back navigation
+    const matrixState = {
+      userSearchTerm,
+      hostSearchTerm,
+      showOnlyAuthorized,
+    };
+    localStorage.setItem('matrixNavigationState', JSON.stringify(matrixState));
     navigate('/hosts', { state: { searchTerm: hostname } });
   };
 
@@ -122,84 +158,6 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
     }
   };
 
-  // Handle bulk operations
-  const handleBulkGrantAccess = async (userIds: number[], hostIds: number[]) => {
-    const operations = [];
-    
-    for (const userId of userIds) {
-      for (const hostId of hostIds) {
-        const isAuthorized = authorizations.some(auth => 
-          auth.user_id === userId && auth.host_id === hostId
-        );
-        if (!isAuthorized) {
-          operations.push({ userId, hostId });
-        }
-      }
-    }
-
-    // Set loading states
-    const loadingKeys = operations.map(op => `${op.userId}-${op.hostId}`);
-    setCellStates(prev => {
-      const newMap = new Map(prev);
-      loadingKeys.forEach(key => newMap.set(key, true));
-      return newMap;
-    });
-
-    try {
-      // Execute bulk operations
-      await Promise.all(
-        operations.map(op => onToggleAuthorization(op.userId, op.hostId, false))
-      );
-    } catch (error) {
-      console.error('Bulk grant access failed:', error);
-    } finally {
-      // Clear loading states
-      setCellStates(prev => {
-        const newMap = new Map(prev);
-        loadingKeys.forEach(key => newMap.delete(key));
-        return newMap;
-      });
-    }
-  };
-
-  const handleBulkRevokeAccess = async (userIds: number[], hostIds: number[]) => {
-    const operations = [];
-    
-    for (const userId of userIds) {
-      for (const hostId of hostIds) {
-        const isAuthorized = authorizations.some(auth => 
-          auth.user_id === userId && auth.host_id === hostId
-        );
-        if (isAuthorized) {
-          operations.push({ userId, hostId });
-        }
-      }
-    }
-
-    // Set loading states
-    const loadingKeys = operations.map(op => `${op.userId}-${op.hostId}`);
-    setCellStates(prev => {
-      const newMap = new Map(prev);
-      loadingKeys.forEach(key => newMap.set(key, true));
-      return newMap;
-    });
-
-    try {
-      // Execute bulk operations
-      await Promise.all(
-        operations.map(op => onToggleAuthorization(op.userId, op.hostId, true))
-      );
-    } catch (error) {
-      console.error('Bulk revoke access failed:', error);
-    } finally {
-      // Clear loading states
-      setCellStates(prev => {
-        const newMap = new Map(prev);
-        loadingKeys.forEach(key => newMap.delete(key));
-        return newMap;
-      });
-    }
-  };
 
   // Get cell content based on state
   const getCellContent = (cell: MatrixCell) => {
@@ -354,11 +312,7 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
                     key={host.id}
                     className="w-12 h-16 flex items-center justify-center border-r border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors relative overflow-hidden"
                     title={`${host.name} (${host.address}) - Click to navigate to hosts page`}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      console.log('Host clicked:', host.name);
-                      handleHostClick(host.name);
-                    }}
+                    onClick={() => handleHostClick(host.name)}
                   >
                     <span className="text-xs font-medium transform -rotate-45 origin-center whitespace-nowrap text-gray-900 dark:text-white absolute hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
                       {truncateText(host.name, 10)}
@@ -377,11 +331,7 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
                       !user.enabled && 'text-gray-400 dark:text-gray-500 italic'
                     )}
                     title={`${user.username}${!user.enabled ? ' (disabled)' : ''} - Click to navigate to users page`}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      console.log('User clicked:', user.username);
-                      handleUserClick(user.username);
-                    }}
+                    onClick={() => handleUserClick(user.username)}
                   >
                     <span className="truncate text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
                       {truncateText(user.username, 16)}
