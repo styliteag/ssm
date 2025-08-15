@@ -1,14 +1,16 @@
 use actix_web::{
-    delete, put,
+    delete, get, put,
     web::{self, Data, Json, Path, Query},
     HttpResponse, Responder, Result,
 };
+use actix_identity::Identity;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 use crate::{
     api_types::*,
     db::UsernameAndKey,
+    routes::require_auth,
     ConnectionPool,
 };
 
@@ -52,7 +54,9 @@ pub struct KeysResponse {
 pub async fn get_all_keys(
     conn: Data<ConnectionPool>,
     _pagination: Query<PaginationQuery>,
+    identity: Option<Identity>,
 ) -> Result<impl Responder> {
+    require_auth(identity)?;
     let all_keys =
         web::block(move || PublicUserKey::get_all_keys_with_username(&mut conn.get().unwrap()))
             .await?;

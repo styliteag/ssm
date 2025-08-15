@@ -1,8 +1,7 @@
 use actix_identity::Identity;
 use actix_web::{
-    body::BoxBody,
+    body::{EitherBody, BoxBody},
     dev::{ServiceRequest, ServiceResponse},
-    http::header,
     middleware::Next,
     Error, FromRequest, HttpResponse,
 };
@@ -14,8 +13,8 @@ const LOG_TARGET: &str = "ssm:webserver";
 #[allow(dead_code)]
 pub async fn authentication(
     request: ServiceRequest,
-    next: Next<BoxBody>,
-) -> Result<ServiceResponse<BoxBody>, Error> {
+    next: Next<EitherBody<BoxBody>>,
+) -> Result<ServiceResponse<EitherBody<BoxBody>>, Error> {
     let path = request.path();
     let method = request.method();
 
@@ -33,10 +32,10 @@ pub async fn authentication(
 
     let Ok(id) = identity.await else {
         info!(target: LOG_TARGET, "{} {} (unauthorized)", method, path);
-        let response = HttpResponse::Found()
-            .append_header((header::LOCATION, "/authentication/login"))
-            .insert_header(("HX-Redirect", "/authentication/login"))
-            .body("<a href=\"/authentication/login\">Login</a>");
+        let response = HttpResponse::Unauthorized()
+            .json(crate::api_types::ApiError::unauthorized())
+            .map_into_boxed_body()
+            .map_into_right_body();
         return Ok(ServiceResponse::new(request.into_parts().0, response));
     };
 

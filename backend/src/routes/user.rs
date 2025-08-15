@@ -3,12 +3,14 @@ use actix_web::{
     web::{self, Data, Json, Path, Query},
     HttpResponse, Responder, Result,
 };
+use actix_identity::Identity;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 use crate::{
     api_types::*,
     db::UserAndOptions,
+    routes::require_auth,
     ssh::SshPublicKey,
     ConnectionPool,
 };
@@ -61,7 +63,9 @@ impl From<User> for UserResponse {
 async fn get_all_users(
     conn: Data<ConnectionPool>,
     _pagination: Query<PaginationQuery>,
+    identity: Option<Identity>,
 ) -> Result<impl Responder> {
+    require_auth(identity)?;
     let all_users = web::block(move || User::get_all_users(&mut conn.get().unwrap())).await?;
 
     match all_users {
