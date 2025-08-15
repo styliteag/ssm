@@ -11,8 +11,8 @@ import {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const getAllHostDiffs = async (): Promise<any[]> => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const response = await api.get<{ hosts: any[] }>('/diff');
-  return response.data?.hosts || [];
+  const response = await api.get<{ success: boolean; data: { hosts: any[] } }>('/diff');
+  return response.data?.data?.hosts || [];
 };
 
 // Get diff status for a specific host
@@ -23,22 +23,22 @@ export const getHostDiff = async (hostName: string, forceUpdate?: boolean, showE
   if (showEmpty) params.append('show_empty', 'true');
   
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const response = await api.get<any>(`/diff/${encodeURIComponent(hostName)}?${params}`);
-  if (!response.data) {
-    throw new Error('Host diff not found');
+  const response = await api.get<{ success: boolean; data?: any; message?: string }>(`/diff/${encodeURIComponent(hostName)}?${params}`);
+  if (!response.data?.success) {
+    throw new Error(response.data?.message || 'Failed to get host diff');
   }
-  return response.data;
+  return response.data?.data;
 };
 
 // Get detailed diff information for a host
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const getDiffDetails = async (hostName: string): Promise<any> => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const response = await api.get<any>(`/diff/${encodeURIComponent(hostName)}/details`);
-  if (!response.data) {
-    throw new Error('Host diff details not found');
+  const response = await api.get<{ success: boolean; data?: any; message?: string }>(`/diff/${encodeURIComponent(hostName)}/details`);
+  if (!response.data?.success) {
+    throw new Error(response.data?.message || 'Failed to get host diff details');
   }
-  return response.data;
+  return response.data?.data;
 };
 
 // These methods don't exist in the backend - calling code will need to be updated
@@ -57,7 +57,84 @@ export const refreshHostDiffs = async (hostNames: string[]): Promise<any[]> => {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const refreshAllHostDiffs = async (): Promise<any[]> => {
-  throw new Error('refreshAllHostDiffs endpoint not available in backend');
+  try {
+    console.log('RefreshAllHostDiffs: Starting...');
+    
+    // First get all hosts
+    const hostsResponse = await getAllHostDiffs();
+    const hosts = hostsResponse || [];
+    
+    console.log(`RefreshAllHostDiffs: Got ${hosts.length} hosts`);
+    
+    if (hosts.length === 0) {
+      console.warn('RefreshAllHostDiffs: No hosts found');
+      return [];
+    }
+    
+    // Process hosts in small batches to avoid overwhelming the backend
+    const BATCH_SIZE = 5;
+    const results: any[] = [];
+    
+    for (let i = 0; i < hosts.length; i += BATCH_SIZE) {
+      const batch = hosts.slice(i, i + BATCH_SIZE);
+      console.log(`RefreshAllHostDiffs: Processing batch ${Math.floor(i/BATCH_SIZE) + 1}/${Math.ceil(hosts.length/BATCH_SIZE)} (${batch.length} hosts)`);
+      
+      const batchPromises = batch.map(async (host: any) => {
+        try {
+          const diff = await getHostDiff(host.name, true); // force_update = true
+          
+          // Map backend response to frontend format
+          const status = diff.is_empty ? 'synchronized' : 'out_of_sync';
+          return {
+            host_id: host.id,
+            host: {
+              ...host,
+              username: 'root', // Default username, should come from host config
+              port: 22 // Default port, should come from host config
+            },
+            status: status,
+            difference_count: diff.total_items || 0,
+            last_checked: new Date().toISOString(),
+            error_message: null,
+            key_differences: [],
+            file_diff: null
+          };
+        } catch (error) {
+          console.error(`RefreshAllHostDiffs: Failed to process host ${host.name}:`, error);
+          return {
+            host_id: host.id,
+            host: {
+              ...host,
+              username: 'root',
+              port: 22
+            },
+            status: 'error' as const,
+            difference_count: 0,
+            last_checked: new Date().toISOString(),
+            error_message: error instanceof Error ? error.message : 'Failed to fetch host diff',
+            key_differences: [],
+            file_diff: null
+          };
+        }
+      });
+      
+      const batchResults = await Promise.all(batchPromises);
+      results.push(...batchResults);
+      
+      console.log(`RefreshAllHostDiffs: Completed batch ${Math.floor(i/BATCH_SIZE) + 1}, total processed: ${results.length}`);
+      
+      // Small delay between batches to be kind to the backend
+      if (i + BATCH_SIZE < hosts.length) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    }
+    
+    console.log(`RefreshAllHostDiffs: Completed processing ${results.length} hosts total`);
+    return results;
+  } catch (error) {
+    console.error('RefreshAllHostDiffs: Fatal error:', error);
+    throw error;
+  }
 };
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars

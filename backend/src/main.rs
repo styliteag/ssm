@@ -5,12 +5,12 @@ use actix_identity::IdentityMiddleware;
 use actix_session::{storage::CookieSessionStore, SessionMiddleware};
 use actix_web::{
     http::header,
+    middleware::Logger,
     web::{self, Data},
     App, HttpServer,
 };
 use config::Config;
 use croner::Cron;
-use diesel::prelude::QueryResult;
 use log::{error, info};
 use serde::Deserialize;
 use ssh::{CachingSshClient, SshClient};
@@ -274,6 +274,7 @@ async fn main() -> Result<(), std::io::Error> {
 
         App::new()
             .wrap(cors)
+            .wrap(Logger::new("%a \"%r\" %s %b \"%{Referer}i\" \"%{User-Agent}i\" %T"))
             .wrap(
                 SessionMiddleware::builder(CookieSessionStore::default(), secret_key.clone())
                     .cookie_name("ssm_session".to_owned())
