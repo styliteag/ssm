@@ -6,8 +6,7 @@ services:
       dockerfile: docker/app/Dockerfile
       args:
         VITE_API_URL: http://localhost/api
-      tags:
-        - ssh-key-manager_app
+    image: ssh-key-manager:latest
     ports:
       - "80:80"
     volumes:      
@@ -29,8 +28,9 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "/app/health-check.sh"]
+      start_period: 30s
       timeout: 10s
-      interval: 60s
+      interval: 30s
       retries: 3
 
   # Optional: SQLite Web-based database administration tool
