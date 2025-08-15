@@ -12,72 +12,115 @@ import {
 export const hostsService = {
   // Get paginated list of hosts
   getHosts: async (params?: PaginationQuery & { search?: string }): Promise<ApiResponse<PaginatedResponse<Host>>> => {
-    return api.get<PaginatedResponse<Host>>('/hosts', { params });
+    // Backend returns array directly, not paginated
+    const response = await api.get<Host[]>('/host', { params });
+    // Convert to paginated response format expected by frontend
+    const data = response.data || [];
+    return {
+      ...response,
+      data: {
+        items: data,
+        total: data.length,
+        page: 1,
+        per_page: data.length,
+        last_page: 1
+      }
+    };
   },
 
-  // Get single host by ID
+  // Get single host by name (backend uses name, not ID)
   getHost: async (id: number): Promise<ApiResponse<Host>> => {
-    return api.get<Host>(`/hosts/${id}`);
+    throw new Error('getHost by ID not supported. Use getHostByName instead.');
+  },
+
+  // Get host by name (this is what the backend actually supports)
+  getHostByName: async (name: string): Promise<ApiResponse<Host>> => {
+    return api.get<Host>(`/host/${encodeURIComponent(name)}`);
   },
 
   // Create new host
   createHost: async (host: HostFormData): Promise<ApiResponse<Host>> => {
-    return api.post<Host>('/hosts', host);
+    return api.post<Host>('/host', host);
   },
 
-  // Update existing host
-  updateHost: async (id: number, host: HostFormData): Promise<ApiResponse<Host>> => {
-    return api.put<Host>(`/hosts/${id}`, host);
+  // Update existing host by name
+  updateHost: async (name: string, host: HostFormData): Promise<ApiResponse<Host>> => {
+    return api.put<Host>(`/host/${encodeURIComponent(name)}`, host);
   },
 
-  // Delete host
-  deleteHost: async (id: number): Promise<ApiResponse<null>> => {
-    return api.delete<null>(`/hosts/${id}`);
+  // Delete host by name
+  deleteHost: async (name: string): Promise<ApiResponse<null>> => {
+    return api.delete<null>(`/host/${encodeURIComponent(name)}`);
   },
 
-  // Get host authorizations
-  getHostAuthorizations: async (id: number): Promise<ApiResponse<Authorization[]>> => {
-    return api.get<Authorization[]>(`/hosts/${id}/authorizations`);
+  // Get host authorizations by name
+  getHostAuthorizations: async (name: string): Promise<ApiResponse<Authorization[]>> => {
+    return api.get<Authorization[]>(`/host/${encodeURIComponent(name)}/authorizations`);
   },
 
-  // Add authorization to host
+  // Add authorization to host (backend uses different endpoint structure)
   addHostAuthorization: async (hostId: number, authorization: Omit<Authorization, 'id' | 'host_id'>): Promise<ApiResponse<Authorization>> => {
-    return api.post<Authorization>(`/hosts/${hostId}/authorizations`, authorization);
+    return api.post<Authorization>('/host/user/authorize', {
+      host_id: hostId,
+      user_id: authorization.user_id,
+      login: authorization.login,
+      options: authorization.options
+    });
   },
 
-  // Remove authorization from host
-  removeHostAuthorization: async (hostId: number, authId: number): Promise<ApiResponse<null>> => {
-    return api.delete<null>(`/hosts/${hostId}/authorizations/${authId}`);
+  // Remove authorization (backend uses different endpoint)
+  removeHostAuthorization: async (authId: number): Promise<ApiResponse<null>> => {
+    return api.delete<null>(`/host/authorization/${authId}`);
   },
 
-  // Get allowed users on host (for diff/keys view)
-  getAllowedUsers: async (id: number): Promise<ApiResponse<AllowedUserOnHost[]>> => {
-    return api.get<AllowedUserOnHost[]>(`/hosts/${id}/allowed-users`);
+  // Get logins for host
+  getHostLogins: async (name: string, forceUpdate?: boolean): Promise<ApiResponse<string[]>> => {
+    const params = forceUpdate ? { force_update: true } : undefined;
+    const response = await api.get<{ logins: string[] }>(`/host/${encodeURIComponent(name)}/logins`, { params });
+    return {
+      ...response,
+      data: response.data?.logins || []
+    };
   },
 
-  // Test SSH connection to host
-  testConnection: async (id: number): Promise<ApiResponse<{ success: boolean; message: string }>> => {
-    return api.post<{ success: boolean; message: string }>(`/hosts/${id}/test-connection`);
+  // Add host key
+  addHostKey: async (id: number, keyFingerprint?: string): Promise<ApiResponse<any>> => {
+    return api.post<any>(`/host/${id}/add_hostkey`, { key_fingerprint: keyFingerprint });
   },
 
-  // Deploy keys to host
-  deployKeys: async (id: number): Promise<ApiResponse<{ message: string }>> => {
-    return api.post<{ message: string }>(`/hosts/${id}/deploy`);
+  // Generate authorized keys
+  generateAuthorizedKeys: async (hostName: string, login: string): Promise<ApiResponse<any>> => {
+    return api.post<any>('/host/gen_authorized_keys', { host_name: hostName, login });
   },
 
-  // Get host key differences (what would be deployed)
-  getKeyDifferences: async (id: number): Promise<ApiResponse<any>> => {
-    return api.get<any>(`/hosts/${id}/diff`);
+  // Set authorized keys on host
+  setAuthorizedKeys: async (hostName: string, login: string, authorizedKeys: string): Promise<ApiResponse<null>> => {
+    return api.post<null>(`/host/${encodeURIComponent(hostName)}/set_authorized_keys`, {
+      login,
+      authorized_keys: authorizedKeys
+    });
   },
 
-  // Get all hosts (for dropdowns, etc.)
+  // Legacy methods for backwards compatibility - these will need to be updated in calling code
   getAllHosts: async (): Promise<ApiResponse<Host[]>> => {
-    return api.get<Host[]>('/hosts/all');
+    return api.get<Host[]>('/host');
   },
 
-  // Get host by name
-  getHostByName: async (name: string): Promise<ApiResponse<Host>> => {
-    return api.get<Host>(`/hosts/name/${encodeURIComponent(name)}`);
+  // These methods don't exist in backend - calling code will need to be updated
+  getAllowedUsers: async (id: number): Promise<ApiResponse<AllowedUserOnHost[]>> => {
+    throw new Error('getAllowedUsers endpoint not available in backend');
+  },
+
+  testConnection: async (id: number): Promise<ApiResponse<{ success: boolean; message: string }>> => {
+    throw new Error('testConnection endpoint not available in backend');
+  },
+
+  deployKeys: async (id: number): Promise<ApiResponse<{ message: string }>> => {
+    throw new Error('deployKeys endpoint not available in backend');
+  },
+
+  getKeyDifferences: async (id: number): Promise<ApiResponse<any>> => {
+    throw new Error('getKeyDifferences endpoint not available in backend');
   },
 };
 

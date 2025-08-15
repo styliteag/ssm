@@ -14,14 +14,10 @@ const createApiClient = (): AxiosInstance => {
     withCredentials: true, // Include cookies for session-based auth
   });
 
-  // Request interceptor for auth tokens if needed
+  // Request interceptor (no auth token needed for session-based auth)
   client.interceptors.request.use(
     (config) => {
-      // Add auth token if available
-      const token = localStorage.getItem('auth_token');
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
+      // Session-based auth uses cookies, no need to add Authorization header
       return config;
     },
     (error) => Promise.reject(error)
@@ -32,8 +28,7 @@ const createApiClient = (): AxiosInstance => {
     (response) => response,
     (error) => {
       if (error.response?.status === 401) {
-        // Handle unauthorized access
-        localStorage.removeItem('auth_token');
+        // Handle unauthorized access - redirect to login
         window.location.href = '/login';
       }
       return Promise.reject(error);
