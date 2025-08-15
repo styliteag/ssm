@@ -213,20 +213,23 @@ const AuthorizationsPage: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center space-x-2">
-            <Shield size={24} />
-            <span>Authorizations</span>
-          </h1>
-          <p className="text-gray-600 dark:text-gray-400">
-            Manage user access permissions for hosts
-          </p>
+      <div>
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center space-x-2">
+              <Shield size={24} />
+              <span>Authorizations</span>
+            </h1>
+            <p className="text-gray-600 dark:text-gray-400">
+              Manage user access permissions for hosts
+            </p>
+          </div>
         </div>
         
-        <div className="flex items-center space-x-3">
+        {/* Action buttons in separate row */}
+        <div className="flex flex-wrap items-center gap-3">
           {/* View Mode Toggle */}
-          <div className="flex bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
+          <div className="inline-flex bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
             <Button
               size="sm"
               variant={viewMode === 'stats' ? 'primary' : 'ghost'}
