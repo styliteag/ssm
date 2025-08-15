@@ -87,7 +87,9 @@ pub async fn get_all_keys(
 pub async fn delete_key(
     conn: Data<ConnectionPool>,
     key_id: Path<i32>,
+    identity: Option<Identity>,
 ) -> Result<impl Responder> {
+    require_auth(identity)?;
     let res =
         web::block(move || PublicUserKey::delete_key(&mut conn.get().unwrap(), *key_id)).await?;
 
@@ -120,7 +122,9 @@ pub async fn update_key_comment(
     conn: Data<ConnectionPool>,
     key_id: Path<i32>,
     json: Json<UpdateKeyCommentRequest>,
+    identity: Option<Identity>,
 ) -> Result<impl Responder> {
+    require_auth(identity)?;
     let key_id = key_id.into_inner();
     let result = web::block(move || {
         let mut conn = conn.get().unwrap();
