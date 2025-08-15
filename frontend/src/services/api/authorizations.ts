@@ -42,12 +42,12 @@ export const authorizationsService = {
   },
 
   // Create authorization (use host service method)
-  createAuthorization: async (hostId: number, userId: number, login: string, options?: string): Promise<ApiResponse<Authorization>> => {
+  createAuthorization: async (authData: AuthorizationFormData): Promise<ApiResponse<Authorization>> => {
     return api.post<Authorization>('/host/user/authorize', {
-      host_id: hostId,
-      user_id: userId,
-      login,
-      options
+      host_id: authData.host_id,
+      user_id: authData.user_id,
+      login: authData.login,
+      options: authData.options
     });
   },
 
@@ -56,9 +56,61 @@ export const authorizationsService = {
     return api.delete<null>(`/host/authorization/${authId}`);
   },
 
-  // These methods don't exist in the backend - calling code will need to be updated
+  // Get all authorizations by fetching from all users
   getAuthorizations: async (params?: PaginationQuery & { host_id?: number; user_id?: number }): Promise<ApiResponse<PaginatedResponse<Authorization>>> => {
-    throw new Error('getAuthorizations endpoint not available in backend');
+    try {
+      // Get all users first
+      const usersResponse = await api.get<any[]>('/user');
+      if (!usersResponse.success || !usersResponse.data) {
+        return { success: false, message: 'Failed to fetch users' };
+      }
+
+      const users = usersResponse.data;
+      const allAuthorizations: Authorization[] = [];
+
+      // Get authorizations for each user
+      for (const user of users) {
+        try {
+          const userAuthResponse = await api.get<{ authorizations: Authorization[] }>(`/user/${encodeURIComponent(user.username)}/authorizations`);
+          if (userAuthResponse.success && userAuthResponse.data) {
+            allAuthorizations.push(...userAuthResponse.data.authorizations);
+          }
+        } catch (error) {
+          // Continue with other users if one fails
+          console.warn(`Failed to get authorizations for user ${user.username}:`, error);
+        }
+      }
+
+      // Apply filters if provided
+      let filteredAuthorizations = allAuthorizations;
+      if (params?.host_id) {
+        filteredAuthorizations = filteredAuthorizations.filter(auth => auth.host_id === params.host_id);
+      }
+      if (params?.user_id) {
+        filteredAuthorizations = filteredAuthorizations.filter(auth => auth.user_id === params.user_id);
+      }
+
+      // Apply pagination
+      const page = params?.page || 1;
+      const perPage = params?.per_page || 50;
+      const startIndex = (page - 1) * perPage;
+      const endIndex = startIndex + perPage;
+      const paginatedItems = filteredAuthorizations.slice(startIndex, endIndex);
+
+      return {
+        success: true,
+        data: {
+          items: paginatedItems,
+          total: filteredAuthorizations.length,
+          page: page,
+          per_page: perPage,
+          total_pages: Math.ceil(filteredAuthorizations.length / perPage)
+        }
+      };
+    } catch (error) {
+      console.error('Error fetching authorizations:', error);
+      return { success: false, message: 'Failed to fetch authorizations' };
+    }
   },
 
   getAuthorization: async (id: number): Promise<ApiResponse<Authorization>> => {
@@ -66,11 +118,40 @@ export const authorizationsService = {
   },
 
   updateAuthorization: async (id: number, authorization: Partial<AuthorizationFormData>): Promise<ApiResponse<Authorization>> => {
-    throw new Error('updateAuthorization endpoint not available in backend');
+    // Update not directly supported, but we can delete and recreate
+    // For now, return an error to indicate this needs special handling
+    throw new Error('Update not supported - delete and recreate authorization instead');
   },
 
   createBulkAuthorizations: async (authorizations: AuthorizationFormData[]): Promise<ApiResponse<{ created: number; failed: number; errors?: string[] }>> => {
-    throw new Error('createBulkAuthorizations endpoint not available in backend');
+    let created = 0;
+    let failed = 0;
+    const errors: string[] = [];
+
+    for (const authData of authorizations) {
+      try {
+        const response = await api.post<Authorization>('/host/user/authorize', {
+          host_id: authData.host_id,
+          user_id: authData.user_id,
+          login: authData.login,
+          options: authData.options
+        });
+        if (response.success) {
+          created++;
+        } else {
+          failed++;
+          errors.push(`Failed to create authorization for user ${authData.user_id} on host ${authData.host_id}: ${response.message}`);
+        }
+      } catch (error) {
+        failed++;
+        errors.push(`Error creating authorization for user ${authData.user_id} on host ${authData.host_id}: ${error}`);
+      }
+    }
+
+    return {
+      success: true,
+      data: { created, failed, errors: errors.length > 0 ? errors : undefined }
+    };
   },
 
   checkAuthorization: async (userId: number, hostId: number): Promise<ApiResponse<{ authorized: boolean; authorization?: Authorization }>> => {

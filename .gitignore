@@ -7,3 +7,5 @@ backend/ssm.db
 backend/config.toml
 backend/.htpasswd
 backend/server.log
+logs/
+__pycache__/
