@@ -67,15 +67,22 @@ impl TestConfig {
             listen: "127.0.0.1".parse().unwrap(),
             port: 8080,
             loglevel: "debug".to_string(),
-            session_key: "test-session-key".to_string(),
+            session_key: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_string(),
             htpasswd_path: temp_dir.path().join(".htpasswd"),
         };
         
         // Create a dummy htpasswd file
         std::fs::write(&config.htpasswd_path, "test:$2y$10$test").unwrap();
         
-        // Create a dummy SSH key file
-        std::fs::write(&config.ssh.private_key_file, "TEST_SSH_KEY").unwrap();
+        // Create a valid test SSH key file (Ed25519 private key in OpenSSH format)
+        let test_ssh_key = "-----BEGIN OPENSSH PRIVATE KEY-----
+b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
+QyNTUxOQAAACDy6FjzYoyVVFS7Nezy8UrI3+PUiv+IeJq+a+RZL1ntqwAAAJh889+FfPPf
+hQAAAAtzc2gtZWQyNTUxOQAAACDy6FjzYoyVVFS7Nezy8UrI3+PUiv+IeJq+a+RZL1ntqw
+AAAEBskm/mpb+k8F2Erdhg48hUe2TQbDNaLj967DNmn1pg5/LoWPNijJVUVLs17PLxSsjf
+49SK/4h4mr5r5FkvWe2rAAAADnRlc3RfdXNlckB0ZXN0AQIDBAUGBw==
+-----END OPENSSH PRIVATE KEY-----";
+        std::fs::write(&config.ssh.private_key_file, test_ssh_key).unwrap();
         
         TestConfig {
             db_pool,
