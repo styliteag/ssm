@@ -95,6 +95,7 @@ pub async fn assert_not_found_response(resp: actix_web::dev::ServiceResponse) ->
     json
 }
 
+
 /// Macro to create authenticated request - simplifies adding auth to existing tests
 #[macro_export]
 macro_rules! authenticated_request {

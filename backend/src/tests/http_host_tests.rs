@@ -33,8 +33,27 @@ async fn test_get_all_hosts_with_data_validation() {
     let mut conn = test_config.db_pool.get().unwrap();
     let _host_id = Host::add_host(&mut conn, &new_host).expect("Failed to create test host");
     
+    // Get authentication cookie
+    let login_req = test::TestRequest::post()
+        .uri("/api/auth/login")
+        .set_json(&json!({"username": "testuser", "password": "testpass"}))
+        .to_request();
+    let login_resp = test::call_service(&app, login_req).await;
+    assert_eq!(login_resp.status(), StatusCode::OK);
+    let mut cookie = String::new();
+    for (name, value) in login_resp.headers().iter() {
+        if name == "set-cookie" {
+            if let Some(cookie_value) = value.to_str().unwrap().split(';').next() {
+                cookie = cookie_value.to_string();
+            }
+            break;
+        }
+    }
+    assert!(!cookie.is_empty());
+    
     let req = test::TestRequest::get()
         .uri("/api/host")
+        .insert_header(("Cookie", cookie))
         .to_request();
     
     let resp = test::call_service(&app, req).await;
@@ -83,8 +102,27 @@ async fn test_get_specific_host_with_data_validation() {
     let mut conn = test_config.db_pool.get().unwrap();
     let _host_id = Host::add_host(&mut conn, &new_host).expect("Failed to create test host");
     
+    // Get authentication cookie
+    let login_req = test::TestRequest::post()
+        .uri("/api/auth/login")
+        .set_json(&json!({"username": "testuser", "password": "testpass"}))
+        .to_request();
+    let login_resp = test::call_service(&app, login_req).await;
+    assert_eq!(login_resp.status(), StatusCode::OK);
+    let mut cookie = String::new();
+    for (name, value) in login_resp.headers().iter() {
+        if name == "set-cookie" {
+            if let Some(cookie_value) = value.to_str().unwrap().split(';').next() {
+                cookie = cookie_value.to_string();
+            }
+            break;
+        }
+    }
+    assert!(!cookie.is_empty());
+    
     let req = test::TestRequest::get()
         .uri("/api/host/specifichost456")
+        .insert_header(("Cookie", cookie))
         .to_request();
     
     let resp = test::call_service(&app, req).await;
@@ -289,9 +327,28 @@ async fn test_host_with_jump_host() {
     
     let _target_host_id = Host::add_host(&mut conn, &target_host).expect("Failed to create target host");
     
+    // Get authentication cookie
+    let login_req = test::TestRequest::post()
+        .uri("/api/auth/login")
+        .set_json(&json!({"username": "testuser", "password": "testpass"}))
+        .to_request();
+    let login_resp = test::call_service(&app, login_req).await;
+    assert_eq!(login_resp.status(), StatusCode::OK);
+    let mut cookie = String::new();
+    for (name, value) in login_resp.headers().iter() {
+        if name == "set-cookie" {
+            if let Some(cookie_value) = value.to_str().unwrap().split(';').next() {
+                cookie = cookie_value.to_string();
+            }
+            break;
+        }
+    }
+    assert!(!cookie.is_empty());
+    
     // Test getting the target host
     let req = test::TestRequest::get()
         .uri("/api/host/targethost")
+        .insert_header(("Cookie", cookie))
         .to_request();
     
     let resp = test::call_service(&app, req).await;
@@ -326,8 +383,27 @@ async fn test_get_host_authorizations() {
     let mut conn = test_config.db_pool.get().unwrap();
     let _host_id = Host::add_host(&mut conn, &new_host).expect("Failed to create test host");
     
+    // Get authentication cookie
+    let login_req = test::TestRequest::post()
+        .uri("/api/auth/login")
+        .set_json(&json!({"username": "testuser", "password": "testpass"}))
+        .to_request();
+    let login_resp = test::call_service(&app, login_req).await;
+    assert_eq!(login_resp.status(), StatusCode::OK);
+    let mut cookie = String::new();
+    for (name, value) in login_resp.headers().iter() {
+        if name == "set-cookie" {
+            if let Some(cookie_value) = value.to_str().unwrap().split(';').next() {
+                cookie = cookie_value.to_string();
+            }
+            break;
+        }
+    }
+    assert!(!cookie.is_empty());
+    
     let req = test::TestRequest::get()
         .uri("/api/host/authhost/authorizations")
+        .insert_header(("Cookie", cookie))
         .to_request();
     
     let resp = test::call_service(&app, req).await;
@@ -383,8 +459,27 @@ async fn test_host_keys_endpoint() {
 async fn test_get_nonexistent_host() {
     let (app, _test_config) = create_inline_test_service!();
     
+    // Get authentication cookie
+    let login_req = test::TestRequest::post()
+        .uri("/api/auth/login")
+        .set_json(&json!({"username": "testuser", "password": "testpass"}))
+        .to_request();
+    let login_resp = test::call_service(&app, login_req).await;
+    assert_eq!(login_resp.status(), StatusCode::OK);
+    let mut cookie = String::new();
+    for (name, value) in login_resp.headers().iter() {
+        if name == "set-cookie" {
+            if let Some(cookie_value) = value.to_str().unwrap().split(';').next() {
+                cookie = cookie_value.to_string();
+            }
+            break;
+        }
+    }
+    assert!(!cookie.is_empty());
+    
     let req = test::TestRequest::get()
         .uri("/api/host/nonexistenthost")
+        .insert_header(("Cookie", cookie))
         .to_request();
     
     let resp = test::call_service(&app, req).await;

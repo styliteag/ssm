@@ -49,8 +49,27 @@ async fn test_get_all_keys_with_data_validation() {
         PublicUserKey::add_key(&mut conn, new_key).expect("Failed to add test key");
     }
     
+    // Get authentication cookie
+    let login_req = test::TestRequest::post()
+        .uri("/api/auth/login")
+        .set_json(&json!({"username": "testuser", "password": "testpass"}))
+        .to_request();
+    let login_resp = test::call_service(&app, login_req).await;
+    assert_eq!(login_resp.status(), StatusCode::OK);
+    let mut cookie = String::new();
+    for (name, value) in login_resp.headers().iter() {
+        if name == "set-cookie" {
+            if let Some(cookie_value) = value.to_str().unwrap().split(';').next() {
+                cookie = cookie_value.to_string();
+            }
+            break;
+        }
+    }
+    assert!(!cookie.is_empty());
+    
     let req = test::TestRequest::get()
         .uri("/api/key")
+        .insert_header(("Cookie", cookie))
         .to_request();
     
     let resp = test::call_service(&app, req).await;
@@ -206,9 +225,28 @@ async fn test_key_validation_with_different_algorithms() {
         }
     }
     
+    // Get authentication cookie
+    let login_req = test::TestRequest::post()
+        .uri("/api/auth/login")
+        .set_json(&json!({"username": "testuser", "password": "testpass"}))
+        .to_request();
+    let login_resp = test::call_service(&app, login_req).await;
+    assert_eq!(login_resp.status(), StatusCode::OK);
+    let mut cookie = String::new();
+    for (name, value) in login_resp.headers().iter() {
+        if name == "set-cookie" {
+            if let Some(cookie_value) = value.to_str().unwrap().split(';').next() {
+                cookie = cookie_value.to_string();
+            }
+            break;
+        }
+    }
+    assert!(!cookie.is_empty());
+    
     // Get all keys and verify algorithms are handled properly
     let req = test::TestRequest::get()
         .uri("/api/key")
+        .insert_header(("Cookie", cookie))
         .to_request();
     
     let resp = test::call_service(&app, req).await;
@@ -249,8 +287,27 @@ async fn test_key_fingerprint_generation() {
     
     PublicUserKey::add_key(&mut conn, new_key).expect("Failed to add test key");
     
+    // Get authentication cookie
+    let login_req = test::TestRequest::post()
+        .uri("/api/auth/login")
+        .set_json(&json!({"username": "testuser", "password": "testpass"}))
+        .to_request();
+    let login_resp = test::call_service(&app, login_req).await;
+    assert_eq!(login_resp.status(), StatusCode::OK);
+    let mut cookie = String::new();
+    for (name, value) in login_resp.headers().iter() {
+        if name == "set-cookie" {
+            if let Some(cookie_value) = value.to_str().unwrap().split(';').next() {
+                cookie = cookie_value.to_string();
+            }
+            break;
+        }
+    }
+    assert!(!cookie.is_empty());
+    
     let req = test::TestRequest::get()
         .uri("/api/key")
+        .insert_header(("Cookie", cookie))
         .to_request();
     
     let resp = test::call_service(&app, req).await;
@@ -303,8 +360,27 @@ async fn test_delete_key_endpoint() {
     let user_keys = user.get_keys(&mut conn).expect("Failed to get user keys");
     let key_id = user_keys[0].id;
     
+    // Get authentication cookie
+    let login_req = test::TestRequest::post()
+        .uri("/api/auth/login")
+        .set_json(&json!({"username": "testuser", "password": "testpass"}))
+        .to_request();
+    let login_resp = test::call_service(&app, login_req).await;
+    assert_eq!(login_resp.status(), StatusCode::OK);
+    let mut cookie = String::new();
+    for (name, value) in login_resp.headers().iter() {
+        if name == "set-cookie" {
+            if let Some(cookie_value) = value.to_str().unwrap().split(';').next() {
+                cookie = cookie_value.to_string();
+            }
+            break;
+        }
+    }
+    assert!(!cookie.is_empty());
+    
     let req = test::TestRequest::delete()
         .uri(&format!("/api/key/{}", key_id))
+        .insert_header(("Cookie", cookie))
         .to_request();
     
     let resp = test::call_service(&app, req).await;
@@ -393,9 +469,28 @@ async fn test_key_search_and_filtering() {
         PublicUserKey::add_key(&mut conn, new_key).expect("Failed to add test key");
     }
     
+    // Get authentication cookie
+    let login_req = test::TestRequest::post()
+        .uri("/api/auth/login")
+        .set_json(&json!({"username": "testuser", "password": "testpass"}))
+        .to_request();
+    let login_resp = test::call_service(&app, login_req).await;
+    assert_eq!(login_resp.status(), StatusCode::OK);
+    let mut cookie = String::new();
+    for (name, value) in login_resp.headers().iter() {
+        if name == "set-cookie" {
+            if let Some(cookie_value) = value.to_str().unwrap().split(';').next() {
+                cookie = cookie_value.to_string();
+            }
+            break;
+        }
+    }
+    assert!(!cookie.is_empty());
+    
     // Test basic get all keys
     let req = test::TestRequest::get()
         .uri("/api/key")
+        .insert_header(("Cookie", cookie.clone()))
         .to_request();
     
     let resp = test::call_service(&app, req).await;
@@ -411,6 +506,7 @@ async fn test_key_search_and_filtering() {
     // Test with query parameters (if supported)
     let req = test::TestRequest::get()
         .uri("/api/key?search=prod")
+        .insert_header(("Cookie", cookie))
         .to_request();
     
     let resp = test::call_service(&app, req).await;

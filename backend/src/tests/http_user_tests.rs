@@ -12,7 +12,6 @@ use crate::{
         http_test_helpers::{extract_json, assert_not_found_response},
     },
     create_inline_test_service,
-    authenticated_request,
 };
 
 #[tokio::test]
@@ -29,7 +28,36 @@ async fn test_get_all_users_with_data_validation() {
     let mut conn = test_config.db_pool.get().unwrap();
     let _username = User::add_user(&mut conn, new_user).expect("Failed to create test user");
     
-    let req = authenticated_request!(&app, get, "/api/user").to_request();
+    // Get authentication cookie by logging in
+    let login_req = test::TestRequest::post()
+        .uri("/api/auth/login")
+        .set_json(&json!({
+            "username": "testuser",
+            "password": "testpass"
+        }))
+        .to_request();
+    
+    let login_resp = test::call_service(&app, login_req).await;
+    assert_eq!(login_resp.status(), StatusCode::OK, "Login should succeed");
+    
+    // Extract session cookie value (just the id=value part)
+    let mut cookie = String::new();
+    for (name, value) in login_resp.headers().iter() {
+        if name == "set-cookie" {
+            let cookie_str = value.to_str().unwrap();
+            // Extract just the "id=value" part before the first semicolon
+            if let Some(cookie_value) = cookie_str.split(';').next() {
+                cookie = cookie_value.to_string();
+            }
+            break;
+        }
+    }
+    assert!(!cookie.is_empty(), "Should have session cookie");
+    
+    let req = test::TestRequest::get()
+        .uri("/api/user")
+        .insert_header(("Cookie", cookie))
+        .to_request();
     
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), StatusCode::OK);
@@ -69,8 +97,35 @@ async fn test_get_specific_user_with_data_validation() {
     let mut conn = test_config.db_pool.get().unwrap();
     let _username = User::add_user(&mut conn, new_user).expect("Failed to create test user");
     
+    // Get authentication cookie by logging in
+    let login_req = test::TestRequest::post()
+        .uri("/api/auth/login")
+        .set_json(&json!({
+            "username": "testuser",
+            "password": "testpass"
+        }))
+        .to_request();
+    
+    let login_resp = test::call_service(&app, login_req).await;
+    assert_eq!(login_resp.status(), StatusCode::OK, "Login should succeed");
+    
+    // Extract session cookie value (just the id=value part)
+    let mut cookie = String::new();
+    for (name, value) in login_resp.headers().iter() {
+        if name == "set-cookie" {
+            let cookie_str = value.to_str().unwrap();
+            // Extract just the "id=value" part before the first semicolon
+            if let Some(cookie_value) = cookie_str.split(';').next() {
+                cookie = cookie_value.to_string();
+            }
+            break;
+        }
+    }
+    assert!(!cookie.is_empty(), "Should have session cookie");
+    
     let req = test::TestRequest::get()
         .uri("/api/user/specificuser456")
+        .insert_header(("Cookie", cookie))
         .to_request();
     
     let resp = test::call_service(&app, req).await;
@@ -100,9 +155,36 @@ async fn test_create_user_endpoint() {
         "enabled": true
     });
     
+    // Get authentication cookie by logging in
+    let login_req = test::TestRequest::post()
+        .uri("/api/auth/login")
+        .set_json(&json!({
+            "username": "testuser",
+            "password": "testpass"
+        }))
+        .to_request();
+    
+    let login_resp = test::call_service(&app, login_req).await;
+    assert_eq!(login_resp.status(), StatusCode::OK, "Login should succeed");
+    
+    // Extract session cookie value (just the id=value part)
+    let mut cookie = String::new();
+    for (name, value) in login_resp.headers().iter() {
+        if name == "set-cookie" {
+            let cookie_str = value.to_str().unwrap();
+            // Extract just the "id=value" part before the first semicolon
+            if let Some(cookie_value) = cookie_str.split(';').next() {
+                cookie = cookie_value.to_string();
+            }
+            break;
+        }
+    }
+    assert!(!cookie.is_empty(), "Should have session cookie");
+    
     let req = test::TestRequest::post()
         .uri("/api/user")
         .set_json(&new_user_data)
+        .insert_header(("Cookie", cookie))
         .to_request();
     
     let resp = test::call_service(&app, req).await;
@@ -160,9 +242,28 @@ async fn test_update_user_endpoint() {
         "enabled": false
     });
     
+    // Get authentication cookie by logging in
+    let login_req = test::TestRequest::post()
+        .uri("/api/auth/login")
+        .set_json(&json!({"username": "testuser", "password": "testpass"}))
+        .to_request();
+    let login_resp = test::call_service(&app, login_req).await;
+    assert_eq!(login_resp.status(), StatusCode::OK);
+    let mut cookie = String::new();
+    for (name, value) in login_resp.headers().iter() {
+        if name == "set-cookie" {
+            if let Some(cookie_value) = value.to_str().unwrap().split(';').next() {
+                cookie = cookie_value.to_string();
+            }
+            break;
+        }
+    }
+    assert!(!cookie.is_empty());
+    
     let req = test::TestRequest::put()
         .uri("/api/user/updateuser")
         .set_json(&update_data)
+        .insert_header(("Cookie", cookie))
         .to_request();
     
     let resp = test::call_service(&app, req).await;
@@ -189,9 +290,28 @@ async fn test_delete_user_endpoint() {
     let mut conn = test_config.db_pool.get().unwrap();
     let _username = User::add_user(&mut conn, new_user).expect("Failed to create test user");
     
+    // Get authentication cookie
+    let login_req = test::TestRequest::post()
+        .uri("/api/auth/login")
+        .set_json(&json!({"username": "testuser", "password": "testpass"}))
+        .to_request();
+    let login_resp = test::call_service(&app, login_req).await;
+    assert_eq!(login_resp.status(), StatusCode::OK);
+    let mut cookie = String::new();
+    for (name, value) in login_resp.headers().iter() {
+        if name == "set-cookie" {
+            if let Some(cookie_value) = value.to_str().unwrap().split(';').next() {
+                cookie = cookie_value.to_string();
+            }
+            break;
+        }
+    }
+    assert!(!cookie.is_empty());
+    
     // Delete the user
     let req = test::TestRequest::delete()
         .uri("/api/user/deleteuser")
+        .insert_header(("Cookie", cookie.clone()))
         .to_request();
     
     let resp = test::call_service(&app, req).await;
@@ -204,6 +324,7 @@ async fn test_delete_user_endpoint() {
     // Verify user is deleted by trying to get it
     let req = test::TestRequest::get()
         .uri("/api/user/deleteuser")
+        .insert_header(("Cookie", cookie))
         .to_request();
     
     let resp = test::call_service(&app, req).await;
@@ -240,8 +361,27 @@ async fn test_get_user_keys_endpoint() {
     
     PublicUserKey::add_key(&mut conn, new_key).expect("Failed to add test key");
     
+    // Get authentication cookie
+    let login_req = test::TestRequest::post()
+        .uri("/api/auth/login")
+        .set_json(&json!({"username": "testuser", "password": "testpass"}))
+        .to_request();
+    let login_resp = test::call_service(&app, login_req).await;
+    assert_eq!(login_resp.status(), StatusCode::OK);
+    let mut cookie = String::new();
+    for (name, value) in login_resp.headers().iter() {
+        if name == "set-cookie" {
+            if let Some(cookie_value) = value.to_str().unwrap().split(';').next() {
+                cookie = cookie_value.to_string();
+            }
+            break;
+        }
+    }
+    assert!(!cookie.is_empty());
+    
     let req = test::TestRequest::get()
         .uri("/api/user/keyuser/keys")
+        .insert_header(("Cookie", cookie))
         .to_request();
     
     let resp = test::call_service(&app, req).await;
@@ -270,8 +410,27 @@ async fn test_get_user_keys_endpoint() {
 async fn test_get_user_authorizations_endpoint() {
     let (app, _test_config) = create_inline_test_service!();
     
+    // Get authentication cookie
+    let login_req = test::TestRequest::post()
+        .uri("/api/auth/login")
+        .set_json(&json!({"username": "testuser", "password": "testpass"}))
+        .to_request();
+    let login_resp = test::call_service(&app, login_req).await;
+    assert_eq!(login_resp.status(), StatusCode::OK);
+    let mut cookie = String::new();
+    for (name, value) in login_resp.headers().iter() {
+        if name == "set-cookie" {
+            if let Some(cookie_value) = value.to_str().unwrap().split(';').next() {
+                cookie = cookie_value.to_string();
+            }
+            break;
+        }
+    }
+    assert!(!cookie.is_empty());
+    
     let req = test::TestRequest::get()
         .uri("/api/user/testuser/authorizations")
+        .insert_header(("Cookie", cookie))
         .to_request();
     
     let resp = test::call_service(&app, req).await;
@@ -310,9 +469,28 @@ async fn test_assign_key_to_user_endpoint() {
         "key_comment": "assigned@example.com"
     });
     
+    // Get authentication cookie
+    let login_req = test::TestRequest::post()
+        .uri("/api/auth/login")
+        .set_json(&json!({"username": "testuser", "password": "testpass"}))
+        .to_request();
+    let login_resp = test::call_service(&app, login_req).await;
+    assert_eq!(login_resp.status(), StatusCode::OK);
+    let mut cookie = String::new();
+    for (name, value) in login_resp.headers().iter() {
+        if name == "set-cookie" {
+            if let Some(cookie_value) = value.to_str().unwrap().split(';').next() {
+                cookie = cookie_value.to_string();
+            }
+            break;
+        }
+    }
+    assert!(!cookie.is_empty());
+    
     let req = test::TestRequest::post()
         .uri("/api/user/assign_key")
         .set_json(&assign_key_data)
+        .insert_header(("Cookie", cookie))
         .to_request();
     
     let resp = test::call_service(&app, req).await;
@@ -330,8 +508,27 @@ async fn test_assign_key_to_user_endpoint() {
 async fn test_get_nonexistent_user() {
     let (app, _test_config) = create_inline_test_service!();
     
+    // Get authentication cookie
+    let login_req = test::TestRequest::post()
+        .uri("/api/auth/login")
+        .set_json(&json!({"username": "testuser", "password": "testpass"}))
+        .to_request();
+    let login_resp = test::call_service(&app, login_req).await;
+    assert_eq!(login_resp.status(), StatusCode::OK);
+    let mut cookie = String::new();
+    for (name, value) in login_resp.headers().iter() {
+        if name == "set-cookie" {
+            if let Some(cookie_value) = value.to_str().unwrap().split(';').next() {
+                cookie = cookie_value.to_string();
+            }
+            break;
+        }
+    }
+    assert!(!cookie.is_empty());
+    
     let req = test::TestRequest::get()
         .uri("/api/user/nonexistentuser")
+        .insert_header(("Cookie", cookie))
         .to_request();
     
     let resp = test::call_service(&app, req).await;
