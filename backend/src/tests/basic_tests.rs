@@ -6,8 +6,6 @@
 use super::safety::init_test_mode;
 use super::test_utils::TestConfig;
 use crate::models::{NewUser, User, NewHost, Host, NewPublicUserKey, PublicUserKey};
-use crate::ConnectionPool;
-use diesel::prelude::*;
 
 #[cfg(test)]
 mod user_tests {
@@ -169,7 +167,7 @@ mod authorization_tests {
         Host::add_host(&mut conn, &new_host).unwrap();
         
         // Get host to get ID - need to get a new connection for async
-        let mut conn2 = pool.get().unwrap();
+        let conn2 = pool.get().unwrap();
         let host = Host::get_from_name(conn2, "auth_host".to_string()).await.unwrap().unwrap();
         
         // Authorize user on host

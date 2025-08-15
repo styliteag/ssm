@@ -67,7 +67,7 @@ async fn test_error_simulation() {
         (MockSshErrorType::NetworkUnreachable, "Network is unreachable"),
     ];
     
-    for (error_type, expected_message) in error_scenarios {
+    for (error_type, _expected_message) in error_scenarios {
         // Simulate specific error
         mock_ssh.simulate_specific_error("test-host", error_type.clone()).await;
         

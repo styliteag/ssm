@@ -113,7 +113,7 @@ async fn test_sql_injection_prevention() {
 #[tokio::test]
 #[serial]
 async fn test_xss_prevention() {
-    let (app, test_config) = create_inline_test_service!();
+    let (app, _test_config) = create_inline_test_service!();
     
     let xss_payloads = vec![
         "<script>alert('xss')</script>",
@@ -401,7 +401,7 @@ async fn test_http_method_validation() {
 #[tokio::test]
 #[serial]
 async fn test_special_characters_handling() {
-    let (app, test_config) = create_inline_test_service!();
+    let (app, _test_config) = create_inline_test_service!();
     
     // Test various special characters and encodings
     let special_chars = vec![

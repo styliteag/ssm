@@ -8,9 +8,6 @@ use serde_json::json;
 use serial_test::serial;
 
 use crate::{
-    tests::{
-        http_test_helpers::{extract_json},
-    },
     create_inline_test_service,
 };
 
