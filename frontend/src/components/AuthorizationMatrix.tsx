@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Check, X, Loader2, AlertCircle, Eye, EyeOff, Search } from 'lucide-react';
 import { cn } from '../utils/cn';
 import { User, Host, Authorization } from '../types';
@@ -31,75 +32,52 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
   loading = false,
   className,
 }) => {
+  const navigate = useNavigate();
   const [cellStates, setCellStates] = useState<Map<string, boolean>>(new Map());
   const [hoveredCell, setHoveredCell] = useState<{ userId: number; hostId: number } | null>(null);
   const [selectedUsers, setSelectedUsers] = useState<Set<number>>(new Set());
   const [selectedHosts, setSelectedHosts] = useState<Set<number>>(new Set());
   const [showOnlyAuthorized, setShowOnlyAuthorized] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [userSearchTerm, setUserSearchTerm] = useState('');
+  const [hostSearchTerm, setHostSearchTerm] = useState('');
 
-  // Create matrix data structure
-  const matrixData = useMemo(() => {
-    const matrix: MatrixCell[][] = [];
-    const authMap = new Map<string, Authorization>();
-    
-    // Create authorization lookup map
+  // Create authorization lookup map
+  const authMap = useMemo(() => {
+    const map = new Map<string, Authorization>();
     authorizations.forEach(auth => {
-      authMap.set(`${auth.user_id}-${auth.host_id}`, auth);
+      map.set(`${auth.user_id}-${auth.host_id}`, auth);
     });
+    return map;
+  }, [authorizations]);
 
-    users.forEach(user => {
-      const row: MatrixCell[] = [];
-      hosts.forEach(host => {
-        const key = `${user.id}-${host.id}`;
-        const authorization = authMap.get(key);
-        const isLoading = cellStates.get(key) || false;
-        
-        row.push({
-          userId: user.id,
-          hostId: host.id,
-          authorization,
-          isAuthorized: !!authorization,
-          loading: isLoading,
-        });
-      });
-      matrix.push(row);
-    });
+  // Navigation handlers
+  const handleUserClick = (username: string) => {
+    console.log('handleUserClick called with:', username);
+    navigate('/users', { state: { searchTerm: username } });
+  };
 
-    return matrix;
-  }, [users, hosts, authorizations, cellStates]);
+  const handleHostClick = (hostname: string) => {
+    console.log('handleHostClick called with:', hostname);
+    navigate('/hosts', { state: { searchTerm: hostname } });
+  };
 
-  // Filter data based on show only authorized and search term
-  const filteredUsers = useMemo(() => {
-    let filtered = users;
+  // Filter data based on show only authorized and search terms
+  const { filteredUsers, filteredHosts } = useMemo(() => {
+    let filteredUsers = users;
+    let filteredHosts = hosts;
     
-    // Filter by search term
-    if (searchTerm.trim()) {
-      const searchLower = searchTerm.toLowerCase();
-      filtered = filtered.filter(user => 
+    // Filter users by search term
+    if (userSearchTerm.trim()) {
+      const searchLower = userSearchTerm.toLowerCase();
+      filteredUsers = filteredUsers.filter(user => 
         user.username.toLowerCase().includes(searchLower)
       );
     }
     
-    // Filter by authorized only
-    if (showOnlyAuthorized) {
-      filtered = filtered.filter(user => 
-        hosts.some(host => 
-          authorizations.some(auth => auth.user_id === user.id && auth.host_id === host.id)
-        )
-      );
-    }
-    
-    return filtered;
-  }, [users, hosts, authorizations, showOnlyAuthorized, searchTerm]);
-
-  const filteredHosts = useMemo(() => {
-    let filtered = hosts;
-    
-    // Filter by search term
-    if (searchTerm.trim()) {
-      const searchLower = searchTerm.toLowerCase();
-      filtered = filtered.filter(host => 
+    // Filter hosts by search term
+    if (hostSearchTerm.trim()) {
+      const searchLower = hostSearchTerm.toLowerCase();
+      filteredHosts = filteredHosts.filter(host => 
         host.name.toLowerCase().includes(searchLower) || 
         host.address.toLowerCase().includes(searchLower)
       );
@@ -107,15 +85,21 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
     
     // Filter by authorized only
     if (showOnlyAuthorized) {
-      filtered = filtered.filter(host =>
-        users.some(user =>
+      filteredUsers = filteredUsers.filter(user => 
+        filteredHosts.some(host => 
+          authorizations.some(auth => auth.user_id === user.id && auth.host_id === host.id)
+        )
+      );
+      
+      filteredHosts = filteredHosts.filter(host =>
+        filteredUsers.some(user =>
           authorizations.some(auth => auth.user_id === user.id && auth.host_id === host.id)
         )
       );
     }
     
-    return filtered;
-  }, [users, hosts, authorizations, showOnlyAuthorized, searchTerm]);
+    return { filteredUsers, filteredHosts };
+  }, [users, hosts, authorizations, showOnlyAuthorized, userSearchTerm, hostSearchTerm]);
 
   // Handle cell click to toggle authorization
   const handleCellClick = async (userId: number, hostId: number, isAuthorized: boolean) => {
@@ -233,11 +217,9 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
   // Get cell background color
   const getCellClassName = (cell: MatrixCell, rowIndex: number) => {
     const isHovered = hoveredCell?.userId === cell.userId && hoveredCell?.hostId === cell.hostId;
-    const isRowSelected = selectedUsers.has(cell.userId);
-    const isColSelected = selectedHosts.has(cell.hostId);
     
     return cn(
-      'w-8 h-8 flex items-center justify-center cursor-pointer transition-all duration-150 border border-gray-200 dark:border-gray-700',
+      'w-12 h-8 flex items-center justify-center cursor-pointer transition-all duration-150 border border-gray-200 dark:border-gray-700',
       {
         // Authorization states
         'bg-green-50 dark:bg-green-900/20 hover:bg-green-100 dark:hover:bg-green-900/30': cell.isAuthorized && !cell.loading,
@@ -246,9 +228,6 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
         
         // Hover states
         'ring-2 ring-blue-500 ring-opacity-50': isHovered,
-        
-        // Selection states
-        'bg-blue-100 dark:bg-blue-900/30': isRowSelected || isColSelected,
         
         // Zebra striping
         'bg-opacity-80': rowIndex % 2 === 0,
@@ -267,7 +246,7 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
         <CardContent className="flex items-center justify-center py-12">
           <div className="flex items-center space-x-2">
             <Loader2 className="h-6 w-6 animate-spin" />
-            <span>Loading authorization matrix...</span>
+            <span className="text-gray-900 dark:text-white">Loading authorization matrix...</span>
           </div>
         </CardContent>
       </Card>
@@ -291,51 +270,58 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
           </div>
         </div>
         
-        {/* Search Input */}
-        <div className="mt-4">
-          <Input
-            type="text"
-            placeholder="Search users, hosts, or addresses..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            leftIcon={<Search size={16} />}
-            className="max-w-md"
-          />
+        {/* Search Inputs */}
+        <div className="mt-4 space-y-4">
+          <div className="flex flex-col sm:flex-row gap-4 max-w-3xl">
+            <div className="w-full sm:w-80">
+              <Input
+                type="text"
+                placeholder="Search users by username..."
+                value={userSearchTerm}
+                onChange={(e) => setUserSearchTerm(e.target.value)}
+                leftIcon={<Search size={16} />}
+                className="w-full"
+              />
+            </div>
+            <div className="w-full sm:w-80">
+              <Input
+                type="text"
+                placeholder="Search hosts by name or IP..."
+                value={hostSearchTerm}
+                onChange={(e) => setHostSearchTerm(e.target.value)}
+                leftIcon={<Search size={16} />}
+                className="w-full"
+              />
+            </div>
+          </div>
+          
+          {/* Active Filters Indicator */}
+          {(userSearchTerm || hostSearchTerm) && (
+            <div className="flex items-center justify-between p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-sm">
+              <div className="flex items-center space-x-2 text-blue-800 dark:text-blue-200">
+                <Search size={14} />
+                <span>
+                  Active filters: 
+                  {userSearchTerm && ` Users: "${userSearchTerm}"`}
+                  {userSearchTerm && hostSearchTerm && ', '}
+                  {hostSearchTerm && ` Hosts: "${hostSearchTerm}"`}
+                </span>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setUserSearchTerm('');
+                  setHostSearchTerm('');
+                }}
+                className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200"
+              >
+                Clear All
+              </Button>
+            </div>
+          )}
         </div>
         
-        {/* Bulk Actions */}
-        {(selectedUsers.size > 0 || selectedHosts.size > 0) && (
-          <div className="flex items-center space-x-2 mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-            <span className="text-sm font-medium">
-              Selected: {selectedUsers.size} users, {selectedHosts.size} hosts
-            </span>
-            <Button
-              size="sm"
-              onClick={() => handleBulkGrantAccess(Array.from(selectedUsers), Array.from(selectedHosts))}
-              disabled={selectedUsers.size === 0 || selectedHosts.size === 0}
-            >
-              Grant Access
-            </Button>
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => handleBulkRevokeAccess(Array.from(selectedUsers), Array.from(selectedHosts))}
-              disabled={selectedUsers.size === 0 || selectedHosts.size === 0}
-            >
-              Revoke Access
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => {
-                setSelectedUsers(new Set());
-                setSelectedHosts(new Set());
-              }}
-            >
-              Clear Selection
-            </Button>
-          </div>
-        )}
       </CardHeader>
       
       <CardContent>
@@ -346,8 +332,13 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
               No Data Available
             </h3>
             <p className="text-gray-500 dark:text-gray-400 text-center">
-              {filteredUsers.length === 0 ? 'No users found.' : 'No hosts found.'}
+              {filteredUsers.length === 0 && filteredHosts.length === 0 
+                ? 'No users or hosts match your search criteria.' 
+                : filteredUsers.length === 0 
+                  ? 'No users found matching your search.' 
+                  : 'No hosts found matching your search.'}
               {showOnlyAuthorized && ' Try showing all users and hosts.'}
+              {(userSearchTerm || hostSearchTerm) && ' Try clearing your search filters.'}
             </p>
           </div>
         ) : (
@@ -355,31 +346,22 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
             <div className="min-w-max">
               {/* Header with host names */}
               <div className="flex bg-gray-50 dark:bg-gray-800 sticky top-0 z-10">
-                <div className="w-32 h-10 flex items-center px-3 border-r border-gray-200 dark:border-gray-700 font-medium text-sm">
+                <div className="w-40 h-16 flex items-center px-3 border-r border-gray-200 dark:border-gray-700 font-medium text-sm text-gray-900 dark:text-white">
                   Users / Hosts
                 </div>
                 {filteredHosts.map((host) => (
                   <div
                     key={host.id}
-                    className={cn(
-                      'w-8 h-10 flex items-center justify-center border-r border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors',
-                      selectedHosts.has(host.id) && 'bg-blue-100 dark:bg-blue-900/30'
-                    )}
-                    title={`${host.name} (${host.address})`}
-                    onClick={() => {
-                      setSelectedHosts(prev => {
-                        const newSet = new Set(prev);
-                        if (newSet.has(host.id)) {
-                          newSet.delete(host.id);
-                        } else {
-                          newSet.add(host.id);
-                        }
-                        return newSet;
-                      });
+                    className="w-12 h-16 flex items-center justify-center border-r border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors relative overflow-hidden"
+                    title={`${host.name} (${host.address}) - Click to navigate to hosts page`}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      console.log('Host clicked:', host.name);
+                      handleHostClick(host.name);
                     }}
                   >
-                    <span className="text-xs font-medium transform -rotate-45 origin-center whitespace-nowrap">
-                      {truncateText(host.name, 8)}
+                    <span className="text-xs font-medium transform -rotate-45 origin-center whitespace-nowrap text-gray-900 dark:text-white absolute hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
+                      {truncateText(host.name, 10)}
                     </span>
                   </div>
                 ))}
@@ -391,33 +373,36 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
                   {/* User name column */}
                   <div
                     className={cn(
-                      'w-32 h-8 flex items-center px-3 border-r border-b border-gray-200 dark:border-gray-700 text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors',
-                      selectedUsers.has(user.id) && 'bg-blue-100 dark:bg-blue-900/30',
-                      !user.enabled && 'text-gray-400 italic'
+                      'w-40 h-8 flex items-center px-3 border-r border-b border-gray-200 dark:border-gray-700 text-sm cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors',
+                      !user.enabled && 'text-gray-400 dark:text-gray-500 italic'
                     )}
-                    title={`${user.username}${!user.enabled ? ' (disabled)' : ''}`}
-                    onClick={() => {
-                      setSelectedUsers(prev => {
-                        const newSet = new Set(prev);
-                        if (newSet.has(user.id)) {
-                          newSet.delete(user.id);
-                        } else {
-                          newSet.add(user.id);
-                        }
-                        return newSet;
-                      });
+                    title={`${user.username}${!user.enabled ? ' (disabled)' : ''} - Click to navigate to users page`}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      console.log('User clicked:', user.username);
+                      handleUserClick(user.username);
                     }}
                   >
-                    <span className="truncate">
-                      {truncateText(user.username)}
+                    <span className="truncate text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
+                      {truncateText(user.username, 16)}
                       {!user.enabled && ' (disabled)'}
                     </span>
                   </div>
 
                   {/* Authorization cells */}
                   {filteredHosts.map((host) => {
-                    const cell = matrixData[users.indexOf(user)]?.[hosts.indexOf(host)];
-                    if (!cell) return null;
+                    const key = `${user.id}-${host.id}`;
+                    const authorization = authMap.get(key);
+                    const isAuthorized = !!authorization;
+                    const isLoading = cellStates.get(key) || false;
+                    
+                    const cell: MatrixCell = {
+                      userId: user.id,
+                      hostId: host.id,
+                      authorization,
+                      isAuthorized,
+                      loading: isLoading,
+                    };
 
                     return (
                       <div
@@ -448,19 +433,19 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
             <div className="w-4 h-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded flex items-center justify-center">
               <Check size={12} className="text-green-500" />
             </div>
-            <span>Authorized</span>
+            <span className="text-gray-900 dark:text-white">Authorized</span>
           </div>
           <div className="flex items-center space-x-2">
             <div className="w-4 h-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded flex items-center justify-center">
               <X size={12} className="text-gray-400" />
             </div>
-            <span>Not Authorized</span>
+            <span className="text-gray-900 dark:text-white">Not Authorized</span>
           </div>
           <div className="flex items-center space-x-2">
             <div className="w-4 h-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded flex items-center justify-center">
               <Loader2 size={12} className="text-blue-500" />
             </div>
-            <span>Updating</span>
+            <span className="text-gray-900 dark:text-white">Updating</span>
           </div>
         </div>
       </CardContent>
