@@ -22,6 +22,7 @@ const DiffPage: React.FC = () => {
   const [hostDetails, setHostDetails] = useState<DetailedDiffResponse | null>(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchHosts = async () => {
@@ -72,11 +73,14 @@ const DiffPage: React.FC = () => {
           } catch (err) {
             console.error(`Error fetching diff for ${host.name}:`, err);
             
+            // Extract error message from backend
+            const errorMessage = err instanceof Error ? err.message : 'Failed to load diff';
+            
             // Update host with error state
             setHosts(prevHosts => 
               prevHosts.map(h => 
                 h.id === host.id 
-                  ? { ...h, loading: false, error: 'Failed to load diff' }
+                  ? { ...h, loading: false, error: errorMessage }
                   : h
               )
             );
@@ -99,6 +103,7 @@ const DiffPage: React.FC = () => {
     setSelectedHost(host);
     setShowModal(true);
     setDetailsLoading(true);
+    setModalError(null);
     
     try {
       // Fetch detailed diff information
@@ -107,6 +112,9 @@ const DiffPage: React.FC = () => {
     } catch (err) {
       console.error('Error fetching host details:', err);
       showError('Failed to load host details', 'Please try again later');
+      // Store the error message for display in the modal
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load host details';
+      setModalError(errorMessage);
       setHostDetails(null);
     } finally {
       setDetailsLoading(false);
@@ -117,6 +125,7 @@ const DiffPage: React.FC = () => {
     if (!selectedHost) return;
     
     setDetailsLoading(true);
+    setModalError(null);
     try {
       const hostDetails = await diffApi.getHostDiffDetails(selectedHost.name, true); // Force update
       setHostDetails(hostDetails);
@@ -124,6 +133,9 @@ const DiffPage: React.FC = () => {
     } catch (err) {
       console.error('Error refreshing host details:', err);
       showError('Failed to refresh data', 'Please try again later');
+      // Store the error message for display in the modal
+      const errorMessage = err instanceof Error ? err.message : 'Failed to refresh data';
+      setModalError(errorMessage);
     } finally {
       setDetailsLoading(false);
     }
@@ -133,6 +145,7 @@ const DiffPage: React.FC = () => {
     setSelectedHost(null);
     setHostDetails(null);
     setShowModal(false);
+    setModalError(null);
   };
 
   // Table column definitions
@@ -263,8 +276,20 @@ const DiffPage: React.FC = () => {
             <span className="ml-3">Loading host details...</span>
           </div>
         ) : !hostDetails ? (
-          <div className="text-red-600 dark:text-red-400 py-4">
-            Error: Failed to load host details
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+            <div className="flex items-start space-x-3">
+              <div className="text-red-600 dark:text-red-400">
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div>
+                <h4 className="text-red-800 dark:text-red-200 font-medium">Failed to load host details</h4>
+                <p className="text-red-700 dark:text-red-300 text-sm mt-1">
+                  {modalError || 'Please try again later'}
+                </p>
+              </div>
+            </div>
           </div>
         ) : (
           <div className="space-y-6">
