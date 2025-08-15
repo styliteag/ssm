@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Activity, RefreshCw, Upload, X } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Activity, RefreshCw, Upload, X, Filter } from 'lucide-react';
 import {
   Card,
   CardContent,
@@ -23,6 +23,7 @@ const DiffPage: React.FC = () => {
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'synchronized' | 'needs-sync' | 'error' | 'loading'>('all');
 
   useEffect(() => {
     const fetchHosts = async () => {
@@ -230,6 +231,30 @@ const DiffPage: React.FC = () => {
     }
   ];
 
+  // Helper function to get host status
+  const getHostStatus = (host: DiffHost): 'synchronized' | 'needs-sync' | 'error' | 'loading' => {
+    if (host.loading) return 'loading';
+    if (host.error) return 'error';
+    if (host.is_empty === false) return 'needs-sync';
+    if (host.is_empty === true) return 'synchronized';
+    return 'loading';
+  };
+
+  // Filter hosts based on status
+  const filteredHosts = useMemo(() => {
+    if (statusFilter === 'all') return hosts;
+    return hosts.filter(host => getHostStatus(host) === statusFilter);
+  }, [hosts, statusFilter]);
+
+  // Status filter options
+  const statusFilterOptions = [
+    { value: 'all', label: 'All Status', count: hosts.length },
+    { value: 'synchronized', label: 'Synchronized', count: hosts.filter(h => getHostStatus(h) === 'synchronized').length },
+    { value: 'needs-sync', label: 'Needs Sync', count: hosts.filter(h => getHostStatus(h) === 'needs-sync').length },
+    { value: 'error', label: 'Error', count: hosts.filter(h => getHostStatus(h) === 'error').length },
+    { value: 'loading', label: 'Loading', count: hosts.filter(h => getHostStatus(h) === 'loading').length },
+  ];
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -248,14 +273,30 @@ const DiffPage: React.FC = () => {
       {/* Host List */}
       <Card>
         <CardHeader>
-          <CardTitle>SSH Hosts Diff Status ({hosts.length})</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle>SSH Hosts Diff Status ({filteredHosts.length}{statusFilter !== 'all' ? ` of ${hosts.length}` : ''})</CardTitle>
+            <div className="flex items-center space-x-2">
+              <Filter size={16} className="text-gray-500 dark:text-gray-400" />
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+                className="h-8 px-3 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                {statusFilterOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label} ({option.count})
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           <DataTable
-            data={hosts}
+            data={filteredHosts}
             columns={columns}
             loading={loading}
-            emptyMessage="No hosts found. Please check your host configuration."
+            emptyMessage={statusFilter === 'all' ? "No hosts found. Please check your host configuration." : `No hosts with status '${statusFilterOptions.find(o => o.value === statusFilter)?.label || statusFilter}'.`}
             searchPlaceholder="Search hosts by name or address..."
             initialSort={{ key: 'name', direction: 'asc' }}
             onRowClick={(host) => handleHostClick(host)}
