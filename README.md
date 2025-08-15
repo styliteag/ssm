@@ -209,16 +209,28 @@ private_key_passphrase = "optional_passphrase"
 - `DATABASE_URL` - Database connection string
 - `RUST_LOG` - Logging level (overrides config)
 - `VITE_API_URL` - Frontend API URL (for production builds)
+- `SESSION_KEY` - Secure session signing key (production required)
 
 ### Authentication Setup
 
+**🔐 IMPORTANT**: Authentication is required for all API endpoints except login/logout.
+
 ```bash
-# Create htpasswd file
-htpasswd -B -c .htpasswd username
+# Create htpasswd file with bcrypt encryption
+htpasswd -cB .htpasswd admin
 
 # Add additional users
 htpasswd -B .htpasswd another_user
+
+# Set secure session key for production
+export SESSION_KEY="your-super-secret-session-key-change-in-production"
 ```
+
+**Security Notes:**
+- All API requests (except authentication) require session-based authentication
+- Session cookies are `HttpOnly` and secure
+- bcrypt encryption is used for password storage
+- Unauthenticated requests return `401 Unauthorized`
 
 ### Docker Environment
 
@@ -235,8 +247,27 @@ docker/data/
 
 ## 🔧 API Documentation
 
+**🔐 Authentication Required**: All API endpoints except authentication require session-based authentication via `.htpasswd` credentials.
+
+### Quick Start with curl
+
+```bash
+# 1. Login to establish session
+curl -X POST http://localhost:8000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"your_password"}' \
+  -c cookies.txt
+
+# 2. Use session cookie for authenticated requests
+curl -b cookies.txt http://localhost:8000/api/host
+
+# 3. Logout when done
+curl -X POST http://localhost:8000/api/auth/logout -b cookies.txt
+```
+
 ### Authentication Endpoints
 
+#### Login (Establishes Session)
 ```http
 POST /api/auth/login
 Content-Type: application/json
@@ -247,86 +278,142 @@ Content-Type: application/json
 }
 ```
 
+**curl example:**
+```bash
+curl -X POST http://localhost:8000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"your_password"}' \
+  -c cookies.txt
+```
+
+#### Logout
 ```http
 POST /api/auth/logout
 DELETE /api/auth/session
 ```
 
-### Host Management
+**curl example:**
+```bash
+curl -X POST http://localhost:8000/api/auth/logout -b cookies.txt
+```
+
+### Host Management (🔐 Authentication Required)
 
 ```http
 # List all hosts
-GET /api/hosts
+GET /api/host
+```
 
+**curl example:**
+```bash
+curl -b cookies.txt http://localhost:8000/api/host
+```
+
+```http
 # Get specific host
-GET /api/hosts/{id}
+GET /api/host/{name}
 
 # Create host
-POST /api/hosts
+POST /api/host
 Content-Type: application/json
 
 {
   "name": "web-server-01",
-  "hostname": "192.168.1.100",
+  "address": "192.168.1.100",
   "port": 22,
   "username": "deploy"
 }
 
 # Update host
-PUT /api/hosts/{id}
+PUT /api/host/{name}
 
 # Delete host
-DELETE /api/hosts/{id}
+DELETE /api/host/{name}
 ```
 
-### User Management
+### User Management (🔐 Authentication Required)
 
 ```http
 # List all users
-GET /api/users
+GET /api/user
+```
+
+**curl example:**
+```bash
+curl -b cookies.txt http://localhost:8000/api/user
+```
+
+```http
+# Get specific user
+GET /api/user/{username}
 
 # Create user
-POST /api/users
+POST /api/user
 Content-Type: application/json
 
 {
-  "name": "john.doe",
-  "public_keys": ["ssh-rsa AAAAB3NzaC1yc2E..."]
+  "username": "john.doe",
+  "enabled": true
 }
 ```
 
-### SSH Key Management
+### SSH Key Management (🔐 Authentication Required)
 
 ```http
-# List keys
-GET /api/keys
+# List all keys
+GET /api/key
+```
 
-# Add key to user
-POST /api/keys
+**curl example:**
+```bash
+curl -b cookies.txt http://localhost:8000/api/key
+```
+
+```http
+# Delete key
+DELETE /api/key/{id}
+
+# Update key comment
+PUT /api/key/{id}/comment
 Content-Type: application/json
 
 {
-  "user_id": 1,
-  "public_key": "ssh-rsa AAAAB3NzaC1yc2E...",
-  "comment": "John's laptop key"
+  "comment": "Updated comment"
 }
 ```
 
-### Authorization Management
+### Authorization Management (🔐 Authentication Required)
 
 ```http
-# List authorizations
-GET /api/authorizations
+# Get authorization dialog data
+GET /api/authorization
 
-# Authorize user on host
-POST /api/authorizations
+# Update authorization options
+PUT /api/authorization
 Content-Type: application/json
 
 {
-  "user_id": 1,
-  "host_id": 2,
-  "remote_user": "deploy"
+  "authorization_id": 1,
+  "options": "no-port-forwarding,command=\"rsync --server\""
 }
+```
+
+### Diff Analysis (🔐 Authentication Required)
+
+```http
+# Get hosts available for diff analysis
+GET /api/diff
+
+# Get differences for specific host
+GET /api/diff/{host_name}
+
+# Get detailed diff information
+GET /api/diff/{host_name}/{login}
+```
+
+**curl example:**
+```bash
+curl -b cookies.txt http://localhost:8000/api/diff
 ```
 
 ## 📁 Project Structure
@@ -361,12 +448,23 @@ ssh-key-manager/
 
 ## 🔐 Security Features
 
-- **Authentication**: htpasswd-based user authentication with secure sessions
-- **Authorization**: Fine-grained user permissions for host access
-- **SSH Security**: Key-based authentication for all remote connections
-- **Session Management**: Secure cookie-based sessions with HTTPS support
-- **Input Validation**: Comprehensive validation of all API inputs
-- **Database Security**: Prepared statements and foreign key constraints
+**🛡️ Comprehensive Security Implementation:**
+
+- **🔒 Required Authentication**: All API endpoints (except login) require session-based authentication
+- **🍪 Secure Sessions**: HttpOnly cookies with session signing keys for protection
+- **🔐 bcrypt Encryption**: Industry-standard password hashing for user credentials
+- **⚡ Session Validation**: Real-time authentication checks on every API request
+- **🚫 Unauthorized Access**: 401 responses for unauthenticated requests
+- **🔑 SSH Key Security**: Key-based authentication for all remote SSH connections
+- **✅ Input Validation**: Comprehensive validation and sanitization of all API inputs
+- **🗄️ Database Security**: Prepared statements and foreign key constraints
+- **🌐 CORS Configuration**: Controlled cross-origin resource sharing for frontend integration
+
+**Authentication Flow:**
+1. Login with `.htpasswd` credentials → Session cookie issued
+2. Include session cookie in subsequent API requests
+3. Server validates session on every protected endpoint
+4. Logout to invalidate session
 
 ## 🚫 SSH Key Management Controls
 

@@ -41,6 +41,52 @@ diesel migration run        # Apply migrations
 docker-compose -f docker/compose.prod.yml up --build
 ```
 
+## Authentication Setup
+
+**🔐 CRITICAL**: This application requires authentication for all API endpoints except login/logout.
+
+### Initial Authentication Setup
+```bash
+cd backend
+# Create htpasswd file with bcrypt encryption
+htpasswd -cB .htpasswd admin
+
+# Set session key for production security
+export SESSION_KEY="super-secret-session-key-for-production"
+```
+
+### API Testing with curl
+```bash
+# Login to establish session
+curl -X POST http://localhost:8000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"your_password"}' \
+  -c cookies.txt
+
+# Use authenticated session for API calls
+curl -b cookies.txt http://localhost:8000/api/host
+curl -b cookies.txt http://localhost:8000/api/user
+curl -b cookies.txt http://localhost:8000/api/key
+
+# Logout when done
+curl -X POST http://localhost:8000/api/auth/logout -b cookies.txt
+```
+
+### Security Implementation Notes
+- All routes except `/api/auth/*` require authentication via `require_auth()` function
+- Session middleware validates cookies on every request
+- Unauthenticated requests return `401 Unauthorized`
+- Session keys should be set via `SESSION_KEY` environment variable in production
+
+### API Endpoint Structure
+The API uses singular resource names in the URL paths:
+- Hosts: `/api/host` (not `/api/hosts`)
+- Users: `/api/user` (not `/api/users`)  
+- Keys: `/api/key` (not `/api/keys`)
+- Authentication: `/api/auth/*`
+- Authorization: `/api/authorization/*`
+- Diff: `/api/diff/*`
+
 ## Architecture Overview
 
 ### Split Frontend/Backend Architecture
@@ -88,5 +134,6 @@ docker-compose -f docker/compose.prod.yml up --build
 
 ### Configuration
 - Main config: `config.toml` (database URL, SSH private key, server settings)
-- Authentication: `.htpasswd` file for user credentials
-- Environment variables: `DATABASE_URL`, `RUST_LOG`, `CONFIG`, `VITE_API_URL`
+- Authentication: `.htpasswd` file for user credentials (bcrypt encrypted)
+- Environment variables: `DATABASE_URL`, `RUST_LOG`, `CONFIG`, `VITE_API_URL`, `SESSION_KEY`
+- Security: All API endpoints require authentication except `/api/auth/login` and `/api/auth/logout`
