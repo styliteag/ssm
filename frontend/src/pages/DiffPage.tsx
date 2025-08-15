@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { diffApi, DiffHost } from '../services/api/diff';
+import { diffApi, DiffHost, DiffResponse, DetailedDiffResponse } from '../services/api/diff';
+import DiffIssue from '../components/DiffIssue';
 
 const DiffPage: React.FC = () => {
   const [hosts, setHosts] = useState<DiffHost[]>([]);
@@ -9,7 +10,7 @@ const DiffPage: React.FC = () => {
   const [sortBy, setSortBy] = useState<'name' | 'address'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [selectedHost, setSelectedHost] = useState<DiffHost | null>(null);
-  const [hostDetails, setHostDetails] = useState<any>(null);
+  const [hostDetails, setHostDetails] = useState<DetailedDiffResponse | null>(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
 
   useEffect(() => {
@@ -50,7 +51,7 @@ const DiffPage: React.FC = () => {
                 h.id === host.id 
                   ? { 
                       ...h, 
-                      diff_summary: diffData.host ? `Found ${diffData.total_items} differences` : diffData.total_items.toString(),
+                      diff_summary: diffData.diff_summary,
                       is_empty: diffData.is_empty,
                       total_items: diffData.total_items,
                       loading: false 
@@ -119,21 +120,12 @@ const DiffPage: React.FC = () => {
     setDetailsLoading(true);
     
     try {
-      // Fetch both diff details and basic host details
-      const [diffData, hostData] = await Promise.all([
-        diffApi.getHostDiff(host.name),
-        diffApi.getHostDiffDetails(host.name)
-      ]);
-      
-      setHostDetails({
-        host: hostData,
-        diff: diffData
-      });
+      // Fetch detailed diff information
+      const hostDetails = await diffApi.getHostDiffDetails(host.name);
+      setHostDetails(hostDetails);
     } catch (err) {
       console.error('Error fetching host details:', err);
-      setHostDetails({
-        error: 'Failed to load host details'
-      });
+      setHostDetails(null);
     } finally {
       setDetailsLoading(false);
     }
@@ -273,7 +265,7 @@ const DiffPage: React.FC = () => {
           onClick={closeModal}
         >
           <div 
-            className="bg-white rounded-lg shadow-xl max-w-2xl w-full m-4 max-h-[80vh] overflow-hidden"
+            className="bg-white rounded-lg shadow-xl max-w-4xl w-full m-4 max-h-[90vh] overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex justify-between items-center p-6 border-b border-gray-200">
@@ -296,73 +288,137 @@ const DiffPage: React.FC = () => {
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
                   <span className="ml-3">Loading host details...</span>
                 </div>
-              ) : hostDetails?.error ? (
+              ) : !hostDetails ? (
                 <div className="text-red-600 py-4">
-                  Error: {hostDetails.error}
+                  Error: Failed to load host details
                 </div>
-              ) : hostDetails ? (
+              ) : (
                 <div className="space-y-6">
                   {/* Basic Host Information */}
                   <div>
                     <h3 className="text-lg font-medium text-gray-900 mb-3">Host Information</h3>
-                    <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-                      <div className="flex justify-between">
+                    <div className="bg-gray-50 rounded-lg p-4 grid grid-cols-2 gap-4">
+                      <div>
                         <span className="font-medium text-gray-700">ID:</span>
-                        <span className="text-gray-900">{hostDetails.host?.id || selectedHost.id}</span>
+                        <span className="text-gray-900 ml-2">{hostDetails.host.id}</span>
                       </div>
-                      <div className="flex justify-between">
+                      <div>
                         <span className="font-medium text-gray-700">Name:</span>
-                        <span className="text-gray-900">{hostDetails.host?.name || selectedHost.name}</span>
+                        <span className="text-gray-900 ml-2">{hostDetails.host.name}</span>
                       </div>
-                      <div className="flex justify-between">
+                      <div>
                         <span className="font-medium text-gray-700">Address:</span>
-                        <span className="text-gray-900">{hostDetails.host?.address || selectedHost.address}</span>
+                        <span className="text-gray-900 ml-2">{hostDetails.host.address}</span>
+                      </div>
+                      <div>
+                        <span className="font-medium text-gray-700">Last Updated:</span>
+                        <span className="text-gray-900 ml-2">
+                          {new Date(hostDetails.cache_timestamp).toLocaleString()}
+                        </span>
                       </div>
                     </div>
                   </div>
 
-                  {/* Diff Information */}
+                  {/* Summary */}
                   <div>
-                    <h3 className="text-lg font-medium text-gray-900 mb-3">Diff Status</h3>
-                    <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-                      <div className="flex justify-between">
-                        <span className="font-medium text-gray-700">Status:</span>
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          hostDetails.diff?.is_empty 
+                    <h3 className="text-lg font-medium text-gray-900 mb-3">Diff Summary</h3>
+                    <div className="bg-gray-50 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
+                          hostDetails.logins.length === 0 
                             ? 'bg-green-100 text-green-800' 
                             : 'bg-red-100 text-red-800'
                         }`}>
-                          {hostDetails.diff?.is_empty ? 'Synchronized' : 'Needs Sync'}
+                          {hostDetails.logins.length === 0 ? 'Synchronized' : 'Needs Sync'}
                         </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="font-medium text-gray-700">Differences:</span>
-                        <span className={`text-gray-900 ${hostDetails.diff?.total_items > 0 ? 'font-medium text-red-600' : ''}`}>
-                          {hostDetails.diff?.total_items || 0}
-                        </span>
-                      </div>
-                      {hostDetails.diff?.diff_summary && (
-                        <div className="flex justify-between">
-                          <span className="font-medium text-gray-700">Summary:</span>
-                          <span className="text-gray-900">{hostDetails.diff.diff_summary}</span>
+                        <div className="text-sm text-gray-600">
+                          {hostDetails.expected_keys.length} expected keys
                         </div>
-                      )}
+                      </div>
+                      <p className="text-gray-900">{hostDetails.summary}</p>
                     </div>
                   </div>
 
-                  {/* Additional Actions */}
+                  {/* Expected Keys */}
+                  {hostDetails.expected_keys.length > 0 && (
+                    <div>
+                      <h3 className="text-lg font-medium text-gray-900 mb-3">Expected Keys</h3>
+                      <div className="bg-gray-50 rounded-lg p-4 max-h-48 overflow-y-auto">
+                        <div className="space-y-2">
+                          {hostDetails.expected_keys.map((key, index) => (
+                            <div key={index} className="bg-white rounded p-3 text-sm">
+                              <div className="flex justify-between items-start">
+                                <div>
+                                  <span className="font-medium">{key.username}</span> → {key.login}
+                                  {key.comment && <span className="text-gray-500 ml-2">({key.comment})</span>}
+                                </div>
+                                <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                                  {key.key_type}
+                                </span>
+                              </div>
+                              {key.options && (
+                                <div className="text-xs text-gray-600 mt-1 font-mono">
+                                  Options: {key.options}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Detailed Issues */}
+                  {hostDetails.logins.length > 0 && (
+                    <div>
+                      <h3 className="text-lg font-medium text-gray-900 mb-3">Issues Found</h3>
+                      <div className="space-y-4">
+                        {hostDetails.logins.map((loginDiff, loginIndex) => (
+                          <div key={loginIndex} className="border border-gray-200 rounded-lg">
+                            <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
+                              <div className="flex items-center justify-between">
+                                <h4 className="font-medium text-gray-900">
+                                  Login: <code className="bg-gray-200 px-2 py-1 rounded text-sm">{loginDiff.login}</code>
+                                </h4>
+                                <span className="text-sm text-gray-600">
+                                  {loginDiff.issues.length} issue{loginDiff.issues.length !== 1 ? 's' : ''}
+                                </span>
+                              </div>
+                              {loginDiff.readonly_condition && (
+                                <div className="text-sm text-yellow-700 mt-1">
+                                  Readonly: {loginDiff.readonly_condition}
+                                </div>
+                              )}
+                            </div>
+                            <div className="p-4 space-y-3">
+                              {loginDiff.issues.map((issue, issueIndex) => (
+                                <DiffIssue key={issueIndex} issue={issue} />
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Actions */}
                   <div className="pt-4 border-t border-gray-200">
                     <div className="flex space-x-3">
-                      <button className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
-                        View Full Diff
+                      <button 
+                        onClick={() => handleHostClick(selectedHost)}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                      >
+                        Refresh Data
                       </button>
-                      <button className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors">
-                        Sync Keys
-                      </button>
+                      {hostDetails.logins.length > 0 && (
+                        <button className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors">
+                          Sync Keys
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
-              ) : null}
+              )}
             </div>
           </div>
         </div>
