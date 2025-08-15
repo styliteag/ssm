@@ -7,7 +7,6 @@ use actix_web::{test, http::StatusCode, cookie::Cookie};
 use serde_json::json;
 use serial_test::serial;
 use std::fs;
-use std::path::PathBuf;
 use bcrypt::{hash, DEFAULT_COST};
 
 use crate::{

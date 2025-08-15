@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 /// HTTP Test Helpers
 /// 
 /// Shared utilities for HTTP API testing across all test modules.

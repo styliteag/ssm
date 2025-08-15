@@ -162,7 +162,6 @@ macro_rules! block_ssh_in_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::net::Ipv4Addr;
 
     #[test]
     fn test_mode_detection() {

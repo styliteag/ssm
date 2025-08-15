@@ -49,7 +49,8 @@ async fn test_ssh_connection_establishment() {
     assert!(keys_result.is_ok(), "Should retrieve authorized keys");
     
     let keys = keys_result.unwrap();
-    assert!(keys.len() >= 0, "Should return key list (possibly empty)");
+    // Keys should be a list (possibly empty) - just verify it's a valid Vec
+    let _key_count = keys.len();
     
     log::info!("✅ SSH connection establishment test passed");
 }
@@ -60,7 +61,7 @@ async fn test_key_deployment_workflow() {
     crate::tests::safety::init_test_mode();
     let test_config = TestConfig::new().await;
     
-    let mock_client = MockSshClient::new(
+    let _mock_client = MockSshClient::new(
         test_config.db_pool.clone(),
         test_config.config.ssh.clone()
     );
@@ -175,7 +176,7 @@ async fn test_ssh_error_handling() {
     crate::tests::safety::init_test_mode();
     let test_config = TestConfig::new().await;
     
-    let mock_client = MockSshClient::new(
+    let _mock_client = MockSshClient::new(
         test_config.db_pool.clone(),
         test_config.config.ssh.clone()
     );
@@ -240,7 +241,7 @@ async fn test_authorized_keys_synchronization() {
     crate::tests::safety::init_test_mode();
     let test_config = TestConfig::new().await;
     
-    let mock_client = MockSshClient::new(
+    let _mock_client = MockSshClient::new(
         test_config.db_pool.clone(),
         test_config.config.ssh.clone()
     );
@@ -337,7 +338,7 @@ async fn test_ssh_key_validation() {
     crate::tests::safety::init_test_mode();
     let test_config = TestConfig::new().await;
     
-    let mock_client = MockSshClient::new(
+    let _mock_client = MockSshClient::new(
         test_config.db_pool.clone(),
         test_config.config.ssh.clone()
     );

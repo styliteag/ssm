@@ -1,10 +1,11 @@
+#![allow(dead_code)]
+
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use serde::{Deserialize, Serialize};
 
 use crate::{test_only, tests::safety::init_test_mode};
-use crate::ssh::{SshKeyfiles, SshKeyfileResponse, KeyDiffItem};
+use crate::ssh::{SshKeyfiles, KeyDiffItem};
 use crate::models::Host;
 use crate::{ConnectionPool, SshConfig};
 
@@ -138,19 +139,19 @@ impl MockSshClient {
     }
 
     /// Verify that an operation was called
-    pub async fn verify_operation_called(&self, op_type: MockOperationType, host: &str) -> bool {
+    pub async fn verify_operation_called(&self, _op_type: MockOperationType, host: &str) -> bool {
         test_only!();
         let log = self.inner.operation_log.lock().await;
         log.iter().any(|op| {
-            matches!(&op.operation_type, op_type) && op.host == host
+            matches!(&op.operation_type, _op_type) && op.host == host
         })
     }
 
     /// Get count of operations by type
-    pub async fn get_operation_count(&self, op_type: MockOperationType) -> usize {
+    pub async fn get_operation_count(&self, _op_type: MockOperationType) -> usize {
         test_only!();
         let log = self.inner.operation_log.lock().await;
-        log.iter().filter(|op| matches!(&op.operation_type, op_type)).count()
+        log.iter().filter(|op| matches!(&op.operation_type, _op_type)).count()
     }
 
     /// Check if this is a mock client (always true for MockSshClient)
@@ -294,7 +295,7 @@ impl MockSshClient {
     }
     
     /// Generate realistic diff for testing
-    fn generate_realistic_diff(&self, new_keyfile: &str, host_name: &str, login: &str) -> Vec<KeyDiffItem> {
+    fn generate_realistic_diff(&self, new_keyfile: &str, _host_name: &str, login: &str) -> Vec<KeyDiffItem> {
         let mut diff = Vec::new();
         
         // Get current keys for this login

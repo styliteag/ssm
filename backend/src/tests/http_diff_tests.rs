@@ -9,7 +9,7 @@ use serial_test::serial;
 
 use crate::{
     tests::{
-        http_test_helpers::{extract_json, assert_not_found_response},
+        http_test_helpers::{extract_json},
     },
     create_inline_test_service,
 };

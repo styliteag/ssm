@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 /// Test utilities for SSH Key Manager tests
 ///
 /// Provides helper functions and test configuration for tests
@@ -6,8 +8,6 @@ use crate::{Configuration, ConnectionPool, SshConfig};
 use diesel::r2d2::{ConnectionManager, Pool};
 use diesel::prelude::*;
 use diesel_migrations::MigrationHarness;
-use std::env;
-use std::path::PathBuf;
 use tempfile::TempDir;
 use uuid::Uuid;
 
