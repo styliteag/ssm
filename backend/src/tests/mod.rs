@@ -32,3 +32,10 @@ pub mod http_user_tests;
 pub mod http_host_tests;
 pub mod http_key_tests;
 pub mod http_error_tests;
+pub mod http_diff_tests;
+pub mod http_authorization_tests;
+pub mod http_security_tests;
+pub mod http_authentication_tests;
+
+// SSH and integration tests
+pub mod ssh_integration_tests;
