@@ -18,9 +18,4 @@ pub mod basic_tests;
 pub mod mock_ssh_tests;
 
 // HTTP API integration tests with complete isolation
-// TODO: Fix actix-web version compatibility issues
-// pub mod http_test_utils;
-// pub mod http_auth_tests;
-// pub mod http_user_tests;
-// pub mod http_host_tests;
-// pub mod http_key_tests;
+pub mod inline_http_tests;
