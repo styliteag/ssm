@@ -433,8 +433,8 @@ const AuthorizationStats: React.FC<AuthorizationStatsProps> = ({
                         <button
                           onClick={() => handleUserClick(item.user.username)}
                           className={cn(
-                            'font-medium text-left hover:text-blue-600 dark:hover:text-blue-400 transition-colors underline-offset-2 hover:underline',
-                            !item.user.enabled && 'text-gray-500 line-through hover:text-gray-700 dark:hover:text-gray-400'
+                            'font-medium text-left hover:text-blue-600 dark:hover:text-blue-400 transition-colors underline-offset-2 hover:underline text-gray-900 dark:text-white',
+                            !item.user.enabled && 'text-gray-500 line-through hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
                           )}
                         >
                           {item.user.username}
