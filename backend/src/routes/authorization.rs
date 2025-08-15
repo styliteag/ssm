@@ -29,8 +29,12 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 #[utoipa::path(
     post,
     path = "/api/authorization/change_options",
+    security(
+        ("session_auth" = [])
+    ),
     responses(
-        (status = 501, description = "Not implemented", body = ApiError)
+        (status = 501, description = "Not implemented", body = ApiError),
+        (status = 401, description = "Unauthorized - authentication required", body = ApiError)
     )
 )]
 #[post("/change_options")]
@@ -66,10 +70,14 @@ pub struct AuthorizeUserRequest {
 #[utoipa::path(
     post,
     path = "/api/authorization/dialog_data",
+    security(
+        ("session_auth" = [])
+    ),
     request_body = AuthorizeUserRequest,
     responses(
         (status = 200, description = "Authorization dialog data", body = AuthorizationDialogResponse),
-        (status = 404, description = "Host or user not found", body = ApiError)
+        (status = 404, description = "Host or user not found", body = ApiError),
+        (status = 401, description = "Unauthorized - authentication required", body = ApiError)
     )
 )]
 #[post("/dialog_data")]

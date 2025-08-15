@@ -1,5 +1,5 @@
 use actix_web::{
-    delete, get, put,
+    delete, put,
     web::{self, Data, Json, Path, Query},
     HttpResponse, Responder, Result,
 };
@@ -47,8 +47,12 @@ pub struct KeysResponse {
 #[utoipa::path(
     get,
     path = "/api/keys",
+    security(
+        ("session_auth" = [])
+    ),
     responses(
-        (status = 200, description = "List of SSH keys", body = KeysResponse)
+        (status = 200, description = "List of SSH keys", body = KeysResponse),
+        (status = 401, description = "Unauthorized - authentication required", body = ApiError)
     )
 )]
 pub async fn get_all_keys(
@@ -75,12 +79,16 @@ pub async fn get_all_keys(
 #[utoipa::path(
     delete,
     path = "/api/keys/{id}",
+    security(
+        ("session_auth" = [])
+    ),
     params(
         ("id" = i32, Path, description = "Key ID")
     ),
     responses(
         (status = 200, description = "Key deleted successfully"),
-        (status = 400, description = "Bad request", body = ApiError)
+        (status = 400, description = "Bad request", body = ApiError),
+        (status = 401, description = "Unauthorized - authentication required", body = ApiError)
     )
 )]
 #[delete("/{id}")]
@@ -108,13 +116,17 @@ pub struct UpdateKeyCommentRequest {
 #[utoipa::path(
     put,
     path = "/api/keys/{id}/comment",
+    security(
+        ("session_auth" = [])
+    ),
     params(
         ("id" = i32, Path, description = "Key ID")
     ),
     request_body = UpdateKeyCommentRequest,
     responses(
         (status = 200, description = "Key comment updated successfully"),
-        (status = 400, description = "Bad request", body = ApiError)
+        (status = 400, description = "Bad request", body = ApiError),
+        (status = 401, description = "Unauthorized - authentication required", body = ApiError)
     )
 )]
 #[put("/{id}/comment")]

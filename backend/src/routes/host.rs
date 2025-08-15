@@ -103,12 +103,16 @@ pub struct LoginsResponse {
 #[utoipa::path(
     get,
     path = "/api/hosts/{name}/logins",
+    security(
+        ("session_auth" = [])
+    ),
     params(
         ("name" = String, Path, description = "Host name")
     ),
     responses(
         (status = 200, description = "List of available logins", body = LoginsResponse),
-        (status = 404, description = "Host not found", body = ApiError)
+        (status = 404, description = "Host not found", body = ApiError),
+        (status = 401, description = "Unauthorized - authentication required", body = ApiError)
     )
 )]
 #[get("/{name}/logins")]
@@ -117,7 +121,9 @@ async fn get_logins(
     caching_ssh_client: Data<CachingSshClient>,
     host_name: Path<String>,
     update: Query<ForceUpdateQuery>,
+    identity: Option<Identity>,
 ) -> Result<impl Responder> {
+    require_auth(identity)?;
     let host = Host::get_from_name(conn.get().unwrap(), host_name.to_string()).await;
 
     match host {
@@ -139,12 +145,16 @@ async fn get_logins(
 #[utoipa::path(
     get,
     path = "/api/hosts/{name}",
+    security(
+        ("session_auth" = [])
+    ),
     params(
         ("name" = String, Path, description = "Host name")
     ),
     responses(
         (status = 200, description = "Host details", body = HostResponse),
-        (status = 404, description = "Host not found", body = ApiError)
+        (status = 404, description = "Host not found", body = ApiError),
+        (status = 401, description = "Unauthorized - authentication required", body = ApiError)
     )
 )]
 #[get("/{name}")]
@@ -228,7 +238,9 @@ async fn add_host_key(
     ssh_client: Data<SshClient>,
     host_id: Path<i32>,
     json: Json<AddHostkeyRequest>,
+    identity: Option<Identity>,
 ) -> Result<impl Responder> {
+    require_auth(identity)?;
     let host = match Host::get_from_id(conn.get().unwrap(), *host_id).await {
         Ok(Some(h)) => h,
         Ok(None) => return Ok(HttpResponse::NotFound().json(ApiError::not_found("Host not found".to_string()))),
@@ -426,7 +438,9 @@ pub struct AuthorizeUserRequest {
 async fn authorize_user(
     conn: Data<ConnectionPool>,
     json: Json<AuthorizeUserRequest>,
+    identity: Option<Identity>,
 ) -> Result<impl Responder> {
+    require_auth(identity)?;
     let res = web::block(move || {
         Host::authorize_user(
             &mut conn.get().unwrap(),
@@ -472,7 +486,9 @@ async fn gen_authorized_keys(
     conn: Data<ConnectionPool>,
     ssh_client: Data<SshClient>,
     json: Json<GenAuthorizedKeysRequest>,
+    identity: Option<Identity>,
 ) -> Result<impl Responder> {
+    require_auth(identity)?;
     let host_name = &json.host_name;
     let login = &json.login;
 
@@ -645,7 +661,9 @@ pub struct HostAuthorizationsResponse {
 async fn list_host_authorizations(
     host_name: Path<String>,
     conn: Data<ConnectionPool>,
+    identity: Option<Identity>,
 ) -> Result<impl Responder> {
+    require_auth(identity)?;
     let host = match Host::get_from_name(conn.get().unwrap(), host_name.to_string()).await {
         Ok(Some(host)) => host,
         Ok(None) => return Ok(HttpResponse::NotFound().json(ApiError::not_found("Host not found".to_string()))),
@@ -682,7 +700,9 @@ struct DeleteAuthorizationRequest {
 async fn delete_authorization(
     authorization_id: Path<i32>,
     conn: Data<ConnectionPool>,
+    identity: Option<Identity>,
 ) -> Result<impl Responder> {
+    require_auth(identity)?;
     let res = web::block(move || {
         let mut connection = conn.get().unwrap();
         Host::delete_authorization(&mut connection, *authorization_id)

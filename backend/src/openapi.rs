@@ -31,6 +31,12 @@ use crate::{
             
             // Additional schemas will be automatically discovered via ToSchema derives
         ),
+        security_schemes(
+            ("session_auth" = ("cookie", "ssm_session"))
+        )
+    ),
+    security(
+        ("session_auth" = [])
     ),
     tags(
         (name = "hosts", description = "Host management operations - requires authentication"),
@@ -43,7 +49,7 @@ use crate::{
     info(
         title = "SSH Key Manager API",
         version = "0.0.1-alpha",
-        description = "Secure API for managing SSH keys across multiple hosts. All endpoints except authentication require session-based authentication via login.",
+        description = "Secure API for managing SSH keys across multiple hosts.\n\n## Authentication\n\nThis API uses session-based authentication via HTTP cookies. To use authenticated endpoints:\n\n1. **Login**: POST to `/api/auth/login` with username/password credentials\n2. **Use the session**: All subsequent requests will automatically include the session cookie\n3. **Logout**: POST to `/api/auth/logout` to invalidate the session\n\nAll endpoints except `/api/auth/*` and public documentation endpoints require authentication. Unauthenticated requests will return `401 Unauthorized`.",
         contact(
             name = "SSM Support",
             url = "https://github.com/styliteag/ssm"
