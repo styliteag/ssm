@@ -13,10 +13,10 @@ services:
       # Database persistence
       - ./data/db:/app/db
       # Configuration files
-      - ./data/config/config.toml:/app/config.toml:ro
-      - ./data/auth/.htpasswd:/app/.htpasswd:ro
+      - ./data/config.toml:/app/config.toml:ro
+      - ./data/.htpasswd:/app/.htpasswd:ro
       # SSH keys (read-only for security)
-      - ./data/ssh-keys:/app/keys:ro
+      - ./data/keys:/app/keys:ro
       # Logs (optional)
       - ./data/logs:/app/logs
     environment:

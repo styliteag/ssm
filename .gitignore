@@ -9,3 +9,4 @@ backend/.htpasswd
 backend/server.log
 logs/
 __pycache__/
+docker/data/
