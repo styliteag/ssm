@@ -6,3 +6,4 @@ backend/result-lib
 backend/ssm.db
 backend/config.toml
 backend/.htpasswd
+backend/server.log
