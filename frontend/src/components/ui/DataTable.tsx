@@ -29,6 +29,7 @@ export interface DataTableProps<T> {
   paginated?: boolean;
   pageSize?: number;
   initialSort?: SortConfig<T>;
+  initialSearch?: string;
   onRowClick?: (item: T, index: number) => void;
   emptyMessage?: string;
   className?: string;
@@ -46,6 +47,7 @@ function DataTable<T extends Record<string, any>>({
   paginated = true,
   pageSize = 10,
   initialSort,
+  initialSearch = '',
   onRowClick,
   emptyMessage = 'No data available',
   className,
@@ -53,7 +55,7 @@ function DataTable<T extends Record<string, any>>({
   showSearchIcon = true,
   stickyHeader = false,
 }: DataTableProps<T>) {
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(initialSearch);
   const [sortConfig, setSortConfig] = useState<SortConfig<T> | null>(initialSort || null);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(pageSize);

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import { 
   Server, 
   Plus, 
@@ -34,6 +35,7 @@ interface ExtendedHost extends Host {
 }
 
 const HostsPage: React.FC = () => {
+  const location = useLocation();
   const { showSuccess, showError } = useNotifications();
   
   // State management
@@ -429,6 +431,7 @@ const HostsPage: React.FC = () => {
             emptyMessage="No hosts found. Add your first SSH host to get started."
             searchPlaceholder="Search hosts by name, address, or username..."
             initialSort={{ key: 'name', direction: 'asc' }}
+            initialSearch={(location.state as any)?.searchTerm || ''}
           />
         </CardContent>
       </Card>

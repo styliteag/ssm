@@ -1,7 +1,11 @@
 import React, { useState, useMemo } from 'react';
-import { Users, Server, Shield, UserCheck, AlertTriangle, TrendingUp, Search } from 'lucide-react';
-import { Authorization, User, Host } from '../types';
-import { Card, CardContent, CardHeader, CardTitle } from './ui';
+import { useNavigate } from 'react-router-dom';
+import { Users, Server, Shield, UserCheck, AlertTriangle, TrendingUp, Search, Edit2 } from 'lucide-react';
+import { Authorization, User, Host, HostFormData, UserFormData } from '../types';
+import { Card, CardContent, CardHeader, CardTitle, Modal, Form, Button } from './ui';
+import { useNotifications } from '../contexts/NotificationContext';
+import { hostsService } from '../services/api/hosts';
+import { usersService } from '../services/api/users';
 import Input from './ui/Input';
 import { cn } from '../utils/cn';
 
@@ -41,7 +45,80 @@ const AuthorizationStats: React.FC<AuthorizationStatsProps> = ({
   hosts,
   className,
 }) => {
+  const navigate = useNavigate();
+  const { showSuccess, showError } = useNotifications();
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // Edit modal states
+  const [showEditHostModal, setShowEditHostModal] = useState(false);
+  const [showEditUserModal, setShowEditUserModal] = useState(false);
+  const [selectedHost, setSelectedHost] = useState<Host | null>(null);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Handle user click to navigate to Users page with search
+  const handleUserClick = (username: string) => {
+    navigate('/users', { state: { searchTerm: username } });
+  };
+
+  // Handle host click to navigate to Hosts page with search
+  const handleHostClick = (hostname: string) => {
+    navigate('/hosts', { state: { searchTerm: hostname } });
+  };
+
+  // Handle edit host
+  const handleEditHost = (host: Host) => {
+    setSelectedHost(host);
+    setShowEditHostModal(true);
+  };
+
+  // Handle edit user
+  const handleEditUser = (user: User) => {
+    setSelectedUser(user);
+    setShowEditUserModal(true);
+  };
+
+  // Handle host form submission
+  const handleHostFormSubmit = async (values: HostFormData) => {
+    if (!selectedHost) return;
+
+    try {
+      setSubmitting(true);
+      const response = await hostsService.updateHost(selectedHost.id, values);
+      if (response.success && response.data) {
+        setShowEditHostModal(false);
+        setSelectedHost(null);
+        showSuccess('Host updated', `${response.data.name} has been updated successfully`);
+      }
+    } catch (error) {
+      showError('Failed to update host', 'Please check your input and try again');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Handle user form submission
+  const handleUserFormSubmit = async (values: UserFormData) => {
+    if (!selectedUser) return;
+
+    try {
+      setSubmitting(true);
+      const userData = {
+        username: selectedUser.username, // Keep original username
+        enabled: values.enabled === 'true' || values.enabled === true
+      };
+      const response = await usersService.updateUser(selectedUser.id, userData);
+      if (response.success && response.data) {
+        setShowEditUserModal(false);
+        setSelectedUser(null);
+        showSuccess('User updated', `${response.data.username} has been updated successfully`);
+      }
+    } catch (error) {
+      showError('Failed to update user', 'Please check your input and try again');
+    } finally {
+      setSubmitting(false);
+    }
+  };
   
   // Filter data based on search term
   const filteredData = useMemo(() => {
@@ -277,13 +354,30 @@ const AuthorizationStats: React.FC<AuthorizationStatsProps> = ({
                       )}>
                         {index + 1}
                       </div>
-                      <div>
-                        <div className="font-medium text-gray-900 dark:text-white">
-                          {item.host.name}
+                      <div className="flex items-center space-x-2 flex-1">
+                        <div>
+                          <button
+                            onClick={() => handleHostClick(item.host.name)}
+                            className="font-medium text-left hover:text-blue-600 dark:hover:text-blue-400 transition-colors underline-offset-2 hover:underline text-gray-900 dark:text-white"
+                          >
+                            {item.host.name}
+                          </button>
+                          <div className="text-sm text-gray-500 dark:text-gray-400">
+                            {item.host.address}
+                          </div>
                         </div>
-                        <div className="text-sm text-gray-500 dark:text-gray-400">
-                          {item.host.address}
-                        </div>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditHost(item.host);
+                          }}
+                          className="h-6 w-6 p-0 text-gray-400 hover:text-gray-600"
+                          title="Edit host"
+                        >
+                          <Edit2 size={12} />
+                        </Button>
                       </div>
                     </div>
                     <div className="text-right">
@@ -334,22 +428,39 @@ const AuthorizationStats: React.FC<AuthorizationStatsProps> = ({
                       )}>
                         {index + 1}
                       </div>
-                      <div className="flex items-center space-x-2">
-                        <div className={cn(
-                          'w-2 h-2 rounded-full',
-                          item.user.enabled ? 'bg-green-500' : 'bg-red-500'
-                        )} />
-                        <div className={cn(
-                          'font-medium',
-                          !item.user.enabled && 'text-gray-500 line-through'
-                        )}>
-                          {item.user.username}
+                      <div className="flex items-center space-x-2 flex-1">
+                        <div className="flex items-center space-x-2">
+                          <div className={cn(
+                            'w-2 h-2 rounded-full',
+                            item.user.enabled ? 'bg-green-500' : 'bg-red-500'
+                          )} />
+                          <button
+                            onClick={() => handleUserClick(item.user.username)}
+                            className={cn(
+                              'font-medium text-left hover:text-blue-600 dark:hover:text-blue-400 transition-colors underline-offset-2 hover:underline',
+                              !item.user.enabled && 'text-gray-500 line-through hover:text-gray-700 dark:hover:text-gray-400'
+                            )}
+                          >
+                            {item.user.username}
+                          </button>
+                          {!item.user.enabled && (
+                            <span className="text-xs text-gray-400 bg-gray-100 dark:bg-gray-700 px-1 rounded">
+                              disabled
+                            </span>
+                          )}
                         </div>
-                        {!item.user.enabled && (
-                          <span className="text-xs text-gray-400 bg-gray-100 dark:bg-gray-700 px-1 rounded">
-                            disabled
-                          </span>
-                        )}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditUser(item.user);
+                          }}
+                          className="h-6 w-6 p-0 text-gray-400 hover:text-gray-600"
+                          title="Edit user"
+                        >
+                          <Edit2 size={12} />
+                        </Button>
                       </div>
                     </div>
                     <div className="text-right">
@@ -421,6 +532,143 @@ const AuthorizationStats: React.FC<AuthorizationStatsProps> = ({
           </CardContent>
         </Card>
       </div>
+
+      {/* Edit Host Modal */}
+      <Modal
+        isOpen={showEditHostModal}
+        onClose={() => {
+          setShowEditHostModal(false);
+          setSelectedHost(null);
+        }}
+        title="Edit Host"
+        size="lg"
+      >
+        {selectedHost && (
+          <Form
+            fields={[
+              {
+                name: 'name',
+                label: 'Host Name',
+                type: 'text',
+                required: true,
+                placeholder: 'Enter host name',
+                helperText: 'Friendly name for this host',
+                validation: {
+                  minLength: 2,
+                  maxLength: 100
+                }
+              },
+              {
+                name: 'address',
+                label: 'Address',
+                type: 'text',
+                required: true,
+                placeholder: 'hostname.example.com or IP address',
+                helperText: 'IP address or hostname to connect to',
+                validation: {
+                  minLength: 3,
+                  maxLength: 255
+                }
+              },
+              {
+                name: 'port',
+                label: 'SSH Port',
+                type: 'number',
+                required: true,
+                placeholder: '22',
+                helperText: 'SSH port number (usually 22)',
+                validation: {
+                  min: 1,
+                  max: 65535
+                }
+              },
+              {
+                name: 'username',
+                label: 'SSH Username',
+                type: 'text',
+                required: true,
+                placeholder: 'root, ubuntu, etc.',
+                helperText: 'Username for SSH connection',
+                validation: {
+                  minLength: 1,
+                  maxLength: 50
+                }
+              }
+            ]}
+            onSubmit={(values) => handleHostFormSubmit(values as HostFormData)}
+            submitText="Save Changes"
+            cancelText="Cancel"
+            onCancel={() => {
+              setShowEditHostModal(false);
+              setSelectedHost(null);
+            }}
+            loading={submitting}
+            layout="grid"
+            gridCols={2}
+            initialValues={{
+              name: selectedHost.name,
+              address: selectedHost.address,
+              port: selectedHost.port,
+              username: selectedHost.username
+            }}
+          />
+        )}
+      </Modal>
+
+      {/* Edit User Modal */}
+      <Modal
+        isOpen={showEditUserModal}
+        onClose={() => {
+          setShowEditUserModal(false);
+          setSelectedUser(null);
+        }}
+        title="Edit User"
+        size="md"
+      >
+        {selectedUser && (
+          <Form
+            fields={[
+              {
+                name: 'username',
+                label: 'Username',
+                type: 'text',
+                required: true,
+                placeholder: 'Enter username',
+                helperText: 'Unique username for SSH access',
+                disabled: true, // Username cannot be changed after creation
+                validation: {
+                  minLength: 2,
+                  maxLength: 50
+                }
+              },
+              {
+                name: 'enabled',
+                label: 'User Status',
+                type: 'select',
+                required: true,
+                placeholder: 'Select user status',
+                helperText: 'Whether the user account is active',
+                options: [
+                  { value: 'true', label: 'Enabled (Active)' },
+                  { value: 'false', label: 'Disabled (Inactive)' }
+                ]
+              }
+            ]}
+            onSubmit={(values) => handleUserFormSubmit(values as UserFormData)}
+            submitText="Save Changes"
+            cancelText="Cancel"
+            onCancel={() => {
+              setShowEditUserModal(false);
+              setSelectedUser(null);
+            }}
+            loading={submitting}
+            initialValues={{
+              username: selectedUser.username,
+              enabled: selectedUser.enabled.toString()
+            }}
+          />
+        )}
+      </Modal>
     </div>
   );
 };
