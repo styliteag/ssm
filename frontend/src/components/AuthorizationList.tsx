@@ -5,6 +5,18 @@ import { Authorization, AuthorizationWithDetails, User, Host } from '../types';
 import DataTable, { Column } from './ui/DataTable';
 import Button from './ui/Button';
 
+// Enhanced type that includes computed search fields
+type EnhancedAuthorizationWithDetails = AuthorizationWithDetails & {
+  user_name: string;
+  host_name: string;
+  host_address: string;
+  host_search: string;
+  status_text: string;
+  login_search: string;
+  combined_search: string;
+  [key: string]: unknown;
+};
+
 interface AuthorizationListProps {
   authorizations: AuthorizationWithDetails[];
   users: User[];
@@ -27,7 +39,7 @@ const AuthorizationList: React.FC<AuthorizationListProps> = ({
   const [selectedAuthorizations, setSelectedAuthorizations] = useState<Set<number>>(new Set());
 
   // Create columns for the data table
-  const columns: Column<AuthorizationWithDetails>[] = useMemo(() => [
+  const columns: Column<EnhancedAuthorizationWithDetails>[] = useMemo(() => [
     {
       key: 'user_name',
       header: 'User',
@@ -172,7 +184,7 @@ const AuthorizationList: React.FC<AuthorizationListProps> = ({
   ], [onEdit, onDelete, onTestAccess]);
 
   // Handle row selection
-  const handleRowClick = (auth: AuthorizationWithDetails) => {
+  const handleRowClick = (auth: EnhancedAuthorizationWithDetails) => {
     setSelectedAuthorizations(prev => {
       const newSet = new Set(prev);
       if (newSet.has(auth.id)) {
@@ -185,7 +197,7 @@ const AuthorizationList: React.FC<AuthorizationListProps> = ({
   };
 
   // Enhanced data with computed fields for better searching and sorting
-  const enhancedData = useMemo(() => {
+  const enhancedData = useMemo((): EnhancedAuthorizationWithDetails[] => {
     return authorizations.map(auth => ({
       ...auth,
       user_name: auth.user?.username || '',

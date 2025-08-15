@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Activity, RefreshCw, Upload, X, Filter } from 'lucide-react';
+import { Activity, RefreshCw, Upload, Filter } from 'lucide-react';
 import {
   Card,
   CardContent,
@@ -10,7 +10,7 @@ import {
   Modal,
   type Column
 } from '../components/ui';
-import { diffApi, DiffHost, DiffResponse, DetailedDiffResponse } from '../services/api/diff';
+import { diffApi, DiffHost, DetailedDiffResponse } from '../services/api/diff';
 import DiffIssue from '../components/DiffIssue';
 import { useNotifications } from '../contexts/NotificationContext';
 
