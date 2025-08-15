@@ -55,7 +55,7 @@ const DiffPage: React.FC = () => {
   const loadHostDiffs = useCallback(async () => {
     try {
       setLoading(true);
-      const diffs = await diffApi.getAllHostDiffs();
+      const diffs = await diffApi.refreshAllHostDiffs();
       setHostDiffs(diffs);
     } catch (error) {
       console.error('Failed to load host diffs:', error);
@@ -347,7 +347,7 @@ const DiffPage: React.FC = () => {
 
   const columns: Column<HostDiffStatus>[] = [
     {
-      key: 'actions',
+      key: 'select',
       header: '',
       width: '50px',
       sortable: false,
