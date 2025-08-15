@@ -7,7 +7,7 @@ use actix_web::{
 };
 use log::error;
 use serde::{Deserialize, Serialize};
-use utoipa::{ToSchema, OpenApi};
+use utoipa::ToSchema;
 
 use crate::{
     api_types::*,

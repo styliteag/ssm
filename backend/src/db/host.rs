@@ -40,7 +40,6 @@ impl Host {
 
     /// Adds a new host to the database
     pub fn add_host(conn: &mut DbConnection, host: &NewHost) -> Result<i32, String> {
-        use diesel::result::QueryResult;
         
         // Insert the host
         insert_into(host::table)
