@@ -17,7 +17,6 @@ macro_rules! create_inline_test_service {
         use actix_session::{SessionMiddleware, storage::CookieSessionStore};
         use actix_web::cookie::Key;
         use actix_identity::IdentityMiddleware;
-        use std::sync::Arc;
         
         init_test_mode();
         let test_config = TestConfig::new().await;
@@ -39,7 +38,7 @@ macro_rules! create_inline_test_service {
         let app = test::init_service(
             App::new()
                 .app_data(web::Data::new(test_config.db_pool.clone()))
-                .app_data(web::Data::new(Arc::new(test_config.config.clone())))
+                .app_data(web::Data::new(test_config.config.clone()))
                 .app_data(web::Data::new(caching_ssh))
                 .wrap(IdentityMiddleware::default())
                 .wrap(
@@ -95,3 +94,73 @@ pub async fn assert_not_found_response(resp: actix_web::dev::ServiceResponse) ->
     
     json
 }
+
+/// Macro to create authenticated request - simplifies adding auth to existing tests
+#[macro_export]
+macro_rules! authenticated_request {
+    ($app:expr, $method:ident, $uri:expr) => {{
+        use actix_web::test;
+        use serde_json::json;
+        
+        // Login first
+        let login_req = test::TestRequest::post()
+            .uri("/api/auth/login")
+            .set_json(&json!({
+                "username": "testuser",
+                "password": "testpass"
+            }))
+            .to_request();
+        
+        let login_resp = test::call_service($app, login_req).await;
+        assert_eq!(login_resp.status(), actix_web::http::StatusCode::OK, "Login should succeed for authentication");
+        
+        // Extract session cookie
+        let mut cookie = String::new();
+        for (name, value) in login_resp.headers().iter() {
+            if name == "set-cookie" {
+                cookie = value.to_str().unwrap().to_string();
+                break;
+            }
+        }
+        assert!(!cookie.is_empty(), "Should have session cookie");
+        
+        // Create authenticated request
+        test::TestRequest::$method()
+            .uri($uri)
+            .insert_header(("Cookie", cookie))
+    }};
+    
+    ($app:expr, $method:ident, $uri:expr, $json:expr) => {{
+        use actix_web::test;
+        use serde_json::json;
+        
+        // Login first
+        let login_req = test::TestRequest::post()
+            .uri("/api/auth/login")
+            .set_json(&json!({
+                "username": "testuser",
+                "password": "testpass"
+            }))
+            .to_request();
+        
+        let login_resp = test::call_service($app, login_req).await;
+        assert_eq!(login_resp.status(), actix_web::http::StatusCode::OK, "Login should succeed for authentication");
+        
+        // Extract session cookie
+        let mut cookie = String::new();
+        for (name, value) in login_resp.headers().iter() {
+            if name == "set-cookie" {
+                cookie = value.to_str().unwrap().to_string();
+                break;
+            }
+        }
+        assert!(!cookie.is_empty(), "Should have session cookie");
+        
+        // Create authenticated request with JSON body
+        test::TestRequest::$method()
+            .uri($uri)
+            .insert_header(("Cookie", cookie))
+            .set_json($json)
+    }};
+}
+

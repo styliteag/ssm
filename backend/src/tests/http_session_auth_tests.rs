@@ -25,7 +25,7 @@ async fn test_successful_login_creates_session() {
     
     // Create a test htpasswd file
     let htpasswd_path = test_config.config.htpasswd_path.clone();
-    let test_password = "testpassword123";
+    let test_password = "testpass";
     let hashed_password = hash(test_password, DEFAULT_COST).expect("Failed to hash password");
     let htpasswd_content = format!("testuser:{}", hashed_password);
     
@@ -101,8 +101,8 @@ async fn test_login_with_invalid_credentials_fails() {
     
     // Verify error response
     let json = extract_json(resp).await;
-    assert!(json["error"].is_string());
-    let error_msg = json["error"].as_str().unwrap_or("");
+    assert!(json["message"].is_string());
+    let error_msg = json["message"].as_str().unwrap_or("");
     assert!(error_msg.to_lowercase().contains("invalid") || error_msg.to_lowercase().contains("password"));
     
     // Test login with non-existent user
@@ -135,7 +135,7 @@ async fn test_session_based_access_to_protected_endpoints() {
     
     // Create a test htpasswd file
     let htpasswd_path = test_config.config.htpasswd_path.clone();
-    let test_password = "testpassword123";
+    let test_password = "testpass";
     let hashed_password = hash(test_password, DEFAULT_COST).expect("Failed to hash password");
     let htpasswd_content = format!("testuser:{}", hashed_password);
     
@@ -163,7 +163,7 @@ async fn test_session_based_access_to_protected_endpoints() {
     // Extract session cookie
     let cookies: Vec<Cookie> = resp.response().cookies().collect();
     let session_cookie = cookies.iter()
-        .find(|cookie| cookie.name().contains("session") || cookie.name().contains("ssm"))
+        .find(|cookie| cookie.name() == "id" || cookie.name().contains("session") || cookie.name().contains("ssm"))
         .expect("Should have session cookie after login");
     
     // Step 2: Use session cookie to access protected endpoint
@@ -208,7 +208,7 @@ async fn test_logout_invalidates_session() {
     
     // Create a test htpasswd file
     let htpasswd_path = test_config.config.htpasswd_path.clone();
-    let test_password = "testpassword123";
+    let test_password = "testpass";
     let hashed_password = hash(test_password, DEFAULT_COST).expect("Failed to hash password");
     let htpasswd_content = format!("testuser:{}", hashed_password);
     
@@ -235,7 +235,7 @@ async fn test_logout_invalidates_session() {
     
     let cookies: Vec<Cookie> = resp.response().cookies().collect();
     let session_cookie = cookies.iter()
-        .find(|cookie| cookie.name().contains("session") || cookie.name().contains("ssm"))
+        .find(|cookie| cookie.name() == "id" || cookie.name().contains("session") || cookie.name().contains("ssm"))
         .expect("Should have session cookie after login");
     
     // Step 2: Verify session works
@@ -298,7 +298,7 @@ async fn test_auth_status_endpoint() {
     
     // Create a test htpasswd file and login
     let htpasswd_path = test_config.config.htpasswd_path.clone();
-    let test_password = "testpassword123";
+    let test_password = "testpass";
     let hashed_password = hash(test_password, DEFAULT_COST).expect("Failed to hash password");
     let htpasswd_content = format!("testuser:{}", hashed_password);
     
@@ -325,7 +325,7 @@ async fn test_auth_status_endpoint() {
     
     let cookies: Vec<Cookie> = resp.response().cookies().collect();
     let session_cookie = cookies.iter()
-        .find(|cookie| cookie.name().contains("session") || cookie.name().contains("ssm"))
+        .find(|cookie| cookie.name() == "id" || cookie.name().contains("session") || cookie.name().contains("ssm"))
         .expect("Should have session cookie after login");
     
     // Test status with authentication
@@ -356,7 +356,7 @@ async fn test_session_cookie_security() {
     
     // Create a test htpasswd file
     let htpasswd_path = test_config.config.htpasswd_path.clone();
-    let test_password = "testpassword123";
+    let test_password = "testpass";
     let hashed_password = hash(test_password, DEFAULT_COST).expect("Failed to hash password");
     let htpasswd_content = format!("testuser:{}", hashed_password);
     
@@ -384,7 +384,7 @@ async fn test_session_cookie_security() {
     // Check session cookie properties
     let cookies: Vec<Cookie> = resp.response().cookies().collect();
     let session_cookie = cookies.iter()
-        .find(|cookie| cookie.name().contains("session") || cookie.name().contains("ssm"))
+        .find(|cookie| cookie.name() == "id" || cookie.name().contains("session") || cookie.name().contains("ssm"))
         .expect("Should have session cookie after login");
     
     // Verify cookie security properties

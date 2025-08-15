@@ -40,6 +40,13 @@ pub mod http_authentication_tests;
 // Comprehensive authentication protection and session tests
 pub mod http_endpoint_auth_protection_tests;
 pub mod http_session_auth_tests;
+pub mod http_session_auth_functional_tests;
+pub mod debug_auth_setup;
+pub mod debug_bcrypt;
+pub mod generate_bcrypt;
+pub mod debug_login_detailed;
+pub mod debug_session_cookies;
+pub mod debug_invalid_login;
 
 // SSH and integration tests
 pub mod ssh_integration_tests;
