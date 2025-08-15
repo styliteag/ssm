@@ -54,7 +54,7 @@ const AuthorizationList: React.FC<AuthorizationListProps> = ({
       ),
     },
     {
-      key: 'host_name',
+      key: 'host_search',
       header: 'Host',
       sortable: true,
       searchable: true,
@@ -98,7 +98,7 @@ const AuthorizationList: React.FC<AuthorizationListProps> = ({
       ),
     },
     {
-      key: 'status_text',
+      key: 'id',
       header: 'Status',
       sortable: true,
       searchable: true,
@@ -132,17 +132,6 @@ const AuthorizationList: React.FC<AuthorizationListProps> = ({
           </div>
         );
       },
-    },
-    // Hidden column for comprehensive searching
-    {
-      key: 'combined_search',
-      header: '',
-      sortable: false,
-      searchable: true,
-      render: () => null, // Hidden column
-      width: '0px',
-      className: 'hidden',
-      headerClassName: 'hidden',
     },
     {
       key: 'actions',

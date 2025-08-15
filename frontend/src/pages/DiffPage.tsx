@@ -374,10 +374,10 @@ const DiffPage: React.FC = () => {
       render: (_: unknown, item: HostDiffStatus) => (
         <div>
           <div className="font-medium text-gray-900 dark:text-gray-100">
-            {item.host.name}
+            {item.host?.name || 'Unknown Host'}
           </div>
           <div className="text-sm text-gray-500 dark:text-gray-400">
-            {item.host.address}:{item.host.port}
+            {item.host?.address || 'Unknown'}:{item.host?.port || '22'}
           </div>
         </div>
       ),

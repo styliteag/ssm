@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { Shield, Plus, Grid3X3, List, BarChart3, RefreshCw, FileDown, Settings } from 'lucide-react';
 import { Button, Loading } from '../components/ui';
 import { 
@@ -26,7 +26,6 @@ type ViewMode = 'stats' | 'matrix' | 'list';
 
 const AuthorizationsPage: React.FC = () => {
   const location = useLocation();
-  const navigate = useNavigate();
   
   // Check URL for view parameter and restore Matrix state
   const urlParams = new URLSearchParams(location.search);
@@ -374,7 +373,7 @@ const AuthorizationsPage: React.FC = () => {
           authorizations={authorizations}
           onToggleAuthorization={handleToggleAuthorization}
           loading={refreshing}
-          onViewModeChange={handleViewModeChange}
+          onViewModeChange={(mode: string) => handleViewModeChange(mode as ViewMode)}
         />
       )}
       
