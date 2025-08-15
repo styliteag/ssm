@@ -254,7 +254,7 @@ async fn get_user_authorizations(
 }
 
 #[derive(Deserialize, ToSchema)]
-struct AssignKeyRequest {
+pub struct AssignKeyRequest {
     user_id: i32,
     key_type: String,
     key_base64: String,
@@ -302,7 +302,7 @@ async fn assign_key_to_user(
 }
 
 #[derive(Deserialize, ToSchema)]
-struct UpdateUserRequest {
+pub struct UpdateUserRequest {
     username: String,
     enabled: bool,
 }
@@ -339,7 +339,7 @@ async fn update_user(
 }
 
 #[derive(Serialize, ToSchema)]
-struct AddKeyResponse {
+pub struct AddKeyResponse {
     key: SshPublicKey,
     suggested_action: String,
 }

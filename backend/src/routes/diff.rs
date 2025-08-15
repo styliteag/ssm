@@ -23,25 +23,25 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 }
 
 #[derive(Serialize, ToSchema)]
-struct DiffResponse {
+pub struct DiffResponse {
     host_name: String,
     logins: Vec<LoginDiff>,
 }
 
 #[derive(Serialize, ToSchema)]
-struct LoginDiff {
+pub struct LoginDiff {
     login: String,
     changes: Vec<String>,
 }
 
 #[derive(Serialize, ToSchema)]
-struct AuthorizedKeysResponse {
+pub struct AuthorizedKeysResponse {
     login: String,
     content: String,
 }
 
 #[derive(Serialize, ToSchema)]
-struct KeyComparisonResponse {
+pub struct KeyComparisonResponse {
     identical: bool,
     changes: Vec<String>,
 }
@@ -64,7 +64,7 @@ impl From<Host> for DiffHostResponse {
 }
 
 #[derive(Serialize, ToSchema)]
-struct DiffHostsResponse {
+pub struct DiffHostsResponse {
     hosts: Vec<DiffHostResponse>,
 }
 
@@ -91,7 +91,7 @@ async fn get_hosts_for_diff(conn: Data<ConnectionPool>) -> Result<impl Responder
 
 
 #[derive(Deserialize, ToSchema)]
-struct DiffQuery {
+pub struct DiffQuery {
     show_empty: Option<bool>,
     force_update: Option<bool>,
 }

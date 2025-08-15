@@ -38,7 +38,7 @@ async fn change_options() -> Result<impl Responder> {
 }
 
 #[derive(Serialize, ToSchema)]
-struct AuthorizationDialogResponse {
+pub struct AuthorizationDialogResponse {
     host_name: String,
     host_id: i32,
     username: String,
@@ -48,7 +48,7 @@ struct AuthorizationDialogResponse {
 }
 
 #[derive(Deserialize, ToSchema)]
-struct AuthorizeUserRequest {
+pub struct AuthorizeUserRequest {
     /// Host name in key-manager
     host_name: String,
     /// Username in key-manager

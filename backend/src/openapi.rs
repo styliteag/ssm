@@ -1,23 +1,24 @@
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
+use utoipauto::utoipauto;
 
 use crate::{
     api_types::*,
     models::*,
     db::UserAndOptions,
+    routes::ApiInfo,
 };
 
+#[utoipauto(paths = "./src/routes")]
 #[derive(OpenApi)]
 #[openapi(
-    paths(
-        // Endpoints will be discovered automatically via utoipa::path macros
-    ),
     components(
         schemas(
             // API types
             ApiError,
             TokenResponse,
             PaginationQuery,
+            ApiInfo,
             
             // Models
             Host,
