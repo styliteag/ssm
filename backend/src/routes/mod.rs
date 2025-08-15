@@ -1,16 +1,16 @@
-mod authentication;
-mod authorization;
-mod diff;
-mod host;
-mod key;
-mod user;
+pub mod authentication;
+pub mod authorization;
+pub mod diff;
+pub mod host;
+pub mod key;
+pub mod user;
 
 use actix_web::{
     get,
     web::{self},
     HttpResponse, Responder, Result,
 };
-use utoipa::OpenApi;
+use utoipa::{OpenApi, ToSchema};
 use serde::{Deserialize, Serialize};
 
 use crate::api_types::*;
@@ -44,11 +44,11 @@ fn should_update(force_update: ForceUpdate) -> bool {
     force_update.force_update.is_some_and(|update| update)
 }
 
-#[derive(Serialize)]
-struct ApiInfo {
-    name: String,
-    version: String,
-    description: String,
+#[derive(Serialize, ToSchema)]
+pub struct ApiInfo {
+    pub name: String,
+    pub version: String,
+    pub description: String,
 }
 
 
@@ -56,6 +56,14 @@ async fn not_found() -> Result<impl Responder> {
     Ok(HttpResponse::NotFound().json(ApiError::not_found("Endpoint not found".to_string())))
 }
 
+/// Get API information
+#[utoipa::path(
+    get,
+    path = "/",
+    responses(
+        (status = 200, description = "API information", body = ApiInfo)
+    )
+)]
 #[get("/")]
 async fn api_info() -> Result<impl Responder> {
     Ok(HttpResponse::Ok().json(ApiResponse::success(ApiInfo {
@@ -66,6 +74,13 @@ async fn api_info() -> Result<impl Responder> {
 }
 
 /// Serve the OpenAPI specification as JSON
+#[utoipa::path(
+    get,
+    path = "/api-docs/openapi.json",
+    responses(
+        (status = 200, description = "OpenAPI 3.0 specification in JSON format", content_type = "application/json")
+    )
+)]
 #[get("/api-docs/openapi.json")]
 async fn openapi_json() -> Result<impl Responder> {
     Ok(HttpResponse::Ok()

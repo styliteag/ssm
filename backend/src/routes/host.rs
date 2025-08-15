@@ -35,7 +35,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 }
 
 #[derive(Serialize, ToSchema)]
-struct HostResponse {
+pub struct HostResponse {
     id: i32,
     name: String,
     address: String,
@@ -65,6 +65,7 @@ impl From<Host> for HostResponse {
 #[utoipa::path(
     get,
     path = "/api/hosts",
+    tag = "hosts",
     responses(
         (status = 200, description = "List of hosts", body = [HostResponse])
     )
@@ -86,7 +87,7 @@ async fn get_all_hosts(
 }
 
 #[derive(Serialize, ToSchema)]
-struct LoginsResponse {
+pub struct LoginsResponse {
     logins: Vec<String>,
 }
 
@@ -173,12 +174,12 @@ async fn get_host(
 }
 
 #[derive(Deserialize, ToSchema)]
-struct AddHostkeyRequest {
+pub struct AddHostkeyRequest {
     key_fingerprint: Option<String>,
 }
 
 #[derive(Deserialize, ToSchema)]
-struct CreateHostRequest {
+pub struct CreateHostRequest {
     name: String,
     address: String,
     port: u16,
@@ -188,7 +189,7 @@ struct CreateHostRequest {
 }
 
 #[derive(Serialize, ToSchema)]
-struct HostkeyConfirmation {
+pub struct HostkeyConfirmation {
     host_name: String,
     login: String,
     address: String,
@@ -392,13 +393,23 @@ async fn create_host(
 
 
 #[derive(Deserialize)]
-struct AuthorizeUserRequest {
+pub struct AuthorizeUserRequest {
     host_id: i32,
     user_id: i32,
     login: String,
     options: Option<String>,
 }
 
+/// Authorize a user to access a host
+#[utoipa::path(
+    post,
+    path = "/api/hosts/user/authorize",
+    request_body = AuthorizeUserRequest,
+    responses(
+        (status = 200, description = "User authorized successfully"),
+        (status = 400, description = "Bad request", body = ApiError)
+    )
+)]
 #[post("/user/authorize")]
 async fn authorize_user(
     conn: Data<ConnectionPool>,
@@ -422,18 +433,28 @@ async fn authorize_user(
 }
 
 #[derive(Deserialize)]
-struct GenAuthorizedKeysRequest {
+pub struct GenAuthorizedKeysRequest {
     host_name: String,
     login: String,
 }
 
 #[derive(Serialize)]
-struct AuthorizedKeysResponse {
+pub struct AuthorizedKeysResponse {
     login: String,
     authorized_keys: String,
     diff_summary: String,
 }
 
+/// Generate authorized_keys file for a host
+#[utoipa::path(
+    post,
+    path = "/api/hosts/gen_authorized_keys",
+    request_body = GenAuthorizedKeysRequest,
+    responses(
+        (status = 200, description = "Authorized keys generated", body = GenAuthorizedKeysResponse),
+        (status = 400, description = "Bad request", body = ApiError)
+    )
+)]
 #[post("/gen_authorized_keys")]
 async fn gen_authorized_keys(
     conn: Data<ConnectionPool>,
@@ -481,11 +502,24 @@ async fn gen_authorized_keys(
 }
 
 #[derive(Deserialize)]
-struct SetAuthorizedKeysRequest {
+pub struct SetAuthorizedKeysRequest {
     login: String,
     authorized_keys: String,
 }
 
+/// Set authorized_keys file on a host
+#[utoipa::path(
+    post,
+    path = "/api/hosts/{name}/set_authorized_keys",
+    params(
+        ("name" = String, Path, description = "Host name")
+    ),
+    request_body = SetAuthorizedKeysRequest,
+    responses(
+        (status = 200, description = "Authorized keys set successfully"),
+        (status = 400, description = "Bad request", body = ApiError)
+    )
+)]
 #[post("/{name}/set_authorized_keys")]
 async fn set_authorized_keys(
     json: Json<SetAuthorizedKeysRequest>,
@@ -507,17 +541,29 @@ async fn set_authorized_keys(
 }
 
 #[derive(Serialize)]
-struct DeleteHostResponse {
+pub struct DeleteHostResponse {
     authorizations: Vec<UserAndOptions>,
     affected_hosts: Vec<String>,
 }
 
 #[derive(Deserialize)]
-struct HostDeleteRequest {
+pub struct HostDeleteRequest {
     #[serde(default)]
     confirm: bool,
 }
 
+/// Delete a host
+#[utoipa::path(
+    delete,
+    path = "/api/hosts/{name}",
+    params(
+        ("name" = String, Path, description = "Host name")
+    ),
+    responses(
+        (status = 200, description = "Host deleted successfully"),
+        (status = 400, description = "Bad request", body = ApiError)
+    )
+)]
 #[delete("/{name}")]
 async fn delete_host(
     conn: Data<ConnectionPool>,
@@ -565,10 +611,22 @@ async fn delete_host(
 }
 
 #[derive(Serialize)]
-struct HostAuthorizationsResponse {
+pub struct HostAuthorizationsResponse {
     authorizations: Vec<UserAndOptions>,
 }
 
+/// List all authorizations for a host
+#[utoipa::path(
+    get,
+    path = "/api/hosts/{name}/authorizations",
+    params(
+        ("name" = String, Path, description = "Host name")
+    ),
+    responses(
+        (status = 200, description = "Host authorizations", body = HostAuthorizationsResponse),
+        (status = 404, description = "Host not found", body = ApiError)
+    )
+)]
 #[get("/{name}/authorizations")]
 async fn list_host_authorizations(
     host_name: Path<String>,
@@ -594,6 +652,18 @@ struct DeleteAuthorizationRequest {
     authorization_id: i32,
 }
 
+/// Delete an authorization
+#[utoipa::path(
+    delete,
+    path = "/api/hosts/authorization/{id}",
+    params(
+        ("id" = i32, Path, description = "Authorization ID")
+    ),
+    responses(
+        (status = 200, description = "Authorization deleted successfully"),
+        (status = 400, description = "Bad request", body = ApiError)
+    )
+)]
 #[delete("/authorization/{id}")]
 async fn delete_authorization(
     authorization_id: Path<i32>,
@@ -638,7 +708,7 @@ where
 }
 
 #[derive(Deserialize)]
-struct UpdateHostRequest {
+pub struct UpdateHostRequest {
     name: String,
     address: String,
     username: String,
@@ -649,6 +719,19 @@ struct UpdateHostRequest {
     jump_via: Option<i32>,
 }
 
+/// Update a host
+#[utoipa::path(
+    put,
+    path = "/api/hosts/{name}",
+    params(
+        ("name" = String, Path, description = "Host name")
+    ),
+    request_body = UpdateHostRequest,
+    responses(
+        (status = 200, description = "Host updated successfully"),
+        (status = 400, description = "Bad request", body = ApiError)
+    )
+)]
 #[put("/{name}")]
 async fn update_host(
     conn: Data<crate::ConnectionPool>,

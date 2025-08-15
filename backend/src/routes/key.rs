@@ -15,7 +15,7 @@ use crate::{
 use crate::models::PublicUserKey;
 
 #[derive(Serialize, ToSchema)]
-struct KeyResponse {
+pub struct KeyResponse {
     id: i32,
     key_type: String,
     key_base64: String,
@@ -37,7 +37,7 @@ impl From<UsernameAndKey> for KeyResponse {
 }
 
 #[derive(Serialize, ToSchema)]
-struct KeysResponse {
+pub struct KeysResponse {
     keys: Vec<KeyResponse>,
 }
 
@@ -94,7 +94,7 @@ pub async fn delete_key(
 }
 
 #[derive(Deserialize, ToSchema)]
-struct UpdateKeyCommentRequest {
+pub struct UpdateKeyCommentRequest {
     comment: String,
 }
 

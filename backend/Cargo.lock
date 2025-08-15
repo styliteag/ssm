@@ -3045,6 +3045,7 @@ dependencies = [
  "toml 0.7.8",
  "utoipa",
  "utoipa-swagger-ui",
+ "utoipauto",
  "uuid",
 ]
 
@@ -3506,6 +3507,38 @@ dependencies = [
  "serde_json",
  "utoipa",
  "zip",
+]
+
+[[package]]
+name = "utoipauto"
+version = "0.3.0-alpha.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5b51f6104f5a48663a7172fa48d1242f1417dc16788bc578bde069079b6786f6"
+dependencies = [
+ "utoipauto-macro",
+]
+
+[[package]]
+name = "utoipauto-core"
+version = "0.3.0-alpha.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f5623bca4252102afc1cc58c3a6c5744a740c1c17c861641d8c1a5634a996f47"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.105",
+]
+
+[[package]]
+name = "utoipauto-macro"
+version = "0.3.0-alpha.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e0b93fc5998da9473226222d019c619cbaf9baebe2073f86a7e128f290a1ad68"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.105",
+ "utoipauto-core",
 ]
 
 [[package]]
