@@ -61,7 +61,7 @@ const AuthorizationsPage: React.FC = () => {
     window.history.replaceState(null, '', newUrl);
   }, []);
 
-  // Restore Matrix state when component mounts
+  // Restore view state when component mounts
   useEffect(() => {
     if (urlView === 'matrix') {
       // Try to restore Matrix state from localStorage
@@ -69,6 +69,13 @@ const AuthorizationsPage: React.FC = () => {
       if (savedState) {
         // Matrix component will handle this when it mounts
         console.log('Matrix state available for restoration');
+      }
+    } else if (urlView === 'stats') {
+      // Try to restore Stats state from localStorage  
+      const savedState = localStorage.getItem('statsNavigationState');
+      if (savedState) {
+        // Stats component will handle this when it mounts
+        console.log('Stats state available for restoration');
       }
     }
   }, [urlView]);
