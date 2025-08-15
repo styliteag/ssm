@@ -64,14 +64,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const response = await authService.login(credentials);
       
       if (response.success && response.data) {
-        // Store token if provided
-        if (response.data.token) {
-          authService.setToken(response.data.token);
-        }
+        // Session-based auth, no token to store
         
         // Update auth state
         setIsAuthenticated(true);
-        setUsername(credentials.username);
+        setUsername(response.data.username);
         
         return true;
       } else {

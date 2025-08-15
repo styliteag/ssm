@@ -8,71 +8,81 @@ import {
 } from '../../types';
 
 export const authorizationsService = {
-  // Get paginated list of authorizations
-  getAuthorizations: async (params?: PaginationQuery & { host_id?: number; user_id?: number }): Promise<ApiResponse<PaginatedResponse<Authorization>>> => {
-    return api.get<PaginatedResponse<Authorization>>('/authorizations', { params });
-  },
-
-  // Get single authorization by ID
-  getAuthorization: async (id: number): Promise<ApiResponse<Authorization>> => {
-    return api.get<Authorization>(`/authorizations/${id}`);
-  },
-
-  // Create new authorization
-  createAuthorization: async (authorization: AuthorizationFormData): Promise<ApiResponse<Authorization>> => {
-    return api.post<Authorization>('/authorizations', authorization);
-  },
-
-  // Update existing authorization
-  updateAuthorization: async (id: number, authorization: Partial<AuthorizationFormData>): Promise<ApiResponse<Authorization>> => {
-    return api.put<Authorization>(`/authorizations/${id}`, authorization);
-  },
-
-  // Delete authorization
-  deleteAuthorization: async (id: number): Promise<ApiResponse<null>> => {
-    return api.delete<null>(`/authorizations/${id}`);
-  },
-
-  // Get authorizations for specific host
-  getHostAuthorizations: async (hostId: number): Promise<ApiResponse<Authorization[]>> => {
-    return api.get<Authorization[]>(`/hosts/${hostId}/authorizations`);
-  },
-
-  // Get authorizations for specific user
-  getUserAuthorizations: async (userId: number): Promise<ApiResponse<Authorization[]>> => {
-    return api.get<Authorization[]>(`/users/${userId}/authorizations`);
-  },
-
-  // Bulk create authorizations
-  createBulkAuthorizations: async (authorizations: AuthorizationFormData[]): Promise<ApiResponse<{ created: number; failed: number; errors?: string[] }>> => {
-    return api.post<{ created: number; failed: number; errors?: string[] }>('/authorizations/bulk', { authorizations });
-  },
-
-  // Check if user is authorized for host
-  checkAuthorization: async (userId: number, hostId: number): Promise<ApiResponse<{ authorized: boolean; authorization?: Authorization }>> => {
-    return api.get<{ authorized: boolean; authorization?: Authorization }>(`/authorizations/check`, {
-      params: { user_id: userId, host_id: hostId }
-    });
-  },
-
   // Get authorization dialog data (for forms)
-  getAuthorizationDialog: async (hostId?: number, userId?: number): Promise<ApiResponse<{ hosts: any[]; users: any[] }>> => {
-    return api.get<{ hosts: any[]; users: any[] }>('/authorizations/dialog', {
-      params: { host_id: hostId, user_id: userId }
+  getAuthorizationDialog: async (hostName: string, username: string, login: string, options?: string): Promise<ApiResponse<any>> => {
+    return api.post<any>('/authorization/dialog_data', {
+      host_name: hostName,
+      username: username,
+      login: login,
+      options: options
     });
   },
 
-  // Copy authorizations from one host to another
+  // Change authorization options (not implemented in backend yet)
+  changeOptions: async (): Promise<ApiResponse<null>> => {
+    return api.post<null>('/authorization/change_options');
+  },
+
+  // Get authorizations for specific host (use host service method)
+  getHostAuthorizations: async (hostName: string): Promise<ApiResponse<Authorization[]>> => {
+    const response = await api.get<{ authorizations: Authorization[] }>(`/host/${encodeURIComponent(hostName)}/authorizations`);
+    return {
+      ...response,
+      data: response.data?.authorizations || []
+    };
+  },
+
+  // Get authorizations for specific user (use user service method)
+  getUserAuthorizations: async (username: string): Promise<ApiResponse<Authorization[]>> => {
+    const response = await api.get<{ authorizations: Authorization[] }>(`/user/${encodeURIComponent(username)}/authorizations`);
+    return {
+      ...response,
+      data: response.data?.authorizations || []
+    };
+  },
+
+  // Create authorization (use host service method)
+  createAuthorization: async (hostId: number, userId: number, login: string, options?: string): Promise<ApiResponse<Authorization>> => {
+    return api.post<Authorization>('/host/user/authorize', {
+      host_id: hostId,
+      user_id: userId,
+      login,
+      options
+    });
+  },
+
+  // Delete authorization (use host service method)
+  deleteAuthorization: async (authId: number): Promise<ApiResponse<null>> => {
+    return api.delete<null>(`/host/authorization/${authId}`);
+  },
+
+  // These methods don't exist in the backend - calling code will need to be updated
+  getAuthorizations: async (params?: PaginationQuery & { host_id?: number; user_id?: number }): Promise<ApiResponse<PaginatedResponse<Authorization>>> => {
+    throw new Error('getAuthorizations endpoint not available in backend');
+  },
+
+  getAuthorization: async (id: number): Promise<ApiResponse<Authorization>> => {
+    throw new Error('getAuthorization endpoint not available in backend');
+  },
+
+  updateAuthorization: async (id: number, authorization: Partial<AuthorizationFormData>): Promise<ApiResponse<Authorization>> => {
+    throw new Error('updateAuthorization endpoint not available in backend');
+  },
+
+  createBulkAuthorizations: async (authorizations: AuthorizationFormData[]): Promise<ApiResponse<{ created: number; failed: number; errors?: string[] }>> => {
+    throw new Error('createBulkAuthorizations endpoint not available in backend');
+  },
+
+  checkAuthorization: async (userId: number, hostId: number): Promise<ApiResponse<{ authorized: boolean; authorization?: Authorization }>> => {
+    throw new Error('checkAuthorization endpoint not available in backend');
+  },
+
   copyAuthorizations: async (fromHostId: number, toHostId: number): Promise<ApiResponse<{ copied: number }>> => {
-    return api.post<{ copied: number }>('/authorizations/copy', {
-      from_host_id: fromHostId,
-      to_host_id: toHostId
-    });
+    throw new Error('copyAuthorizations endpoint not available in backend');
   },
 
-  // Get authorization summary statistics
   getAuthorizationStats: async (): Promise<ApiResponse<{ total: number; by_host: Record<string, number>; by_user: Record<string, number> }>> => {
-    return api.get<{ total: number; by_host: Record<string, number>; by_user: Record<string, number> }>('/authorizations/stats');
+    throw new Error('getAuthorizationStats endpoint not available in backend');
   },
 };
 

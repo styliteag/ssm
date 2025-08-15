@@ -12,62 +12,109 @@ import {
 export const usersService = {
   // Get paginated list of users
   getUsers: async (params?: PaginationQuery & { search?: string; enabled?: boolean }): Promise<ApiResponse<PaginatedResponse<User>>> => {
-    return api.get<PaginatedResponse<User>>('/users', { params });
+    // Backend returns array directly, not paginated
+    const response = await api.get<User[]>('/user', { params });
+    // Convert to paginated response format expected by frontend
+    const data = response.data || [];
+    return {
+      ...response,
+      data: {
+        items: data,
+        total: data.length,
+        page: 1,
+        per_page: data.length,
+        last_page: 1
+      }
+    };
   },
 
-  // Get single user by ID
+  // Get single user by username (backend uses username, not ID)
   getUser: async (id: number): Promise<ApiResponse<User>> => {
-    return api.get<User>(`/users/${id}`);
+    throw new Error('getUser by ID not supported. Use getUserByUsername instead.');
+  },
+
+  // Get user by username (this is what the backend actually supports)
+  getUserByUsername: async (username: string): Promise<ApiResponse<User>> => {
+    return api.get<User>(`/user/${encodeURIComponent(username)}`);
   },
 
   // Create new user
   createUser: async (user: UserFormData): Promise<ApiResponse<User>> => {
-    return api.post<User>('/users', user);
+    return api.post<User>('/user', user);
   },
 
-  // Update existing user
-  updateUser: async (id: number, user: UserFormData): Promise<ApiResponse<User>> => {
-    return api.put<User>(`/users/${id}`, user);
+  // Update existing user by username
+  updateUser: async (oldUsername: string, user: UserFormData): Promise<ApiResponse<User>> => {
+    return api.put<User>(`/user/${encodeURIComponent(oldUsername)}`, {
+      username: user.username,
+      enabled: user.enabled
+    });
   },
 
-  // Delete user
-  deleteUser: async (id: number): Promise<ApiResponse<null>> => {
-    return api.delete<null>(`/users/${id}`);
+  // Delete user by username
+  deleteUser: async (username: string): Promise<ApiResponse<null>> => {
+    return api.delete<null>(`/user/${encodeURIComponent(username)}`);
   },
 
-  // Enable/disable user
-  toggleUser: async (id: number, enabled: boolean): Promise<ApiResponse<User>> => {
-    return api.patch<User>(`/users/${id}/toggle`, { enabled });
+  // Get user authorizations by username
+  getUserAuthorizations: async (username: string): Promise<ApiResponse<Authorization[]>> => {
+    const response = await api.get<{ authorizations: Authorization[] }>(`/user/${encodeURIComponent(username)}/authorizations`);
+    return {
+      ...response,
+      data: response.data?.authorizations || []
+    };
   },
 
-  // Get user authorizations
-  getUserAuthorizations: async (id: number): Promise<ApiResponse<Authorization[]>> => {
-    return api.get<Authorization[]>(`/users/${id}/authorizations`);
+  // Get user SSH keys by username
+  getUserKeys: async (username: string): Promise<ApiResponse<PublicUserKey[]>> => {
+    const response = await api.get<{ keys: PublicUserKey[] }>(`/user/${encodeURIComponent(username)}/keys`);
+    return {
+      ...response,
+      data: response.data?.keys || []
+    };
   },
 
-  // Get user SSH keys
-  getUserKeys: async (id: number): Promise<ApiResponse<PublicUserKey[]>> => {
-    return api.get<PublicUserKey[]>(`/users/${id}/keys`);
+  // Assign key to user
+  assignKeyToUser: async (keyData: {
+    user_id: number;
+    key_type: string;
+    key_base64: string;
+    key_comment?: string;
+  }): Promise<ApiResponse<null>> => {
+    return api.post<null>('/user/assign_key', keyData);
+  },
+
+  // Add key dialog (preview key before assignment)
+  previewKey: async (keyData: {
+    key_type: string;
+    key_base64: string;
+    key_comment?: string;
+  }): Promise<ApiResponse<any>> => {
+    return api.post<any>('/user/add_key', keyData);
   },
 
   // Get all users (for dropdowns, etc.)
   getAllUsers: async (): Promise<ApiResponse<User[]>> => {
-    return api.get<User[]>('/users/all');
+    return api.get<User[]>('/user');
   },
 
-  // Get enabled users only
+  // These methods don't exist in backend - calling code will need to be updated
   getEnabledUsers: async (): Promise<ApiResponse<User[]>> => {
-    return api.get<User[]>('/users/enabled');
+    // Filter enabled users on frontend since backend doesn't have this endpoint
+    const response = await api.get<User[]>('/user');
+    const data = response.data || [];
+    return {
+      ...response,
+      data: data.filter(user => user.enabled)
+    };
   },
 
-  // Get user by username
-  getUserByUsername: async (username: string): Promise<ApiResponse<User>> => {
-    return api.get<User>(`/users/username/${encodeURIComponent(username)}`);
+  toggleUser: async (id: number, enabled: boolean): Promise<ApiResponse<User>> => {
+    throw new Error('toggleUser endpoint not available in backend. Use updateUser instead.');
   },
 
-  // Search users by name
   searchUsers: async (query: string): Promise<ApiResponse<User[]>> => {
-    return api.get<User[]>('/users/search', { params: { q: query } });
+    throw new Error('searchUsers endpoint not available in backend');
   },
 };
 

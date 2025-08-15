@@ -7,9 +7,9 @@ import {
 } from '../../types';
 
 export const authService = {
-  // Login with username and password
-  login: async (credentials: LoginRequest): Promise<ApiResponse<TokenResponse>> => {
-    return api.post<TokenResponse>('/auth/login', credentials);
+  // Login with username and password (session-based auth)
+  login: async (credentials: LoginRequest): Promise<ApiResponse<{ success: boolean; username: string; message: string }>> => {
+    return api.post<{ success: boolean; username: string; message: string }>('/auth/login', credentials);
   },
 
   // Logout current user
@@ -18,34 +18,41 @@ export const authService = {
   },
 
   // Get current authentication status
-  status: async (): Promise<ApiResponse<AuthStatusResponse>> => {
-    return api.get<AuthStatusResponse>('/auth/status');
+  status: async (): Promise<ApiResponse<{ logged_in: boolean; username?: string }>> => {
+    return api.get<{ logged_in: boolean; username?: string }>('/auth/status');
   },
 
-  // Refresh authentication token (if using JWT)
-  refresh: async (): Promise<ApiResponse<TokenResponse>> => {
-    return api.post<TokenResponse>('/auth/refresh');
+  // Check if user is authenticated (using session-based auth via cookies)
+  isAuthenticated: async (): Promise<boolean> => {
+    try {
+      const response = await authService.status();
+      return response.data.logged_in;
+    } catch (error) {
+      return false;
+    }
   },
 
-  // Check if user is authenticated
-  isAuthenticated: (): boolean => {
-    const token = localStorage.getItem('auth_token');
-    return !!token;
-  },
-
-  // Store auth token
+  // Session-based auth doesn't use tokens stored in localStorage
+  // These methods are kept for backwards compatibility but don't do anything meaningful
   setToken: (token: string): void => {
-    localStorage.setItem('auth_token', token);
+    // No-op for session-based auth
+    console.warn('setToken called but session-based auth does not use tokens');
   },
 
-  // Clear auth token
   clearToken: (): void => {
-    localStorage.removeItem('auth_token');
+    // No-op for session-based auth
+    console.warn('clearToken called but session-based auth does not use tokens');
   },
 
-  // Get stored auth token
   getToken: (): string | null => {
-    return localStorage.getItem('auth_token');
+    // No-op for session-based auth
+    console.warn('getToken called but session-based auth does not use tokens');
+    return null;
+  },
+
+  // Refresh not needed for session-based auth
+  refresh: async (): Promise<ApiResponse<TokenResponse>> => {
+    throw new Error('Refresh not available with session-based authentication');
   },
 };
 

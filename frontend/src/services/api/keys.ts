@@ -8,64 +8,78 @@ import {
 } from '../../types';
 
 export const keysService = {
-  // Get paginated list of keys
+  // Get paginated list of all keys
   getKeys: async (params?: PaginationQuery & { search?: string; user_id?: number }): Promise<ApiResponse<PaginatedResponse<PublicUserKey>>> => {
-    return api.get<PaginatedResponse<PublicUserKey>>('/keys', { params });
+    // Backend returns wrapped response with keys array
+    const response = await api.get<{ keys: PublicUserKey[] }>('/key', { params });
+    // Convert to paginated response format expected by frontend
+    const keys = response.data?.keys || [];
+    return {
+      ...response,
+      data: {
+        items: keys,
+        total: keys.length,
+        page: 1,
+        per_page: keys.length,
+        last_page: 1
+      }
+    };
   },
 
-  // Get single key by ID
-  getKey: async (id: number): Promise<ApiResponse<PublicUserKey>> => {
-    return api.get<PublicUserKey>(`/keys/${id}`);
-  },
-
-  // Create new SSH key for user
-  createKey: async (userId: number, key: KeyFormData): Promise<ApiResponse<PublicUserKey>> => {
-    return api.post<PublicUserKey>(`/users/${userId}/keys`, key);
-  },
-
-  // Update existing key
-  updateKey: async (id: number, key: Partial<KeyFormData>): Promise<ApiResponse<PublicUserKey>> => {
-    return api.put<PublicUserKey>(`/keys/${id}`, key);
-  },
-
-  // Delete SSH key
+  // Delete SSH key by ID
   deleteKey: async (id: number): Promise<ApiResponse<null>> => {
-    return api.delete<null>(`/keys/${id}`);
+    return api.delete<null>(`/key/${id}`);
   },
 
-  // Parse SSH key from text format
+  // Update key comment
+  updateKeyComment: async (id: number, comment: string): Promise<ApiResponse<null>> => {
+    return api.put<null>(`/key/${id}/comment`, { comment });
+  },
+
+  // Get all keys for a user (use the user service method instead)
+  getKeysForUser: async (username: string): Promise<ApiResponse<PublicUserKey[]>> => {
+    const response = await api.get<{ keys: PublicUserKey[] }>(`/user/${encodeURIComponent(username)}/keys`);
+    return {
+      ...response,
+      data: response.data?.keys || []
+    };
+  },
+
+  // These methods don't exist in the backend - calling code will need to be updated
+  getKey: async (id: number): Promise<ApiResponse<PublicUserKey>> => {
+    throw new Error('getKey endpoint not available in backend');
+  },
+
+  createKey: async (userId: number, key: KeyFormData): Promise<ApiResponse<PublicUserKey>> => {
+    throw new Error('createKey endpoint not available in backend. Use usersService.assignKeyToUser instead.');
+  },
+
+  updateKey: async (id: number, key: Partial<KeyFormData>): Promise<ApiResponse<PublicUserKey>> => {
+    throw new Error('updateKey endpoint not available in backend. Use updateKeyComment for comment updates.');
+  },
+
   parseKey: async (keyText: string): Promise<ApiResponse<{ key_type: string; key_base64: string; comment?: string }>> => {
-    return api.post<{ key_type: string; key_base64: string; comment?: string }>('/keys/parse', { key_text: keyText });
+    throw new Error('parseKey endpoint not available in backend');
   },
 
-  // Validate SSH key format
   validateKey: async (keyText: string): Promise<ApiResponse<{ valid: boolean; message?: string }>> => {
-    return api.post<{ valid: boolean; message?: string }>('/keys/validate', { key_text: keyText });
+    throw new Error('validateKey endpoint not available in backend');
   },
 
-  // Get key fingerprint
   getKeyFingerprint: async (keyId: number): Promise<ApiResponse<{ fingerprint: string }>> => {
-    return api.get<{ fingerprint: string }>(`/keys/${keyId}/fingerprint`);
+    throw new Error('getKeyFingerprint endpoint not available in backend');
   },
 
-  // Get all keys for a user
-  getKeysForUser: async (userId: number): Promise<ApiResponse<PublicUserKey[]>> => {
-    return api.get<PublicUserKey[]>(`/users/${userId}/keys`);
-  },
-
-  // Import multiple keys from text (one per line)
   importKeys: async (userId: number, keysText: string): Promise<ApiResponse<{ imported: number; failed: number; errors?: string[] }>> => {
-    return api.post<{ imported: number; failed: number; errors?: string[] }>(`/users/${userId}/keys/import`, { keys_text: keysText });
+    throw new Error('importKeys endpoint not available in backend');
   },
 
-  // Export user's keys in OpenSSH format
   exportKeys: async (userId: number): Promise<ApiResponse<{ keys_text: string }>> => {
-    return api.get<{ keys_text: string }>(`/users/${userId}/keys/export`);
+    throw new Error('exportKeys endpoint not available in backend');
   },
 
-  // Search keys by comment or content
   searchKeys: async (query: string): Promise<ApiResponse<PublicUserKey[]>> => {
-    return api.get<PublicUserKey[]>('/keys/search', { params: { q: query } });
+    throw new Error('searchKeys endpoint not available in backend');
   },
 };
 
