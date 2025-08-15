@@ -21,8 +21,20 @@ SSM (Secure SSH Manager) is a Rust-based web application that manages SSH keys a
 - Database migrations are located in `migrations/` directory
 
 ### Testing
-- `cargo test` - Run tests
+- `cargo test` - Run all tests (107 total tests)
+- `cargo test --quiet` - Run tests with minimal output
+- `cargo test http_` - Run specific HTTP API test categories
+- `cargo test ssh_integration` - Run SSH operations integration tests
+- `cargo test http_security` - Run security and input validation tests
 - Check `cargo build` to verify compilation after changes
+
+### Test Categories
+- **HTTP API Tests** (65+ tests): Comprehensive endpoint testing with data validation
+- **Security Tests** (10 tests): SQL injection, XSS, input validation, authentication bypass
+- **SSH Integration Tests** (8 tests): Connection handling, key deployment, jump hosts
+- **Authentication Tests** (10 tests): Session management, cookie security, auth flows
+- **Authorization Tests** (8 tests): User-host permission management
+- **Diff Tests** (7 tests): Key difference calculation and comparison
 
 ## Architecture Overview
 
