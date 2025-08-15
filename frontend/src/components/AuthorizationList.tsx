@@ -29,7 +29,7 @@ const AuthorizationList: React.FC<AuthorizationListProps> = ({
   // Create columns for the data table
   const columns: Column<AuthorizationWithDetails>[] = useMemo(() => [
     {
-      key: 'actions',
+      key: 'user_name',
       header: 'User',
       sortable: true,
       searchable: true,
@@ -54,7 +54,7 @@ const AuthorizationList: React.FC<AuthorizationListProps> = ({
       ),
     },
     {
-      key: 'actions',
+      key: 'host_name',
       header: 'Host',
       sortable: true,
       searchable: true,
@@ -98,9 +98,10 @@ const AuthorizationList: React.FC<AuthorizationListProps> = ({
       ),
     },
     {
-      key: 'actions',
+      key: 'status_text',
       header: 'Status',
       sortable: true,
+      searchable: true,
       render: (_, auth) => {
         const userEnabled = auth.user?.enabled ?? true;
         const hasValidUser = !!auth.user;
@@ -131,6 +132,17 @@ const AuthorizationList: React.FC<AuthorizationListProps> = ({
           </div>
         );
       },
+    },
+    // Hidden column for comprehensive searching
+    {
+      key: 'combined_search',
+      header: '',
+      sortable: false,
+      searchable: true,
+      render: () => null, // Hidden column
+      width: '0px',
+      className: 'hidden',
+      headerClassName: 'hidden',
     },
     {
       key: 'actions',
@@ -192,6 +204,10 @@ const AuthorizationList: React.FC<AuthorizationListProps> = ({
       host_address: auth.host?.address || '',
       host_search: `${auth.host?.name || ''} ${auth.host?.address || ''}`.trim(),
       status_text: auth.user?.enabled ? 'Active' : 'Disabled',
+      // Make login searchable as a string
+      login_search: auth.login || '',
+      // Combined search field for comprehensive searching
+      combined_search: `${auth.user?.username || ''} ${auth.host?.name || ''} ${auth.host?.address || ''} ${auth.login || ''} ${auth.user?.enabled ? 'Active' : 'Disabled'}`.toLowerCase(),
     }));
   }, [authorizations]);
 
