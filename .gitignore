@@ -4,6 +4,7 @@ backend/result
 backend/result-lib
 .direnv
 backend/ssm.db
+backend/*.db
 backend/config.toml
 backend/.htpasswd
 backend/server.log
