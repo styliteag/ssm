@@ -10,7 +10,7 @@ export interface Column<T> {
   sortable?: boolean;
   searchable?: boolean;
   width?: string;
-  render?: (value: any, item: T, index: number) => React.ReactNode;
+  render?: (value: unknown, item: T, index: number) => React.ReactNode;
   className?: string;
   headerClassName?: string;
 }
@@ -38,7 +38,7 @@ export interface DataTableProps<T> {
   stickyHeader?: boolean;
 }
 
-function DataTable<T extends Record<string, any>>({
+function DataTable<T extends Record<string, unknown>>({
   data,
   columns,
   loading = false,
@@ -95,8 +95,8 @@ function DataTable<T extends Record<string, any>>({
         comparison = aValue.localeCompare(bValue);
       } else if (typeof aValue === 'number' && typeof bValue === 'number') {
         comparison = aValue - bValue;
-      } else if ((aValue as any) instanceof Date && (bValue as any) instanceof Date) {
-        comparison = (aValue as Date).getTime() - (bValue as Date).getTime();
+      } else if ((aValue as unknown) instanceof Date && (bValue as unknown) instanceof Date) {
+        comparison = ((aValue as unknown) as Date).getTime() - ((bValue as unknown) as Date).getTime();
       } else {
         comparison = String(aValue).localeCompare(String(bValue));
       }
@@ -270,7 +270,7 @@ function DataTable<T extends Record<string, any>>({
               ) : (
                 paginatedData.map((item, index) => (
                   <tr
-                    key={item.id || index}
+                    key={(item.id as React.Key) || index}
                     className={cn(
                       'transition-colors',
                       onRowClick && 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800'

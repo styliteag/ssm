@@ -47,18 +47,20 @@ export async function apiRequest<T>(
   try {
     const response: AxiosResponse<ApiResponse<T>> = await apiClient(config);
     return response.data;
-  } catch (error: any) {
+  } catch (error: unknown) {
     // Handle axios errors and API errors
-    if (error.response?.data) {
-      const apiError: ApiError = error.response.data;
+    const errorObj = error as { response?: { data?: ApiError }; request?: unknown; message?: string };
+    
+    if (errorObj.response?.data) {
+      const apiError: ApiError = errorObj.response.data;
       throw new Error(apiError.message || 'An API error occurred');
     }
     
-    if (error.request) {
+    if (errorObj.request) {
       throw new Error('Network error - please check your connection');
     }
     
-    throw new Error(error.message || 'An unexpected error occurred');
+    throw new Error(errorObj.message || 'An unexpected error occurred');
   }
 }
 
@@ -67,13 +69,13 @@ export const api = {
   get: <T>(url: string, config?: AxiosRequestConfig) =>
     apiRequest<T>({ ...config, method: 'GET', url }),
 
-  post: <T>(url: string, data?: any, config?: AxiosRequestConfig) =>
+  post: <T>(url: string, data?: unknown, config?: AxiosRequestConfig) =>
     apiRequest<T>({ ...config, method: 'POST', url, data }),
 
-  put: <T>(url: string, data?: any, config?: AxiosRequestConfig) =>
+  put: <T>(url: string, data?: unknown, config?: AxiosRequestConfig) =>
     apiRequest<T>({ ...config, method: 'PUT', url, data }),
 
-  patch: <T>(url: string, data?: any, config?: AxiosRequestConfig) =>
+  patch: <T>(url: string, data?: unknown, config?: AxiosRequestConfig) =>
     apiRequest<T>({ ...config, method: 'PATCH', url, data }),
 
   delete: <T>(url: string, config?: AxiosRequestConfig) =>

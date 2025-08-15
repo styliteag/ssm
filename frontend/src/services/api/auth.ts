@@ -2,7 +2,6 @@ import { api } from './base';
 import {
   LoginRequest,
   TokenResponse,
-  AuthStatusResponse,
   ApiResponse,
 } from '../../types';
 
@@ -26,15 +25,16 @@ export const authService = {
   isAuthenticated: async (): Promise<boolean> => {
     try {
       const response = await authService.status();
-      return response.data.logged_in;
-    } catch (error) {
+      return response.data?.logged_in || false;
+    } catch {
       return false;
     }
   },
 
   // Session-based auth doesn't use tokens stored in localStorage
   // These methods are kept for backwards compatibility but don't do anything meaningful
-  setToken: (token: string): void => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  setToken: (_token: string): void => {
     // No-op for session-based auth
     console.warn('setToken called but session-based auth does not use tokens');
   },

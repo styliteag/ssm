@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Shield, Plus, Grid3X3, List, BarChart3, RefreshCw, FileDown, Settings } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, Button, Loading } from '../components/ui';
+import { Button, Loading } from '../components/ui';
 import { 
   Authorization, 
   AuthorizationWithDetails, 
@@ -20,7 +20,6 @@ import {
   BulkGrantModal,
   DeleteAuthorizationModal
 } from '../components/AuthorizationForms';
-import { cn } from '../utils/cn';
 
 type ViewMode = 'stats' | 'matrix' | 'list';
 

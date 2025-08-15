@@ -209,6 +209,7 @@ export interface HostDiffStatus {
   file_diff?: FileDiff;
   key_differences?: KeyDifference[];
   difference_count: number;
+  [key: string]: unknown;
 }
 
 export interface DiffDeployment {

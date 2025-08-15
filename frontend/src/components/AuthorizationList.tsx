@@ -18,8 +18,6 @@ interface AuthorizationListProps {
 
 const AuthorizationList: React.FC<AuthorizationListProps> = ({
   authorizations,
-  users,
-  hosts,
   onEdit,
   onDelete,
   onTestAccess,
@@ -31,7 +29,7 @@ const AuthorizationList: React.FC<AuthorizationListProps> = ({
   // Create columns for the data table
   const columns: Column<AuthorizationWithDetails>[] = useMemo(() => [
     {
-      key: 'user_name',
+      key: 'actions',
       header: 'User',
       sortable: true,
       searchable: true,
@@ -56,7 +54,7 @@ const AuthorizationList: React.FC<AuthorizationListProps> = ({
       ),
     },
     {
-      key: 'host_search',
+      key: 'actions',
       header: 'Host',
       sortable: true,
       searchable: true,
@@ -77,7 +75,7 @@ const AuthorizationList: React.FC<AuthorizationListProps> = ({
       searchable: true,
       render: (value) => (
         <span className="font-mono text-sm bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
-          {value || '-'}
+          {(value as string) || '-'}
         </span>
       ),
     },
@@ -86,13 +84,13 @@ const AuthorizationList: React.FC<AuthorizationListProps> = ({
       header: 'SSH Options',
       sortable: false,
       searchable: true,
-      render: (value) => value ? (
+      render: (value) => (value as string) ? (
         <div className="max-w-xs">
           <div
             className="font-mono text-xs bg-gray-100 dark:bg-gray-800 p-2 rounded truncate"
-            title={value}
+            title={value as string}
           >
-            {value}
+            {value as string}
           </div>
         </div>
       ) : (
@@ -100,7 +98,7 @@ const AuthorizationList: React.FC<AuthorizationListProps> = ({
       ),
     },
     {
-      key: 'status',
+      key: 'actions',
       header: 'Status',
       sortable: true,
       render: (_, auth) => {

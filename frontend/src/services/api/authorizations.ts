@@ -9,8 +9,8 @@ import {
 
 export const authorizationsService = {
   // Get authorization dialog data (for forms)
-  getAuthorizationDialog: async (hostName: string, username: string, login: string, options?: string): Promise<ApiResponse<any>> => {
-    return api.post<any>('/authorization/dialog_data', {
+  getAuthorizationDialog: async (hostName: string, username: string, login: string, options?: string): Promise<ApiResponse<unknown>> => {
+    return api.post<unknown>('/authorization/dialog_data', {
       host_name: hostName,
       username: username,
       login: login,
@@ -61,8 +61,8 @@ export const authorizationsService = {
     try {
       // Get all users and hosts first to create lookup maps
       const [usersResponse, hostsResponse] = await Promise.all([
-        api.get<any[]>('/user'),
-        api.get<any[]>('/host')
+        api.get<unknown[]>('/user'),
+        api.get<unknown[]>('/host')
       ]);
       
       if (!usersResponse.success || !usersResponse.data) {
@@ -77,20 +77,23 @@ export const authorizationsService = {
       const hosts = hostsResponse.data;
       
       // Create lookup maps for efficient lookup
-      const userNameToId = new Map(users.map(u => [u.username, u.id]));
-      const hostNameToId = new Map(hosts.map(h => [h.name, h.id]));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const hostNameToId = new Map(hosts.map((h: any) => [h.name, h.id]));
       
       const allAuthorizations: Authorization[] = [];
 
       // Get authorizations for each user
       for (const user of users) {
         try {
-          const userAuthResponse = await api.get<{ authorizations: any[] }>(`/user/${encodeURIComponent(user.username)}/authorizations`);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const userAuthResponse = await api.get<{ authorizations: unknown[] }>(`/user/${encodeURIComponent((user as any).username)}/authorizations`);
           if (userAuthResponse.success && userAuthResponse.data) {
             // Convert UserAndOptions format to Authorization format
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const userAuths: Authorization[] = userAuthResponse.data.authorizations.map((auth: any) => ({
               id: auth.id,
-              user_id: user.id, // Current user's ID
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              user_id: (user as any).id, // Current user's ID
               host_id: hostNameToId.get(auth.username) || 0, // auth.username is actually hostname in this context
               login: auth.login,
               options: auth.options
@@ -99,7 +102,8 @@ export const authorizationsService = {
           }
         } catch (error) {
           // Continue with other users if one fails
-          console.warn(`Failed to get authorizations for user ${user.username}:`, error);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          console.warn(`Failed to get authorizations for user ${(user as any).username}:`, error);
         }
       }
 
@@ -135,11 +139,13 @@ export const authorizationsService = {
     }
   },
 
-  getAuthorization: async (id: number): Promise<ApiResponse<Authorization>> => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  getAuthorization: async (_id: number): Promise<ApiResponse<Authorization>> => {
     throw new Error('getAuthorization endpoint not available in backend');
   },
 
-  updateAuthorization: async (id: number, authorization: Partial<AuthorizationFormData>): Promise<ApiResponse<Authorization>> => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  updateAuthorization: async (_id: number, _authorization: Partial<AuthorizationFormData>): Promise<ApiResponse<Authorization>> => {
     // Update not directly supported, but we can delete and recreate
     // For now, return an error to indicate this needs special handling
     throw new Error('Update not supported - delete and recreate authorization instead');
@@ -176,11 +182,13 @@ export const authorizationsService = {
     };
   },
 
-  checkAuthorization: async (userId: number, hostId: number): Promise<ApiResponse<{ authorized: boolean; authorization?: Authorization }>> => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  checkAuthorization: async (_userId: number, _hostId: number): Promise<ApiResponse<{ authorized: boolean; authorization?: Authorization }>> => {
     throw new Error('checkAuthorization endpoint not available in backend');
   },
 
-  copyAuthorizations: async (fromHostId: number, toHostId: number): Promise<ApiResponse<{ copied: number }>> => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  copyAuthorizations: async (_fromHostId: number, _toHostId: number): Promise<ApiResponse<{ copied: number }>> => {
     throw new Error('copyAuthorizations endpoint not available in backend');
   },
 

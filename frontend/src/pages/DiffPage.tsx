@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   RefreshCw,
   Upload,
@@ -52,23 +52,7 @@ const DiffPage: React.FC = () => {
   
   const { addNotification } = useNotifications();
 
-  // Auto-refresh effect
-  useEffect(() => {
-    if (!autoRefresh) return;
-
-    const interval = setInterval(() => {
-      handleRefreshAll(true); // Silent refresh
-    }, refreshInterval);
-
-    return () => clearInterval(interval);
-  }, [autoRefresh, refreshInterval]);
-
-  // Load initial data
-  useEffect(() => {
-    loadHostDiffs();
-  }, []);
-
-  const loadHostDiffs = async () => {
+  const loadHostDiffs = useCallback(async () => {
     try {
       setLoading(true);
       const diffs = await diffApi.getAllHostDiffs();
@@ -83,9 +67,9 @@ const DiffPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [addNotification]);
 
-  const handleRefreshAll = async (silent = false) => {
+  const handleRefreshAll = useCallback(async (silent = false) => {
     try {
       if (!silent) setRefreshing(true);
       const diffs = await diffApi.refreshAllHostDiffs();
@@ -109,11 +93,14 @@ const DiffPage: React.FC = () => {
     } finally {
       if (!silent) setRefreshing(false);
     }
-  };
+  }, [addNotification]);
 
   const handleRefreshHost = async (hostId: number) => {
     try {
-      const updatedDiff = await diffApi.refreshHostDiff(hostId);
+      const hostDiff = hostDiffs.find(diff => diff.host_id === hostId);
+      if (!hostDiff) return;
+      
+      const updatedDiff = await diffApi.refreshHostDiff(hostDiff.host.name);
       setHostDiffs(prev => prev.map(diff => 
         diff.host_id === hostId ? updatedDiff : diff
       ));
@@ -138,7 +125,11 @@ const DiffPage: React.FC = () => {
     try {
       setRefreshing(true);
       const hostIds = Array.from(selectedHosts);
-      const updatedDiffs = await diffApi.refreshHostDiffs(hostIds);
+      const hostNames = hostIds.map(id => {
+        const hostDiff = hostDiffs.find(diff => diff.host_id === id);
+        return hostDiff?.host.name;
+      }).filter(Boolean) as string[];
+      const updatedDiffs = await diffApi.refreshHostDiffs(hostNames);
       
       setHostDiffs(prev => prev.map(diff => {
         const updated = updatedDiffs.find(u => u.host_id === diff.host_id);
@@ -191,7 +182,11 @@ const DiffPage: React.FC = () => {
       
       // Refresh affected hosts
       const hostIds = deployments.map(d => d.host_id);
-      const refreshedDiffs = await diffApi.refreshHostDiffs(hostIds);
+      const hostNames = hostIds.map(id => {
+        const hostDiff = hostDiffs.find(diff => diff.host_id === id);
+        return hostDiff?.host.name;
+      }).filter(Boolean) as string[];
+      const refreshedDiffs = await diffApi.refreshHostDiffs(hostNames);
       setHostDiffs(prev => prev.map(diff => {
         const refreshed = refreshedDiffs.find(r => r.host_id === diff.host_id);
         return refreshed || diff;
@@ -254,6 +249,22 @@ const DiffPage: React.FC = () => {
       });
     }
   };
+
+  // Auto-refresh effect
+  useEffect(() => {
+    if (!autoRefresh) return;
+
+    const interval = setInterval(() => {
+      handleRefreshAll(true); // Silent refresh
+    }, refreshInterval);
+
+    return () => clearInterval(interval);
+  }, [autoRefresh, refreshInterval, handleRefreshAll]);
+
+  // Load initial data
+  useEffect(() => {
+    loadHostDiffs();
+  }, [loadHostDiffs]);
 
   // Filter and sort host diffs
   const filteredHostDiffs = React.useMemo(() => {
@@ -340,7 +351,7 @@ const DiffPage: React.FC = () => {
       header: '',
       width: '50px',
       sortable: false,
-      render: (_: any, item: HostDiffStatus) => (
+      render: (_: unknown, item: HostDiffStatus) => (
         <input
           type="checkbox"
           checked={selectedHosts.has(item.host_id)}
@@ -360,7 +371,7 @@ const DiffPage: React.FC = () => {
     {
       key: 'host',
       header: 'Host',
-      render: (_: any, item: HostDiffStatus) => (
+      render: (_: unknown, item: HostDiffStatus) => (
         <div>
           <div className="font-medium text-gray-900 dark:text-gray-100">
             {item.host.name}
@@ -375,18 +386,18 @@ const DiffPage: React.FC = () => {
       key: 'status',
       header: 'Status',
       width: '150px',
-      render: (_: any, item: HostDiffStatus) => getStatusBadge(item.status),
+      render: (_: unknown, item: HostDiffStatus) => getStatusBadge(item.status),
     },
     {
       key: 'difference_count',
       header: 'Differences',
       width: '120px',
-      render: (value: number, item: HostDiffStatus) => (
+      render: (value: unknown) => (
         <div className="text-center">
-          {value === 0 ? (
+          {(value as number) === 0 ? (
             <span className="text-green-600 dark:text-green-400 font-medium">0</span>
           ) : (
-            <span className="text-yellow-600 dark:text-yellow-400 font-medium">{value}</span>
+            <span className="text-yellow-600 dark:text-yellow-400 font-medium">{value as number}</span>
           )}
         </div>
       ),
@@ -395,9 +406,9 @@ const DiffPage: React.FC = () => {
       key: 'last_checked',
       header: 'Last Checked',
       width: '150px',
-      render: (value: string | undefined) => (
+      render: (value: unknown) => (
         <span className="text-sm text-gray-600 dark:text-gray-400">
-          {value ? new Date(value).toLocaleString() : 'Never'}
+          {(value as string) ? new Date(value as string).toLocaleString() : 'Never'}
         </span>
       ),
     },
@@ -406,7 +417,7 @@ const DiffPage: React.FC = () => {
       header: 'Actions',
       width: '200px',
       sortable: false,
-      render: (_: any, item: HostDiffStatus) => (
+      render: (_: unknown, item: HostDiffStatus) => (
         <div className="flex items-center space-x-2">
           <Button
             variant="ghost"

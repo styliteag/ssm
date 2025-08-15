@@ -23,13 +23,14 @@ export const usersService = {
         total: data.length,
         page: 1,
         per_page: data.length,
-        last_page: 1
+        total_pages: 1
       }
     };
   },
 
   // Get single user by username (backend uses username, not ID)
-  getUser: async (id: number): Promise<ApiResponse<User>> => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  getUser: async (_id: number): Promise<ApiResponse<User>> => {
     throw new Error('getUser by ID not supported. Use getUserByUsername instead.');
   },
 
@@ -89,8 +90,8 @@ export const usersService = {
     key_type: string;
     key_base64: string;
     key_comment?: string;
-  }): Promise<ApiResponse<any>> => {
-    return api.post<any>('/user/add_key', keyData);
+  }): Promise<ApiResponse<unknown>> => {
+    return api.post<unknown>('/user/add_key', keyData);
   },
 
   // Get all users (for dropdowns, etc.)
@@ -109,11 +110,13 @@ export const usersService = {
     };
   },
 
-  toggleUser: async (id: number, enabled: boolean): Promise<ApiResponse<User>> => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  toggleUser: async (_id: number, _enabled: boolean): Promise<ApiResponse<User>> => {
     throw new Error('toggleUser endpoint not available in backend. Use updateUser instead.');
   },
 
-  searchUsers: async (query: string): Promise<ApiResponse<User[]>> => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  searchUsers: async (_query: string): Promise<ApiResponse<User[]>> => {
     throw new Error('searchUsers endpoint not available in backend');
   },
 };
