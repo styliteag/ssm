@@ -87,12 +87,16 @@ async fn get_all_users(
 #[utoipa::path(
     get,
     path = "/api/users/{name}",
+    security(
+        ("session_auth" = [])
+    ),
     params(
         ("name" = String, Path, description = "Username")
     ),
     responses(
         (status = 200, description = "User details", body = UserResponse),
-        (status = 404, description = "User not found", body = ApiError)
+        (status = 404, description = "User not found", body = ApiError),
+        (status = 401, description = "Unauthorized - authentication required", body = ApiError)
     )
 )]
 #[get("/{name}")]
@@ -116,10 +120,14 @@ async fn get_user(
 #[utoipa::path(
     post,
     path = "/api/users",
+    security(
+        ("session_auth" = [])
+    ),
     request_body = NewUser,
     responses(
         (status = 201, description = "User created successfully"),
-        (status = 400, description = "Bad request", body = ApiError)
+        (status = 400, description = "Bad request", body = ApiError),
+        (status = 401, description = "Unauthorized - authentication required", body = ApiError)
     )
 )]
 #[post("")]
@@ -148,12 +156,16 @@ async fn create_user(
 #[utoipa::path(
     delete,
     path = "/api/users/{username}",
+    security(
+        ("session_auth" = [])
+    ),
     params(
         ("username" = String, Path, description = "Username to delete")
     ),
     responses(
         (status = 200, description = "User deleted successfully"),
-        (status = 400, description = "Bad request", body = ApiError)
+        (status = 400, description = "Bad request", body = ApiError),
+        (status = 401, description = "Unauthorized - authentication required", body = ApiError)
     )
 )]
 #[delete("/{username}")]
@@ -188,19 +200,25 @@ pub struct UserKeysResponse {
 #[utoipa::path(
     get,
     path = "/api/users/{username}/keys",
+    security(
+        ("session_auth" = [])
+    ),
     params(
         ("username" = String, Path, description = "Username")
     ),
     responses(
         (status = 200, description = "User SSH keys", body = UserKeysResponse),
-        (status = 404, description = "User not found", body = ApiError)
+        (status = 404, description = "User not found", body = ApiError),
+        (status = 401, description = "Unauthorized - authentication required", body = ApiError)
     )
 )]
 #[get("/{username}/keys")]
 async fn get_user_keys(
     conn: Data<ConnectionPool>,
     username: Path<String>,
+    identity: Option<Identity>,
 ) -> Result<impl Responder> {
+    require_auth(identity)?;
     let maybe_user_keys = web::block(move || {
         let mut connection = conn.get().unwrap();
         let user = User::get_user(&mut connection, username.to_string())?;
@@ -241,12 +259,16 @@ pub struct UserAuthorizationsResponse {
 #[utoipa::path(
     get,
     path = "/api/users/{username}/authorizations",
+    security(
+        ("session_auth" = [])
+    ),
     params(
         ("username" = String, Path, description = "Username")
     ),
     responses(
         (status = 200, description = "User authorizations", body = UserAuthorizationsResponse),
-        (status = 404, description = "User not found", body = ApiError)
+        (status = 404, description = "User not found", body = ApiError),
+        (status = 401, description = "Unauthorized - authentication required", body = ApiError)
     )
 )]
 #[get("/{username}/authorizations")]
@@ -281,10 +303,14 @@ pub struct AssignKeyRequest {
 #[utoipa::path(
     post,
     path = "/api/users/assign_key",
+    security(
+        ("session_auth" = [])
+    ),
     request_body = AssignKeyRequest,
     responses(
         (status = 201, description = "Key assigned successfully"),
-        (status = 400, description = "Invalid key algorithm", body = ApiError)
+        (status = 400, description = "Invalid key algorithm", body = ApiError),
+        (status = 401, description = "Unauthorized - authentication required", body = ApiError)
     )
 )]
 #[post("/assign_key")]
@@ -329,13 +355,17 @@ pub struct UpdateUserRequest {
 #[utoipa::path(
     put,
     path = "/api/users/{old_username}",
+    security(
+        ("session_auth" = [])
+    ),
     params(
         ("old_username" = String, Path, description = "Current username")
     ),
     request_body = UpdateUserRequest,
     responses(
         (status = 200, description = "User updated successfully"),
-        (status = 400, description = "Bad request", body = ApiError)
+        (status = 400, description = "Bad request", body = ApiError),
+        (status = 401, description = "Unauthorized - authentication required", body = ApiError)
     )
 )]
 #[put("/{old_username}")]

@@ -184,8 +184,12 @@ pub struct DiffHostsResponse {
 #[utoipa::path(
     get,
     path = "/api/diff",
+    security(
+        ("session_auth" = [])
+    ),
     responses(
-        (status = 200, description = "Hosts available for diff", body = DiffHostsResponse)
+        (status = 200, description = "Hosts available for diff", body = DiffHostsResponse),
+        (status = 401, description = "Unauthorized - authentication required", body = ApiError)
     )
 )]
 #[get("")]
@@ -223,6 +227,9 @@ pub struct DiffQuery {
 #[utoipa::path(
     get,
     path = "/api/diff/{host_name}",
+    security(
+        ("session_auth" = [])
+    ),
     params(
         ("host_name" = String, Path, description = "Host name"),
         ("show_empty" = Option<bool>, Query, description = "Show empty diff results"),
@@ -230,7 +237,8 @@ pub struct DiffQuery {
     ),
     responses(
         (status = 200, description = "Detailed SSH key differences between expected and actual authorized_keys", body = DiffResponse),
-        (status = 404, description = "Host not found", body = ApiError)
+        (status = 404, description = "Host not found", body = ApiError),
+        (status = 401, description = "Unauthorized - authentication required", body = ApiError)
     )
 )]
 #[get("/{host_name}")]
@@ -335,13 +343,17 @@ async fn get_host_diff(
 #[utoipa::path(
     get,
     path = "/api/diff/{name}/details",
+    security(
+        ("session_auth" = [])
+    ),
     params(
         ("name" = String, Path, description = "Host name"),
         ("force_update" = Option<bool>, Query, description = "Force cache refresh")
     ),
     responses(
         (status = 200, description = "Host diff details with expected vs actual authorized_keys comparison", body = DetailedDiffResponse),
-        (status = 404, description = "Host not found", body = ApiError)
+        (status = 404, description = "Host not found", body = ApiError),
+        (status = 401, description = "Unauthorized - authentication required", body = ApiError)
     )
 )]
 #[get("/{name}/details")]
