@@ -55,8 +55,12 @@ impl From<User> for UserResponse {
 #[utoipa::path(
     get,
     path = "/api/users",
+    security(
+        ("session_auth" = [])
+    ),
     responses(
-        (status = 200, description = "List of users", body = [UserResponse])
+        (status = 200, description = "List of users", body = [UserResponse]),
+        (status = 401, description = "Unauthorized - authentication required", body = ApiError)
     )
 )]
 #[get("")]
@@ -95,7 +99,9 @@ async fn get_all_users(
 async fn get_user(
     conn: Data<ConnectionPool>,
     username: Path<String>,
+    identity: Option<Identity>,
 ) -> Result<impl Responder> {
+    require_auth(identity)?;
     let mut conn = conn.clone().get().unwrap();
     let maybe_user = web::block(move || User::get_user(&mut conn, username.to_string())).await?;
 
@@ -152,7 +158,9 @@ async fn create_user(
 async fn delete_user(
     conn: Data<ConnectionPool>,
     username: Path<String>,
+    identity: Option<Identity>,
 ) -> Result<impl Responder> {
+    require_auth(identity)?;
     let res = web::block(move || User::delete_user(&mut conn.get().unwrap(), username.as_str())).await?;
     match res {
         Ok(()) => Ok(HttpResponse::Ok().json(ApiResponse::success_message("User deleted successfully".to_string()))),

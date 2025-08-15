@@ -67,8 +67,12 @@ impl From<Host> for HostResponse {
     get,
     path = "/api/hosts",
     tag = "hosts",
+    security(
+        ("session_auth" = [])
+    ),
     responses(
-        (status = 200, description = "List of hosts", body = [HostResponse])
+        (status = 200, description = "List of hosts", body = [HostResponse]),
+        (status = 401, description = "Unauthorized - authentication required", body = ApiError)
     )
 )]
 #[get("")]
@@ -147,7 +151,9 @@ async fn get_logins(
 async fn get_host(
     conn: Data<ConnectionPool>,
     host_name: Path<String>,
+    identity: Option<Identity>,
 ) -> Result<impl Responder> {
+    require_auth(identity)?;
     let host = match Host::get_from_name(conn.get().unwrap(), host_name.to_string()).await {
         Ok(Some(host)) => host,
         Ok(None) => {
@@ -308,7 +314,9 @@ async fn create_host(
     conn: Data<ConnectionPool>,
     ssh_client: Data<SshClient>,
     json: Json<CreateHostRequest>,
+    identity: Option<Identity>,
 ) -> Result<impl Responder> {
+    require_auth(identity)?;
     let jumphost = json.jump_via
         .and_then(|host| if host < 0 { None } else { Some(host) });
 
@@ -574,7 +582,9 @@ async fn delete_host(
     caching_ssh_client: Data<CachingSshClient>,
     json: Json<HostDeleteRequest>,
     host_name: Path<String>,
+    identity: Option<Identity>,
 ) -> Result<impl Responder> {
+    require_auth(identity)?;
     let host = match Host::get_from_name(conn.get().unwrap(), host_name.to_owned()).await {
         Ok(None) => {
             return Ok(HttpResponse::NotFound().json(ApiError::not_found("Host not found".to_string())));

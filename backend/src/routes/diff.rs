@@ -7,12 +7,14 @@ use actix_web::{
     web::{self, Data, Path, Query},
     HttpResponse, Responder, Result,
 };
+use actix_identity::Identity;
 use log::{debug, info, warn, error};
 use serde::{Deserialize, Serialize};
 use time;
 use utoipa::ToSchema;
 
 use crate::{
+    routes::require_auth,
     ConnectionPool,
 };
 
@@ -187,7 +189,8 @@ pub struct DiffHostsResponse {
     )
 )]
 #[get("")]
-async fn get_hosts_for_diff(conn: Data<ConnectionPool>) -> Result<impl Responder> {
+async fn get_hosts_for_diff(conn: Data<ConnectionPool>, identity: Option<Identity>) -> Result<impl Responder> {
+    require_auth(identity)?;
     info!("GET /api/diff - Fetching hosts available for diff comparison");
     debug!("Getting all hosts from database for diff view");
     
@@ -236,7 +239,9 @@ async fn get_host_diff(
     caching_ssh_client: Data<CachingSshClient>,
     host_name: Path<String>,
     query: Query<DiffQuery>,
+    identity: Option<Identity>,
 ) -> Result<impl Responder> {
+    require_auth(identity)?;
     info!("GET /api/diff/{} - Starting diff comparison", host_name);
     debug!("Query parameters: force_update={:?}, show_empty={:?}", 
            query.force_update, query.show_empty);
@@ -345,7 +350,9 @@ async fn get_diff_details(
     caching_ssh_client: Data<CachingSshClient>,
     host_name: Path<String>,
     query: Query<DiffQuery>,
+    identity: Option<Identity>,
 ) -> Result<impl Responder> {
+    require_auth(identity)?;
     info!("GET /api/diff/{}/details - Fetching detailed diff with raw content", host_name);
     debug!("Looking up host '{}' for detailed diff analysis", host_name);
     

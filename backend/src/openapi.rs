@@ -30,19 +30,20 @@ use crate::{
             UserAndOptions,
             
             // Additional schemas will be automatically discovered via ToSchema derives
-        )
+        ),
     ),
     tags(
-        (name = "hosts", description = "Host management operations"),
-        (name = "users", description = "User management operations"),
-        (name = "keys", description = "SSH key management operations"),
+        (name = "hosts", description = "Host management operations - requires authentication"),
+        (name = "users", description = "User management operations - requires authentication"),
+        (name = "keys", description = "SSH key management operations - requires authentication"),
         (name = "auth", description = "Authentication operations"),
-        (name = "diff", description = "Key difference operations"),
+        (name = "diff", description = "SSH key difference analysis - requires authentication"),
+        (name = "authorization", description = "SSH authorization management - requires authentication"),
     ),
     info(
         title = "SSH Key Manager API",
         version = "0.0.1-alpha",
-        description = "API for managing SSH keys across multiple hosts",
+        description = "Secure API for managing SSH keys across multiple hosts. All endpoints except authentication require session-based authentication via login.",
         contact(
             name = "SSM Support",
             url = "https://github.com/styliteag/ssm"
