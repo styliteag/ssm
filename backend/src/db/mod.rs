@@ -3,6 +3,8 @@ use std::str::FromStr;
 use diesel::result::Error;
 use log::error;
 use russh::keys::{ssh_key::authorized_keys::ConfigOpts, Algorithm};
+use serde::Serialize;
+use utoipa::ToSchema;
 
 use crate::{models::PublicUserKey, ssh::AuthorizedKey};
 
@@ -10,9 +12,29 @@ mod host;
 mod key;
 mod user;
 
-// TODO: this should probably be a struct
-/// Authorization ID, Username, Login and SSH options
-pub type UserAndOptions = (i32, String, String, Option<String>);
+/// User authorization information with SSH options
+#[derive(Serialize, serde::Deserialize, Debug, ToSchema)]
+pub struct UserAndOptions {
+    /// Authorization ID
+    pub id: i32,
+    /// Username
+    pub username: String,
+    /// Login account
+    pub login: String,
+    /// SSH key options
+    pub options: Option<String>,
+}
+
+impl From<(i32, String, String, Option<String>)> for UserAndOptions {
+    fn from(value: (i32, String, String, Option<String>)) -> Self {
+        Self {
+            id: value.0,
+            username: value.1,
+            login: value.2,
+            options: value.3,
+        }
+    }
+}
 
 /// A fictional authorized_keys entry for an allowed user
 #[derive(Clone, Debug)]

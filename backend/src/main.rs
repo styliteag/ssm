@@ -25,6 +25,7 @@ mod api_types;
 mod db;
 mod middleware;
 mod models;
+mod openapi;
 mod routes;
 mod scheduler;
 mod schema;

@@ -7,24 +7,25 @@ use actix_web::{
 use bcrypt::{verify, BcryptError};
 use log::error;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 use std::fs;
 
 use crate::{Configuration, api_types::*};
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct LoginRequest {
     username: String,
     password: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct LoginResponse {
     pub success: bool,
     pub username: String,
     pub message: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct StatusResponse {
     pub logged_in: bool,
     pub username: Option<String>,
@@ -47,6 +48,16 @@ fn verify_apache_password(password: &str, hash: &str) -> Result<bool, BcryptErro
 }
 
 
+/// User login with credentials
+#[utoipa::path(
+    post,
+    path = "/api/auth/login",
+    request_body = LoginRequest,
+    responses(
+        (status = 200, description = "Login successful", body = LoginResponse),
+        (status = 401, description = "Invalid credentials", body = ApiError)
+    )
+)]
 #[post("/login")]
 async fn login(
     req: HttpRequest,
@@ -104,6 +115,14 @@ async fn login(
     }
 }
 
+/// User logout
+#[utoipa::path(
+    post,
+    path = "/api/auth/logout",
+    responses(
+        (status = 200, description = "Logout successful")
+    )
+)]
 #[post("/logout")]
 async fn logout(identity: Identity) -> impl Responder {
     identity.logout();
@@ -112,6 +131,14 @@ async fn logout(identity: Identity) -> impl Responder {
     ))
 }
 
+/// Get authentication status
+#[utoipa::path(
+    get,
+    path = "/api/auth/status",
+    responses(
+        (status = 200, description = "Authentication status", body = StatusResponse)
+    )
+)]
 #[get("/status")]
 async fn auth_status(identity: Option<Identity>) -> impl Responder {
     let username = identity.as_ref().and_then(|id| id.id().ok());

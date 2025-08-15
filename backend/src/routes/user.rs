@@ -4,6 +4,7 @@ use actix_web::{
     HttpResponse, Responder, Result,
 };
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 use crate::{
     api_types::*,
@@ -26,12 +27,12 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(add_key_dialog);
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, ToSchema)]
 pub struct DeleteUserResponse {
     pub message: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, ToSchema)]
 pub struct UserResponse {
     pub id: i32,
     pub username: String,
@@ -48,6 +49,14 @@ impl From<User> for UserResponse {
     }
 }
 
+/// Get all users
+#[utoipa::path(
+    get,
+    path = "/api/users",
+    responses(
+        (status = 200, description = "List of users", body = [UserResponse])
+    )
+)]
 #[get("")]
 async fn get_all_users(
     conn: Data<ConnectionPool>,
@@ -66,6 +75,18 @@ async fn get_all_users(
 
 
 
+/// Get a user by username
+#[utoipa::path(
+    get,
+    path = "/api/users/{name}",
+    params(
+        ("name" = String, Path, description = "Username")
+    ),
+    responses(
+        (status = 200, description = "User details", body = UserResponse),
+        (status = 404, description = "User not found", body = ApiError)
+    )
+)]
 #[get("/{name}")]
 async fn get_user(
     conn: Data<ConnectionPool>,
@@ -81,6 +102,16 @@ async fn get_user(
 }
 
 
+/// Create a new user
+#[utoipa::path(
+    post,
+    path = "/api/users",
+    request_body = NewUser,
+    responses(
+        (status = 201, description = "User created successfully"),
+        (status = 400, description = "Bad request", body = ApiError)
+    )
+)]
 #[post("")]
 async fn create_user(
     conn: Data<ConnectionPool>,
@@ -101,6 +132,18 @@ async fn create_user(
 }
 
 
+/// Delete a user by username
+#[utoipa::path(
+    delete,
+    path = "/api/users/{username}",
+    params(
+        ("username" = String, Path, description = "Username to delete")
+    ),
+    responses(
+        (status = 200, description = "User deleted successfully"),
+        (status = 400, description = "Bad request", body = ApiError)
+    )
+)]
 #[delete("/{username}")]
 async fn delete_user(
     conn: Data<ConnectionPool>,
@@ -113,7 +156,7 @@ async fn delete_user(
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, ToSchema)]
 pub struct UserKeyResponse {
     pub id: i32,
     pub key_type: String,
@@ -122,11 +165,23 @@ pub struct UserKeyResponse {
     pub fingerprint: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, ToSchema)]
 pub struct UserKeysResponse {
     pub keys: Vec<UserKeyResponse>,
 }
 
+/// Get SSH keys for a user
+#[utoipa::path(
+    get,
+    path = "/api/users/{username}/keys",
+    params(
+        ("username" = String, Path, description = "Username")
+    ),
+    responses(
+        (status = 200, description = "User SSH keys", body = UserKeysResponse),
+        (status = 404, description = "User not found", body = ApiError)
+    )
+)]
 #[get("/{username}/keys")]
 async fn get_user_keys(
     conn: Data<ConnectionPool>,
@@ -163,11 +218,23 @@ async fn get_user_keys(
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, ToSchema)]
 pub struct UserAuthorizationsResponse {
     pub authorizations: Vec<UserAndOptions>,
 }
 
+/// Get user authorizations (hosts they can access)
+#[utoipa::path(
+    get,
+    path = "/api/users/{username}/authorizations",
+    params(
+        ("username" = String, Path, description = "Username")
+    ),
+    responses(
+        (status = 200, description = "User authorizations", body = UserAuthorizationsResponse),
+        (status = 404, description = "User not found", body = ApiError)
+    )
+)]
 #[get("/{username}/authorizations")]
 async fn get_user_authorizations(
     conn: Data<ConnectionPool>,
@@ -186,7 +253,7 @@ async fn get_user_authorizations(
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 struct AssignKeyRequest {
     user_id: i32,
     key_type: String,
@@ -194,6 +261,16 @@ struct AssignKeyRequest {
     key_comment: Option<String>,
 }
 
+/// Assign an SSH key to a user
+#[utoipa::path(
+    post,
+    path = "/api/users/assign_key",
+    request_body = AssignKeyRequest,
+    responses(
+        (status = 201, description = "Key assigned successfully"),
+        (status = 400, description = "Invalid key algorithm", body = ApiError)
+    )
+)]
 #[post("/assign_key")]
 async fn assign_key_to_user(
     conn: Data<ConnectionPool>,
@@ -224,12 +301,25 @@ async fn assign_key_to_user(
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 struct UpdateUserRequest {
     username: String,
     enabled: bool,
 }
 
+/// Update a user's information
+#[utoipa::path(
+    put,
+    path = "/api/users/{old_username}",
+    params(
+        ("old_username" = String, Path, description = "Current username")
+    ),
+    request_body = UpdateUserRequest,
+    responses(
+        (status = 200, description = "User updated successfully"),
+        (status = 400, description = "Bad request", body = ApiError)
+    )
+)]
 #[put("/{old_username}")]
 async fn update_user(
     conn: Data<ConnectionPool>,
@@ -248,12 +338,21 @@ async fn update_user(
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 struct AddKeyResponse {
     key: SshPublicKey,
     suggested_action: String,
 }
 
+/// Add SSH key dialog (preview key before assignment)
+#[utoipa::path(
+    post,
+    path = "/api/users/add_key",
+    request_body = SshPublicKey,
+    responses(
+        (status = 200, description = "Key preview", body = AddKeyResponse)
+    )
+)]
 #[post("/add_key")]
 async fn add_key_dialog(json: Json<SshPublicKey>) -> Result<impl Responder> {
     Ok(HttpResponse::Ok().json(ApiResponse::success(AddKeyResponse {

@@ -4,6 +4,7 @@ use actix_web::{
     HttpResponse, Responder, Result,
 };
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 use crate::{
     api_types::*,
@@ -13,7 +14,7 @@ use crate::{
 
 use crate::models::PublicUserKey;
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 struct KeyResponse {
     id: i32,
     key_type: String,
@@ -35,12 +36,19 @@ impl From<UsernameAndKey> for KeyResponse {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 struct KeysResponse {
     keys: Vec<KeyResponse>,
 }
 
-#[get("")]
+/// Get all SSH keys
+#[utoipa::path(
+    get,
+    path = "/api/keys",
+    responses(
+        (status = 200, description = "List of SSH keys", body = KeysResponse)
+    )
+)]
 pub async fn get_all_keys(
     conn: Data<ConnectionPool>,
     _pagination: Query<PaginationQuery>,
@@ -59,6 +67,18 @@ pub async fn get_all_keys(
 }
 
 
+/// Delete an SSH key by ID
+#[utoipa::path(
+    delete,
+    path = "/api/keys/{id}",
+    params(
+        ("id" = i32, Path, description = "Key ID")
+    ),
+    responses(
+        (status = 200, description = "Key deleted successfully"),
+        (status = 400, description = "Bad request", body = ApiError)
+    )
+)]
 #[delete("/{id}")]
 pub async fn delete_key(
     conn: Data<ConnectionPool>,
@@ -73,11 +93,24 @@ pub async fn delete_key(
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 struct UpdateKeyCommentRequest {
     comment: String,
 }
 
+/// Update SSH key comment
+#[utoipa::path(
+    put,
+    path = "/api/keys/{id}/comment",
+    params(
+        ("id" = i32, Path, description = "Key ID")
+    ),
+    request_body = UpdateKeyCommentRequest,
+    responses(
+        (status = 200, description = "Key comment updated successfully"),
+        (status = 400, description = "Bad request", body = ApiError)
+    )
+)]
 #[put("/{id}/comment")]
 pub async fn update_key_comment(
     conn: Data<ConnectionPool>,
@@ -98,7 +131,7 @@ pub async fn update_key_comment(
 }
 
 pub fn config(cfg: &mut web::ServiceConfig) {
-    cfg.service(get_all_keys)
+    cfg.service(web::resource("").route(web::get().to(get_all_keys)))
         .service(delete_key)
         .service(update_key_comment);
 }

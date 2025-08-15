@@ -8,6 +8,7 @@ use actix_web::{
     HttpResponse, Responder, Result,
 };
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 use crate::{
     ConnectionPool,
@@ -21,31 +22,31 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(get_diff_details);
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 struct DiffResponse {
     host_name: String,
     logins: Vec<LoginDiff>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 struct LoginDiff {
     login: String,
     changes: Vec<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 struct AuthorizedKeysResponse {
     login: String,
     content: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 struct KeyComparisonResponse {
     identical: bool,
     changes: Vec<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct DiffHostResponse {
     id: i32,
     name: String,
@@ -62,11 +63,19 @@ impl From<Host> for DiffHostResponse {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 struct DiffHostsResponse {
     hosts: Vec<DiffHostResponse>,
 }
 
+/// Get hosts available for diff comparison
+#[utoipa::path(
+    get,
+    path = "/api/diff",
+    responses(
+        (status = 200, description = "Hosts available for diff", body = DiffHostsResponse)
+    )
+)]
 #[get("")]
 async fn get_hosts_for_diff(conn: Data<ConnectionPool>) -> Result<impl Responder> {
     let hosts = web::block(move || Host::get_all_hosts(&mut conn.get().unwrap())).await?;
@@ -81,12 +90,24 @@ async fn get_hosts_for_diff(conn: Data<ConnectionPool>) -> Result<impl Responder
 }
 
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 struct DiffQuery {
     show_empty: Option<bool>,
     force_update: Option<bool>,
 }
 
+/// Get SSH key differences for a specific host
+#[utoipa::path(
+    get,
+    path = "/api/diff/{host_name}",
+    params(
+        ("host_name" = String, Path, description = "Host name")
+    ),
+    responses(
+        (status = 200, description = "SSH key differences", body = DiffResponse),
+        (status = 404, description = "Host not found", body = ApiError)
+    )
+)]
 #[get("/{host_name}")]
 async fn get_host_diff(
     conn: Data<ConnectionPool>,
@@ -137,6 +158,18 @@ async fn get_host_diff(
 }
 
 
+/// Get detailed diff information for a host
+#[utoipa::path(
+    get,
+    path = "/api/diff/{name}/details",
+    params(
+        ("name" = String, Path, description = "Host name")
+    ),
+    responses(
+        (status = 200, description = "Host diff details", body = DiffHostResponse),
+        (status = 404, description = "Host not found", body = ApiError)
+    )
+)]
 #[get("/{name}/details")]
 async fn get_diff_details(
     conn: Data<ConnectionPool>,

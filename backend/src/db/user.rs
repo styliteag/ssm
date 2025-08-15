@@ -71,7 +71,7 @@ impl User {
         &self,
         conn: &mut DbConnection,
     ) -> Result<Vec<UserAndOptions>, String> {
-        query(
+        let tuples: Result<Vec<(i32, String, String, Option<String>)>, String> = query(
             authorization::table
                 .inner_join(user::table)
                 .inner_join(host::table)
@@ -82,7 +82,8 @@ impl User {
                     authorization::login,
                     authorization::options,
                 ))
-                .load::<UserAndOptions>(conn),
-        )
+                .load::<(i32, String, String, Option<String>)>(conn),
+        );
+        tuples.map(|vec| vec.into_iter().map(UserAndOptions::from).collect())
     }
 }

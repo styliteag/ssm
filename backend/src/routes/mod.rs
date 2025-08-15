@@ -10,12 +10,15 @@ use actix_web::{
     web::{self},
     HttpResponse, Responder, Result,
 };
+use utoipa::OpenApi;
 use serde::{Deserialize, Serialize};
 
 use crate::api_types::*;
 
 pub fn route_config(cfg: &mut web::ServiceConfig) {
     cfg.service(api_info)
+        .service(openapi_json)
+        .service(crate::openapi::swagger_ui())
         .service(
             web::scope("/api")
                 .service(web::scope("/host").configure(host::config))
@@ -60,4 +63,12 @@ async fn api_info() -> Result<impl Responder> {
         version: env!("CARGO_PKG_VERSION").to_string(),
         description: "REST API for managing SSH keys across multiple hosts".to_string(),
     })))
+}
+
+/// Serve the OpenAPI specification as JSON
+#[get("/api-docs/openapi.json")]
+async fn openapi_json() -> Result<impl Responder> {
+    Ok(HttpResponse::Ok()
+        .content_type("application/json")
+        .json(crate::openapi::ApiDoc::openapi()))
 }
