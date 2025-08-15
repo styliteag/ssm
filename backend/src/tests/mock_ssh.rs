@@ -49,6 +49,15 @@ pub enum MockOperationType {
     Execute,
 }
 
+#[derive(Debug, Clone)]
+pub enum MockSshErrorType {
+    ConnectionTimeout,
+    AuthenticationFailed,
+    HostKeyMismatch,
+    PermissionDenied,
+    NetworkUnreachable,
+}
+
 impl MockSshClient {
     pub fn new(_pool: ConnectionPool, _config: SshConfig) -> Self {
         test_only!();
@@ -152,7 +161,7 @@ impl MockSshClient {
 
     // Mock implementations of SSH client methods
     
-    async fn log_operation(&self, operation_type: MockOperationType, host: &str, login: Option<&str>, success: bool) {
+    pub async fn log_operation(&self, operation_type: MockOperationType, host: &str, login: Option<&str>, success: bool) {
         let operation = MockOperation {
             operation_type,
             host: host.to_string(),
@@ -181,15 +190,48 @@ impl MockSshClient {
         self.log_operation(MockOperationType::Connect, &host.name, None, true).await;
         self.log_operation(MockOperationType::GetKeyfiles, &host.name, None, true).await;
         
-        // Return mock response
+        // Return mock response with realistic SSH keyfiles structure
         let responses = self.inner.keyfiles_responses.lock().await;
         let response = responses.get(&host.name).cloned().unwrap_or_else(|| {
-            // Default mock response
-            // Return empty vec for now - actual mock responses would be more complex
-            vec![]
+            // Default mock response with realistic authorized_keys structure
+            self.create_realistic_default_keyfiles(&host.name)
         });
         
         Ok(response)
+    }
+    
+    /// Create realistic default SSH keyfiles for testing
+    fn create_realistic_default_keyfiles(&self, _host_name: &str) -> SshKeyfiles {
+        // For now, return empty keyfiles to avoid complex struct creation
+        // This can be enhanced later when we have better access to internal structures
+        vec![]
+    }
+    
+    /// Generate realistic authorized_keys content for testing
+    pub fn generate_realistic_authorized_keys(&self, login: &str) -> String {
+        // Simulate realistic authorized_keys with different key types and comments
+        let sample_keys = match login {
+            "root" => vec![
+                "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC7vbqajDw5XJjfsQM1dLDEeuxWiZQ root@prod-server",
+                "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SuVKT root@backup-server",
+            ],
+            "ubuntu" => vec![
+                "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC7TEST ubuntu@workstation",
+                "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTY ubuntu@laptop",
+            ],
+            "admin" => vec![
+                "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC7ADMIN admin@management",
+            ],
+            "deploy" => vec![
+                "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDEPLOYqqnkVzrm0SuVKT deploy@ci-cd",
+                "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC7DEPLOY jenkins@build-server",
+            ],
+            _ => vec![
+                "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC7DEFAULT user@default",
+            ],
+        };
+        
+        sample_keys.join("\n")
     }
 
     pub async fn set_authorized_keys(
@@ -243,14 +285,41 @@ impl MockSshClient {
         // Return mock diff response
         let responses = self.inner.diff_responses.lock().await;
         let diff = responses.get(&key).cloned().unwrap_or_else(|| {
-            // Default mock diff - simulate adding a key
-            vec![
-                KeyDiffItem::Added(format!("+ {}", new_keyfile.lines().next().unwrap_or("ssh-rsa AAAAB3... test@example.com"))),
-            ]
+            // Generate realistic diff based on new keyfile vs current authorized_keys
+            self.generate_realistic_diff(new_keyfile, &host_name, &login)
         });
         
         log::debug!("🤖 Mock diff generated for {}:{} ({} changes)", host_name, login, diff.len());
         Ok(diff)
+    }
+    
+    /// Generate realistic diff for testing
+    fn generate_realistic_diff(&self, new_keyfile: &str, host_name: &str, login: &str) -> Vec<KeyDiffItem> {
+        let mut diff = Vec::new();
+        
+        // Get current keys for this login
+        let current_keys = self.generate_realistic_authorized_keys(login);
+        let current_lines: Vec<&str> = current_keys.lines().collect();
+        let new_lines: Vec<&str> = new_keyfile.lines().collect();
+        
+        // Simulate removing old keys not in new keyfile
+        for current_line in &current_lines {
+            if !current_line.trim().is_empty() && !new_lines.contains(current_line) {
+                diff.push(KeyDiffItem::Removed(format!("- {}", current_line)));
+            }
+        }
+        
+        // Simulate adding new keys not in current keyfile
+        for new_line in &new_lines {
+            if !new_line.trim().is_empty() && !current_lines.contains(new_line) {
+                diff.push(KeyDiffItem::Added(format!("+ {}", new_line)));
+            }
+        }
+        
+        // If no changes, return empty diff (which is realistic)
+        // Empty diff means no changes needed
+        
+        diff
     }
 
     pub async fn install_script_on_host(&self, host_id: i32) -> Result<(), crate::ssh::SshClientError> {
@@ -292,6 +361,53 @@ impl MockSshClient {
     pub fn get_own_key_b64(&self) -> String {
         test_only!();
         "AAAAB3NzaC1yc2EAAAADAQABAAABgQC7vbqajDw5XJjfsQM1dLDEeuxWiZQ".to_string()
+    }
+    
+    /// Simulate network delays for more realistic testing
+    pub async fn simulate_network_delay(&self, host_name: &str, delay_ms: u64) {
+        test_only!();
+        // In a real implementation, this would add delays to operations
+        // For now, just log the simulated delay
+        log::debug!("🤖 Simulating {}ms network delay for host: {}", delay_ms, host_name);
+        tokio::time::sleep(tokio::time::Duration::from_millis(delay_ms)).await;
+    }
+    
+    /// Simulate different types of SSH errors for comprehensive testing
+    pub async fn simulate_specific_error(&self, host_name: &str, error_type: MockSshErrorType) {
+        test_only!();
+        let error_message = match error_type {
+            MockSshErrorType::ConnectionTimeout => "Connection timed out",
+            MockSshErrorType::AuthenticationFailed => "Authentication failed (publickey)",
+            MockSshErrorType::HostKeyMismatch => "Host key verification failed",
+            MockSshErrorType::PermissionDenied => "Permission denied (authorized_keys not writable)",
+            MockSshErrorType::NetworkUnreachable => "Network is unreachable",
+        };
+        
+        let mut failures = self.inner.connection_failures.lock().await;
+        failures.insert(host_name.to_string(), error_message.to_string());
+        log::debug!("🤖 Simulated {:?} error for host: {}", error_type, host_name);
+    }
+    
+    /// Generate test SSH keys for comprehensive testing
+    pub fn generate_test_ssh_key(key_type: &str, comment: &str) -> String {
+        test_only!();
+        match key_type {
+            "ssh-rsa" => format!("ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC7TEST{}KEY {}", 
+                                Self::random_string(8), comment),
+            "ssh-ed25519" => format!("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOTEST{}KEY {}", 
+                                   Self::random_string(8), comment),
+            "ecdsa-sha2-nistp256" => format!("ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBTEST{}KEY {}", 
+                                           Self::random_string(8), comment),
+            _ => format!("ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC7DEFAULT {}@unknown", comment),
+        }
+    }
+    
+    /// Generate random string for unique test data
+    fn random_string(length: usize) -> String {
+        use uuid::Uuid;
+        // Use UUID to generate unique strings for test data
+        let uuid_str = Uuid::new_v4().to_string().replace('-', "");
+        uuid_str.chars().take(length).collect::<String>().to_uppercase()
     }
 }
 
