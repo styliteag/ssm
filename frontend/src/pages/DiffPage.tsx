@@ -1,17 +1,27 @@
 import React, { useState, useEffect } from 'react';
+import { Activity, RefreshCw, Upload, X } from 'lucide-react';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Button,
+  DataTable,
+  Modal,
+  type Column
+} from '../components/ui';
 import { diffApi, DiffHost, DiffResponse, DetailedDiffResponse } from '../services/api/diff';
 import DiffIssue from '../components/DiffIssue';
+import { useNotifications } from '../contexts/NotificationContext';
 
 const DiffPage: React.FC = () => {
+  const { showSuccess, showError } = useNotifications();
   const [hosts, setHosts] = useState<DiffHost[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [sortBy, setSortBy] = useState<'name' | 'address'>('name');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [selectedHost, setSelectedHost] = useState<DiffHost | null>(null);
   const [hostDetails, setHostDetails] = useState<DetailedDiffResponse | null>(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
+  const [showModal, setShowModal] = useState(false);
 
   useEffect(() => {
     const fetchHosts = async () => {
@@ -27,7 +37,7 @@ const DiffPage: React.FC = () => {
         // Fetch diff data for each host in the background
         fetchDiffDataForHosts(hostData);
       } catch (err) {
-        setError('Failed to load hosts');
+        showError('Failed to load hosts', 'Please try again later');
         console.error('Error fetching hosts:', err);
         setLoading(false);
       }
@@ -83,40 +93,11 @@ const DiffPage: React.FC = () => {
     };
 
     fetchHosts();
-  }, []);
-
-  const filteredAndSortedHosts = React.useMemo(() => {
-    let filtered = hosts.filter(host =>
-      host.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      host.address.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-
-    filtered.sort((a, b) => {
-      const aValue = a[sortBy];
-      const bValue = b[sortBy];
-      const comparison = aValue.localeCompare(bValue);
-      return sortOrder === 'asc' ? comparison : -comparison;
-    });
-
-    return filtered;
-  }, [hosts, searchTerm, sortBy, sortOrder]);
-
-  const handleSort = (column: 'name' | 'address') => {
-    if (sortBy === column) {
-      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortBy(column);
-      setSortOrder('asc');
-    }
-  };
-
-  const getSortIcon = (column: 'name' | 'address') => {
-    if (sortBy !== column) return '↕️';
-    return sortOrder === 'asc' ? '↑' : '↓';
-  };
+  }, [showError]);
 
   const handleHostClick = async (host: DiffHost) => {
     setSelectedHost(host);
+    setShowModal(true);
     setDetailsLoading(true);
     
     try {
@@ -125,7 +106,24 @@ const DiffPage: React.FC = () => {
       setHostDetails(hostDetails);
     } catch (err) {
       console.error('Error fetching host details:', err);
+      showError('Failed to load host details', 'Please try again later');
       setHostDetails(null);
+    } finally {
+      setDetailsLoading(false);
+    }
+  };
+
+  const handleRefreshHost = async () => {
+    if (!selectedHost) return;
+    
+    setDetailsLoading(true);
+    try {
+      const hostDetails = await diffApi.getHostDiffDetails(selectedHost.name, true); // Force update
+      setHostDetails(hostDetails);
+      showSuccess('Data refreshed', 'Host diff data has been updated');
+    } catch (err) {
+      console.error('Error refreshing host details:', err);
+      showError('Failed to refresh data', 'Please try again later');
     } finally {
       setDetailsLoading(false);
     }
@@ -134,295 +132,273 @@ const DiffPage: React.FC = () => {
   const closeModal = () => {
     setSelectedHost(null);
     setHostDetails(null);
+    setShowModal(false);
   };
 
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="text-lg">Loading hosts...</div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="text-red-600 text-lg">{error}</div>
-      </div>
-    );
-  }
+  // Table column definitions
+  const columns: Column<DiffHost>[] = [
+    {
+      key: 'name',
+      header: 'Name',
+      sortable: true,
+      render: (value) => (
+        <div className="font-medium text-gray-900 dark:text-gray-100">
+          {value as string}
+        </div>
+      )
+    },
+    {
+      key: 'address',
+      header: 'Address',
+      sortable: true,
+      render: (value) => (
+        <div className="text-gray-600 dark:text-gray-400">
+          {value as string}
+        </div>
+      )
+    },
+    {
+      key: 'loading',
+      header: 'Status',
+      render: (_, host) => {
+        if (host.loading) {
+          return (
+            <div className="flex items-center space-x-2">
+              <RefreshCw className="w-4 h-4 animate-spin text-blue-500" />
+              <span className="text-gray-500 dark:text-gray-400">Loading...</span>
+            </div>
+          );
+        }
+        
+        if (host.error) {
+          return (
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300">
+              Error
+            </span>
+          );
+        }
+        
+        if (host.is_empty === false) {
+          return (
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300">
+              Needs Sync
+            </span>
+          );
+        }
+        
+        if (host.is_empty === true) {
+          return (
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">
+              Synchronized
+            </span>
+          );
+        }
+        
+        return (
+          <span className="text-gray-400 dark:text-gray-500">Unknown</span>
+        );
+      }
+    },
+    {
+      key: 'total_items',
+      header: 'Differences',
+      render: (_, host) => {
+        if (host.loading) return '-';
+        if (host.error) return 'Error';
+        if (host.total_items !== undefined) {
+          return (
+            <span className={host.total_items > 0 ? 'text-red-600 dark:text-red-300 font-medium' : 'text-gray-500 dark:text-gray-400'}>
+              {host.total_items} {host.total_items === 1 ? 'difference' : 'differences'}
+            </span>
+          );
+        }
+        return '-';
+      }
+    }
+  ];
 
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold mb-6">Hosts Diff Overview</h1>
-      
-      <div className="mb-4">
-        <input
-          type="text"
-          placeholder="Search hosts by name or address..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center space-x-2">
+            <Activity size={24} />
+            <span>Hosts Diff Overview</span>
+          </h1>
+          <p className="text-gray-600 dark:text-gray-400">
+            Monitor SSH key synchronization status across all hosts
+          </p>
+        </div>
       </div>
 
-      <div className="bg-white shadow-md rounded-lg overflow-hidden">
-        <table className="min-w-full">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                ID
-              </th>
-              <th 
-                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                onClick={() => handleSort('name')}
-              >
-                Name {getSortIcon('name')}
-              </th>
-              <th 
-                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                onClick={() => handleSort('address')}
-              >
-                Address {getSortIcon('address')}
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Status
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Differences
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {filteredAndSortedHosts.map((host) => (
-              <tr 
-                key={host.id} 
-                className="hover:bg-gray-50 cursor-pointer transition-colors"
-                onClick={() => handleHostClick(host)}
-              >
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  {host.id}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                  {host.name}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {host.address}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm">
-                  {host.loading ? (
-                    <div className="flex items-center">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-900"></div>
-                      <span className="ml-2 text-gray-500">Loading...</span>
-                    </div>
-                  ) : host.error ? (
-                    <span className="text-red-600">Error</span>
-                  ) : host.is_empty === false ? (
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                      Needs Sync
-                    </span>
-                  ) : host.is_empty === true ? (
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                      Synchronized
-                    </span>
-                  ) : (
-                    <span className="text-gray-400">Unknown</span>
-                  )}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {host.loading ? (
-                    '-'
-                  ) : host.error ? (
-                    'Error'
-                  ) : host.total_items !== undefined ? (
-                    <span className={host.total_items > 0 ? 'text-red-600 font-medium' : 'text-gray-500'}>
-                      {host.total_items} {host.total_items === 1 ? 'difference' : 'differences'}
-                    </span>
-                  ) : (
-                    '-'
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        
-        {filteredAndSortedHosts.length === 0 && (
-          <div className="text-center py-8 text-gray-500">
-            {searchTerm ? 'No hosts match your search criteria' : 'No hosts found'}
-          </div>
-        )}
-      </div>
-      
-      <div className="mt-4 text-sm text-gray-600">
-        Showing {filteredAndSortedHosts.length} of {hosts.length} hosts
-      </div>
+      {/* Host List */}
+      <Card>
+        <CardHeader>
+          <CardTitle>SSH Hosts Diff Status ({hosts.length})</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <DataTable
+            data={hosts}
+            columns={columns}
+            loading={loading}
+            emptyMessage="No hosts found. Please check your host configuration."
+            searchPlaceholder="Search hosts by name or address..."
+            initialSort={{ key: 'name', direction: 'asc' }}
+            onRowClick={(host) => handleHostClick(host)}
+          />
+        </CardContent>
+      </Card>
 
       {/* Host Details Modal */}
-      {selectedHost && (
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-          onClick={closeModal}
-        >
-          <div 
-            className="bg-white rounded-lg shadow-xl max-w-4xl w-full m-4 max-h-[90vh] overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex justify-between items-center p-6 border-b border-gray-200">
-              <h2 className="text-xl font-semibold text-gray-900">
-                Host Details: {selectedHost.name}
-              </h2>
-              <button
-                onClick={closeModal}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+      <Modal
+        isOpen={showModal}
+        onClose={closeModal}
+        title={`Host Details: ${selectedHost?.name || ''}`}
+        size="xl"
+      >
+        {detailsLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <RefreshCw className="w-8 h-8 animate-spin text-blue-500" />
+            <span className="ml-3">Loading host details...</span>
+          </div>
+        ) : !hostDetails ? (
+          <div className="text-red-600 dark:text-red-400 py-4">
+            Error: Failed to load host details
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {/* Basic Host Information */}
+            <div>
+              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-3">Host Information</h3>
+              <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 grid grid-cols-2 gap-4">
+                <div>
+                  <span className="font-medium text-gray-700 dark:text-gray-300">ID:</span>
+                  <span className="text-gray-900 dark:text-gray-100 ml-2">{hostDetails.host.id}</span>
+                </div>
+                <div>
+                  <span className="font-medium text-gray-700 dark:text-gray-300">Name:</span>
+                  <span className="text-gray-900 dark:text-gray-100 ml-2">{hostDetails.host.name}</span>
+                </div>
+                <div>
+                  <span className="font-medium text-gray-700 dark:text-gray-300">Address:</span>
+                  <span className="text-gray-900 dark:text-gray-100 ml-2">{hostDetails.host.address}</span>
+                </div>
+                <div>
+                  <span className="font-medium text-gray-700 dark:text-gray-300">Last Updated:</span>
+                  <span className="text-gray-900 dark:text-gray-100 ml-2">
+                    {new Date(hostDetails.cache_timestamp).toLocaleString()}
+                  </span>
+                </div>
+              </div>
             </div>
-            
-            <div className="p-6 overflow-y-auto">
-              {detailsLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
-                  <span className="ml-3">Loading host details...</span>
-                </div>
-              ) : !hostDetails ? (
-                <div className="text-red-600 py-4">
-                  Error: Failed to load host details
-                </div>
-              ) : (
-                <div className="space-y-6">
-                  {/* Basic Host Information */}
-                  <div>
-                    <h3 className="text-lg font-medium text-gray-900 mb-3">Host Information</h3>
-                    <div className="bg-gray-50 rounded-lg p-4 grid grid-cols-2 gap-4">
-                      <div>
-                        <span className="font-medium text-gray-700">ID:</span>
-                        <span className="text-gray-900 ml-2">{hostDetails.host.id}</span>
-                      </div>
-                      <div>
-                        <span className="font-medium text-gray-700">Name:</span>
-                        <span className="text-gray-900 ml-2">{hostDetails.host.name}</span>
-                      </div>
-                      <div>
-                        <span className="font-medium text-gray-700">Address:</span>
-                        <span className="text-gray-900 ml-2">{hostDetails.host.address}</span>
-                      </div>
-                      <div>
-                        <span className="font-medium text-gray-700">Last Updated:</span>
-                        <span className="text-gray-900 ml-2">
-                          {new Date(hostDetails.cache_timestamp).toLocaleString()}
-                        </span>
-                      </div>
-                    </div>
+
+            {/* Summary */}
+            <div>
+              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-3">Diff Summary</h3>
+              <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
+                    hostDetails.logins.length === 0 
+                      ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300' 
+                      : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300'
+                  }`}>
+                    {hostDetails.logins.length === 0 ? 'Synchronized' : 'Needs Sync'}
+                  </span>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">
+                    {hostDetails.expected_keys.length} expected keys
                   </div>
+                </div>
+                <p className="text-gray-900 dark:text-gray-100">{hostDetails.summary}</p>
+              </div>
+            </div>
 
-                  {/* Summary */}
-                  <div>
-                    <h3 className="text-lg font-medium text-gray-900 mb-3">Diff Summary</h3>
-                    <div className="bg-gray-50 rounded-lg p-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-                          hostDetails.logins.length === 0 
-                            ? 'bg-green-100 text-green-800' 
-                            : 'bg-red-100 text-red-800'
-                        }`}>
-                          {hostDetails.logins.length === 0 ? 'Synchronized' : 'Needs Sync'}
-                        </span>
-                        <div className="text-sm text-gray-600">
-                          {hostDetails.expected_keys.length} expected keys
-                        </div>
-                      </div>
-                      <p className="text-gray-900">{hostDetails.summary}</p>
-                    </div>
-                  </div>
-
-                  {/* Expected Keys */}
-                  {hostDetails.expected_keys.length > 0 && (
-                    <div>
-                      <h3 className="text-lg font-medium text-gray-900 mb-3">Expected Keys</h3>
-                      <div className="bg-gray-50 rounded-lg p-4 max-h-48 overflow-y-auto">
-                        <div className="space-y-2">
-                          {hostDetails.expected_keys.map((key, index) => (
-                            <div key={index} className="bg-white rounded p-3 text-sm">
-                              <div className="flex justify-between items-start">
-                                <div>
-                                  <span className="font-medium">{key.username}</span> → {key.login}
-                                  {key.comment && <span className="text-gray-500 ml-2">({key.comment})</span>}
-                                </div>
-                                <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                                  {key.key_type}
-                                </span>
-                              </div>
-                              {key.options && (
-                                <div className="text-xs text-gray-600 mt-1 font-mono">
-                                  Options: {key.options}
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Detailed Issues */}
-                  {hostDetails.logins.length > 0 && (
-                    <div>
-                      <h3 className="text-lg font-medium text-gray-900 mb-3">Issues Found</h3>
-                      <div className="space-y-4">
-                        {hostDetails.logins.map((loginDiff, loginIndex) => (
-                          <div key={loginIndex} className="border border-gray-200 rounded-lg">
-                            <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
-                              <div className="flex items-center justify-between">
-                                <h4 className="font-medium text-gray-900">
-                                  Login: <code className="bg-gray-200 px-2 py-1 rounded text-sm">{loginDiff.login}</code>
-                                </h4>
-                                <span className="text-sm text-gray-600">
-                                  {loginDiff.issues.length} issue{loginDiff.issues.length !== 1 ? 's' : ''}
-                                </span>
-                              </div>
-                              {loginDiff.readonly_condition && (
-                                <div className="text-sm text-yellow-700 mt-1">
-                                  Readonly: {loginDiff.readonly_condition}
-                                </div>
-                              )}
-                            </div>
-                            <div className="p-4 space-y-3">
-                              {loginDiff.issues.map((issue, issueIndex) => (
-                                <DiffIssue key={issueIndex} issue={issue} />
-                              ))}
-                            </div>
+            {/* Expected Keys */}
+            {hostDetails.expected_keys.length > 0 && (
+              <div>
+                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-3">Expected Keys</h3>
+                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 max-h-48 overflow-y-auto">
+                  <div className="space-y-2">
+                    {hostDetails.expected_keys.map((key, index) => (
+                      <div key={index} className="bg-white dark:bg-gray-700 rounded p-3 text-sm">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <span className="font-medium text-gray-900 dark:text-gray-100">{key.username}</span> 
+                            <span className="text-gray-600 dark:text-gray-400"> → {key.login}</span>
+                            {key.comment && <span className="text-gray-500 dark:text-gray-400 ml-2">({key.comment})</span>}
                           </div>
+                          <span className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-2 py-1 rounded">
+                            {key.key_type}
+                          </span>
+                        </div>
+                        {key.options && (
+                          <div className="text-xs text-gray-600 dark:text-gray-400 mt-1 font-mono">
+                            Options: {key.options}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Detailed Issues */}
+            {hostDetails.logins.length > 0 && (
+              <div>
+                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-3">Issues Found</h3>
+                <div className="space-y-4">
+                  {hostDetails.logins.map((loginDiff, loginIndex) => (
+                    <div key={loginIndex} className="border border-gray-200 dark:border-gray-700 rounded-lg">
+                      <div className="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-medium text-gray-900 dark:text-gray-100">
+                            Login: <code className="bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-2 py-1 rounded text-sm">{loginDiff.login}</code>
+                          </h4>
+                          <span className="text-sm text-gray-600 dark:text-gray-400">
+                            {loginDiff.issues.length} issue{loginDiff.issues.length !== 1 ? 's' : ''}
+                          </span>
+                        </div>
+                        {loginDiff.readonly_condition && (
+                          <div className="text-sm text-yellow-700 dark:text-yellow-400 mt-1">
+                            Readonly: {loginDiff.readonly_condition}
+                          </div>
+                        )}
+                      </div>
+                      <div className="p-4 space-y-3">
+                        {loginDiff.issues.map((issue, issueIndex) => (
+                          <DiffIssue key={issueIndex} issue={issue} />
                         ))}
                       </div>
                     </div>
-                  )}
-
-                  {/* Actions */}
-                  <div className="pt-4 border-t border-gray-200">
-                    <div className="flex space-x-3">
-                      <button 
-                        onClick={() => handleHostClick(selectedHost)}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-                      >
-                        Refresh Data
-                      </button>
-                      {hostDetails.logins.length > 0 && (
-                        <button className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors">
-                          Sync Keys
-                        </button>
-                      )}
-                    </div>
-                  </div>
+                  ))}
                 </div>
-              )}
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+              <div className="flex space-x-3">
+                <Button 
+                  onClick={handleRefreshHost}
+                  loading={detailsLoading}
+                  leftIcon={<RefreshCw size={16} />}
+                >
+                  Refresh Data
+                </Button>
+                {hostDetails.logins.length > 0 && (
+                  <Button 
+                    variant="primary"
+                    leftIcon={<Upload size={16} />}
+                  >
+                    Sync Keys
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </Modal>
     </div>
   );
 };
