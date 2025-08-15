@@ -50,13 +50,13 @@ const getIssueSeverity = (type: string) => {
 const getSeverityClasses = (severity: string) => {
   switch (severity) {
     case 'error':
-      return 'bg-red-50 border-red-200 text-red-800';
+      return 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-800 dark:text-red-200';
     case 'warning':
-      return 'bg-yellow-50 border-yellow-200 text-yellow-800';
+      return 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800 text-yellow-800 dark:text-yellow-200';
     case 'info':
-      return 'bg-blue-50 border-blue-200 text-blue-800';
+      return 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-200';
     default:
-      return 'bg-gray-50 border-gray-200 text-gray-800';
+      return 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200';
   }
 };
 
@@ -74,18 +74,18 @@ export const DiffIssue: React.FC<DiffIssueProps> = ({ issue }) => {
         <div className="flex items-center space-x-2">
           <span className="text-lg">{getIssueIcon(issue.type)}</span>
           <span className="font-medium">{issue.description}</span>
-          <span className="text-xs px-2 py-1 bg-white bg-opacity-50 rounded">
+          <span className="text-xs px-2 py-1 bg-white dark:bg-gray-700 bg-opacity-50 dark:bg-opacity-50 rounded">
             {issue.type.replace('_', ' ')}
           </span>
         </div>
-        <button className="text-sm font-medium hover:underline">
+        <button className="text-sm font-medium hover:underline text-current">
           {expanded ? 'Less' : 'More'} {expanded ? '▲' : '▼'}
         </button>
       </div>
 
       {expanded && issue.details && (
         <div className="mt-3 pt-3 border-t border-current border-opacity-20">
-          <div className="space-y-2 text-sm">
+          <div className="space-y-2 text-sm text-current">
             {issue.details.username && (
               <div>
                 <span className="font-medium">Username:</span> {issue.details.username}
@@ -95,7 +95,7 @@ export const DiffIssue: React.FC<DiffIssueProps> = ({ issue }) => {
             {issue.details.key && (
               <div className="space-y-1">
                 <span className="font-medium">Key Details:</span>
-                <div className="bg-white bg-opacity-30 rounded p-2 font-mono text-xs">
+                <div className="bg-white dark:bg-gray-700 bg-opacity-30 dark:bg-opacity-30 rounded p-2 font-mono text-xs text-current">
                   <div><strong>Type:</strong> {issue.details.key.base64.startsWith('AAAAB3NzaC1yc2') ? 'RSA' : 
                                                 issue.details.key.base64.startsWith('AAAAC3NzaC1lZDI1NTE5') ? 'Ed25519' : 
                                                 issue.details.key.base64.startsWith('AAAAE2VjZHNhLXNoYTItbmlzdHA') ? 'ECDSA' : 'Unknown'}</div>
@@ -109,7 +109,7 @@ export const DiffIssue: React.FC<DiffIssueProps> = ({ issue }) => {
             {issue.details.expected_options && (
               <div>
                 <span className="font-medium">Expected Options:</span>
-                <div className="bg-white bg-opacity-30 rounded p-2 font-mono text-xs">
+                <div className="bg-white dark:bg-gray-700 bg-opacity-30 dark:bg-opacity-30 rounded p-2 font-mono text-xs text-current">
                   {issue.details.expected_options}
                 </div>
               </div>
@@ -118,7 +118,7 @@ export const DiffIssue: React.FC<DiffIssueProps> = ({ issue }) => {
             {issue.details.actual_options && (
               <div>
                 <span className="font-medium">Actual Options:</span>
-                <div className="bg-white bg-opacity-30 rounded p-2 font-mono text-xs">
+                <div className="bg-white dark:bg-gray-700 bg-opacity-30 dark:bg-opacity-30 rounded p-2 font-mono text-xs text-current">
                   {issue.details.actual_options}
                 </div>
               </div>
@@ -133,7 +133,7 @@ export const DiffIssue: React.FC<DiffIssueProps> = ({ issue }) => {
             {issue.details.line && (
               <div>
                 <span className="font-medium">Problem Line:</span>
-                <div className="bg-white bg-opacity-30 rounded p-2 font-mono text-xs break-all">
+                <div className="bg-white dark:bg-gray-700 bg-opacity-30 dark:bg-opacity-30 rounded p-2 font-mono text-xs break-all text-current">
                   {issue.details.line}
                 </div>
               </div>
