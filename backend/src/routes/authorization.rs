@@ -4,6 +4,7 @@ use actix_web::{
     HttpResponse, Responder, Result,
 };
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 use crate::{
     api_types::*,
@@ -22,13 +23,21 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 // }
 // TODO: do this
 
+/// Change authorization options (TODO: Not implemented)
+#[utoipa::path(
+    post,
+    path = "/api/authorization/change_options",
+    responses(
+        (status = 501, description = "Not implemented", body = ApiError)
+    )
+)]
 #[post("/change_options")]
 async fn change_options() -> Result<impl Responder> {
     // TODO: Implement authorization options change
     Ok(HttpResponse::NotImplemented().json(ApiError::new("Not implemented".to_string())))
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 struct AuthorizationDialogResponse {
     host_name: String,
     host_id: i32,
@@ -38,7 +47,7 @@ struct AuthorizationDialogResponse {
     options: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 struct AuthorizeUserRequest {
     /// Host name in key-manager
     host_name: String,
@@ -50,6 +59,16 @@ struct AuthorizeUserRequest {
     options: Option<String>,
 }
 
+/// Get authorization dialog data for user and host
+#[utoipa::path(
+    post,
+    path = "/api/authorization/dialog_data",
+    request_body = AuthorizeUserRequest,
+    responses(
+        (status = 200, description = "Authorization dialog data", body = AuthorizationDialogResponse),
+        (status = 404, description = "Host or user not found", body = ApiError)
+    )
+)]
 #[post("/dialog_data")]
 async fn get_authorization_dialog_data(
     conn: Data<ConnectionPool>,

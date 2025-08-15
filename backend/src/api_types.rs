@@ -1,9 +1,10 @@
 use serde::{Deserialize, Serialize};
 use actix_web::{HttpResponse, ResponseError};
 use std::fmt;
+use utoipa::ToSchema;
 
 /// Standard API response wrapper for successful operations
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, ToSchema)]
 pub struct ApiResponse<T> {
     pub success: bool,
     pub data: Option<T>,
@@ -57,7 +58,7 @@ impl ApiResponse<()> {
 }
 
 /// Custom error type for API responses
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct ApiError {
     pub success: bool,
     pub message: String,
@@ -129,14 +130,14 @@ impl<T: Serialize> ToApiResponse<T> for Result<T, String> {
 }
 
 /// JWT token response for authentication
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, ToSchema)]
 pub struct TokenResponse {
     pub token: String,
     pub expires_in: u64,
 }
 
 /// Login request structure
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 #[allow(dead_code)]
 pub struct LoginRequest {
     pub username: String,
@@ -144,7 +145,7 @@ pub struct LoginRequest {
 }
 
 /// Authentication status response
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 #[allow(dead_code)]
 pub struct AuthStatusResponse {
     pub logged_in: bool,
@@ -152,7 +153,7 @@ pub struct AuthStatusResponse {
 }
 
 /// Paginated list response
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 #[allow(dead_code)]
 pub struct PaginatedResponse<T> {
     pub items: Vec<T>,
@@ -177,7 +178,7 @@ impl<T> PaginatedResponse<T> {
 }
 
 /// Query parameters for pagination
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 #[allow(dead_code)]
 pub struct PaginationQuery {
     pub page: Option<u32>,

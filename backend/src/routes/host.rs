@@ -7,6 +7,7 @@ use actix_web::{
 };
 use log::error;
 use serde::{Deserialize, Serialize};
+use utoipa::{ToSchema, OpenApi};
 
 use crate::{
     api_types::*,
@@ -33,7 +34,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(list_host_authorizations);
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 struct HostResponse {
     id: i32,
     name: String,
@@ -60,6 +61,14 @@ impl From<Host> for HostResponse {
     }
 }
 
+/// Get all hosts
+#[utoipa::path(
+    get,
+    path = "/api/hosts",
+    responses(
+        (status = 200, description = "List of hosts", body = [HostResponse])
+    )
+)]
 #[get("")]
 async fn get_all_hosts(
     conn: Data<ConnectionPool>,
@@ -76,11 +85,23 @@ async fn get_all_hosts(
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 struct LoginsResponse {
     logins: Vec<String>,
 }
 
+/// Get available logins for a host
+#[utoipa::path(
+    get,
+    path = "/api/hosts/{name}/logins",
+    params(
+        ("name" = String, Path, description = "Host name")
+    ),
+    responses(
+        (status = 200, description = "List of available logins", body = LoginsResponse),
+        (status = 404, description = "Host not found", body = ApiError)
+    )
+)]
 #[get("/{name}/logins")]
 async fn get_logins(
     conn: Data<ConnectionPool>,
@@ -105,6 +126,18 @@ async fn get_logins(
     }
 }
 
+/// Get a host by name
+#[utoipa::path(
+    get,
+    path = "/api/hosts/{name}",
+    params(
+        ("name" = String, Path, description = "Host name")
+    ),
+    responses(
+        (status = 200, description = "Host details", body = HostResponse),
+        (status = 404, description = "Host not found", body = ApiError)
+    )
+)]
 #[get("/{name}")]
 async fn get_host(
     conn: Data<ConnectionPool>,
@@ -139,12 +172,12 @@ async fn get_host(
     Ok(HttpResponse::Ok().json(ApiResponse::success(host_response)))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 struct AddHostkeyRequest {
     key_fingerprint: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 struct CreateHostRequest {
     name: String,
     address: String,
@@ -154,7 +187,7 @@ struct CreateHostRequest {
     jump_via: Option<i32>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 struct HostkeyConfirmation {
     host_name: String,
     login: String,
@@ -165,6 +198,19 @@ struct HostkeyConfirmation {
     requires_confirmation: bool,
 }
 
+/// Add host key for SSH connection
+#[utoipa::path(
+    post,
+    path = "/api/hosts/{id}/add_hostkey",
+    params(
+        ("id" = i32, Path, description = "Host ID")
+    ),
+    request_body = AddHostkeyRequest,
+    responses(
+        (status = 200, description = "Host key added successfully", body = HostkeyConfirmation),
+        (status = 404, description = "Host not found", body = ApiError)
+    )
+)]
 #[post("/{id}/add_hostkey")]
 async fn add_host_key(
     conn: Data<ConnectionPool>,
@@ -242,6 +288,16 @@ async fn add_host_key(
 }
 
 
+/// Create a new host
+#[utoipa::path(
+    post,
+    path = "/api/hosts",
+    request_body = CreateHostRequest,
+    responses(
+        (status = 201, description = "Host created successfully", body = HostResponse),
+        (status = 400, description = "Bad request", body = ApiError)
+    )
+)]
 #[post("")]
 async fn create_host(
     conn: Data<ConnectionPool>,

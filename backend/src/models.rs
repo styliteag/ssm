@@ -1,7 +1,8 @@
 use diesel::prelude::*;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Queryable, Selectable, Associations, Clone, Debug)]
+#[derive(Queryable, Selectable, Associations, Clone, Debug, Serialize, ToSchema)]
 #[diesel(table_name = crate::schema::host)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 #[diesel(belongs_to(Host, foreign_key = jump_via))]
@@ -57,7 +58,7 @@ impl Host {
     }
 }
 
-#[derive(Insertable, Clone)]
+#[derive(Insertable, Clone, ToSchema)]
 #[diesel(table_name = crate::schema::host)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct NewHost {
@@ -69,7 +70,7 @@ pub struct NewHost {
     pub jump_via: Option<i32>,
 }
 
-#[derive(Queryable, Selectable, Associations, Clone, Debug)]
+#[derive(Queryable, Selectable, Associations, Clone, Debug, Serialize, ToSchema)]
 #[diesel(table_name = crate::schema::user_key)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 #[diesel(belongs_to(User))]
@@ -81,7 +82,7 @@ pub struct PublicUserKey {
     pub user_id: i32,
 }
 
-#[derive(Insertable, Associations, Clone)]
+#[derive(Insertable, Associations, Clone, ToSchema)]
 #[diesel(table_name = crate::schema::user_key)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 #[diesel(belongs_to(User))]
@@ -108,7 +109,7 @@ impl NewPublicUserKey {
     }
 }
 
-#[derive(Queryable, Selectable, Clone)]
+#[derive(Queryable, Selectable, Clone, Serialize, ToSchema)]
 #[diesel(table_name = crate::schema::user)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct User {
@@ -117,7 +118,7 @@ pub struct User {
     pub enabled: bool,
 }
 
-#[derive(Insertable, Deserialize, Clone)]
+#[derive(Insertable, Deserialize, Clone, ToSchema)]
 #[diesel(table_name = crate::schema::user)]
 pub struct NewUser {
     pub username: String,

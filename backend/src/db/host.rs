@@ -87,7 +87,7 @@ impl Host {
     ) -> Result<Vec<UserAndOptions>, String> {
         // let user_ids = self.get_authorized_user_ids(conn)?;
 
-        query(
+        let tuples: Result<Vec<(i32, String, String, Option<String>)>, String> = query(
             authorization::table
                 .inner_join(user::table)
                 .filter(authorization::host_id.eq(self.id))
@@ -97,8 +97,9 @@ impl Host {
                     authorization::login,
                     authorization::options,
                 ))
-                .load::<UserAndOptions>(conn),
-        )
+                .load::<(i32, String, String, Option<String>)>(conn),
+        );
+        tuples.map(|vec| vec.into_iter().map(UserAndOptions::from).collect())
     }
 
     /// Get a host from a name
