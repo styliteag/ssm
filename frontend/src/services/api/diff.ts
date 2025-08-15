@@ -69,14 +69,14 @@ export interface DetailedDiffResponse {
 
 // Get all hosts available for diff comparison
 export const getAllHosts = async (): Promise<DiffHost[]> => {
-  const response = await api.get<{ success: boolean; data: { hosts: DiffHost[] } }>('/diff');
+  const response = await api.get<{ hosts: DiffHost[] }>('/diff');
   return response.data?.hosts || [];
 };
 
 // Get diff status for a specific host (with detailed diff information)
 export const getHostDiff = async (hostName: string, forceUpdate = false): Promise<DiffResponse> => {
   const params = forceUpdate ? '?force_update=true' : '';
-  const response = await api.get<{ success: boolean; data: DiffResponse }>(`/diff/${encodeURIComponent(hostName)}${params}`);
+  const response = await api.get<DiffResponse>(`/diff/${encodeURIComponent(hostName)}${params}`);
   
   if (!response.success) {
     throw new Error('Failed to get host diff');
@@ -95,7 +95,7 @@ export const getHostDiff = async (hostName: string, forceUpdate = false): Promis
 // Get detailed host information for diff details view (with expected keys)
 export const getHostDiffDetails = async (hostName: string, forceUpdate = false): Promise<DetailedDiffResponse> => {
   const params = forceUpdate ? '?force_update=true' : '';
-  const response = await api.get<{ success: boolean; data: DetailedDiffResponse }>(`/diff/${encodeURIComponent(hostName)}/details${params}`);
+  const response = await api.get<DetailedDiffResponse>(`/diff/${encodeURIComponent(hostName)}/details${params}`);
   
   if (!response.success) {
     throw new Error('Failed to get host details');
