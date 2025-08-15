@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   Server, 
   Plus, 
@@ -37,7 +37,9 @@ interface ExtendedHost extends Host {
 
 const HostsPage: React.FC = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { showSuccess, showError } = useNotifications();
+  
   
   // State management
   const [hosts, setHosts] = useState<ExtendedHost[]>([]);

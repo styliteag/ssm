@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Shield, Plus, Grid3X3, List, BarChart3, RefreshCw, FileDown, Settings } from 'lucide-react';
 import { Button, Loading } from '../components/ui';
 import { 
@@ -24,8 +25,15 @@ import {
 type ViewMode = 'stats' | 'matrix' | 'list';
 
 const AuthorizationsPage: React.FC = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  
+  // Check URL for view parameter and restore Matrix state
+  const urlParams = new URLSearchParams(location.search);
+  const urlView = urlParams.get('view') as ViewMode;
+  
   // State management
-  const [viewMode, setViewMode] = useState<ViewMode>('stats');
+  const [viewMode, setViewMode] = useState<ViewMode>(urlView || 'stats');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   
@@ -41,6 +49,29 @@ const AuthorizationsPage: React.FC = () => {
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedAuthorization, setSelectedAuthorization] = useState<Authorization | null>(null);
+
+  // Handle view mode changes and update URL
+  const handleViewModeChange = useCallback((newViewMode: ViewMode) => {
+    setViewMode(newViewMode);
+    
+    // Update URL without triggering navigation
+    const newUrl = newViewMode === 'stats' 
+      ? '/authorizations' 
+      : `/authorizations?view=${newViewMode}`;
+    window.history.replaceState(null, '', newUrl);
+  }, []);
+
+  // Restore Matrix state when component mounts
+  useEffect(() => {
+    if (urlView === 'matrix') {
+      // Try to restore Matrix state from localStorage
+      const savedState = localStorage.getItem('matrixNavigationState');
+      if (savedState) {
+        // Matrix component will handle this when it mounts
+        console.log('Matrix state available for restoration');
+      }
+    }
+  }, [urlView]);
 
   // Load all data
   const loadData = useCallback(async (showLoader = true) => {
@@ -255,7 +286,7 @@ const AuthorizationsPage: React.FC = () => {
             <Button
               size="sm"
               variant={viewMode === 'stats' ? 'primary' : 'ghost'}
-              onClick={() => setViewMode('stats')}
+              onClick={() => handleViewModeChange('stats')}
               leftIcon={<BarChart3 size={16} />}
               className="h-8"
             >
@@ -264,7 +295,7 @@ const AuthorizationsPage: React.FC = () => {
             <Button
               size="sm"
               variant={viewMode === 'list' ? 'primary' : 'ghost'}
-              onClick={() => setViewMode('list')}
+              onClick={() => handleViewModeChange('list')}
               leftIcon={<List size={16} />}
               className="h-8"
             >
@@ -273,7 +304,7 @@ const AuthorizationsPage: React.FC = () => {
             <Button
               size="sm"
               variant={viewMode === 'matrix' ? 'primary' : 'ghost'}
-              onClick={() => setViewMode('matrix')}
+              onClick={() => handleViewModeChange('matrix')}
               leftIcon={<Grid3X3 size={16} />}
               className="h-8"
             >
@@ -336,6 +367,7 @@ const AuthorizationsPage: React.FC = () => {
           authorizations={authorizations}
           onToggleAuthorization={handleToggleAuthorization}
           loading={refreshing}
+          onViewModeChange={handleViewModeChange}
         />
       )}
       

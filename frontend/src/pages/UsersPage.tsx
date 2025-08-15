@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Users,
   Plus,
@@ -51,7 +51,9 @@ interface UserDetailsData {
 
 const UsersPage: React.FC = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { showSuccess, showError } = useNotifications();
+  
   
   // State management
   const [users, setUsers] = useState<ExtendedUser[]>([]);
