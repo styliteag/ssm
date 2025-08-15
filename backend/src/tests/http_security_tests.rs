@@ -19,6 +19,24 @@ use crate::{
 async fn test_sql_injection_prevention() {
     let (app, test_config) = create_inline_test_service!();
     
+    // Get authentication cookie
+    let login_req = test::TestRequest::post()
+        .uri("/api/auth/login")
+        .set_json(&json!({"username": "testuser", "password": "testpass"}))
+        .to_request();
+    let login_resp = test::call_service(&app, login_req).await;
+    assert_eq!(login_resp.status(), StatusCode::OK);
+    let mut cookie = String::new();
+    for (name, value) in login_resp.headers().iter() {
+        if name == "set-cookie" {
+            if let Some(cookie_value) = value.to_str().unwrap().split(';').next() {
+                cookie = cookie_value.to_string();
+            }
+            break;
+        }
+    }
+    assert!(!cookie.is_empty());
+    
     // Create test data
     use crate::models::{NewUser, User, NewHost, Host};
     let mut conn = test_config.db_pool.get().unwrap();
@@ -54,6 +72,7 @@ async fn test_sql_injection_prevention() {
         // Test user endpoint
         let req = test::TestRequest::get()
             .uri(&format!("/api/user/{}", urlencoding::encode(payload)))
+            .insert_header(("Cookie", cookie.clone()))
             .to_request();
         
         let resp = test::call_service(&app, req).await;
@@ -63,6 +82,7 @@ async fn test_sql_injection_prevention() {
         // Test host endpoint
         let req = test::TestRequest::get()
             .uri(&format!("/api/host/{}", urlencoding::encode(payload)))
+            .insert_header(("Cookie", cookie.clone()))
             .to_request();
         
         let resp = test::call_service(&app, req).await;
@@ -71,6 +91,7 @@ async fn test_sql_injection_prevention() {
         // Test key search with malicious input
         let req = test::TestRequest::get()
             .uri(&format!("/api/key?search={}", urlencoding::encode(payload)))
+            .insert_header(("Cookie", cookie.clone()))
             .to_request();
         
         let resp = test::call_service(&app, req).await;
@@ -506,9 +527,28 @@ async fn test_concurrent_request_safety() {
 async fn test_error_information_disclosure() {
     let (app, _test_config) = create_inline_test_service!();
     
+    // Get authentication cookie
+    let login_req = test::TestRequest::post()
+        .uri("/api/auth/login")
+        .set_json(&json!({"username": "testuser", "password": "testpass"}))
+        .to_request();
+    let login_resp = test::call_service(&app, login_req).await;
+    assert_eq!(login_resp.status(), StatusCode::OK);
+    let mut cookie = String::new();
+    for (name, value) in login_resp.headers().iter() {
+        if name == "set-cookie" {
+            if let Some(cookie_value) = value.to_str().unwrap().split(';').next() {
+                cookie = cookie_value.to_string();
+            }
+            break;
+        }
+    }
+    assert!(!cookie.is_empty());
+    
     // Test that error messages don't reveal sensitive information
     let req = test::TestRequest::get()
         .uri("/api/user/nonexistentuser")
+        .insert_header(("Cookie", cookie))
         .to_request();
     
     let resp = test::call_service(&app, req).await;

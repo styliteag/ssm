@@ -299,9 +299,28 @@ async fn test_diff_with_authorization_filtering() {
 async fn test_diff_error_scenarios() {
     let (app, _test_config) = create_inline_test_service!();
     
+    // Get authentication cookie
+    let login_req = test::TestRequest::post()
+        .uri("/api/auth/login")
+        .set_json(&json!({"username": "testuser", "password": "testpass"}))
+        .to_request();
+    let login_resp = test::call_service(&app, login_req).await;
+    assert_eq!(login_resp.status(), StatusCode::OK);
+    let mut cookie = String::new();
+    for (name, value) in login_resp.headers().iter() {
+        if name == "set-cookie" {
+            if let Some(cookie_value) = value.to_str().unwrap().split(';').next() {
+                cookie = cookie_value.to_string();
+            }
+            break;
+        }
+    }
+    assert!(!cookie.is_empty());
+    
     // Test diff with nonexistent host
     let req = test::TestRequest::get()
         .uri("/api/diff/nonexistenthost")
+        .insert_header(("Cookie", cookie.clone()))
         .to_request();
     
     let resp = test::call_service(&app, req).await;
@@ -310,6 +329,7 @@ async fn test_diff_error_scenarios() {
     // Test diff between nonexistent hosts
     let req = test::TestRequest::get()
         .uri("/api/diff/nonexistent1/nonexistent2")
+        .insert_header(("Cookie", cookie.clone()))
         .to_request();
     
     let resp = test::call_service(&app, req).await;
@@ -318,6 +338,7 @@ async fn test_diff_error_scenarios() {
     // Test diff with invalid login
     let req = test::TestRequest::get()
         .uri("/api/diff/somehost/invalidlogin@#$")
+        .insert_header(("Cookie", cookie))
         .to_request();
     
     let resp = test::call_service(&app, req).await;

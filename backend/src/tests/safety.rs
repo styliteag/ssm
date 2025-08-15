@@ -5,7 +5,7 @@ use std::path::Path;
 /// Global flag to track if we're in test mode
 static TEST_MODE: AtomicBool = AtomicBool::new(false);
 
-/// Thread-local flag to track if SSH operations are allowed
+// Thread-local flag to track if SSH operations are allowed
 thread_local! {
     static SSH_OPERATIONS_BLOCKED: std::cell::Cell<bool> = std::cell::Cell::new(false);
 }
