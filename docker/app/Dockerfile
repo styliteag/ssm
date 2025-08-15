@@ -95,6 +95,7 @@ COPY templates /app/templates
 RUN mkdir -p /var/cache/nginx /var/run/nginx /app/db /app/keys /var/log/nginx && \
     chmod +x /app/health-check.sh && \
     chmod +x /app/ssm && \
+    rm -rf /app/.htpasswd && \
     printf '#!/bin/sh\n' > /app/start.sh && \
     printf 'set -e\n' >> /app/start.sh && \
     printf 'echo "Starting SSH Key Manager"\n' >> /app/start.sh && \
@@ -116,6 +117,8 @@ RUN mkdir -p /var/cache/nginx /var/run/nginx /app/db /app/keys /var/log/nginx &&
     printf '\n' >> /app/start.sh && \
     printf '# Start nginx in background\n' >> /app/start.sh && \
     printf 'echo "Starting nginx reverse proxy..."\n' >> /app/start.sh && \
+    printf 'echo "Nginx Config:"\n' >> /app/start.sh && \
+    printf 'nginx -T\n' >> /app/start.sh && \
     printf 'nginx -t && nginx -g "daemon off;" &\n' >> /app/start.sh && \
     printf 'NGINX_PID=$!\n' >> /app/start.sh && \
     printf 'sleep 2\n' >> /app/start.sh && \
