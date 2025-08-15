@@ -12,8 +12,20 @@ use actix_web::{
 };
 use utoipa::{OpenApi, ToSchema};
 use serde::{Deserialize, Serialize};
+use actix_identity::Identity;
 
 use crate::api_types::*;
+
+/// Helper function to check if user is authenticated
+pub fn require_auth(identity: Option<Identity>) -> Result<String, actix_web::Error> {
+    match identity {
+        Some(id) => match id.id() {
+            Ok(user_id) => Ok(user_id),
+            Err(_) => Err(actix_web::error::ErrorUnauthorized(ApiError::unauthorized())),
+        },
+        None => Err(actix_web::error::ErrorUnauthorized(ApiError::unauthorized())),
+    }
+}
 
 pub fn route_config(cfg: &mut web::ServiceConfig) {
     cfg.service(api_info)

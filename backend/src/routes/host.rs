@@ -5,6 +5,7 @@ use actix_web::{
     web::{self, Data, Json, Path, Query},
     HttpResponse, Responder, Result,
 };
+use actix_identity::Identity;
 use log::error;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -12,7 +13,7 @@ use utoipa::ToSchema;
 use crate::{
     api_types::*,
     db::UserAndOptions,
-    routes::ForceUpdateQuery,
+    routes::{ForceUpdateQuery, require_auth},
     ssh::{CachingSshClient, SshClient, SshFirstConnectionHandler},
     ConnectionPool,
 };
@@ -74,7 +75,10 @@ impl From<Host> for HostResponse {
 async fn get_all_hosts(
     conn: Data<ConnectionPool>,
     _pagination: Query<PaginationQuery>,
+    identity: Option<Identity>,
 ) -> Result<impl Responder> {
+    // Check authentication
+    require_auth(identity)?;
     let hosts = web::block(move || Host::get_all_hosts(&mut conn.get().unwrap())).await?;
     
     match hosts {

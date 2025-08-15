@@ -125,7 +125,10 @@ fn default_loglevel() -> String {
 }
 
 fn default_session_key() -> String {
-    String::from("my-secret-key-please-change-me-in-production")
+    env::var("SESSION_KEY").unwrap_or_else(|_| {
+        error!("SESSION_KEY environment variable not set! Using insecure default.");
+        String::from("my-secret-key-please-change-me-in-production")
+    })
 }
 
 fn default_htpasswd_path() -> PathBuf {
@@ -281,21 +284,6 @@ async fn main() -> Result<(), std::io::Error> {
                     .build(),
             )
             .wrap(IdentityMiddleware::default())
-            // TODO: Re-enable authentication middleware after fixing middleware issues
-            // .wrap(actix_web::middleware::from_fn(middleware::authentication))
-            // TODO: Re-enable error handlers after fixing middleware issues
-            // .wrap(
-            //     ErrorHandlers::new().handler(StatusCode::UNAUTHORIZED, |res: ServiceResponse| {
-            //         let req = res.request().clone();
-            //         let response = HttpResponse::Unauthorized()
-            //             .json(crate::api_types::ApiError::unauthorized())
-            //             .map_into_right_body();
-            //         Ok(ErrorHandlerResponse::Response(ServiceResponse::new(
-            //             req,
-            //             response,
-            //         )))
-            //     }),
-            // )
             .app_data(Data::new(ssh_client.clone()))
             .app_data(caching_ssh_client.clone())
             .app_data(config.clone())
