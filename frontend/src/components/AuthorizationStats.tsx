@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Users, Server, Shield, UserCheck, AlertTriangle, TrendingUp, Search, Edit2 } from 'lucide-react';
 import { Authorization, User, Host, HostFormData, UserFormData } from '../types';
@@ -56,13 +56,40 @@ const AuthorizationStats: React.FC<AuthorizationStatsProps> = ({
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  // Restore state from localStorage if returning from navigation
+  useEffect(() => {
+    const savedState = localStorage.getItem('statsNavigationState');
+    if (savedState) {
+      try {
+        const state = JSON.parse(savedState);
+        setSearchTerm(state.searchTerm || '');
+        
+        // Clear the saved state after restoring
+        localStorage.removeItem('statsNavigationState');
+      } catch (error) {
+        console.error('Error restoring stats state:', error);
+        localStorage.removeItem('statsNavigationState');
+      }
+    }
+  }, []);
+
   // Handle user click to navigate to Users page with search
   const handleUserClick = (username: string) => {
+    // Save current state for back navigation
+    const statsState = {
+      searchTerm, // Current search term in stats
+    };
+    localStorage.setItem('statsNavigationState', JSON.stringify(statsState));
     navigate('/users', { state: { searchTerm: username } });
   };
 
   // Handle host click to navigate to Hosts page with search
   const handleHostClick = (hostname: string) => {
+    // Save current state for back navigation  
+    const statsState = {
+      searchTerm, // Current search term in stats
+    };
+    localStorage.setItem('statsNavigationState', JSON.stringify(statsState));
     navigate('/hosts', { state: { searchTerm: hostname } });
   };
 
