@@ -1,0 +1,70 @@
+# Development commands for the SSH Key Manager backend
+
+# Run the development server with auto-reload on file changes
+dev:
+    RUST_LOG=debug cargo watch -x run
+    #cargo watch -x run --env RUST_LOG=debug
+
+# Run the development server without auto-reload
+run:
+    cargo run
+
+# Run all tests
+test:
+    cargo test
+
+# Run a specific test
+test-name name:
+    cargo test {{name}}
+
+# Run tests with output
+test-verbose:
+    cargo test -- --nocapture
+
+# Check code without building
+check:
+    cargo check
+
+# Build the project
+build:
+    cargo build
+
+# Build for release
+build-release:
+    cargo build --release
+
+# Run clippy linter
+lint:
+    cargo clippy
+
+# Format code
+fmt:
+    cargo fmt
+
+# Apply database migrations
+migrate:
+    diesel migration run
+
+# Create a new migration
+migration name:
+    diesel migration generate {{name}}
+
+# Setup database (create and migrate)
+db-setup:
+    diesel setup
+
+# Reset database (drop, create, and migrate)
+db-reset:
+    diesel database reset
+
+# Clean build artifacts
+clean:
+    cargo clean
+
+# Install cargo-watch if not already installed
+install-watch:
+    cargo install cargo-watch
+
+# Show available commands
+help:
+    just --list
