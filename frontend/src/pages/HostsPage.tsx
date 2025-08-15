@@ -279,10 +279,18 @@ const HostsPage: React.FC = () => {
       key: 'name',
       header: 'Name',
       sortable: true,
-      render: (value) => (
-        <div className="font-medium text-gray-900 dark:text-gray-100">
+      render: (value, host) => (
+        <button
+          className="font-medium text-gray-900 dark:text-gray-100 hover:text-blue-600 dark:hover:text-blue-400 text-left cursor-pointer"
+          onClick={(e) => {
+            e.stopPropagation();
+            setSelectedHost(host);
+            setShowEditModal(true);
+          }}
+          title="Click to edit host"
+        >
           {value as string}
-        </div>
+        </button>
       )
     },
     {
