@@ -1,0 +1,68 @@
+# SSH Key Manager Configuration Example
+# Copy this file to config.toml and update with your actual values
+
+[database]
+# SQLite database connection string
+# For development, use a local SQLite file
+# For production, consider using PostgreSQL or MySQL
+database_url = "sqlite://ssm.db"
+
+[server]
+# Port for the web server to listen on
+port = 8000
+
+# Number of worker threads
+# For development: 4
+# For production: 16 or more depending on your server capacity
+workers = 4
+
+# Session configuration
+# Generate a new session key for production using: openssl rand -hex 32
+# This key is used to encrypt session cookies
+session_key = "YOUR_SESSION_KEY_HERE_32_CHARACTERS_LONG"
+
+[ssh]
+# Path to your SSH private key for authenticating with managed hosts
+# This should be an absolute path to your SSH private key
+# Example: "/home/user/.ssh/id_rsa" or "C:\Users\user\.ssh\id_rsa"
+private_key_file = "/path/to/your/ssh/private/key"
+
+# Optional: private key passphrase if your key is encrypted
+# Uncomment and set if your SSH key requires a passphrase
+# private_key_passphrase = "your_passphrase_here"
+
+# SSH connection timeout in seconds
+timeout = 30
+
+[logging]
+# Log level: debug, info, warn, error
+level = "info"
+
+# Log file path (optional, logs to console if not specified)
+# log_file = "/var/log/ssh-key-manager.log"
+
+[auth]
+# Path to htpasswd file for user authentication
+# Create this file using: htpasswd -c .htpasswd username
+htpasswd_file = ".htpasswd"
+
+# Session timeout in seconds
+session_timeout = 3600
+
+# Optional: Enable/disable authentication
+# Set to false to disable authentication (development only)
+# require_auth = true
+
+[security]
+# CORS settings for web frontend
+# In production, restrict this to your actual frontend domain
+cors_origins = ["http://localhost:3000", "http://localhost:8080"]
+
+# Rate limiting (requests per minute per IP)
+rate_limit = 100
+
+# Optional: Enable HTTPS redirect
+# https_redirect = false
+
+# Optional: Trusted proxy headers (if behind a reverse proxy)
+# trusted_proxies = ["127.0.0.1", "::1"]
