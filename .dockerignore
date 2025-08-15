@@ -1,6 +1,11 @@
 # Backend Rust build artifacts
 backend/target/
 target/
+backend/config.toml
+backend/.htpasswd
+backend/ssm.db
+backend/data/
+backend/target/
 *.db
 *.db-*
 ssm.db*
