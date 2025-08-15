@@ -1,8 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Check, X, Loader2, AlertCircle, Eye, EyeOff, Search } from 'lucide-react';
 import { cn } from '../utils/cn';
 import { User, Host, Authorization } from '../types';
-import { authorizationsService } from '../services/api/authorizations';
 import { Card, CardContent, CardHeader, CardTitle } from './ui';
 import Button from './ui/Button';
 import Input from './ui/Input';
@@ -232,7 +231,7 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
   };
 
   // Get cell background color
-  const getCellClassName = (cell: MatrixCell, rowIndex: number, colIndex: number) => {
+  const getCellClassName = (cell: MatrixCell, rowIndex: number) => {
     const isHovered = hoveredCell?.userId === cell.userId && hoveredCell?.hostId === cell.hostId;
     const isRowSelected = selectedUsers.has(cell.userId);
     const isColSelected = selectedHosts.has(cell.hostId);
@@ -359,7 +358,7 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
                 <div className="w-32 h-10 flex items-center px-3 border-r border-gray-200 dark:border-gray-700 font-medium text-sm">
                   Users / Hosts
                 </div>
-                {filteredHosts.map((host, index) => (
+                {filteredHosts.map((host) => (
                   <div
                     key={host.id}
                     className={cn(
@@ -416,14 +415,14 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
                   </div>
 
                   {/* Authorization cells */}
-                  {filteredHosts.map((host, colIndex) => {
+                  {filteredHosts.map((host) => {
                     const cell = matrixData[users.indexOf(user)]?.[hosts.indexOf(host)];
                     if (!cell) return null;
 
                     return (
                       <div
                         key={`${user.id}-${host.id}`}
-                        className={getCellClassName(cell, rowIndex, colIndex)}
+                        className={getCellClassName(cell, rowIndex)}
                         onClick={() => !cell.loading && handleCellClick(cell.userId, cell.hostId, cell.isAuthorized)}
                         onMouseEnter={() => setHoveredCell({ userId: cell.userId, hostId: cell.hostId })}
                         onMouseLeave={() => setHoveredCell(null)}

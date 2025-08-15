@@ -49,6 +49,7 @@ interface ExtendedKey extends PublicUserKey {
   lastUsed?: Date;
   createdAt?: Date;
   hostCount?: number;
+  [key: string]: unknown;
 }
 
 interface KeyDetails {
@@ -111,7 +112,7 @@ const KeysPage: React.FC = () => {
               const user = userMap.get(key.user_id);
               
               // Get authorization count for this key
-              const authResponse = await authorizationsService.getUserAuthorizations(key.user_id);
+              const authResponse = await authorizationsService.getUserAuthorizations(user?.username || '');
               const hostCount = authResponse.success ? authResponse.data?.length || 0 : 0;
 
               return {
@@ -121,7 +122,7 @@ const KeysPage: React.FC = () => {
                 hostCount,
                 createdAt: new Date(), // Would come from backend
               };
-            } catch (error) {
+            } catch {
               return {
                 ...key,
                 username: userMap.get(key.user_id)?.username || 'Unknown',
@@ -135,7 +136,7 @@ const KeysPage: React.FC = () => {
 
         setKeys(enhancedKeys);
       }
-    } catch (error) {
+    } catch {
       showError('Failed to load SSH keys', 'Please try again later');
     } finally {
       setLoading(false);
@@ -153,7 +154,7 @@ const KeysPage: React.FC = () => {
       const key = keys.find(k => k.id === keyId);
       if (!key) return;
 
-      const authResponse = await authorizationsService.getUserAuthorizations(key.user_id);
+      const authResponse = await authorizationsService.getUserAuthorizations(key.username || '');
       if (authResponse.success && authResponse.data) {
         // Would need to fetch host details in a real implementation
         const hosts: Host[] = []; // Would need to fetch host details
@@ -163,7 +164,7 @@ const KeysPage: React.FC = () => {
           hosts
         });
       }
-    } catch (error) {
+    } catch {
       showError('Failed to load key details', 'Please try again');
     } finally {
       setLoadingDetails(false);
@@ -203,7 +204,7 @@ const KeysPage: React.FC = () => {
     try {
       await navigator.clipboard.writeText(text);
       showSuccess('Copied to clipboard');
-    } catch (error) {
+    } catch {
       showError('Failed to copy to clipboard');
     }
   };
@@ -214,25 +215,26 @@ const KeysPage: React.FC = () => {
   };
 
   // Handle key creation
-  const handleCreateKey = async (formData: Record<string, any>) => {
+  const handleCreateKey = async (formData: Record<string, unknown>) => {
     try {
       setSubmitting(true);
       
-      const keyValidation = validateSSHKey(formData.keyText);
+      const keyValidation = validateSSHKey((formData as Record<string, unknown>).keyText as string);
       if (!keyValidation.valid) {
         showError('Invalid SSH Key', keyValidation.message);
         return;
       }
 
-      const keyData = parseSSHKey(formData.keyText);
+      const keyData = parseSSHKey((formData as Record<string, unknown>).keyText as string);
       if (!keyData) {
         showError('Failed to parse SSH key');
         return;
       }
 
-      const response = await keysService.createKey(formData.userId, {
+      const formDataTyped = formData as Record<string, unknown>;
+      const response = await keysService.createKey(formDataTyped.userId as number, {
         ...keyData,
-        comment: formData.comment || keyData.comment
+        comment: (formDataTyped.comment as string) || keyData.comment
       });
 
       if (response.success) {
@@ -242,7 +244,7 @@ const KeysPage: React.FC = () => {
       } else {
         showError('Failed to add SSH key', response.message);
       }
-    } catch (error) {
+    } catch {
       showError('Failed to add SSH key', 'Please try again');
     } finally {
       setSubmitting(false);
@@ -250,13 +252,13 @@ const KeysPage: React.FC = () => {
   };
 
   // Handle key update
-  const handleUpdateKey = async (formData: Record<string, any>) => {
+  const handleUpdateKey = async (formData: Record<string, unknown>) => {
     if (!selectedKey) return;
 
     try {
       setSubmitting(true);
       const response = await keysService.updateKey(selectedKey.id, {
-        comment: formData.comment
+        comment: (formData as Record<string, unknown>).comment as string
       });
 
       if (response.success) {
@@ -267,7 +269,7 @@ const KeysPage: React.FC = () => {
       } else {
         showError('Failed to update SSH key', response.message);
       }
-    } catch (error) {
+    } catch {
       showError('Failed to update SSH key', 'Please try again');
     } finally {
       setSubmitting(false);
@@ -290,7 +292,7 @@ const KeysPage: React.FC = () => {
       } else {
         showError('Failed to delete SSH key', response.message);
       }
-    } catch (error) {
+    } catch {
       showError('Failed to delete SSH key', 'Please try again');
     } finally {
       setSubmitting(false);
@@ -298,14 +300,14 @@ const KeysPage: React.FC = () => {
   };
 
   // Handle bulk assignment
-  const handleBulkAssign = async (_formData: Record<string, any>) => {
+  const handleBulkAssign = async () => {
     try {
       setSubmitting(true);
       // Note: This would need API support for bulk assignment or user reassignment
       // For now, we'll show a message about this functionality
       showError('Bulk assignment not yet supported', 'This feature requires backend API updates');
       setShowBulkAssignModal(false);
-    } catch (error) {
+    } catch {
       showError('Failed to assign keys', 'Please try again');
     } finally {
       setSubmitting(false);
@@ -313,10 +315,11 @@ const KeysPage: React.FC = () => {
   };
 
   // Handle key import
-  const handleImportKeys = async (formData: Record<string, any>) => {
+  const handleImportKeys = async (formData: Record<string, unknown>) => {
     try {
       setSubmitting(true);
-      const response = await keysService.importKeys(formData.userId, formData.keysText);
+      const formDataTyped = formData as Record<string, unknown>;
+      const response = await keysService.importKeys(formDataTyped.userId as number, formDataTyped.keysText as string);
 
       if (response.success && response.data) {
         const { imported, failed, errors } = response.data;
@@ -331,7 +334,7 @@ const KeysPage: React.FC = () => {
       } else {
         showError('Failed to import keys', response.message);
       }
-    } catch (error) {
+    } catch {
       showError('Failed to import keys', 'Please try again');
     } finally {
       setSubmitting(false);
@@ -392,9 +395,9 @@ const KeysPage: React.FC = () => {
       key: 'key_type',
       header: 'Type',
       sortable: true,
-      render: (value: string) => (
-        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getKeyTypeBadgeColor(value)}`}>
-          {value.replace('ssh-', '').toUpperCase()}
+      render: (value: unknown) => (
+        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getKeyTypeBadgeColor(value as string)}`}>
+          {(value as string).replace('ssh-', '').toUpperCase()}
         </span>
       ),
     },
@@ -403,7 +406,7 @@ const KeysPage: React.FC = () => {
       header: 'User',
       sortable: true,
       searchable: true,
-      render: (value: string, item: ExtendedKey) => (
+      render: (value: unknown, item: ExtendedKey) => (
         <div className="flex items-center space-x-2">
           {item.user_id ? (
             <UserCheck size={16} className="text-green-600" />
@@ -411,7 +414,7 @@ const KeysPage: React.FC = () => {
             <UserX size={16} className="text-gray-400" />
           )}
           <span className={item.user_id ? 'text-gray-900 dark:text-gray-100' : 'text-gray-400'}>
-            {value || 'Unassigned'}
+            {(value as string) || 'Unassigned'}
           </span>
         </div>
       ),
@@ -420,20 +423,20 @@ const KeysPage: React.FC = () => {
       key: 'comment',
       header: 'Comment',
       searchable: true,
-      render: (value: string) => (
+      render: (value: unknown) => (
         <span className="text-gray-600 dark:text-gray-400 max-w-xs truncate">
-          {value || 'No comment'}
+          {(value as string) || 'No comment'}
         </span>
       ),
     },
     {
       key: 'key_base64',
       header: 'Fingerprint',
-      render: (value: string) => (
+      render: (value: unknown) => (
         <div className="flex items-center space-x-2">
           <Fingerprint size={14} className="text-gray-400" />
           <code className="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded font-mono max-w-32 truncate">
-            {value.substring(0, 20)}...
+            {(value as string).substring(0, 20)}...
           </code>
         </div>
       ),
@@ -442,10 +445,10 @@ const KeysPage: React.FC = () => {
       key: 'status',
       header: 'Status',
       sortable: true,
-      render: (value: ExtendedKey['status']) => (
+      render: (value: unknown) => (
         <div className="flex items-center space-x-2">
-          {getStatusIcon(value)}
-          <span className="text-sm capitalize">{value}</span>
+          {getStatusIcon(value as ExtendedKey['status'])}
+          <span className="text-sm capitalize">{value as string}</span>
         </div>
       ),
     },
@@ -453,10 +456,10 @@ const KeysPage: React.FC = () => {
       key: 'hostCount',
       header: 'Hosts',
       sortable: true,
-      render: (value: number = 0) => (
+      render: (value: unknown) => (
         <div className="flex items-center space-x-1">
           <Shield size={14} className="text-gray-400" />
-          <span>{value}</span>
+          <span>{(value as number) || 0}</span>
         </div>
       ),
     },
@@ -464,9 +467,9 @@ const KeysPage: React.FC = () => {
       key: 'createdAt',
       header: 'Created',
       sortable: true,
-      render: (value: Date) => (
+      render: (value: unknown) => (
         <span className="text-sm text-gray-500 dark:text-gray-400">
-          {value?.toLocaleDateString() || 'Unknown'}
+          {(value as Date)?.toLocaleDateString() || 'Unknown'}
         </span>
       ),
     },
@@ -561,8 +564,8 @@ const KeysPage: React.FC = () => {
       placeholder: 'Paste your SSH public key here (e.g., ssh-rsa AAAA... user@host)',
       helperText: 'Paste the complete SSH public key including type, key data, and optional comment',
       validation: {
-        custom: (value: string) => {
-          const validation = validateSSHKey(value);
+        custom: (value: unknown) => {
+          const validation = validateSSHKey(value as string);
           return validation.valid ? null : validation.message || 'Invalid SSH key format';
         }
       }
@@ -1041,7 +1044,7 @@ const KeysPage: React.FC = () => {
       >
         <Form
           fields={assignKeyFields}
-          onSubmit={async (_formData) => {
+          onSubmit={async () => {
             if (!selectedKey) return;
             try {
               setSubmitting(true);
@@ -1050,7 +1053,7 @@ const KeysPage: React.FC = () => {
               showError('Key reassignment not yet supported', 'This feature requires backend API updates');
               setShowAssignModal(false);
               setSelectedKey(null);
-            } catch (error) {
+            } catch {
               showError('Failed to assign SSH key', 'Please try again');
             } finally {
               setSubmitting(false);

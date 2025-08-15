@@ -84,13 +84,13 @@ const AuthorizationStats: React.FC<AuthorizationStatsProps> = ({
 
     try {
       setSubmitting(true);
-      const response = await hostsService.updateHost(selectedHost.id, values);
+      const response = await hostsService.updateHost(selectedHost.name, values);
       if (response.success && response.data) {
         setShowEditHostModal(false);
         setSelectedHost(null);
         showSuccess('Host updated', `${String(response.data.name)} has been updated successfully`);
       }
-    } catch (error) {
+    } catch {
       showError('Failed to update host', 'Please check your input and try again');
     } finally {
       setSubmitting(false);
@@ -107,13 +107,13 @@ const AuthorizationStats: React.FC<AuthorizationStatsProps> = ({
         username: selectedUser.username, // Keep original username
         enabled: typeof values.enabled === 'string' ? values.enabled === 'true' : Boolean(values.enabled)
       };
-      const response = await usersService.updateUser(selectedUser.id, userData);
+      const response = await usersService.updateUser(selectedUser.username, userData);
       if (response.success && response.data) {
         setShowEditUserModal(false);
         setSelectedUser(null);
         showSuccess('User updated', `${String(response.data.username)} has been updated successfully`);
       }
-    } catch (error) {
+    } catch {
       showError('Failed to update user', 'Please check your input and try again');
     } finally {
       setSubmitting(false);
@@ -590,7 +590,7 @@ const AuthorizationStats: React.FC<AuthorizationStatsProps> = ({
                 }
               }
             ]}
-            onSubmit={(values) => handleHostFormSubmit(values as HostFormData)}
+            onSubmit={(values: Record<string, unknown>) => handleHostFormSubmit(values as unknown as HostFormData)}
             submitText="Save Changes"
             cancelText="Cancel"
             onCancel={() => {
@@ -649,7 +649,7 @@ const AuthorizationStats: React.FC<AuthorizationStatsProps> = ({
                 ]
               }
             ]}
-            onSubmit={(values) => handleUserFormSubmit(values as UserFormData)}
+            onSubmit={(values: Record<string, unknown>) => handleUserFormSubmit(values as unknown as UserFormData)}
             submitText="Save Changes"
             cancelText="Cancel"
             onCancel={() => {

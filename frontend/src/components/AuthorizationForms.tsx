@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Check, X, UserPlus, Users, AlertTriangle, Info } from 'lucide-react';
+import { Check, UserPlus, AlertTriangle, Info } from 'lucide-react';
 import { Authorization, AuthorizationFormData, User, Host } from '../types';
 import Modal from './ui/Modal';
 import Form, { FormField } from './ui/Form';
@@ -83,14 +83,14 @@ export const AddAuthorizationModal: React.FC<AddAuthorizationModalProps> = ({
     },
   ];
 
-  const handleSubmit = async (values: Record<string, any>) => {
+  const handleSubmit = async (values: Record<string, unknown>) => {
     setLoading(true);
     try {
       await onSubmit({
-        user_id: parseInt(values.user_id),
-        host_id: parseInt(values.host_id),
-        login: values.login.trim(),
-        options: values.options?.trim() || undefined,
+        user_id: parseInt(values.user_id as string),
+        host_id: parseInt(values.host_id as string),
+        login: (values.login as string).trim(),
+        options: (values.options as string)?.trim() || undefined,
       });
       onClose();
     } catch (error) {
@@ -205,14 +205,14 @@ export const EditAuthorizationModal: React.FC<EditAuthorizationModalProps> = ({
     },
   ];
 
-  const handleSubmit = async (values: Record<string, any>) => {
+  const handleSubmit = async (values: Record<string, unknown>) => {
     if (!authorization) return;
     
     setLoading(true);
     try {
       await onSubmit(authorization.id, {
-        login: values.login.trim(),
-        options: values.options?.trim() || undefined,
+        login: (values.login as string).trim(),
+        options: (values.options as string)?.trim() || undefined,
       });
       onClose();
     } catch (error) {

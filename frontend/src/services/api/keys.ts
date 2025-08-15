@@ -21,7 +21,7 @@ export const keysService = {
         total: keys.length,
         page: 1,
         per_page: keys.length,
-        last_page: 1
+        total_pages: 1
       }
     };
   },
@@ -46,39 +46,48 @@ export const keysService = {
   },
 
   // These methods don't exist in the backend - calling code will need to be updated
-  getKey: async (id: number): Promise<ApiResponse<PublicUserKey>> => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  getKey: async (_id: number): Promise<ApiResponse<PublicUserKey>> => {
     throw new Error('getKey endpoint not available in backend');
   },
 
-  createKey: async (userId: number, key: KeyFormData): Promise<ApiResponse<PublicUserKey>> => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  createKey: async (_userId: number, _key: KeyFormData): Promise<ApiResponse<PublicUserKey>> => {
     throw new Error('createKey endpoint not available in backend. Use usersService.assignKeyToUser instead.');
   },
 
-  updateKey: async (id: number, key: Partial<KeyFormData>): Promise<ApiResponse<PublicUserKey>> => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  updateKey: async (_id: number, _key: Partial<KeyFormData>): Promise<ApiResponse<PublicUserKey>> => {
     throw new Error('updateKey endpoint not available in backend. Use updateKeyComment for comment updates.');
   },
 
-  parseKey: async (keyText: string): Promise<ApiResponse<{ key_type: string; key_base64: string; comment?: string }>> => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  parseKey: async (_keyText: string): Promise<ApiResponse<{ key_type: string; key_base64: string; comment?: string }>> => {
     throw new Error('parseKey endpoint not available in backend');
   },
 
-  validateKey: async (keyText: string): Promise<ApiResponse<{ valid: boolean; message?: string }>> => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  validateKey: async (_keyText: string): Promise<ApiResponse<{ valid: boolean; message?: string }>> => {
     throw new Error('validateKey endpoint not available in backend');
   },
 
-  getKeyFingerprint: async (keyId: number): Promise<ApiResponse<{ fingerprint: string }>> => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  getKeyFingerprint: async (_keyId: number): Promise<ApiResponse<{ fingerprint: string }>> => {
     throw new Error('getKeyFingerprint endpoint not available in backend');
   },
 
-  importKeys: async (userId: number, keysText: string): Promise<ApiResponse<{ imported: number; failed: number; errors?: string[] }>> => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  importKeys: async (_userId: number, _keysText: string): Promise<ApiResponse<{ imported: number; failed: number; errors?: string[] }>> => {
     throw new Error('importKeys endpoint not available in backend');
   },
 
-  exportKeys: async (userId: number): Promise<ApiResponse<{ keys_text: string }>> => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  exportKeys: async (_userId: number): Promise<ApiResponse<{ keys_text: string }>> => {
     throw new Error('exportKeys endpoint not available in backend');
   },
 
-  searchKeys: async (query: string): Promise<ApiResponse<PublicUserKey[]>> => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  searchKeys: async (_query: string): Promise<ApiResponse<PublicUserKey[]>> => {
     throw new Error('searchKeys endpoint not available in backend');
   },
 };

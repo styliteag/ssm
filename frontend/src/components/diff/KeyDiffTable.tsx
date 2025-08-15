@@ -30,6 +30,7 @@ interface KeyDiffRow extends KeyDifference {
   user_display: string;
   status_display: string;
   key_preview: string;
+  [key: string]: unknown;
 }
 
 const KeyDiffTable: React.FC<KeyDiffTableProps> = ({
@@ -187,11 +188,11 @@ const KeyDiffTable: React.FC<KeyDiffTableProps> = ({
 
   const columns: Column<KeyDiffRow>[] = [
     ...(selectable ? [{
-      key: 'select' as keyof KeyDiffRow,
+      key: 'actions',
       header: '',
       width: '50px',
       sortable: false,
-      render: (_: any, item: KeyDiffRow) => (
+      render: (_: unknown, item: KeyDiffRow) => (
         <input
           type="checkbox"
           checked={selectedDifferences.has(item.id)}
@@ -204,16 +205,16 @@ const KeyDiffTable: React.FC<KeyDiffTableProps> = ({
       key: 'action',
       header: 'Action',
       width: '120px',
-      render: (_: any, item: KeyDiffRow) => getActionBadge(item.action),
+      render: (_: unknown, item: KeyDiffRow) => getActionBadge(item.action),
     },
     {
       key: 'user_display',
       header: 'User',
       width: '150px',
-      render: (value: string, item: KeyDiffRow) => (
+      render: (value: unknown) => (
         <div className="flex items-center space-x-2">
           <User size={16} className="text-gray-500 dark:text-gray-400" />
-          <span className="font-medium">{value}</span>
+          <span className="font-medium">{value as string}</span>
         </div>
       ),
     },
@@ -221,7 +222,7 @@ const KeyDiffTable: React.FC<KeyDiffTableProps> = ({
       key: 'key',
       header: 'Key Type',
       width: '100px',
-      render: (_: any, item: KeyDiffRow) => (
+      render: (_: unknown, item: KeyDiffRow) => (
         <span className="font-mono text-sm">{item.key.key.key_type}</span>
       ),
     },
@@ -229,9 +230,9 @@ const KeyDiffTable: React.FC<KeyDiffTableProps> = ({
       key: 'fingerprint',
       header: 'Fingerprint',
       width: '200px',
-      render: (value: string) => (
+      render: (value: unknown) => (
         <span className="font-mono text-sm text-gray-600 dark:text-gray-400">
-          {value}
+          {value as string}
         </span>
       ),
     },
@@ -239,23 +240,23 @@ const KeyDiffTable: React.FC<KeyDiffTableProps> = ({
       key: 'key',
       header: 'Login',
       width: '120px',
-      render: (_: any, item: KeyDiffRow) => item.key.login,
+      render: (_: unknown, item: KeyDiffRow) => item.key.login,
     },
     {
       key: 'key',
       header: 'Comment',
-      render: (_: any, item: KeyDiffRow) => (
+      render: (_: unknown, item: KeyDiffRow) => (
         <span className="text-sm text-gray-600 dark:text-gray-400">
           {item.key.key.comment || <em>No comment</em>}
         </span>
       ),
     },
     ...(showDetails ? [{
-      key: 'actions' as keyof KeyDiffRow,
+      key: 'actions',
       header: '',
       width: '80px',
       sortable: false,
-      render: (_: any, item: KeyDiffRow) => (
+      render: (_: unknown, item: KeyDiffRow) => (
         <Button
           variant="ghost"
           size="sm"

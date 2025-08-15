@@ -32,6 +32,7 @@ import type {
 interface ExtendedHost extends Host {
   connectionStatus?: 'online' | 'offline' | 'testing' | 'unknown';
   lastTested?: Date;
+  [key: string]: unknown;
 }
 
 const HostsPage: React.FC = () => {
@@ -64,7 +65,7 @@ const HostsPage: React.FC = () => {
           connectionStatus: 'unknown' as const
         })));
       }
-    } catch (error) {
+    } catch {
       showError('Failed to load hosts', 'Please try again later');
     } finally {
       setLoading(false);
@@ -112,7 +113,7 @@ const HostsPage: React.FC = () => {
       } else {
         showError('Connection failed', response.data?.message || 'Unable to connect to host');
       }
-    } catch (error) {
+    } catch {
       setHosts(prev => prev.map(h => 
         h.id === host.id 
           ? { ...h, connectionStatus: 'offline', lastTested: new Date() }
@@ -136,10 +137,10 @@ const HostsPage: React.FC = () => {
       validation: {
         minLength: 2,
         maxLength: 50,
-        pattern: /^[a-zA-Z0-9\-_\.]+$/,
-        custom: (value: string) => {
+        pattern: /^[a-zA-Z0-9\-_.]+$/,
+        custom: (value: unknown) => {
           if (isEdit) return null;
-          const exists = hosts.some(h => h.name.toLowerCase() === value.toLowerCase());
+          const exists = hosts.some(h => h.name.toLowerCase() === (value as string).toLowerCase());
           return exists ? 'Host name already exists' : null;
         }
       }
@@ -213,7 +214,7 @@ const HostsPage: React.FC = () => {
         showSuccess('Host added', `${response.data!.name} has been added successfully`);
         await loadJumpHosts(); // Refresh jump hosts list
       }
-    } catch (error) {
+    } catch {
       showError('Failed to add host', 'Please check your input and try again');
     } finally {
       setSubmitting(false);
@@ -232,7 +233,7 @@ const HostsPage: React.FC = () => {
         key_fingerprint: values.key_fingerprint || undefined
       };
 
-      const response = await hostsService.updateHost(selectedHost.id, hostData);
+      const response = await hostsService.updateHost(selectedHost.name, hostData);
       if (response.success && response.data) {
         setHosts(prev => prev.map(h => 
           h.id === selectedHost.id 
@@ -244,7 +245,7 @@ const HostsPage: React.FC = () => {
         showSuccess('Host updated', `${response.data!.name} has been updated successfully`);
         await loadJumpHosts(); // Refresh jump hosts list
       }
-    } catch (error) {
+    } catch {
       showError('Failed to update host', 'Please check your input and try again');
     } finally {
       setSubmitting(false);
@@ -256,7 +257,7 @@ const HostsPage: React.FC = () => {
 
     try {
       setSubmitting(true);
-      const response = await hostsService.deleteHost(selectedHost.id);
+      const response = await hostsService.deleteHost(selectedHost.name);
       if (response.success) {
         setHosts(prev => prev.filter(h => h.id !== selectedHost.id));
         setShowDeleteModal(false);
@@ -264,7 +265,7 @@ const HostsPage: React.FC = () => {
         showSuccess('Host deleted', `${selectedHost.name} has been deleted successfully`);
         await loadJumpHosts(); // Refresh jump hosts list
       }
-    } catch (error) {
+    } catch {
       showError('Failed to delete host', 'Please try again later');
     } finally {
       setSubmitting(false);
@@ -279,7 +280,7 @@ const HostsPage: React.FC = () => {
       sortable: true,
       render: (value) => (
         <div className="font-medium text-gray-900 dark:text-gray-100">
-          {value}
+          {value as string}
         </div>
       )
     },
@@ -289,7 +290,7 @@ const HostsPage: React.FC = () => {
       sortable: true,
       render: (value, host) => (
         <div className="text-gray-600 dark:text-gray-400">
-          {value}:{host.port}
+          {value as string}:{(host as ExtendedHost).port}
         </div>
       )
     },
@@ -299,7 +300,7 @@ const HostsPage: React.FC = () => {
       sortable: true,
       render: (value) => (
         <code className="text-sm bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
-          {value}
+          {value as string}
         </code>
       )
     },
@@ -431,7 +432,7 @@ const HostsPage: React.FC = () => {
             emptyMessage="No hosts found. Add your first SSH host to get started."
             searchPlaceholder="Search hosts by name, address, or username..."
             initialSort={{ key: 'name', direction: 'asc' }}
-            initialSearch={(location.state as any)?.searchTerm || ''}
+            initialSearch={(location.state as { searchTerm?: string })?.searchTerm || ''}
           />
         </CardContent>
       </Card>
@@ -445,7 +446,7 @@ const HostsPage: React.FC = () => {
       >
         <Form
           fields={getFormFields(false)}
-          onSubmit={(values) => handleAddHost(values as HostFormData)}
+          onSubmit={(values) => handleAddHost(values as unknown as HostFormData)}
           submitText="Add Host"
           cancelText="Cancel"
           onCancel={() => setShowAddModal(false)}
@@ -471,7 +472,7 @@ const HostsPage: React.FC = () => {
         {selectedHost && (
           <Form
             fields={getFormFields(true)}
-            onSubmit={(values) => handleEditHost(values as HostFormData)}
+            onSubmit={(values) => handleEditHost(values as unknown as HostFormData)}
             submitText="Save Changes"
             cancelText="Cancel"
             onCancel={() => {

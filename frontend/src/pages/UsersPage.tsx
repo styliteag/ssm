@@ -10,7 +10,6 @@ import {
   AlertCircle,
   CheckCircle,
   XCircle,
-  Eye,
   UserPlus,
   UserMinus
 } from 'lucide-react';
@@ -32,7 +31,6 @@ import { keysService } from '../services/api/keys';
 import { authorizationsService } from '../services/api/authorizations';
 import type {
   User,
-  UserFormData,
   PublicUserKey,
   Authorization,
   Host
@@ -42,6 +40,7 @@ interface ExtendedUser extends User {
   keyCount?: number;
   authorizationCount?: number;
   lastActive?: Date;
+  [key: string]: unknown;
 }
 
 interface UserDetailsData {
@@ -82,8 +81,8 @@ const UsersPage: React.FC = () => {
           response.data.items.map(async (user) => {
             try {
               const [keysResponse, authResponse] = await Promise.all([
-                keysService.getKeysForUser(user.id),
-                authorizationsService.getUserAuthorizations(user.id)
+                keysService.getKeysForUser(user.username),
+                authorizationsService.getUserAuthorizations(user.username)
               ]);
               
               return {
@@ -91,7 +90,7 @@ const UsersPage: React.FC = () => {
                 keyCount: keysResponse.success ? keysResponse.data?.length || 0 : 0,
                 authorizationCount: authResponse.success ? authResponse.data?.length || 0 : 0
               };
-            } catch (error) {
+            } catch {
               return {
                 ...user,
                 keyCount: 0,
@@ -103,7 +102,7 @@ const UsersPage: React.FC = () => {
         
         setUsers(usersWithDetails);
       }
-    } catch (error) {
+    } catch {
       showError('Failed to load users', 'Please try again later');
     } finally {
       setLoading(false);
@@ -119,8 +118,8 @@ const UsersPage: React.FC = () => {
     try {
       setLoadingDetails(true);
       const [keysResponse, authResponse] = await Promise.all([
-        keysService.getKeysForUser(user.id),
-        authorizationsService.getUserAuthorizations(user.id)
+        keysService.getKeysForUser(user.username),
+        authorizationsService.getUserAuthorizations(user.username)
       ]);
       
       // Get host details for authorizations
@@ -135,7 +134,7 @@ const UsersPage: React.FC = () => {
         authorizations: authResponse.success ? authResponse.data || [] : [],
         hosts
       });
-    } catch (error) {
+    } catch {
       showError('Failed to load user details', 'Please try again later');
     } finally {
       setLoadingDetails(false);
@@ -155,10 +154,10 @@ const UsersPage: React.FC = () => {
       validation: {
         minLength: 2,
         maxLength: 50,
-        pattern: /^[a-zA-Z0-9\-_\.]+$/,
-        custom: (value: string) => {
+        pattern: /^[a-zA-Z0-9\-_.]+$/,
+        custom: (value: unknown) => {
           if (isEdit) return null;
-          const exists = users.some(u => u.username.toLowerCase() === value.toLowerCase());
+          const exists = users.some(u => u.username.toLowerCase() === (value as string).toLowerCase());
           return exists ? 'Username already exists' : null;
         }
       }
@@ -171,19 +170,20 @@ const UsersPage: React.FC = () => {
       placeholder: 'Select user status',
       helperText: 'Whether the user account is active',
       options: [
-        { value: true, label: 'Enabled (Active)' },
-        { value: false, label: 'Disabled (Inactive)' }
+        { value: 'true', label: 'Enabled (Active)' },
+        { value: 'false', label: 'Disabled (Inactive)' }
       ]
     }
   ];
 
   // Handle form submissions
-  const handleAddUser = async (values: UserFormData) => {
+  const handleAddUser = async (values: Record<string, unknown>) => {
     try {
       setSubmitting(true);
+      const valuesTyped = values as Record<string, unknown>;
       const userData = {
-        username: values.username,
-        enabled: values.enabled ?? true
+        username: valuesTyped.username as string,
+        enabled: valuesTyped.enabled === 'true'
       };
 
       const response = await usersService.createUser(userData);
@@ -192,31 +192,31 @@ const UsersPage: React.FC = () => {
         setShowAddModal(false);
         showSuccess('User added', `${response.data.username} has been added successfully`);
       }
-    } catch (error) {
+    } catch {
       showError('Failed to add user', 'Please check your input and try again');
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleEditUser = async (values: UserFormData) => {
+  const handleEditUser = async (values: Record<string, unknown>) => {
     if (!selectedUser) return;
 
     try {
       setSubmitting(true);
       const userData = {
         username: selectedUser.username, // Keep original username
-        enabled: values.enabled ?? selectedUser.enabled
+        enabled: (values as Record<string, unknown>).enabled === 'true'
       };
 
-      const response = await usersService.updateUser(selectedUser.id, userData);
+      const response = await usersService.updateUser(selectedUser.username, userData);
       if (response.success && response.data) {
         await loadUsers(); // Reload to get updated data
         setShowEditModal(false);
         setSelectedUser(null);
         showSuccess('User updated', `${response.data.username} has been updated successfully`);
       }
-    } catch (error) {
+    } catch {
       showError('Failed to update user', 'Please check your input and try again');
     } finally {
       setSubmitting(false);
@@ -228,14 +228,14 @@ const UsersPage: React.FC = () => {
 
     try {
       setSubmitting(true);
-      const response = await usersService.deleteUser(selectedUser.id);
+      const response = await usersService.deleteUser(selectedUser.username);
       if (response.success) {
         setUsers(prev => prev.filter(u => u.id !== selectedUser.id));
         setShowDeleteModal(false);
         setSelectedUser(null);
         showSuccess('User deleted', `${selectedUser.username} has been deleted successfully`);
       }
-    } catch (error) {
+    } catch {
       showError('Failed to delete user', 'Please try again later');
     } finally {
       setSubmitting(false);
@@ -254,7 +254,7 @@ const UsersPage: React.FC = () => {
           `${user.username} has been ${response.data.enabled ? 'enabled' : 'disabled'}`
         );
       }
-    } catch (error) {
+    } catch {
       showError('Failed to toggle user status', 'Please try again later');
     }
   };
@@ -280,10 +280,10 @@ const UsersPage: React.FC = () => {
       render: (value, user) => (
         <div className="flex items-center space-x-2">
           <div className="font-medium text-gray-900 dark:text-gray-100">
-            {value}
+            {value as string}
           </div>
-          {!user.enabled && (
-            <XCircle size={14} className="text-red-500" title="Disabled" />
+          {!(user as ExtendedUser).enabled && (
+            <XCircle size={14} className="text-red-500" />
           )}
         </div>
       )
@@ -319,9 +319,9 @@ const UsersPage: React.FC = () => {
         <div className="flex items-center space-x-2">
           <Key size={14} className="text-gray-400" />
           <span className="text-sm font-medium">
-            {count || 0}
+            {(count as number) || 0}
           </span>
-          {(count || 0) > 0 && (
+          {((count as number) || 0) > 0 && (
             <Button
               variant="ghost"
               size="sm"
@@ -345,9 +345,9 @@ const UsersPage: React.FC = () => {
         <div className="flex items-center space-x-2">
           <Shield size={14} className="text-gray-400" />
           <span className="text-sm font-medium">
-            {count || 0} hosts
+            {(count as number) || 0} hosts
           </span>
-          {(count || 0) > 0 && (
+          {((count as number) || 0) > 0 && (
             <Button
               variant="ghost"
               size="sm"
@@ -369,7 +369,7 @@ const UsersPage: React.FC = () => {
       sortable: true,
       render: (id) => (
         <code className="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
-          #{id}
+          #{id as number}
         </code>
       )
     },
@@ -449,7 +449,7 @@ const UsersPage: React.FC = () => {
             emptyMessage="No users found. Add your first user to get started."
             searchPlaceholder="Search users by username..."
             initialSort={{ key: 'username', direction: 'asc' }}
-            initialSearch={(location.state as any)?.searchTerm || ''}
+            initialSearch={(location.state as { searchTerm?: string })?.searchTerm || ''}
           />
         </CardContent>
       </Card>
@@ -463,7 +463,7 @@ const UsersPage: React.FC = () => {
       >
         <Form
           fields={getFormFields(false)}
-          onSubmit={(values) => handleAddUser(values as UserFormData)}
+          onSubmit={(values) => handleAddUser(values)}
           submitText="Add User"
           cancelText="Cancel"
           onCancel={() => setShowAddModal(false)}
@@ -487,7 +487,7 @@ const UsersPage: React.FC = () => {
         {selectedUser && (
           <Form
             fields={getFormFields(true)}
-            onSubmit={(values) => handleEditUser(values as UserFormData)}
+            onSubmit={(values) => handleEditUser(values)}
             submitText="Save Changes"
             cancelText="Cancel"
             onCancel={() => {
@@ -608,7 +608,7 @@ const UsersPage: React.FC = () => {
               </div>
             ) : (
               <div className="space-y-3">
-                {userDetails?.keys.map((key, index) => (
+                {userDetails?.keys.map((key) => (
                   <div key={key.id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
                     <div className="flex items-start justify-between">
                       <div className="flex-1">

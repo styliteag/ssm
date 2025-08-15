@@ -18,7 +18,7 @@ export interface FormField {
     min?: number;
     max?: number;
     pattern?: RegExp;
-    custom?: (value: any) => string | null;
+    custom?: (value: unknown) => string | null;
   };
   className?: string;
   inputClassName?: string;
@@ -27,8 +27,8 @@ export interface FormField {
 
 export interface FormProps {
   fields: FormField[];
-  onSubmit: (values: Record<string, any>) => void | Promise<void>;
-  initialValues?: Record<string, any>;
+  onSubmit: (values: Record<string, unknown>) => void | Promise<void>;
+  initialValues?: Record<string, unknown>;
   submitText?: string;
   cancelText?: string;
   onCancel?: () => void;
@@ -66,8 +66,8 @@ const Form: React.FC<FormProps> = ({
   validateOnChange = false,
   validateOnBlur = true,
 }) => {
-  const [values, setValues] = useState<Record<string, any>>(() => {
-    const initial: Record<string, any> = {};
+  const [values, setValues] = useState<Record<string, unknown>>(() => {
+    const initial: Record<string, unknown> = {};
     fields.forEach(field => {
       initial[field.name] = initialValues[field.name] || '';
     });
@@ -78,7 +78,7 @@ const Form: React.FC<FormProps> = ({
   const [touched, setTouched] = useState<Record<string, boolean>>({});
 
   // Validate a single field
-  const validateField = useCallback((field: FormField, value: any): string | null => {
+  const validateField = useCallback((field: FormField, value: unknown): string | null => {
     if (field.required && (!value || (typeof value === 'string' && !value.trim()))) {
       return `${field.label} is required`;
     }
@@ -88,11 +88,11 @@ const Form: React.FC<FormProps> = ({
     const validation = field.validation;
     if (!validation) return null;
 
-    if (validation.minLength && value.length < validation.minLength) {
+    if (validation.minLength && (value as string).length < validation.minLength) {
       return `${field.label} must be at least ${validation.minLength} characters`;
     }
 
-    if (validation.maxLength && value.length > validation.maxLength) {
+    if (validation.maxLength && (value as string).length > validation.maxLength) {
       return `${field.label} must be no more than ${validation.maxLength} characters`;
     }
 
@@ -106,7 +106,7 @@ const Form: React.FC<FormProps> = ({
       }
     }
 
-    if (validation.pattern && !validation.pattern.test(value)) {
+    if (validation.pattern && !validation.pattern.test(value as string)) {
       return `${field.label} format is invalid`;
     }
 
@@ -128,7 +128,7 @@ const Form: React.FC<FormProps> = ({
   }, [fields, values, validateField]);
 
   // Handle field change
-  const handleChange = useCallback((name: string, value: any) => {
+  const handleChange = useCallback((name: string, value: unknown) => {
     setValues(prev => ({ ...prev, [name]: value }));
 
     if (validateOnChange) {
@@ -205,7 +205,7 @@ const Form: React.FC<FormProps> = ({
             </label>
             <textarea
               {...commonProps}
-              value={values[field.name] || ''}
+              value={(values[field.name] as string) || ''}
               placeholder={field.placeholder}
               rows={field.rows || 3}
               onChange={(e) => handleChange(field.name, e.target.value)}
@@ -238,7 +238,7 @@ const Form: React.FC<FormProps> = ({
             </label>
             <select
               {...commonProps}
-              value={values[field.name] || ''}
+              value={(values[field.name] as string) || ''}
               onChange={(e) => handleChange(field.name, e.target.value)}
               onBlur={() => handleBlur(field.name)}
               className={cn(
@@ -275,7 +275,7 @@ const Form: React.FC<FormProps> = ({
               {...commonProps}
               type={field.type || 'text'}
               label={field.label}
-              value={values[field.name] || ''}
+              value={(values[field.name] as string) || ''}
               placeholder={field.placeholder}
               required={field.required}
               error={error || undefined}

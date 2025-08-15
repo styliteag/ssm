@@ -23,13 +23,14 @@ export const hostsService = {
         total: data.length,
         page: 1,
         per_page: data.length,
-        last_page: 1
+        total_pages: 1
       }
     };
   },
 
   // Get single host by name (backend uses name, not ID)
-  getHost: async (id: number): Promise<ApiResponse<Host>> => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  getHost: async (_id: number): Promise<ApiResponse<Host>> => {
     throw new Error('getHost by ID not supported. Use getHostByName instead.');
   },
 
@@ -84,13 +85,13 @@ export const hostsService = {
   },
 
   // Add host key
-  addHostKey: async (id: number, keyFingerprint?: string): Promise<ApiResponse<any>> => {
-    return api.post<any>(`/host/${id}/add_hostkey`, { key_fingerprint: keyFingerprint });
+  addHostKey: async (_id: number, keyFingerprint?: string): Promise<ApiResponse<unknown>> => {
+    return api.post<unknown>(`/host/${_id}/add_hostkey`, { key_fingerprint: keyFingerprint });
   },
 
   // Generate authorized keys
-  generateAuthorizedKeys: async (hostName: string, login: string): Promise<ApiResponse<any>> => {
-    return api.post<any>('/host/gen_authorized_keys', { host_name: hostName, login });
+  generateAuthorizedKeys: async (hostName: string, login: string): Promise<ApiResponse<unknown>> => {
+    return api.post<unknown>('/host/gen_authorized_keys', { host_name: hostName, login });
   },
 
   // Set authorized keys on host
@@ -107,19 +108,23 @@ export const hostsService = {
   },
 
   // These methods don't exist in backend - calling code will need to be updated
-  getAllowedUsers: async (id: number): Promise<ApiResponse<AllowedUserOnHost[]>> => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  getAllowedUsers: async (_id: number): Promise<ApiResponse<AllowedUserOnHost[]>> => {
     throw new Error('getAllowedUsers endpoint not available in backend');
   },
 
-  testConnection: async (id: number): Promise<ApiResponse<{ success: boolean; message: string }>> => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  testConnection: async (_id: number): Promise<ApiResponse<{ success: boolean; message: string }>> => {
     throw new Error('testConnection endpoint not available in backend');
   },
 
-  deployKeys: async (id: number): Promise<ApiResponse<{ message: string }>> => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  deployKeys: async (_id: number): Promise<ApiResponse<{ message: string }>> => {
     throw new Error('deployKeys endpoint not available in backend');
   },
 
-  getKeyDifferences: async (id: number): Promise<ApiResponse<any>> => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  getKeyDifferences: async (_id: number): Promise<ApiResponse<unknown>> => {
     throw new Error('getKeyDifferences endpoint not available in backend');
   },
 };

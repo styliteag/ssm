@@ -36,8 +36,8 @@ const LoginPage: React.FC = () => {
       if (success) {
         navigate('/dashboard');
       }
-    } catch (error: any) {
-      showError('Login Failed', error.message || 'Invalid username or password');
+    } catch (error: unknown) {
+      showError('Login Failed', (error as { message?: string })?.message || 'Invalid username or password');
     } finally {
       setIsLoading(false);
     }
