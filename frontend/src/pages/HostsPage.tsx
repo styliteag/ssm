@@ -100,7 +100,7 @@ const HostsPage: React.FC = () => {
           : h
       ));
 
-      const response = await hostsService.testConnection(host.id);
+      const response = await hostsService.testConnection(host.name);
       const status = response.success && response.data?.success ? 'online' : 'offline';
       
       setHosts(prev => prev.map(h => 

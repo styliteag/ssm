@@ -113,9 +113,37 @@ export const hostsService = {
     throw new Error('getAllowedUsers endpoint not available in backend');
   },
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  testConnection: async (_id: number): Promise<ApiResponse<{ success: boolean; message: string }>> => {
-    throw new Error('testConnection endpoint not available in backend');
+  // Test connection by attempting to get logins (requires SSH connectivity)
+  testConnection: async (hostName: string): Promise<ApiResponse<{ success: boolean; message: string }>> => {
+    try {
+      const response = await api.get<{ logins: string[] }>(`/host/${encodeURIComponent(hostName)}/logins`);
+      if (response.success) {
+        return {
+          ...response,
+          data: {
+            success: true,
+            message: `Connection successful. Found ${response.data?.logins?.length || 0} available logins.`
+          }
+        };
+      } else {
+        return {
+          ...response,
+          data: {
+            success: false,
+            message: response.message || 'Connection failed'
+          }
+        };
+      }
+    } catch (error) {
+      return {
+        success: false,
+        message: 'Connection failed',
+        data: {
+          success: false,
+          message: error instanceof Error ? error.message : 'Unknown error occurred'
+        }
+      };
+    }
   },
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
