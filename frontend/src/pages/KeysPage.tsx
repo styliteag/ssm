@@ -926,20 +926,20 @@ const KeysPage: React.FC = () => {
             <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
               <div className="space-y-2">
                 <div className="flex justify-between">
-                  <span className="text-sm font-medium">Key Type:</span>
-                  <span className="text-sm">{selectedKey.key_type.replace('ssh-', '').toUpperCase()}</span>
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Key Type:</span>
+                  <span className="text-sm text-gray-900 dark:text-gray-100">{selectedKey.key_type.replace('ssh-', '').toUpperCase()}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-sm font-medium">User:</span>
-                  <span className="text-sm">{selectedKey.username || 'Unassigned'}</span>
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">User:</span>
+                  <span className="text-sm text-gray-900 dark:text-gray-100">{selectedKey.username || 'Unassigned'}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-sm font-medium">Comment:</span>
-                  <span className="text-sm">{selectedKey.comment || 'No comment'}</span>
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Comment:</span>
+                  <span className="text-sm text-gray-900 dark:text-gray-100">{selectedKey.comment || 'No comment'}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-sm font-medium">Host Access:</span>
-                  <span className="text-sm">{selectedKey.hostCount || 0} hosts</span>
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Host Access:</span>
+                  <span className="text-sm text-gray-900 dark:text-gray-100">{selectedKey.hostCount || 0} hosts</span>
                 </div>
               </div>
             </div>
@@ -981,26 +981,26 @@ const KeysPage: React.FC = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Key Type</label>
-                  <p className="mt-1">{selectedKey.key_type}</p>
+                  <p className="mt-1 text-gray-900 dark:text-gray-100">{selectedKey.key_type}</p>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Status</label>
                   <div className="mt-1 flex items-center space-x-2">
                     {getStatusIcon(selectedKey.status)}
-                    <span className="capitalize">{selectedKey.status}</span>
+                    <span className="capitalize text-gray-900 dark:text-gray-100">{selectedKey.status}</span>
                   </div>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Assigned User</label>
-                  <p className="mt-1">{selectedKey.username || 'Unassigned'}</p>
+                  <p className="mt-1 text-gray-900 dark:text-gray-100">{selectedKey.username || 'Unassigned'}</p>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Host Access</label>
-                  <p className="mt-1">{selectedKey.hostCount || 0} hosts</p>
+                  <p className="mt-1 text-gray-900 dark:text-gray-100">{selectedKey.hostCount || 0} hosts</p>
                 </div>
                 <div className="col-span-2">
                   <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Comment</label>
-                  <p className="mt-1">{selectedKey.comment || 'No comment'}</p>
+                  <p className="mt-1 text-gray-900 dark:text-gray-100">{selectedKey.comment || 'No comment'}</p>
                 </div>
               </div>
             </div>
@@ -1019,7 +1019,7 @@ const KeysPage: React.FC = () => {
                 </Button>
               </div>
               <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
-                <code className="text-xs font-mono break-all">
+                <code className="text-xs font-mono break-all text-gray-900 dark:text-gray-100">
                   {getFullKeyText(selectedKey)}
                 </code>
               </div>
