@@ -204,7 +204,7 @@ const HostsPage: React.FC = () => {
       const hostData = {
         ...values,
         port: Number(values.port),
-        jump_via: values.jump_via && values.jump_via !== '' ? String(values.jump_via) : "",
+        jump_via: values.jump_via && String(values.jump_via) !== '' ? String(values.jump_via) : "",
         key_fingerprint: values.key_fingerprint || ""
       };
 
@@ -233,7 +233,7 @@ const HostsPage: React.FC = () => {
       const hostData = {
         ...values,
         port: Number(values.port),
-        jump_via: values.jump_via && values.jump_via !== '' ? String(values.jump_via) : "",
+        jump_via: values.jump_via && String(values.jump_via) !== '' ? String(values.jump_via) : "",
         key_fingerprint: values.key_fingerprint || ""
       };
 

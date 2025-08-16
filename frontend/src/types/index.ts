@@ -129,7 +129,7 @@ export interface HostFormData {
   port: number;
   username: string;
   key_fingerprint?: string;
-  jump_via?: number;
+  jump_via?: string | number;
 }
 
 export interface UserFormData {

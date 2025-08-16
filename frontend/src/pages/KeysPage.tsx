@@ -4,7 +4,6 @@ import {
   Plus,
   Edit2,
   Trash2,
-  Eye,
   Copy,
   UserCheck,
   UserX,
@@ -16,7 +15,6 @@ import {
   Clock,
   Filter,
   Upload,
-  Fingerprint,
   Users
 } from 'lucide-react';
 import {
@@ -114,8 +112,9 @@ const KeysPage: React.FC = () => {
           keysResponse.data.items.map(async (key): Promise<ExtendedKey> => {
             try {
               // Backend returns username instead of user_id, so we need to map it back
-              const user = (key as any).username ? usernameMap.get((key as any).username) : userMap.get(key.user_id);
-              const actualUsername = (key as any).username || user?.username || 'Unknown';
+              const keyWithUsername = key as PublicUserKey & { username?: string };
+              const user = keyWithUsername.username ? usernameMap.get(keyWithUsername.username) : userMap.get(key.user_id);
+              const actualUsername = keyWithUsername.username || user?.username || 'Unknown';
               
               // Get authorization count for this key
               const authResponse = await authorizationsService.getUserAuthorizations(actualUsername);
@@ -131,8 +130,9 @@ const KeysPage: React.FC = () => {
               };
             } catch {
               // Fallback for error cases
-              const user = (key as any).username ? usernameMap.get((key as any).username) : userMap.get(key.user_id);
-              const actualUsername = (key as any).username || user?.username || 'Unknown';
+              const keyWithUsername = key as PublicUserKey & { username?: string };
+              const user = keyWithUsername.username ? usernameMap.get(keyWithUsername.username) : userMap.get(key.user_id);
+              const actualUsername = keyWithUsername.username || user?.username || 'Unknown';
               
               return {
                 ...key,
@@ -453,7 +453,6 @@ const KeysPage: React.FC = () => {
       key: 'actions',
       header: 'Actions',
       width: '200px',
-      align: 'right',
       render: (_, item: ExtendedKey) => (
         <div className="flex items-center justify-end space-x-2">
           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getKeyTypeBadgeColor(item.key_type)}`}>
@@ -542,15 +541,6 @@ const KeysPage: React.FC = () => {
     },
   ];
 
-  // Form fields for edit modal
-  const editKeyFields: FormField[] = [
-    {
-      name: 'comment',
-      label: 'Comment',
-      type: 'text',
-      placeholder: 'Key description or comment',
-    },
-  ];
 
   // Form fields for assign modal  
   const assignKeyFields: FormField[] = [

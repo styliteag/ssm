@@ -11,9 +11,10 @@ export const keysService = {
   // Get paginated list of all keys
   getKeys: async (params?: PaginationQuery & { search?: string; user_id?: number }): Promise<ApiResponse<PaginatedResponse<PublicUserKey>>> => {
     // Backend returns wrapped response with keys array
-    const response = await api.get<{ keys: any[] }>('/key', { params });
+    interface BackendKey extends Omit<PublicUserKey, 'comment'> { key_comment?: string; comment?: string; }
+    const response = await api.get<{ keys: BackendKey[] }>('/key', { params });
     // Convert to paginated response format expected by frontend and map key_comment to comment
-    const keys = (response.data?.keys || []).map((key: any) => ({
+    const keys = (response.data?.keys || []).map((key: BackendKey) => ({
       ...key,
       comment: key.key_comment || key.comment, // Map key_comment from backend to comment field
     }));
@@ -41,9 +42,10 @@ export const keysService = {
 
   // Get all keys for a user (use the user service method instead)
   getKeysForUser: async (username: string): Promise<ApiResponse<PublicUserKey[]>> => {
-    const response = await api.get<{ keys: any[] }>(`/user/${encodeURIComponent(username)}/keys`);
+    interface BackendKey extends Omit<PublicUserKey, 'comment'> { key_comment?: string; comment?: string; }
+    const response = await api.get<{ keys: BackendKey[] }>(`/user/${encodeURIComponent(username)}/keys`);
     // Map key_comment from backend to comment field
-    const keys = (response.data?.keys || []).map((key: any) => ({
+    const keys = (response.data?.keys || []).map((key: BackendKey) => ({
       ...key,
       comment: key.key_comment || key.comment,
     }));
