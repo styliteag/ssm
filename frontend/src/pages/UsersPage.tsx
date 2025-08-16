@@ -631,7 +631,7 @@ const UsersPage: React.FC = () => {
                             </span>
                           )}
                         </div>
-                        <code className="text-xs bg-gray-100 dark:bg-gray-800 p-2 rounded block overflow-x-auto">
+                        <code className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 p-2 rounded block overflow-x-auto">
                           {key.key_type} {key.key_base64.substring(0, 60)}...{key.comment ? ` ${key.comment}` : ''}
                         </code>
                       </div>
@@ -697,10 +697,10 @@ const UsersPage: React.FC = () => {
                             Host #{auth.host_id}
                           </span>
                         </div>
-                        <div className="text-sm space-y-1">
-                          <div><strong>Login as:</strong> <code className="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded">{auth.login}</code></div>
+                        <div className="text-sm space-y-1 text-gray-900 dark:text-gray-100">
+                          <div><strong>Login as:</strong> <code className="bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-1 py-0.5 rounded">{auth.login}</code></div>
                           {auth.options && (
-                            <div><strong>Options:</strong> <code className="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-xs">{auth.options}</code></div>
+                            <div><strong>Options:</strong> <code className="bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-1 py-0.5 rounded text-xs">{auth.options}</code></div>
                           )}
                         </div>
                       </div>
