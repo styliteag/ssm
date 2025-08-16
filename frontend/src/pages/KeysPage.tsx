@@ -244,10 +244,16 @@ const KeysPage: React.FC = () => {
       }
 
       const formDataTyped = formData as Record<string, unknown>;
-      const response = await keysService.createKey(formDataTyped.userId as number, {
-        ...keyData,
-        comment: (formDataTyped.comment as string) || keyData.comment
-      });
+      const comment = (formDataTyped.comment as string) || keyData.comment;
+      const keyPayload = {
+        user_id: Number(formDataTyped.userId),
+        key_type: keyData.key_type,
+        key_base64: keyData.key_base64,
+        key_comment: comment && comment.trim() !== '' ? comment : null
+      };
+      
+      console.log('Sending key data:', keyPayload);
+      const response = await usersService.assignKeyToUser(keyPayload);
 
       if (response.success) {
         showSuccess('SSH key added successfully');
@@ -331,21 +337,60 @@ const KeysPage: React.FC = () => {
     try {
       setSubmitting(true);
       const formDataTyped = formData as Record<string, unknown>;
-      const response = await keysService.importKeys(formDataTyped.userId as number, formDataTyped.keysText as string);
+      const keysText = formDataTyped.keysText as string;
+      const userId = formDataTyped.userId as number;
+      
+      const keyLines = keysText.split('\n').filter(line => line.trim());
+      let imported = 0;
+      let failed = 0;
+      const errors: string[] = [];
 
-      if (response.success && response.data) {
-        const { imported, failed, errors } = response.data;
-        if (imported > 0) {
-          showSuccess(`${imported} keys imported successfully`);
+      for (const keyLine of keyLines) {
+        try {
+          const keyValidation = validateSSHKey(keyLine);
+          if (!keyValidation.valid) {
+            failed++;
+            errors.push(`Invalid key format: ${keyValidation.message}`);
+            continue;
+          }
+
+          const keyData = parseSSHKey(keyLine);
+          if (!keyData) {
+            failed++;
+            errors.push('Failed to parse SSH key');
+            continue;
+          }
+
+          const keyPayload = {
+            user_id: Number(userId),
+            key_type: keyData.key_type,
+            key_base64: keyData.key_base64,
+            key_comment: keyData.comment && keyData.comment.trim() !== '' ? keyData.comment : null
+          };
+          
+          const response = await usersService.assignKeyToUser(keyPayload);
+
+          if (response.success) {
+            imported++;
+          } else {
+            failed++;
+            errors.push(`Failed to import key: ${response.message}`);
+          }
+        } catch (error) {
+          failed++;
+          errors.push(`Error importing key: ${error}`);
         }
-        if (failed > 0) {
-          showError(`${failed} keys failed to import`, errors?.join(', '));
-        }
-        setShowImportModal(false);
-        loadKeys();
-      } else {
-        showError('Failed to import keys', response.message);
       }
+
+      if (imported > 0) {
+        showSuccess(`${imported} keys imported successfully`);
+      }
+      if (failed > 0) {
+        showError(`${failed} keys failed to import`, errors.slice(0, 3).join(', ') + (errors.length > 3 ? '...' : ''));
+      }
+      
+      setShowImportModal(false);
+      loadKeys();
     } catch {
       showError('Failed to import keys', 'Please try again');
     } finally {
@@ -461,7 +506,8 @@ const KeysPage: React.FC = () => {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => {
+            onClick={(e) => {
+              e.stopPropagation();
               setSelectedKey(item);
               setCommentValue(item.comment || '');
               setEditingComment(false);
@@ -475,7 +521,8 @@ const KeysPage: React.FC = () => {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => {
+              onClick={(e) => {
+                e.stopPropagation();
                 setSelectedKey(item);
                 setShowAssignModal(true);
               }}
@@ -487,7 +534,8 @@ const KeysPage: React.FC = () => {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => {
+            onClick={(e) => {
+              e.stopPropagation();
               setSelectedKey(item);
               setShowDeleteModal(true);
             }}

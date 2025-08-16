@@ -80,8 +80,9 @@ export const usersService = {
     user_id: number;
     key_type: string;
     key_base64: string;
-    key_comment?: string;
+    key_comment: string | null;
   }): Promise<ApiResponse<null>> => {
+    console.log('assignKeyToUser called with:', keyData);
     return api.post<null>('/user/assign_key', keyData);
   },
 
