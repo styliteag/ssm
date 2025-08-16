@@ -77,12 +77,15 @@ const KeysPage: React.FC = () => {
   
   // Modal states
   const [showAddModal, setShowAddModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [showBulkAssignModal, setShowBulkAssignModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  
+  // Edit state for inline comment editing
+  const [editingComment, setEditingComment] = useState(false);
+  const [commentValue, setCommentValue] = useState('');
   
   // Form loading states
   const [submitting, setSubmitting] = useState(false);
@@ -266,14 +269,14 @@ const KeysPage: React.FC = () => {
 
     try {
       setSubmitting(true);
-      const response = await keysService.updateKey(selectedKey.id, {
-        comment: (formData as Record<string, unknown>).comment as string
-      });
+      const comment = (formData as Record<string, unknown>).comment as string;
+      const response = await keysService.updateKeyComment(selectedKey.id, comment);
 
       if (response.success) {
-        showSuccess('SSH key updated successfully');
-        setShowEditModal(false);
-        setSelectedKey(null);
+        showSuccess('SSH key comment updated successfully');
+        setEditingComment(false);
+        // Update the selected key with new comment
+        setSelectedKey({ ...selectedKey, comment });
         loadKeys();
       } else {
         showError('Failed to update SSH key', response.message);
@@ -493,6 +496,8 @@ const KeysPage: React.FC = () => {
             size="sm"
             onClick={() => {
               setSelectedKey(item);
+              setCommentValue(item.comment || '');
+              setEditingComment(false);
               setShowViewModal(true);
             }}
             title="View full key"
@@ -512,9 +517,11 @@ const KeysPage: React.FC = () => {
             size="sm"
             onClick={() => {
               setSelectedKey(item);
-              setShowEditModal(true);
+              setCommentValue(item.comment || '');
+              setEditingComment(false);
+              setShowViewModal(true);
             }}
-            title="Edit comment"
+            title="View/Edit key"
           >
             <Edit2 size={16} />
           </Button>
@@ -860,6 +867,8 @@ const KeysPage: React.FC = () => {
             emptyMessage="No SSH keys found"
             onRowClick={(key) => {
               setSelectedKey(key);
+              setCommentValue(key.comment || '');
+              setEditingComment(false);
               loadKeyDetails(key.id);
               setShowViewModal(true);
             }}
@@ -883,24 +892,6 @@ const KeysPage: React.FC = () => {
         />
       </Modal>
 
-      {/* Edit Key Modal */}
-      <Modal
-        isOpen={showEditModal}
-        onClose={() => setShowEditModal(false)}
-        title="Edit SSH Key"
-        size="md"
-      >
-        <Form
-          fields={editKeyFields}
-          onSubmit={handleUpdateKey}
-          initialValues={{
-            comment: selectedKey?.comment || ''
-          }}
-          loading={submitting}
-          submitText="Update Key"
-          onCancel={() => setShowEditModal(false)}
-        />
-      </Modal>
 
       {/* Delete Key Modal */}
       <Modal
@@ -966,10 +957,14 @@ const KeysPage: React.FC = () => {
         </div>
       </Modal>
 
-      {/* View Key Modal */}
+      {/* View/Edit Key Modal */}
       <Modal
         isOpen={showViewModal}
-        onClose={() => setShowViewModal(false)}
+        onClose={() => {
+          setShowViewModal(false);
+          setEditingComment(false);
+          setCommentValue('');
+        }}
         title="SSH Key Details"
         size="xl"
       >
@@ -999,8 +994,52 @@ const KeysPage: React.FC = () => {
                   <p className="mt-1 text-gray-900 dark:text-gray-100">{selectedKey.hostCount || 0} hosts</p>
                 </div>
                 <div className="col-span-2">
-                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Comment</label>
-                  <p className="mt-1 text-gray-900 dark:text-gray-100">{selectedKey.comment || 'No comment'}</p>
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Comment</label>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        if (editingComment) {
+                          handleUpdateKey({ comment: commentValue });
+                        } else {
+                          setEditingComment(true);
+                        }
+                      }}
+                      leftIcon={editingComment ? <CheckCircle size={16} /> : <Edit2 size={16} />}
+                      disabled={submitting}
+                    >
+                      {editingComment ? 'Save' : 'Edit'}
+                    </Button>
+                  </div>
+                  {editingComment ? (
+                    <div className="mt-2 space-y-2">
+                      <input
+                        type="text"
+                        value={commentValue}
+                        onChange={(e) => setCommentValue(e.target.value)}
+                        placeholder="Enter comment for this key"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        disabled={submitting}
+                        autoFocus
+                      />
+                      <div className="flex items-center space-x-2">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => {
+                            setEditingComment(false);
+                            setCommentValue(selectedKey.comment || '');
+                          }}
+                          disabled={submitting}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="mt-1 text-gray-900 dark:text-gray-100">{selectedKey.comment || 'No comment'}</p>
+                  )}
                 </div>
               </div>
             </div>
