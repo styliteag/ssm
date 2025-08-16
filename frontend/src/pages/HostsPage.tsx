@@ -187,10 +187,13 @@ const HostsPage: React.FC = () => {
       type: 'select',
       placeholder: 'Select a jump host (optional)',
       helperText: 'Optional: Use another host as a jump/bastion host',
-      options: jumpHosts.map(host => ({
-        value: host.id,
-        label: `${host.name} (${host.address})`
-      }))
+      options: [
+        { value: '', label: 'None (no jump host)' },
+        ...jumpHosts.map(host => ({
+          value: host.id,
+          label: `${host.name} (${host.address})`
+        }))
+      ]
     }
   ];
 
@@ -201,8 +204,8 @@ const HostsPage: React.FC = () => {
       const hostData = {
         ...values,
         port: Number(values.port),
-        jump_via: values.jump_via ? Number(values.jump_via) : undefined,
-        key_fingerprint: values.key_fingerprint || undefined
+        jump_via: values.jump_via && values.jump_via !== '' ? String(values.jump_via) : "",
+        key_fingerprint: values.key_fingerprint || ""
       };
 
       const response = await hostsService.createHost(hostData);
@@ -230,24 +233,22 @@ const HostsPage: React.FC = () => {
       const hostData = {
         ...values,
         port: Number(values.port),
-        jump_via: values.jump_via ? Number(values.jump_via) : undefined,
-        key_fingerprint: values.key_fingerprint || undefined
+        jump_via: values.jump_via && values.jump_via !== '' ? String(values.jump_via) : "",
+        key_fingerprint: values.key_fingerprint || ""
       };
 
+      console.log('Updating host:', selectedHost.name, 'with data:', hostData);
       const response = await hostsService.updateHost(selectedHost.name, hostData);
-      if (response.success && response.data) {
-        setHosts(prev => prev.map(h => 
-          h.id === selectedHost.id 
-            ? { ...response.data!, connectionStatus: h.connectionStatus, lastTested: h.lastTested }
-            : h
-        ));
+      if (response.success) {
         setShowEditModal(false);
         setSelectedHost(null);
-        showSuccess('Host updated', `${response.data!.name} has been updated successfully`);
+        showSuccess('Host updated', `${selectedHost.name} has been updated successfully`);
+        await loadHosts(); // Refresh the entire hosts table with fresh data
         await loadJumpHosts(); // Refresh jump hosts list
       }
-    } catch {
-      showError('Failed to update host', 'Please check your input and try again');
+    } catch (error) {
+      console.error('Error updating host:', error);
+      showError('Failed to update host', `Error: ${error}`);
     } finally {
       setSubmitting(false);
     }
@@ -497,7 +498,7 @@ const HostsPage: React.FC = () => {
               port: selectedHost.port,
               username: selectedHost.username,
               key_fingerprint: selectedHost.key_fingerprint || '',
-              jump_via: selectedHost.jump_via || ''
+              jump_via: selectedHost.jump_via
             }}
           />
         )}
