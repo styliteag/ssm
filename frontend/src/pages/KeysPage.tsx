@@ -398,22 +398,6 @@ const KeysPage: React.FC = () => {
   // Table columns
   const columns: Column<ExtendedKey>[] = [
     {
-      key: 'id',
-      header: 'ID',
-      width: '80px',
-      sortable: true,
-    },
-    {
-      key: 'key_type',
-      header: 'Type',
-      sortable: true,
-      render: (value: unknown) => (
-        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getKeyTypeBadgeColor(value as string)}`}>
-          {(value as string).replace('ssh-', '').toUpperCase()}
-        </span>
-      ),
-    },
-    {
       key: 'username',
       header: 'User',
       sortable: true,
@@ -442,21 +426,10 @@ const KeysPage: React.FC = () => {
       ),
     },
     {
-      key: 'key_base64',
-      header: 'Fingerprint',
-      render: (value: unknown) => (
-        <div className="flex items-center space-x-2">
-          <Fingerprint size={14} className="text-gray-400" />
-          <code className="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded font-mono max-w-32 truncate">
-            {(value as string).substring(0, 20)}...
-          </code>
-        </div>
-      ),
-    },
-    {
       key: 'status',
       header: 'Status',
       sortable: true,
+      width: '100px',
       render: (value: unknown) => (
         <div className="flex items-center space-x-2">
           {getStatusIcon(value as ExtendedKey['status'])}
@@ -468,6 +441,7 @@ const KeysPage: React.FC = () => {
       key: 'hostCount',
       header: 'Hosts',
       sortable: true,
+      width: '80px',
       render: (value: unknown) => (
         <div className="flex items-center space-x-1">
           <Shield size={14} className="text-gray-400" />
@@ -476,42 +450,15 @@ const KeysPage: React.FC = () => {
       ),
     },
     {
-      key: 'createdAt',
-      header: 'Created',
-      sortable: true,
-      render: (value: unknown) => (
-        <span className="text-sm text-gray-500 dark:text-gray-400">
-          {(value as Date)?.toLocaleDateString() || 'Unknown'}
-        </span>
-      ),
-    },
-    {
       key: 'actions',
       header: 'Actions',
       width: '200px',
+      align: 'right',
       render: (_, item: ExtendedKey) => (
-        <div className="flex items-center space-x-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              setSelectedKey(item);
-              setCommentValue(item.comment || '');
-              setEditingComment(false);
-              setShowViewModal(true);
-            }}
-            title="View full key"
-          >
-            <Eye size={16} />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => copyToClipboard(getFullKeyText(item))}
-            title="Copy key to clipboard"
-          >
-            <Copy size={16} />
-          </Button>
+        <div className="flex items-center justify-end space-x-2">
+          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getKeyTypeBadgeColor(item.key_type)}`}>
+            {item.key_type.replace('ssh-', '').toUpperCase()}
+          </span>
           <Button
             variant="ghost"
             size="sm"
