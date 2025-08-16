@@ -67,7 +67,7 @@ async fn test_all_post_endpoints_require_auth() {
         // User endpoints
         ("/api/user", json!({"username": "testuser", "enabled": true})),
         ("/api/user/assign_key", json!({"user_id": 1, "key_type": "ssh-ed25519", "key_base64": "AAAAC3NzaC1lZDI1NTE5AAAAIXSSTestKey", "key_comment": "test"})),
-        // Note: /api/user/add_key is a preview dialog that doesn't require authentication
+        ("/api/user/add_key", json!({"key_type": "ssh-ed25519", "key_base64": "AAAAC3NzaC1lZDI1NTE5AAAAIXSSTestKey", "key_comment": "test"})),
         
         // Host endpoints  
         ("/api/host", json!({"name": "testhost", "username": "ubuntu", "address": "192.168.1.100", "port": 22})),
