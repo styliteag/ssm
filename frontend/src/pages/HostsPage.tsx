@@ -189,8 +189,10 @@ const HostsPage: React.FC = () => {
         maxLength: 50,
         pattern: /^[a-zA-Z0-9\-_.]+$/,
         custom: (value: unknown) => {
-          if (isEdit) return null;
-          const exists = hosts.some(h => h.name.toLowerCase() === (value as string).toLowerCase());
+          const exists = hosts.some(h => 
+            h.name.toLowerCase() === (value as string).toLowerCase() && 
+            (!isEdit || h.id !== selectedHost?.id)
+          );
           return exists ? 'Host name already exists' : null;
         }
       }
@@ -317,10 +319,12 @@ const HostsPage: React.FC = () => {
     try {
       setSubmitting(true);
       const hostData = {
-        ...values,
+        name: values.name,
+        address: values.address,
         port: Number(values.port),
-        jump_via: values.jump_via && String(values.jump_via) !== '' ? Number(values.jump_via) : undefined,
-        key_fingerprint: values.key_fingerprint || undefined
+        username: values.username,
+        jump_via: values.jump_via && String(values.jump_via) !== '' ? String(values.jump_via) : "",
+        key_fingerprint: values.key_fingerprint && values.key_fingerprint.trim() !== '' ? values.key_fingerprint : ""
       };
 
       console.log('Updating host:', selectedHost.name, 'with data:', hostData);
@@ -328,7 +332,9 @@ const HostsPage: React.FC = () => {
       if (response.success) {
         setShowEditModal(false);
         setSelectedHost(null);
-        showSuccess('Host updated', `${selectedHost.name} has been updated successfully`);
+        // Use the new name if it was changed
+        const updatedName = values.name !== selectedHost.name ? values.name : selectedHost.name;
+        showSuccess('Host updated', `${updatedName} has been updated successfully`);
         await loadHosts(); // Refresh the entire hosts table with fresh data
         await loadJumpHosts(); // Refresh jump hosts list
       }
