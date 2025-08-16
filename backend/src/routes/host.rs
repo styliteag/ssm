@@ -771,7 +771,9 @@ async fn update_host(
     conn: Data<crate::ConnectionPool>,
     host_name: Path<String>,
     json: Json<UpdateHostRequest>,
+    identity: Option<Identity>,
 ) -> Result<impl Responder> {
+    require_auth(identity)?;
     let mut db_conn = conn.get().unwrap();
     match Host::update_host(
         &mut db_conn,
