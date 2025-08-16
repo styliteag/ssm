@@ -359,7 +359,7 @@ export const BulkGrantModal: React.FC<BulkGrantModalProps> = ({
       <div className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Users Selection */}
-          <Card>
+          <Card variant="elevated">
             <CardHeader>
               <CardTitle className="text-base">Select Users</CardTitle>
               <div className="flex items-center space-x-2">
@@ -385,22 +385,22 @@ export const BulkGrantModal: React.FC<BulkGrantModalProps> = ({
                   <div
                     key={user.id}
                     className={cn(
-                      'flex items-center space-x-2 p-2 rounded cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800',
-                      selectedUsers.has(user.id) && 'bg-blue-50 dark:bg-blue-900/20'
+                      'flex items-center space-x-2 p-2 rounded cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors',
+                      selectedUsers.has(user.id) && 'bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700'
                     )}
                     onClick={() => toggleUser(user.id)}
                   >
                     <div className={cn(
-                      'w-4 h-4 rounded border-2 flex items-center justify-center',
+                      'w-4 h-4 rounded border-2 flex items-center justify-center transition-colors',
                       selectedUsers.has(user.id)
-                        ? 'bg-blue-500 border-blue-500'
-                        : 'border-gray-300 dark:border-gray-600'
+                        ? 'bg-blue-500 border-blue-500 dark:bg-blue-400 dark:border-blue-400'
+                        : 'border-gray-300 dark:border-gray-500 bg-white dark:bg-gray-700'
                     )}>
                       {selectedUsers.has(user.id) && (
                         <Check size={12} className="text-white" />
                       )}
                     </div>
-                    <span className="text-sm">{user.username}</span>
+                    <span className="text-sm text-gray-900 dark:text-gray-100">{user.username}</span>
                   </div>
                 ))}
               </div>
@@ -408,7 +408,7 @@ export const BulkGrantModal: React.FC<BulkGrantModalProps> = ({
           </Card>
 
           {/* Hosts Selection */}
-          <Card>
+          <Card variant="elevated">
             <CardHeader>
               <CardTitle className="text-base">Select Hosts</CardTitle>
               <div className="flex items-center space-x-2">
@@ -434,24 +434,24 @@ export const BulkGrantModal: React.FC<BulkGrantModalProps> = ({
                   <div
                     key={host.id}
                     className={cn(
-                      'flex items-center space-x-2 p-2 rounded cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800',
-                      selectedHosts.has(host.id) && 'bg-blue-50 dark:bg-blue-900/20'
+                      'flex items-center space-x-2 p-2 rounded cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors',
+                      selectedHosts.has(host.id) && 'bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700'
                     )}
                     onClick={() => toggleHost(host.id)}
                   >
                     <div className={cn(
-                      'w-4 h-4 rounded border-2 flex items-center justify-center',
+                      'w-4 h-4 rounded border-2 flex items-center justify-center transition-colors',
                       selectedHosts.has(host.id)
-                        ? 'bg-blue-500 border-blue-500'
-                        : 'border-gray-300 dark:border-gray-600'
+                        ? 'bg-blue-500 border-blue-500 dark:bg-blue-400 dark:border-blue-400'
+                        : 'border-gray-300 dark:border-gray-500 bg-white dark:bg-gray-700'
                     )}>
                       {selectedHosts.has(host.id) && (
                         <Check size={12} className="text-white" />
                       )}
                     </div>
                     <div className="flex-1">
-                      <div className="text-sm font-medium">{host.name}</div>
-                      <div className="text-xs text-gray-500">{host.address}</div>
+                      <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{host.name}</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">{host.address}</div>
                     </div>
                   </div>
                 ))}
@@ -461,7 +461,7 @@ export const BulkGrantModal: React.FC<BulkGrantModalProps> = ({
         </div>
 
         {/* Access Configuration */}
-        <Card>
+        <Card variant="elevated">
           <CardHeader>
             <CardTitle className="text-base">Access Configuration</CardTitle>
           </CardHeader>
@@ -498,7 +498,8 @@ export const BulkGrantModal: React.FC<BulkGrantModalProps> = ({
 
         {/* Operation Summary */}
         {(selectedUsers.size > 0 && selectedHosts.size > 0) && (
-          <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+          <Card variant="elevated" className="bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-700">
+            <CardContent className="p-4">
             <div className="flex items-start space-x-3">
               <Info className="h-5 w-5 text-blue-500 flex-shrink-0 mt-0.5" />
               <div>
@@ -514,7 +515,8 @@ export const BulkGrantModal: React.FC<BulkGrantModalProps> = ({
                 </div>
               </div>
             </div>
-          </div>
+            </CardContent>
+          </Card>
         )}
 
         {/* Footer */}
