@@ -29,6 +29,7 @@ import { useNotifications } from '../contexts/NotificationContext';
 import { usersService } from '../services/api/users';
 import { keysService } from '../services/api/keys';
 import { authorizationsService } from '../services/api/authorizations';
+import { hostsService } from '../services/api/hosts';
 import type {
   User,
   PublicUserKey,
@@ -118,22 +119,16 @@ const UsersPage: React.FC = () => {
   const loadUserDetails = useCallback(async (user: ExtendedUser) => {
     try {
       setLoadingDetails(true);
-      const [keysResponse, authResponse] = await Promise.all([
+      const [keysResponse, authResponse, hostsResponse] = await Promise.all([
         keysService.getKeysForUser(user.username),
-        authorizationsService.getUserAuthorizations(user.username)
+        authorizationsService.getUserAuthorizations(user.username),
+        hostsService.getAllHosts()
       ]);
-      
-      // Get host details for authorizations
-      let hosts: Host[] = [];
-      if (authResponse.success && authResponse.data) {
-        // We'd need to fetch host details, but for now we'll use placeholder
-        hosts = [];
-      }
       
       setUserDetails({
         keys: keysResponse.success ? keysResponse.data || [] : [],
         authorizations: authResponse.success ? authResponse.data || [] : [],
-        hosts
+        hosts: hostsResponse.success ? hostsResponse.data || [] : []
       });
     } catch {
       showError('Failed to load user details', 'Please try again later');
@@ -666,7 +661,7 @@ const UsersPage: React.FC = () => {
           setUserDetails(null);
         }}
         title={`Host Access - ${selectedUser?.username}`}
-        size="lg"
+        size="xl"
       >
         {selectedUser && (
           <div className="space-y-4">
@@ -686,27 +681,41 @@ const UsersPage: React.FC = () => {
                 </p>
               </div>
             ) : (
-              <div className="space-y-3">
-                {userDetails?.authorizations.map((auth) => (
-                  <div key={auth.id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-2 mb-2">
-                          <Shield size={16} className="text-green-500" />
-                          <span className="font-medium text-gray-900 dark:text-gray-100">
-                            Host #{auth.host_id}
-                          </span>
-                        </div>
-                        <div className="text-sm space-y-1 text-gray-900 dark:text-gray-100">
-                          <div><strong>Login as:</strong> <code className="bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-1 py-0.5 rounded">{auth.login}</code></div>
-                          {auth.options && (
-                            <div><strong>Options:</strong> <code className="bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-1 py-0.5 rounded text-xs">{auth.options}</code></div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {userDetails?.authorizations.map((auth) => {
+                  // In the backend response, auth.username is actually the hostname
+                  const hostName = (auth as any).username;
+                  const host = userDetails?.hosts.find(h => h.name === hostName);
+                  return (
+                    <div key={auth.id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+                      <div className="flex items-center space-x-2 mb-2">
+                        <Shield size={14} className="text-green-500" />
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-gray-900 dark:text-gray-100 text-sm truncate">
+                            {hostName || 'Unknown Host'}
+                          </div>
+                          {host && (
+                            <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                              {host.address}:{host.port}
+                            </div>
                           )}
                         </div>
                       </div>
+                      <div className="text-xs space-y-1">
+                        <div className="flex items-center space-x-1">
+                          <span className="font-medium text-gray-600 dark:text-gray-400">Login as:</span> 
+                          <code className="bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 px-2 py-1 rounded font-medium">{auth.login}</code>
+                        </div>
+                        {auth.options && (
+                          <div className="flex items-start space-x-1">
+                            <span className="font-medium text-gray-600 dark:text-gray-400 mt-0.5">Options:</span> 
+                            <code className="bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-1 py-0.5 rounded text-xs break-all flex-1">{auth.options}</code>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
             
