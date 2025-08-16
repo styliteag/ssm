@@ -151,7 +151,7 @@ const UsersPage: React.FC = () => {
       required: true,
       placeholder: 'Enter username',
       helperText: 'Unique username for SSH access',
-      disabled: isEdit, // Username cannot be changed after creation
+      disabled: false, // Username can now be changed
       validation: {
         minLength: 2,
         maxLength: 50,
@@ -206,16 +206,16 @@ const UsersPage: React.FC = () => {
     try {
       setSubmitting(true);
       const userData = {
-        username: selectedUser.username, // Keep original username
+        username: (values as Record<string, unknown>).username as string, // Use new username from form
         enabled: (values as Record<string, unknown>).enabled === 'true'
       };
 
       const response = await usersService.updateUser(selectedUser.username, userData);
-      if (response.success && response.data) {
+      if (response.success) {
         await loadUsers(); // Reload to get updated data
         setShowEditModal(false);
         setSelectedUser(null);
-        showSuccess('User updated', `${response.data.username} has been updated successfully`);
+        showSuccess('User updated', `${userData.username} has been updated successfully`);
       }
     } catch {
       showError('Failed to update user', 'Please check your input and try again');
@@ -506,7 +506,7 @@ const UsersPage: React.FC = () => {
             loading={submitting}
             initialValues={{
               username: selectedUser.username,
-              enabled: selectedUser.enabled
+              enabled: selectedUser.enabled.toString()
             }}
           />
         )}
