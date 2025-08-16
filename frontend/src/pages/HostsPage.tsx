@@ -55,23 +55,72 @@ const HostsPage: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [testing, setTesting] = useState<Record<number, boolean>>({});
 
+  // Load statuses for all hosts in parallel batches
+  const loadHostStatuses = useCallback(async (hostList: ExtendedHost[]) => {
+    const batchSize = 5;
+    
+    // Process hosts in batches of 5
+    for (let i = 0; i < hostList.length; i += batchSize) {
+      const batch = hostList.slice(i, i + batchSize);
+      
+      // Set all hosts in this batch to testing
+      setHosts(prev => prev.map(h => 
+        batch.some(batchHost => batchHost.id === h.id)
+          ? { ...h, connectionStatus: 'testing' }
+          : h
+      ));
+      
+      // Check all hosts in this batch in parallel
+      const promises = batch.map(async (host) => {
+        try {
+          const response = await hostsService.testConnection(host.name);
+          const status = response.success && response.data?.success ? 'online' : 'offline';
+          
+          setHosts(prev => prev.map(h => 
+            h.id === host.id 
+              ? { ...h, connectionStatus: status, lastTested: new Date() }
+              : h
+          ));
+        } catch {
+          setHosts(prev => prev.map(h => 
+            h.id === host.id 
+              ? { ...h, connectionStatus: 'offline', lastTested: new Date() }
+              : h
+          ));
+        }
+      });
+      
+      // Wait for all hosts in this batch to complete
+      await Promise.allSettled(promises);
+      
+      // Small delay before next batch to avoid overwhelming server
+      if (i + batchSize < hostList.length) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    }
+  }, []);
+
   // Load hosts on component mount
   const loadHosts = useCallback(async () => {
     try {
       setLoading(true);
       const response = await hostsService.getHosts();
       if (response.success && response.data) {
-        setHosts(response.data.items.map(host => ({
+        const hostsWithStatus = response.data.items.map(host => ({
           ...host,
           connectionStatus: 'unknown' as const
-        })));
+        }));
+        setHosts(hostsWithStatus);
+        
+        // Start async status checks for all hosts
+        loadHostStatuses(hostsWithStatus);
       }
     } catch {
       showError('Failed to load hosts', 'Please try again later');
     } finally {
       setLoading(false);
     }
-  }, [showError]);
+  }, [showError, loadHostStatuses]);
 
   // Load jump hosts for dropdown
   const loadJumpHosts = useCallback(async () => {
@@ -202,23 +251,60 @@ const HostsPage: React.FC = () => {
     try {
       setSubmitting(true);
       const hostData = {
-        ...values,
+        name: values.name,
+        address: values.address,
         port: Number(values.port),
-        jump_via: values.jump_via && String(values.jump_via) !== '' ? String(values.jump_via) : "",
-        key_fingerprint: values.key_fingerprint || ""
+        username: values.username,
+        jump_via: values.jump_via && String(values.jump_via) !== '' ? Number(values.jump_via) : null,
+        key_fingerprint: values.key_fingerprint && values.key_fingerprint.trim() !== '' ? values.key_fingerprint : null
       };
 
+      console.log('Creating host with data:', hostData);
       const response = await hostsService.createHost(hostData);
+      console.log('Host creation response:', response);
+      
       if (response.success && response.data) {
-        setHosts(prev => [...prev, { 
-          ...response.data!, 
-          connectionStatus: 'unknown' 
-        }]);
-        setShowAddModal(false);
-        showSuccess('Host added', `${response.data!.name} has been added successfully`);
-        await loadJumpHosts(); // Refresh jump hosts list
+        // Check if this is a host key confirmation response (two-step process)
+        if ((response.data as any).requires_confirmation) {
+          console.log('Host key confirmation required, sending with fingerprint');
+          
+          // Second call with the received fingerprint
+          const confirmedHostData = {
+            ...hostData,
+            key_fingerprint: (response.data as any).key_fingerprint
+          };
+          
+          const finalResponse = await hostsService.createHost(confirmedHostData);
+          console.log('Final host creation response:', finalResponse);
+          
+          if (finalResponse.success && finalResponse.data) {
+            setHosts(prev => [...prev, { 
+              ...finalResponse.data!, 
+              connectionStatus: 'unknown' 
+            }]);
+            setShowAddModal(false);
+            showSuccess('Host added', `${finalResponse.data!.name} has been added successfully`);
+            await loadJumpHosts(); // Refresh jump hosts list
+          } else {
+            console.error('Final host creation failed:', finalResponse);
+            showError('Failed to add host', finalResponse.message || 'Failed to confirm host key');
+          }
+        } else {
+          // Direct host creation (when fingerprint was provided)
+          setHosts(prev => [...prev, { 
+            ...response.data!, 
+            connectionStatus: 'unknown' 
+          }]);
+          setShowAddModal(false);
+          showSuccess('Host added', `${response.data!.name} has been added successfully`);
+          await loadJumpHosts(); // Refresh jump hosts list
+        }
+      } else {
+        console.error('Host creation failed:', response);
+        showError('Failed to add host', response.message || 'Please check your input and try again');
       }
-    } catch {
+    } catch (error) {
+      console.error('Host creation error:', error);
       showError('Failed to add host', 'Please check your input and try again');
     } finally {
       setSubmitting(false);
@@ -233,8 +319,8 @@ const HostsPage: React.FC = () => {
       const hostData = {
         ...values,
         port: Number(values.port),
-        jump_via: values.jump_via && String(values.jump_via) !== '' ? String(values.jump_via) : "",
-        key_fingerprint: values.key_fingerprint || ""
+        jump_via: values.jump_via && String(values.jump_via) !== '' ? Number(values.jump_via) : undefined,
+        key_fingerprint: values.key_fingerprint || undefined
       };
 
       console.log('Updating host:', selectedHost.name, 'with data:', hostData);

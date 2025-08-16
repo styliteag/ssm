@@ -40,12 +40,12 @@ export const hostsService = {
   },
 
   // Create new host
-  createHost: async (host: HostFormData): Promise<ApiResponse<Host>> => {
+  createHost: async (host: any): Promise<ApiResponse<Host>> => {
     return api.post<Host>('/host', host);
   },
 
   // Update existing host by name
-  updateHost: async (name: string, host: HostFormData): Promise<ApiResponse<Host>> => {
+  updateHost: async (name: string, host: any): Promise<ApiResponse<Host>> => {
     return api.put<Host>(`/host/${encodeURIComponent(name)}`, host);
   },
 
