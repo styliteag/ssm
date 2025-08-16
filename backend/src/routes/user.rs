@@ -404,7 +404,8 @@ pub struct AddKeyResponse {
     )
 )]
 #[post("/add_key")]
-async fn add_key_dialog(json: Json<SshPublicKey>) -> Result<impl Responder> {
+async fn add_key_dialog(json: Json<SshPublicKey>, identity: Option<Identity>) -> Result<impl Responder> {
+    require_auth(identity)?;
     Ok(HttpResponse::Ok().json(ApiResponse::success(AddKeyResponse {
         key: json.into_inner(),
         suggested_action: "Assign this key to a user".to_string(),

@@ -101,31 +101,40 @@ const KeysPage: React.FC = () => {
       ]);
 
       if (keysResponse.success && keysResponse.data && usersResponse.success && usersResponse.data) {
-        // Create user lookup map
+        // Create user lookup maps - both id->user and username->user
         const userMap = new Map(usersResponse.data.items.map(user => [user.id, user]));
+        const usernameMap = new Map(usersResponse.data.items.map(user => [user.username, user]));
         setUsers(usersResponse.data.items);
 
         // Enhance keys with additional information
         const enhancedKeys = await Promise.all(
           keysResponse.data.items.map(async (key): Promise<ExtendedKey> => {
             try {
-              const user = userMap.get(key.user_id);
+              // Backend returns username instead of user_id, so we need to map it back
+              const user = (key as any).username ? usernameMap.get((key as any).username) : userMap.get(key.user_id);
+              const actualUsername = (key as any).username || user?.username || 'Unknown';
               
               // Get authorization count for this key
-              const authResponse = await authorizationsService.getUserAuthorizations(user?.username || '');
+              const authResponse = await authorizationsService.getUserAuthorizations(actualUsername);
               const hostCount = authResponse.success ? authResponse.data?.length || 0 : 0;
 
               return {
                 ...key,
-                username: user?.username || 'Unknown',
+                user_id: user?.id || 0, // Set proper user_id from the username lookup
+                username: actualUsername,
                 status: 'deployed', // Would be determined by backend logic
                 hostCount,
                 createdAt: new Date(), // Would come from backend
               };
             } catch {
+              // Fallback for error cases
+              const user = (key as any).username ? usernameMap.get((key as any).username) : userMap.get(key.user_id);
+              const actualUsername = (key as any).username || user?.username || 'Unknown';
+              
               return {
                 ...key,
-                username: userMap.get(key.user_id)?.username || 'Unknown',
+                user_id: user?.id || 0,
+                username: actualUsername,
                 status: 'unknown',
                 hostCount: 0,
                 createdAt: new Date(),
@@ -345,13 +354,13 @@ const KeysPage: React.FC = () => {
   const filteredKeys = keys.filter(key => {
     if (filters.keyType && key.key_type !== filters.keyType) return false;
     if (filters.userId && key.user_id !== filters.userId) return false;
-    if (filters.status === 'assigned' && !key.user_id) return false;
-    if (filters.status === 'unassigned' && key.user_id) return false;
+    if (filters.status === 'assigned' && (!key.user_id || key.user_id === 0)) return false;
+    if (filters.status === 'unassigned' && key.user_id && key.user_id !== 0) return false;
     return true;
   });
 
-  // Unassigned keys
-  const unassignedKeys = keys.filter(key => !key.user_id);
+  // Unassigned keys (user_id is 0 or falsy)
+  const unassignedKeys = keys.filter(key => !key.user_id || key.user_id === 0);
 
   // Get status icon and color
   const getStatusIcon = (status: ExtendedKey['status']) => {
@@ -408,12 +417,12 @@ const KeysPage: React.FC = () => {
       searchable: true,
       render: (value: unknown, item: ExtendedKey) => (
         <div className="flex items-center space-x-2">
-          {item.user_id ? (
+          {item.user_id && item.user_id !== 0 ? (
             <UserCheck size={16} className="text-green-600" />
           ) : (
             <UserX size={16} className="text-gray-400" />
           )}
-          <span className={item.user_id ? 'text-gray-900 dark:text-gray-100' : 'text-gray-400'}>
+          <span className={item.user_id && item.user_id !== 0 ? 'text-gray-900 dark:text-gray-100' : 'text-gray-400'}>
             {(value as string) || 'Unassigned'}
           </span>
         </div>
@@ -509,7 +518,7 @@ const KeysPage: React.FC = () => {
           >
             <Edit2 size={16} />
           </Button>
-          {!item.user_id && (
+          {(!item.user_id || item.user_id === 0) && (
             <Button
               variant="ghost"
               size="sm"
@@ -693,7 +702,7 @@ const KeysPage: React.FC = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600 dark:text-gray-400">Assigned</p>
-                <p className="text-2xl font-bold text-green-600">{keys.filter(k => k.user_id).length}</p>
+                <p className="text-2xl font-bold text-green-600">{keys.filter(k => k.user_id && k.user_id !== 0).length}</p>
               </div>
               <UserCheck size={24} className="text-green-600" />
             </div>
