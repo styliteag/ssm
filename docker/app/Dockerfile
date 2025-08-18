@@ -88,8 +88,8 @@ COPY --from=backend-builder /app/diesel.toml /app/diesel.toml
 
 # Copy backend static assets and templates (needed for Rust web app)
 COPY backend/src/ssh/script.sh /app/script.sh
-COPY static /app/static
-COPY templates /app/templates
+#COPY static /app/static
+#COPY templates /app/templates
 
 # Create necessary directories and startup script
 RUN mkdir -p /var/cache/nginx /var/run/nginx /app/db /app/keys /var/log/nginx && \
