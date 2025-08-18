@@ -262,21 +262,29 @@ const HostsPage: React.FC = () => {
       };
 
       console.log('Creating host with data:', hostData);
-      const response = await hostsService.createHost(hostData);
+      const response = await hostsService.createHost({
+        ...hostData,
+        jump_via: hostData.jump_via ?? undefined,
+        key_fingerprint: hostData.key_fingerprint ?? undefined
+      });
       console.log('Host creation response:', response);
       
       if (response.success && response.data) {
         // Check if this is a host key confirmation response (two-step process)
-        if ((response.data as any).requires_confirmation) {
+        if (response.data.requires_confirmation) {
           console.log('Host key confirmation required, sending with fingerprint');
           
           // Second call with the received fingerprint
           const confirmedHostData = {
             ...hostData,
-            key_fingerprint: (response.data as any).key_fingerprint
+            key_fingerprint: response.data.key_fingerprint
           };
           
-          const finalResponse = await hostsService.createHost(confirmedHostData);
+          const finalResponse = await hostsService.createHost({
+            ...confirmedHostData,
+            jump_via: confirmedHostData.jump_via ?? undefined,
+            key_fingerprint: confirmedHostData.key_fingerprint ?? undefined
+          });
           console.log('Final host creation response:', finalResponse);
           
           if (finalResponse.success && finalResponse.data) {
@@ -323,12 +331,16 @@ const HostsPage: React.FC = () => {
         address: values.address,
         port: Number(values.port),
         username: values.username,
-        jump_via: values.jump_via && String(values.jump_via) !== '' ? String(values.jump_via) : "",
-        key_fingerprint: values.key_fingerprint && values.key_fingerprint.trim() !== '' ? values.key_fingerprint : ""
+        jump_via: values.jump_via && String(values.jump_via) !== '' ? Number(values.jump_via) : undefined,
+        key_fingerprint: values.key_fingerprint && values.key_fingerprint.trim() !== '' ? values.key_fingerprint : undefined
       };
 
       console.log('Updating host:', selectedHost.name, 'with data:', hostData);
-      const response = await hostsService.updateHost(selectedHost.name, hostData);
+      const response = await hostsService.updateHost(selectedHost.name, {
+        ...hostData,
+        jump_via: hostData.jump_via,
+        key_fingerprint: hostData.key_fingerprint
+      });
       if (response.success) {
         setShowEditModal(false);
         setSelectedHost(null);

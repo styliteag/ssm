@@ -111,7 +111,10 @@ const AuthorizationStats: React.FC<AuthorizationStatsProps> = ({
 
     try {
       setSubmitting(true);
-      const response = await hostsService.updateHost(selectedHost.name, values);
+      const response = await hostsService.updateHost(selectedHost.name, {
+        ...values,
+        jump_via: values.jump_via ? Number(values.jump_via) : undefined,
+      });
       if (response.success && response.data) {
         setShowEditHostModal(false);
         setSelectedHost(null);

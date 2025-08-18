@@ -1,7 +1,6 @@
 import { api } from './base';
 import {
   Host,
-  HostFormData,
   PaginatedResponse,
   PaginationQuery,
   ApiResponse,
@@ -40,12 +39,12 @@ export const hostsService = {
   },
 
   // Create new host
-  createHost: async (host: any): Promise<ApiResponse<Host>> => {
-    return api.post<Host>('/host', host);
+  createHost: async (host: Partial<Host> & { key_fingerprint?: string }): Promise<ApiResponse<Host & { requires_confirmation?: boolean; key_fingerprint?: string }>> => {
+    return api.post<Host & { requires_confirmation?: boolean; key_fingerprint?: string }>('/host', host);
   },
 
   // Update existing host by name
-  updateHost: async (name: string, host: any): Promise<ApiResponse<Host>> => {
+  updateHost: async (name: string, host: Partial<Host>): Promise<ApiResponse<Host>> => {
     return api.put<Host>(`/host/${encodeURIComponent(name)}`, host);
   },
 
