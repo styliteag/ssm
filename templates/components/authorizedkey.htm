@@ -1,9 +1,0 @@
-<p>Key type: <code>{{ key.algorithm }}</code></p>
-<p>{% match key.comment %}
-  {% when Some with (comment) %}
-  Comment: <code>{{ comment }}</code>
-  {% when None %}
-  <i>No comment attached to this key.</i>
-  {% endmatch %}
-</p>
-<p>Key Options: <code>{{ key.options }}</code></p>
