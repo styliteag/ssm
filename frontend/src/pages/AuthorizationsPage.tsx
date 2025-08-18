@@ -156,14 +156,20 @@ const AuthorizationsPage: React.FC = () => {
   const handleToggleAuthorization = useCallback(async (userId: number, hostId: number, isAuthorized: boolean) => {
     try {
       if (isAuthorized) {
-        // Revoke access - find and delete the authorization
-        const authorization = authorizations.find(auth => 
+        // Revoke access - find and delete ALL authorizations for this user-host pair
+        const userAuthorizations = authorizations.filter(auth => 
           auth.user_id === userId && auth.host_id === hostId
         );
-        if (authorization) {
+        
+        // If there are multiple authorizations, we should delete all of them when "unchecking"
+        // This provides a clear toggle behavior in the matrix
+        for (const authorization of userAuthorizations) {
           await authorizationsService.deleteAuthorization(authorization.id);
-          setAuthorizations(prev => prev.filter(auth => auth.id !== authorization.id));
         }
+        
+        setAuthorizations(prev => prev.filter(auth => 
+          !(auth.user_id === userId && auth.host_id === hostId)
+        ));
       } else {
         // Grant access - create new authorization
         const user = users.find(u => u.id === userId);
@@ -177,16 +183,41 @@ const AuthorizationsPage: React.FC = () => {
           };
           
           const response = await authorizationsService.createAuthorization(authData);
+          
           if (response.success && response.data) {
             setAuthorizations(prev => [...prev, response.data!]);
+          } else {
+            // If the API call succeeded but didn't return expected data,
+            // refresh the data to ensure UI consistency
+            console.warn('Authorization created but response data missing, refreshing...');
+            await loadData(false);
           }
         }
       }
     } catch (error) {
       console.error('Failed to toggle authorization:', error);
+      // On error, refresh data to ensure UI consistency
+      await loadData(false);
       throw error; // Re-throw to let the matrix component handle the error
     }
-  }, [authorizations, users, hosts]);
+  }, [authorizations, users, hosts, loadData]);
+
+  // Handle managing multiple authorizations (for matrix view)
+  const handleManageAuthorizations = useCallback((userId: number, hostId: number, userAuthorizations: Authorization[]) => {
+    // For now, we'll navigate to the list view with a filter
+    // In the future, this could open a dedicated modal
+    const user = users.find(u => u.id === userId);
+    const host = hosts.find(h => h.id === hostId);
+    
+    if (user && host) {
+      // Set view mode to list and apply search filter
+      handleViewModeChange('list');
+      // You could also implement additional filtering logic here
+      console.log(`Managing ${userAuthorizations.length} authorizations for ${user.username} on ${host.name}:`, 
+        userAuthorizations.map(auth => auth.login).join(', ')
+      );
+    }
+  }, [users, hosts, handleViewModeChange]);
 
   // Handle add authorization
   const handleAddAuthorization = useCallback(async (data: AuthorizationFormData) => {
@@ -372,6 +403,7 @@ const AuthorizationsPage: React.FC = () => {
           hosts={hosts}
           authorizations={authorizations}
           onToggleAuthorization={handleToggleAuthorization}
+          onManageAuthorizations={handleManageAuthorizations}
           loading={refreshing}
           onViewModeChange={(mode: string) => handleViewModeChange(mode as ViewMode)}
         />

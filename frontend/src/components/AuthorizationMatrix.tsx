@@ -12,6 +12,7 @@ interface AuthorizationMatrixProps {
   hosts: Host[];
   authorizations: Authorization[];
   onToggleAuthorization: (userId: number, hostId: number, isAuthorized: boolean) => Promise<void>;
+  onManageAuthorizations?: (userId: number, hostId: number, authorizations: Authorization[]) => void;
   loading?: boolean;
   className?: string;
   onViewModeChange?: (mode: string) => void; // Callback to change view mode in parent
@@ -20,7 +21,7 @@ interface AuthorizationMatrixProps {
 interface MatrixCell {
   userId: number;
   hostId: number;
-  authorization?: Authorization;
+  authorizations: Authorization[];
   isAuthorized: boolean;
   loading: boolean;
 }
@@ -30,6 +31,7 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
   hosts,
   authorizations,
   onToggleAuthorization,
+  onManageAuthorizations,
   loading = false,
   className,
   onViewModeChange,
@@ -65,11 +67,15 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
     }
   }, [onViewModeChange]);
 
-  // Create authorization lookup map
+  // Create authorization lookup map - now supports multiple login accounts per user-host
   const authMap = useMemo(() => {
-    const map = new Map<string, Authorization>();
+    const map = new Map<string, Authorization[]>();
     authorizations.forEach(auth => {
-      map.set(`${auth.user_id}-${auth.host_id}`, auth);
+      const key = `${auth.user_id}-${auth.host_id}`;
+      if (!map.has(key)) {
+        map.set(key, []);
+      }
+      map.get(key)!.push(auth);
     });
     return map;
   }, [authorizations]);
@@ -137,9 +143,15 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
     return { filteredUsers, filteredHosts };
   }, [users, hosts, authorizations, showOnlyAuthorized, userSearchTerm, hostSearchTerm]);
 
-  // Handle cell click to toggle authorization
-  const handleCellClick = async (userId: number, hostId: number, isAuthorized: boolean) => {
+  // Handle cell click to toggle authorization or manage multiple accounts
+  const handleCellClick = async (userId: number, hostId: number, isAuthorized: boolean, authorizations: Authorization[]) => {
     const key = `${userId}-${hostId}`;
+    
+    // If there are multiple authorizations and we have a manage callback, open management interface
+    if (isAuthorized && authorizations.length > 1 && onManageAuthorizations) {
+      onManageAuthorizations(userId, hostId, authorizations);
+      return;
+    }
     
     // Set loading state
     setCellStates(prev => new Map(prev).set(key, true));
@@ -166,7 +178,18 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
     }
     
     if (cell.isAuthorized) {
-      return <Check size={16} className="text-green-500" />;
+      if (cell.authorizations.length > 1) {
+        // Multiple login accounts - show count
+        return (
+          <div className="flex items-center space-x-1">
+            <Check size={12} className="text-green-500" />
+            <span className="text-xs font-bold text-green-600">{cell.authorizations.length}</span>
+          </div>
+        );
+      } else {
+        // Single authorization
+        return <Check size={16} className="text-green-500" />;
+      }
     }
     
     return <X size={16} className="text-gray-400" />;
@@ -342,14 +365,14 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
                   {/* Authorization cells */}
                   {filteredHosts.map((host) => {
                     const key = `${user.id}-${host.id}`;
-                    const authorization = authMap.get(key);
-                    const isAuthorized = !!authorization;
+                    const userAuthorizations = authMap.get(key) || [];
+                    const isAuthorized = userAuthorizations.length > 0;
                     const isLoading = cellStates.get(key) || false;
                     
                     const cell: MatrixCell = {
                       userId: user.id,
                       hostId: host.id,
-                      authorization,
+                      authorizations: userAuthorizations,
                       isAuthorized,
                       loading: isLoading,
                     };
@@ -358,13 +381,15 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
                       <div
                         key={`${user.id}-${host.id}`}
                         className={getCellClassName(cell, rowIndex)}
-                        onClick={() => !cell.loading && handleCellClick(cell.userId, cell.hostId, cell.isAuthorized)}
+                        onClick={() => !cell.loading && handleCellClick(cell.userId, cell.hostId, cell.isAuthorized, cell.authorizations)}
                         onMouseEnter={() => setHoveredCell({ userId: cell.userId, hostId: cell.hostId })}
                         onMouseLeave={() => setHoveredCell(null)}
                         title={
                           cell.loading 
                             ? 'Updating...' 
-                            : `${user.username} on ${host.name}: ${cell.isAuthorized ? 'Authorized' : 'Not Authorized'}${cell.authorization?.login ? ` (login: ${cell.authorization.login})` : ''}`
+                            : cell.isAuthorized
+                              ? `${user.username} on ${host.name}: Authorized${cell.authorizations.length > 1 ? ` (${cell.authorizations.length} accounts)` : ''}\n${cell.authorizations.map(auth => `• ${auth.login}${auth.options ? ` (${auth.options})` : ''}`).join('\n')}`
+                              : `${user.username} on ${host.name}: Not Authorized`
                         }
                       >
                         {getCellContent(cell)}
@@ -384,6 +409,15 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
               <Check size={12} className="text-green-500" />
             </div>
             <span className="text-gray-900 dark:text-white">Authorized</span>
+          </div>
+          <div className="flex items-center space-x-2">
+            <div className="w-4 h-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded flex items-center justify-center">
+              <div className="flex items-center space-x-1">
+                <Check size={8} className="text-green-500" />
+                <span className="text-xs font-bold text-green-600">2</span>
+              </div>
+            </div>
+            <span className="text-gray-900 dark:text-white">Multiple Login Accounts</span>
           </div>
           <div className="flex items-center space-x-2">
             <div className="w-4 h-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded flex items-center justify-center">
