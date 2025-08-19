@@ -55,6 +55,10 @@ test-security:
 test-lifecycle:
     cargo test user_lifecycle -- --nocapture
 
+# Run complete workflow tests with logging
+test-workflow:
+    cargo test complete_workflow_test -- --nocapture
+
 # Check code without building
 check:
     cargo check
