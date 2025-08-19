@@ -12,6 +12,7 @@ use crate::{
         http_test_helpers::{extract_json},
     },
     create_inline_test_service,
+    authenticated_request,
 };
 
 #[tokio::test]
@@ -49,27 +50,30 @@ async fn test_get_all_keys_with_data_validation() {
         PublicUserKey::add_key(&mut conn, new_key).expect("Failed to add test key");
     }
     
-    // Get authentication cookie
+    // Login to get session
     let login_req = test::TestRequest::post()
         .uri("/api/auth/login")
         .set_json(&json!({"username": "testuser", "password": "testpass"}))
         .to_request();
     let login_resp = test::call_service(&app, login_req).await;
     assert_eq!(login_resp.status(), StatusCode::OK);
-    let mut cookie = String::new();
-    for (name, value) in login_resp.headers().iter() {
-        if name == "set-cookie" {
-            if let Some(cookie_value) = value.to_str().unwrap().split(';').next() {
-                cookie = cookie_value.to_string();
-            }
-            break;
-        }
-    }
-    assert!(!cookie.is_empty());
-    
+
+    let session_cookie = crate::tests::http_test_helpers::extract_session_cookie(&login_resp);
+
+    // Get CSRF token
+    let csrf_req = test::TestRequest::get()
+        .uri("/api/auth/csrf")
+        .insert_header(("Cookie", session_cookie.clone()))
+        .to_request();
+    let csrf_resp = test::call_service(&app, csrf_req).await;
+    assert_eq!(csrf_resp.status(), 200);
+    let csrf_body: serde_json::Value = test::read_body_json(csrf_resp).await;
+    let csrf_token = csrf_body["data"]["csrf_token"].as_str().unwrap();
+
     let req = test::TestRequest::get()
         .uri("/api/key")
-        .insert_header(("Cookie", cookie))
+        .insert_header(("Cookie", session_cookie))
+        .insert_header(("X-CSRF-Token", csrf_token))
         .to_request();
     
     let resp = test::call_service(&app, req).await;
@@ -128,8 +132,7 @@ async fn test_get_specific_key() {
     let user_keys = user.get_keys(&mut conn).expect("Failed to get user keys");
     let key_id = user_keys[0].id;
     
-    let req = test::TestRequest::get()
-        .uri(&format!("/api/key/{}", key_id))
+    let req = authenticated_request!(&app, get, &format!("/api/key/{}", key_id))
         .to_request();
     
     let resp = test::call_service(&app, req).await;
@@ -168,9 +171,7 @@ async fn test_create_key_endpoint() {
         "key_comment": "newkey@example.com"
     });
     
-    let req = test::TestRequest::post()
-        .uri("/api/key")
-        .set_json(&new_key_data)
+    let req = authenticated_request!(&app, post, "/api/key", &new_key_data)
         .to_request();
     
     let resp = test::call_service(&app, req).await;
@@ -225,28 +226,31 @@ async fn test_key_validation_with_different_algorithms() {
         }
     }
     
-    // Get authentication cookie
+    // Login to get session
     let login_req = test::TestRequest::post()
         .uri("/api/auth/login")
         .set_json(&json!({"username": "testuser", "password": "testpass"}))
         .to_request();
     let login_resp = test::call_service(&app, login_req).await;
     assert_eq!(login_resp.status(), StatusCode::OK);
-    let mut cookie = String::new();
-    for (name, value) in login_resp.headers().iter() {
-        if name == "set-cookie" {
-            if let Some(cookie_value) = value.to_str().unwrap().split(';').next() {
-                cookie = cookie_value.to_string();
-            }
-            break;
-        }
-    }
-    assert!(!cookie.is_empty());
-    
+
+    let session_cookie = crate::tests::http_test_helpers::extract_session_cookie(&login_resp);
+
+    // Get CSRF token
+    let csrf_req = test::TestRequest::get()
+        .uri("/api/auth/csrf")
+        .insert_header(("Cookie", session_cookie.clone()))
+        .to_request();
+    let csrf_resp = test::call_service(&app, csrf_req).await;
+    assert_eq!(csrf_resp.status(), 200);
+    let csrf_body: serde_json::Value = test::read_body_json(csrf_resp).await;
+    let csrf_token = csrf_body["data"]["csrf_token"].as_str().unwrap();
+
     // Get all keys and verify algorithms are handled properly
     let req = test::TestRequest::get()
         .uri("/api/key")
-        .insert_header(("Cookie", cookie))
+        .insert_header(("Cookie", session_cookie))
+        .insert_header(("X-CSRF-Token", csrf_token))
         .to_request();
     
     let resp = test::call_service(&app, req).await;
@@ -287,27 +291,30 @@ async fn test_key_fingerprint_generation() {
     
     PublicUserKey::add_key(&mut conn, new_key).expect("Failed to add test key");
     
-    // Get authentication cookie
+    // Login to get session
     let login_req = test::TestRequest::post()
         .uri("/api/auth/login")
         .set_json(&json!({"username": "testuser", "password": "testpass"}))
         .to_request();
     let login_resp = test::call_service(&app, login_req).await;
     assert_eq!(login_resp.status(), StatusCode::OK);
-    let mut cookie = String::new();
-    for (name, value) in login_resp.headers().iter() {
-        if name == "set-cookie" {
-            if let Some(cookie_value) = value.to_str().unwrap().split(';').next() {
-                cookie = cookie_value.to_string();
-            }
-            break;
-        }
-    }
-    assert!(!cookie.is_empty());
-    
+
+    let session_cookie = crate::tests::http_test_helpers::extract_session_cookie(&login_resp);
+
+    // Get CSRF token
+    let csrf_req = test::TestRequest::get()
+        .uri("/api/auth/csrf")
+        .insert_header(("Cookie", session_cookie.clone()))
+        .to_request();
+    let csrf_resp = test::call_service(&app, csrf_req).await;
+    assert_eq!(csrf_resp.status(), 200);
+    let csrf_body: serde_json::Value = test::read_body_json(csrf_resp).await;
+    let csrf_token = csrf_body["data"]["csrf_token"].as_str().unwrap();
+
     let req = test::TestRequest::get()
         .uri("/api/key")
-        .insert_header(("Cookie", cookie))
+        .insert_header(("Cookie", session_cookie))
+        .insert_header(("X-CSRF-Token", csrf_token))
         .to_request();
     
     let resp = test::call_service(&app, req).await;
@@ -360,27 +367,30 @@ async fn test_delete_key_endpoint() {
     let user_keys = user.get_keys(&mut conn).expect("Failed to get user keys");
     let key_id = user_keys[0].id;
     
-    // Get authentication cookie
+    // Login to get session
     let login_req = test::TestRequest::post()
         .uri("/api/auth/login")
         .set_json(&json!({"username": "testuser", "password": "testpass"}))
         .to_request();
     let login_resp = test::call_service(&app, login_req).await;
     assert_eq!(login_resp.status(), StatusCode::OK);
-    let mut cookie = String::new();
-    for (name, value) in login_resp.headers().iter() {
-        if name == "set-cookie" {
-            if let Some(cookie_value) = value.to_str().unwrap().split(';').next() {
-                cookie = cookie_value.to_string();
-            }
-            break;
-        }
-    }
-    assert!(!cookie.is_empty());
-    
+
+    let session_cookie = crate::tests::http_test_helpers::extract_session_cookie(&login_resp);
+
+    // Get CSRF token
+    let csrf_req = test::TestRequest::get()
+        .uri("/api/auth/csrf")
+        .insert_header(("Cookie", session_cookie.clone()))
+        .to_request();
+    let csrf_resp = test::call_service(&app, csrf_req).await;
+    assert_eq!(csrf_resp.status(), 200);
+    let csrf_body: serde_json::Value = test::read_body_json(csrf_resp).await;
+    let csrf_token = csrf_body["data"]["csrf_token"].as_str().unwrap();
+
     let req = test::TestRequest::delete()
         .uri(&format!("/api/key/{}", key_id))
-        .insert_header(("Cookie", cookie))
+        .insert_header(("Cookie", session_cookie))
+        .insert_header(("X-CSRF-Token", csrf_token))
         .to_request();
     
     let resp = test::call_service(&app, req).await;
@@ -469,28 +479,31 @@ async fn test_key_search_and_filtering() {
         PublicUserKey::add_key(&mut conn, new_key).expect("Failed to add test key");
     }
     
-    // Get authentication cookie
+    // Login to get session
     let login_req = test::TestRequest::post()
         .uri("/api/auth/login")
         .set_json(&json!({"username": "testuser", "password": "testpass"}))
         .to_request();
     let login_resp = test::call_service(&app, login_req).await;
     assert_eq!(login_resp.status(), StatusCode::OK);
-    let mut cookie = String::new();
-    for (name, value) in login_resp.headers().iter() {
-        if name == "set-cookie" {
-            if let Some(cookie_value) = value.to_str().unwrap().split(';').next() {
-                cookie = cookie_value.to_string();
-            }
-            break;
-        }
-    }
-    assert!(!cookie.is_empty());
-    
+
+    let session_cookie = crate::tests::http_test_helpers::extract_session_cookie(&login_resp);
+
+    // Get CSRF token
+    let csrf_req = test::TestRequest::get()
+        .uri("/api/auth/csrf")
+        .insert_header(("Cookie", session_cookie.clone()))
+        .to_request();
+    let csrf_resp = test::call_service(&app, csrf_req).await;
+    assert_eq!(csrf_resp.status(), 200);
+    let csrf_body: serde_json::Value = test::read_body_json(csrf_resp).await;
+    let csrf_token = csrf_body["data"]["csrf_token"].as_str().unwrap();
+
     // Test basic get all keys
     let req = test::TestRequest::get()
         .uri("/api/key")
-        .insert_header(("Cookie", cookie.clone()))
+        .insert_header(("Cookie", session_cookie.clone()))
+        .insert_header(("X-CSRF-Token", csrf_token))
         .to_request();
     
     let resp = test::call_service(&app, req).await;
@@ -506,7 +519,8 @@ async fn test_key_search_and_filtering() {
     // Test with query parameters (if supported)
     let req = test::TestRequest::get()
         .uri("/api/key?search=prod")
-        .insert_header(("Cookie", cookie))
+        .insert_header(("Cookie", session_cookie))
+        .insert_header(("X-CSRF-Token", csrf_token))
         .to_request();
     
     let resp = test::call_service(&app, req).await;

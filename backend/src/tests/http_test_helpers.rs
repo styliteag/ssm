@@ -110,15 +110,32 @@ where
     json
 }
 
+/// Helper function to extract session cookie from response
+pub fn extract_session_cookie<B>(resp: &actix_web::dev::ServiceResponse<B>) -> String 
+where
+    B: actix_web::body::MessageBody,
+{
+    for (name, value) in resp.headers().iter() {
+        if name == "set-cookie" {
+            if let Ok(cookie_str) = value.to_str() {
+                if let Some(session_part) = cookie_str.split(';').next() {
+                    return session_part.to_string();
+                }
+            }
+        }
+    }
+    panic!("Session cookie not found in response headers");
+}
 
-/// Macro to create authenticated request - simplifies adding auth to existing tests
+
+/// Macro to create authenticated request with CSRF protection
 #[macro_export]
 macro_rules! authenticated_request {
     ($app:expr, $method:ident, $uri:expr) => {{
         use actix_web::test;
         use serde_json::json;
         
-        // Login first
+        // Login first to get session cookie
         let login_req = test::TestRequest::post()
             .uri("/api/auth/login")
             .set_json(&json!({
@@ -130,27 +147,32 @@ macro_rules! authenticated_request {
         let login_resp = test::call_service($app, login_req).await;
         assert_eq!(login_resp.status(), actix_web::http::StatusCode::OK, "Login should succeed for authentication");
         
-        // Extract session cookie
-        let mut cookie = String::new();
-        for (name, value) in login_resp.headers().iter() {
-            if name == "set-cookie" {
-                cookie = value.to_str().unwrap().to_string();
-                break;
-            }
-        }
-        assert!(!cookie.is_empty(), "Should have session cookie");
+        let cookie = crate::tests::http_test_helpers::extract_session_cookie(&login_resp);
         
-        // Create authenticated request
+        // Get CSRF token from dedicated endpoint
+        let csrf_req = test::TestRequest::get()
+            .uri("/api/auth/csrf")
+            .insert_header(("Cookie", cookie.clone()))
+            .to_request();
+        let csrf_resp = test::call_service($app, csrf_req).await;
+        assert_eq!(csrf_resp.status(), actix_web::http::StatusCode::OK, "CSRF token request should succeed");
+        let csrf_body: serde_json::Value = test::read_body_json(csrf_resp).await;
+        let csrf_token = csrf_body["data"]["csrf_token"].as_str()
+            .expect("CSRF token should be present in response")
+            .to_string();
+        
+        // Create authenticated request with CSRF token
         test::TestRequest::$method()
             .uri($uri)
             .insert_header(("Cookie", cookie))
+            .insert_header(("X-CSRF-Token", csrf_token))
     }};
     
     ($app:expr, $method:ident, $uri:expr, $json:expr) => {{
         use actix_web::test;
         use serde_json::json;
         
-        // Login first
+        // Login first to get session cookie
         let login_req = test::TestRequest::post()
             .uri("/api/auth/login")
             .set_json(&json!({
@@ -162,21 +184,25 @@ macro_rules! authenticated_request {
         let login_resp = test::call_service($app, login_req).await;
         assert_eq!(login_resp.status(), actix_web::http::StatusCode::OK, "Login should succeed for authentication");
         
-        // Extract session cookie
-        let mut cookie = String::new();
-        for (name, value) in login_resp.headers().iter() {
-            if name == "set-cookie" {
-                cookie = value.to_str().unwrap().to_string();
-                break;
-            }
-        }
-        assert!(!cookie.is_empty(), "Should have session cookie");
+        let cookie = crate::tests::http_test_helpers::extract_session_cookie(&login_resp);
         
-        // Create authenticated request with JSON body
+        // Get CSRF token from dedicated endpoint
+        let csrf_req = test::TestRequest::get()
+            .uri("/api/auth/csrf")
+            .insert_header(("Cookie", cookie.clone()))
+            .to_request();
+        let csrf_resp = test::call_service($app, csrf_req).await;
+        assert_eq!(csrf_resp.status(), actix_web::http::StatusCode::OK, "CSRF token request should succeed");
+        let csrf_body: serde_json::Value = test::read_body_json(csrf_resp).await;
+        let csrf_token = csrf_body["data"]["csrf_token"].as_str()
+            .expect("CSRF token should be present in response")
+            .to_string();
+        
+        // Create authenticated request with JSON body and CSRF token
         test::TestRequest::$method()
             .uri($uri)
             .insert_header(("Cookie", cookie))
+            .insert_header(("X-CSRF-Token", csrf_token))
             .set_json($json)
     }};
 }
-

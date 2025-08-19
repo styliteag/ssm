@@ -5,7 +5,7 @@ use serial_test::serial;
 use crate::create_inline_test_service;
 
 // Helper function to extract session cookie from response
-fn get_session_cookie<B>(resp: &actix_web::dev::ServiceResponse<B>) -> cookie::Cookie<'static> 
+fn get_session_cookie<B>(resp: &actix_web::dev::ServiceResponse<B>) -> String 
 where
     B: actix_web::body::MessageBody,
 {
@@ -14,7 +14,10 @@ where
         .expect("Set-Cookie header should be present");
     
     let cookie_str = cookie_header.to_str().unwrap();
-    cookie::Cookie::parse(cookie_str.to_owned()).unwrap()
+    if let Some(session_part) = cookie_str.split(';').next() {
+        return session_part.to_string();
+    }
+    panic!("Could not extract session cookie");
 }
 
 #[tokio::test]
@@ -64,7 +67,7 @@ async fn test_csrf_token_endpoint() {
     // Get CSRF token from endpoint
     let req = test::TestRequest::get()
         .uri("/api/auth/csrf")
-        .cookie(session_cookie)
+        .insert_header(("Cookie", session_cookie))
         .to_request();
     
     let resp = test::call_service(&app, req).await;
@@ -96,7 +99,7 @@ async fn test_post_request_without_csrf_token_fails() {
     // Try to create a host without CSRF token (should fail)
     let req = test::TestRequest::post()
         .uri("/api/host")
-        .cookie(session_cookie)
+        .insert_header(("Cookie", session_cookie))
         .set_json(&json!({
             "name": "test-host",
             "address": "192.168.1.100",
@@ -131,7 +134,7 @@ async fn test_post_request_with_invalid_csrf_token_fails() {
     // Try to create a host with invalid CSRF token (should fail)
     let req = test::TestRequest::post()
         .uri("/api/host")
-        .cookie(session_cookie)
+        .insert_header(("Cookie", session_cookie))
         .insert_header(("X-CSRF-Token", "invalid-token"))
         .set_json(&json!({
             "name": "test-host",
@@ -162,26 +165,23 @@ async fn test_post_request_with_valid_csrf_token_succeeds() {
     let login_resp = test::call_service(&app, login_req).await;
     assert_eq!(login_resp.status(), 200);
     
-    // Extract CSRF token from login response body
-    let body: serde_json::Value = test::read_body_json(login_resp).await;
-    let csrf_token = body["data"]["csrf_token"].as_str().unwrap();
+    let session_cookie = get_session_cookie(&login_resp);
     
-    // Re-login to get a fresh session for the test (since we consumed the response body)
-    let login_req2 = test::TestRequest::post()
-        .uri("/api/auth/login")
-        .set_json(&json!({
-            "username": "testuser",
-            "password": "testpass"
-        }))
+    // Get CSRF token from the current session
+    let csrf_req = test::TestRequest::get()
+        .uri("/api/auth/csrf")
+        .insert_header(("Cookie", session_cookie.clone()))
         .to_request();
     
-    let login_resp2 = test::call_service(&app, login_req2).await;
-    let session_cookie = get_session_cookie(&login_resp2);
+    let csrf_resp = test::call_service(&app, csrf_req).await;
+    assert_eq!(csrf_resp.status(), 200);
+    let csrf_body: serde_json::Value = test::read_body_json(csrf_resp).await;
+    let csrf_token = csrf_body["data"]["csrf_token"].as_str().unwrap();
     
     // Try to create a host with valid CSRF token
     let req = test::TestRequest::post()
         .uri("/api/host")
-        .cookie(session_cookie)
+        .insert_header(("Cookie", session_cookie))
         .insert_header(("X-CSRF-Token", csrf_token))
         .set_json(&json!({
             "name": "test-host-csrf",
@@ -220,7 +220,7 @@ async fn test_get_requests_now_require_csrf_token() {
     // GET requests should now be blocked without CSRF token
     let req = test::TestRequest::get()
         .uri("/api/host")
-        .cookie(session_cookie)
+        .insert_header(("Cookie", session_cookie))
         .to_request();
     
     let resp = test::call_service(&app, req).await;
@@ -244,26 +244,23 @@ async fn test_get_requests_work_with_csrf_token() {
     let login_resp = test::call_service(&app, login_req).await;
     assert_eq!(login_resp.status(), 200);
     
-    // Extract CSRF token from login response
-    let body: serde_json::Value = test::read_body_json(login_resp).await;
-    let csrf_token = body["data"]["csrf_token"].as_str().unwrap();
+    let session_cookie = get_session_cookie(&login_resp);
     
-    // Re-login to get a fresh session
-    let login_req2 = test::TestRequest::post()
-        .uri("/api/auth/login")
-        .set_json(&json!({
-            "username": "testuser",
-            "password": "testpass"
-        }))
+    // Get CSRF token from the current session
+    let csrf_req = test::TestRequest::get()
+        .uri("/api/auth/csrf")
+        .insert_header(("Cookie", session_cookie.clone()))
         .to_request();
     
-    let login_resp2 = test::call_service(&app, login_req2).await;
-    let session_cookie = get_session_cookie(&login_resp2);
+    let csrf_resp = test::call_service(&app, csrf_req).await;
+    assert_eq!(csrf_resp.status(), 200);
+    let csrf_body: serde_json::Value = test::read_body_json(csrf_resp).await;
+    let csrf_token = csrf_body["data"]["csrf_token"].as_str().unwrap();
     
     // GET requests should work WITH CSRF token
     let req = test::TestRequest::get()
         .uri("/api/host")
-        .cookie(session_cookie)
+        .insert_header(("Cookie", session_cookie))
         .insert_header(("X-CSRF-Token", csrf_token))
         .to_request();
     
