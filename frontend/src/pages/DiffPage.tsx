@@ -10,7 +10,7 @@ import {
   Modal,
   type Column
 } from '../components/ui';
-import { diffApi, DiffHost, DetailedDiffResponse } from '../services/api/diff';
+import { diffApi, DiffHost, DetailedDiffResponse, DiffItemResponse } from '../services/api/diff';
 import { hostsService } from '../services/api/hosts';
 import type { Host } from '../types';
 import DiffIssue from '../components/DiffIssue';
@@ -179,6 +179,48 @@ const DiffPage: React.FC = () => {
     setHostDetails(null);
     setShowModal(false);
     setModalError(null);
+  };
+
+  // Handle allowing unauthorized keys
+  const handleAllowKey = async (issue: DiffItemResponse) => {
+    if (!selectedHost || !hostDetails) return;
+    
+    // Extract username from the issue details
+    const username = issue.details?.username;
+    if (!username) {
+      showError('Cannot authorize key', 'Username not found in issue details');
+      return;
+    }
+
+    // Find the login from the current login section
+    const currentLogin = hostDetails.logins.find(login => 
+      login.issues.some(i => i === issue)
+    )?.login;
+    
+    if (!currentLogin) {
+      showError('Cannot authorize key', 'Login not found for this issue');
+      return;
+    }
+
+    try {
+      // Call the API to authorize the key
+      await diffApi.authorizeKey(
+        selectedHost.name, 
+        username, 
+        currentLogin,
+        issue.details?.key?.options || undefined
+      );
+      
+      showSuccess('Key authorized', `Key for user "${username}" has been authorized for login "${currentLogin}"`);
+      
+      // Refresh the host details to show updated status
+      const refreshedDetails = await diffApi.getHostDiffDetails(selectedHost.name, true);
+      setHostDetails(refreshedDetails);
+    } catch (error) {
+      console.error('Error allowing key:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Please try again later';
+      showError('Failed to authorize key', errorMessage);
+    }
   };
 
   // Table column definitions
@@ -392,55 +434,58 @@ const DiffPage: React.FC = () => {
           </div>
         ) : (
           <div className="space-y-5">
-            {/* Basic Host Information */}
-            <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3 border-b border-gray-200 dark:border-gray-700 pb-2">Host Information</h3>
-              <div className="grid grid-cols-4 gap-4">
-                <div className="flex flex-col">
-                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">ID</span>
-                  <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 mt-1">{hostDetails.host.id}</span>
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Name</span>
-                  <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 mt-1">{hostDetails.host.name}</span>
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Address</span>
-                  <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 mt-1">{hostDetails.host.address}</span>
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Last Updated</span>
-                  <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 mt-1">
-                    {new Date(hostDetails.cache_timestamp).toLocaleString()}
-                  </span>
+            {/* Host Information and Status Summary */}
+            <div className="grid grid-cols-2 gap-6">
+              {/* Basic Host Information */}
+              <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3 border-b border-gray-200 dark:border-gray-700 pb-2">Host Information</h3>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+                  <div className="flex flex-col">
+                    <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">ID</span>
+                    <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 mt-1">{hostDetails.host.id}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Name</span>
+                    <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 mt-1">{hostDetails.host.name}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Address</span>
+                    <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 mt-1">{hostDetails.host.address}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Last Updated</span>
+                    <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 mt-1">
+                      {new Date(hostDetails.cache_timestamp).toLocaleString()}
+                    </span>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* Summary */}
-            <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3 border-b border-gray-200 dark:border-gray-700 pb-2">Status Summary</h3>
-              <div className="flex items-center justify-between mb-3">
-                <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-semibold ${
-                  hostDetails.logins.length === 0 
-                    ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 border border-green-200 dark:border-green-800' 
-                    : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 border border-red-200 dark:border-red-800'
-                }`}>
-                  {hostDetails.logins.length === 0 ? '✓ Synchronized' : '⚠ Needs Sync'}
-                </span>
-                <div className="text-sm text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-3 py-1 rounded-full">
-                  {hostDetails.expected_keys.length} expected keys
+              {/* Status Summary */}
+              <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3 border-b border-gray-200 dark:border-gray-700 pb-2">Status Summary</h3>
+                <div className="flex items-center justify-between mb-3">
+                  <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-semibold ${
+                    hostDetails.logins.length === 0 
+                      ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 border border-green-200 dark:border-green-800' 
+                      : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 border border-red-200 dark:border-red-800'
+                  }`}>
+                    {hostDetails.logins.length === 0 ? '✓ Synchronized' : '⚠ Needs Sync'}
+                  </span>
+                  <div className="text-sm text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-3 py-1 rounded-full">
+                    {hostDetails.expected_keys.length} expected keys
+                  </div>
                 </div>
+                <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{hostDetails.summary}</p>
               </div>
-              <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{hostDetails.summary}</p>
             </div>
 
             {/* Expected Keys */}
             {hostDetails.expected_keys.length > 0 && (
               <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3 border-b border-gray-200 dark:border-gray-700 pb-2">Expected Keys</h3>
-                <div className="max-h-40 overflow-y-auto">
-                  <div className="grid grid-cols-2 gap-3">
+                <div className="max-h-64 overflow-y-auto">
+                  <div className="grid grid-cols-3 gap-3">
                     {hostDetails.expected_keys.map((key, index) => (
                       <div key={index} className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-3 hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors">
                         <div className="flex justify-between items-start mb-2">
@@ -469,7 +514,8 @@ const DiffPage: React.FC = () => {
             {hostDetails.logins.length > 0 && (
               <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3 border-b border-gray-200 dark:border-gray-700 pb-2">Issues Found</h3>
-                <div className="space-y-4">
+                <div className="max-h-96 overflow-y-auto">
+                  <div className="space-y-4">
                   {hostDetails.logins.map((loginDiff, loginIndex) => (
                     <div key={loginIndex} className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
                       <div className="bg-gradient-to-r from-gray-100 to-gray-50 dark:from-gray-800 dark:to-gray-750 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
@@ -495,7 +541,7 @@ const DiffPage: React.FC = () => {
                           {loginDiff.issues.map((issue, issueIndex) => (
                             <div key={issueIndex} className="min-w-0">
                               <div className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-2 hover:shadow-sm transition-shadow">
-                                <DiffIssue issue={issue} />
+                                <DiffIssue issue={issue} onAllowKey={handleAllowKey} />
                               </div>
                             </div>
                           ))}
@@ -503,6 +549,7 @@ const DiffPage: React.FC = () => {
                       </div>
                     </div>
                   ))}
+                  </div>
                 </div>
               </div>
             )}

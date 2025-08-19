@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
+import { Check } from 'lucide-react';
 import { DiffItemResponse } from '../services/api/diff';
 
 interface DiffIssueProps {
   issue: DiffItemResponse;
+  onAllowKey?: (issue: DiffItemResponse) => void;
 }
 
 const getIssueIcon = (type: string) => {
@@ -60,7 +62,7 @@ const getSeverityClasses = (severity: string) => {
   }
 };
 
-export const DiffIssue: React.FC<DiffIssueProps> = ({ issue }) => {
+export const DiffIssue: React.FC<DiffIssueProps> = ({ issue, onAllowKey }) => {
   const [expanded, setExpanded] = useState(false);
   const severity = getIssueSeverity(issue.type);
   const severityClasses = getSeverityClasses(severity);
@@ -78,9 +80,24 @@ export const DiffIssue: React.FC<DiffIssueProps> = ({ issue }) => {
             {issue.type.replace('_', ' ')}
           </span>
         </div>
-        <button className="text-sm font-medium hover:underline text-current">
-          {expanded ? 'Less' : 'More'} {expanded ? '▲' : '▼'}
-        </button>
+        <div className="flex items-center space-x-2">
+          {/* Allow button for unauthorized key issues */}
+          {issue.type === 'unauthorized_key' && onAllowKey && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onAllowKey(issue);
+              }}
+              className="inline-flex items-center space-x-1 px-2 py-1 bg-green-600 hover:bg-green-700 text-white text-xs font-medium rounded transition-colors"
+            >
+              <Check size={12} />
+              <span>Allow</span>
+            </button>
+          )}
+          <button className="text-sm font-medium text-current">
+            {expanded ? '▲' : '▼'}
+          </button>
+        </div>
       </div>
 
       {expanded && issue.details && (

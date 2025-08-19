@@ -110,10 +110,40 @@ export const getHostDiffDetails = async (hostName: string, forceUpdate = false):
   };
 };
 
+// Authorize an unauthorized key by creating an authorization
+export const authorizeKey = async (hostName: string, username: string, login: string, options?: string): Promise<void> => {
+  // First get the host and user IDs
+  const [hostResponse, userResponse] = await Promise.all([
+    api.get<{ id: number; name: string; address: string }>(`/host/${encodeURIComponent(hostName)}`),
+    api.get<{ id: number; username: string }>(`/user/${encodeURIComponent(username)}`)
+  ]);
+
+  if (!hostResponse.success || !hostResponse.data) {
+    throw new Error(`Host ${hostName} not found`);
+  }
+
+  if (!userResponse.success || !userResponse.data) {
+    throw new Error(`User ${username} not found`);
+  }
+
+  // Create the authorization
+  const authResponse = await api.post<unknown>('/host/user/authorize', {
+    host_id: hostResponse.data.id,
+    user_id: userResponse.data.id,
+    login: login,
+    options: options || null
+  });
+
+  if (!authResponse.success) {
+    throw new Error(authResponse.message || 'Failed to authorize key');
+  }
+};
+
 export const diffApi = {
   getAllHosts,
   getHostDiff,
   getHostDiffDetails,
+  authorizeKey,
 };
 
 export default diffApi;
