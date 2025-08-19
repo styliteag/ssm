@@ -195,7 +195,7 @@ const UsersPage: React.FC = () => {
   };
 
   // Handle user updated callback from edit modal
-  const handleUserUpdated = (_updatedUser: User) => {
+  const handleUserUpdated = () => {
     setSelectedUser(null);
     setShowEditModal(false);
     // Reload users to get updated data with fresh counts
