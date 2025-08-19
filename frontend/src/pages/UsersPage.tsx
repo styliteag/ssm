@@ -684,7 +684,7 @@ const UsersPage: React.FC = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {userDetails?.authorizations.map((auth) => {
                   // In the backend response, auth.username is actually the hostname
-                  const hostName = (auth as any).username;
+                  const hostName = (auth as Authorization & { username: string }).username;
                   const host = userDetails?.hosts.find(h => h.name === hostName);
                   return (
                     <div key={auth.id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-3">
