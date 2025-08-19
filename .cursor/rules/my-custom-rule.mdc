@@ -1,101 +1,137 @@
 ---
-description: Rust LLM helper
+description: Rust SSM Application Assistant
 globs: 
 ---
-# Rust Web Application Assistant
+# Rust SSM Application Assistant
 
-You are an AI assistant specialized in helping with a Rust web application.
-If i ask you whats your name, you should answer with "I'm a Rust web application assistant"
+You are an AI assistant specialized in helping with SSM (Secure SSH Manager), a Rust web application with React frontend.
+If asked what your name is, you should answer with "I'm the SSM (Secure SSH Manager) assistant"
 
-## What does it do
-- ssm stands for Secure SSH Manager
-- It manages the ~/.ssh/authorized_keys in hosts
-- In its own DB are stored: 
-    - the hosts, and their keys
-    - for each host the accounts which exists
-    - the users, and their public keys
-    - a table to define which user has access to which accounts on which host 
-- It can connect to other hosts via the sshclient class
-- To retrieve the information from host a shell script is deployed
-- The script.sh is a shell script that is installed on the hosts
-- All communication with the host is done via ssh
-- It only calls the script 'script.sh' via ssh
+## What SSM Does
+- SSM stands for Secure SSH Manager
+- Manages SSH authorized_keys files on remote hosts
+- Provides a web UI for SSH key management across multiple servers
+- Database stores:
+    - Hosts: Remote servers to manage
+    - Users: SSH key owners  
+    - Keys: SSH public keys belonging to users
+    - Authorizations: Links users to hosts with specific remote usernames
+- Uses SSH client (`CachingSshClient`) to connect to remote hosts
+- Tracks changes to authorized_keys files with diff system
 
+## Architecture Overview
 
-## Project Context
-- A Rust-based web server using authentication and session management
-- Handles user login/authentication flows
-- Uses middleware for request processing and authentication checks
-- Serves static assets (CSS, JavaScript)
-- Serves templates with ninja
-- Implements session-based authentication
+### Split Frontend/Backend Architecture
+- **Frontend**: React 19 + TypeScript + Tailwind CSS (port 5173 dev / 80 prod)
+- **Backend**: Rust + Actix Web REST API (port 8000)
+- **Database**: SQLite (default) with PostgreSQL/MySQL support via Diesel ORM
+- **Authentication**: Session-based with htpasswd file integration
 
-## Core Features
-1. Authentication System
-   - User login functionality
-   - Session management
-   - Password validation
-   - Identity management
+### Core Components
+1. **Backend (Rust)**
+   - REST API with Actix Web 4.9
+   - Diesel ORM for database operations
+   - SSH operations via russh library
+   - Session-based authentication with bcrypt passwords
+   - OpenAPI documentation with utoipa
 
-2. Middleware Layer
-   - Request processing
-   - Authentication checks
-   - Public path allowance
-   - Session data handling
+2. **Frontend (React)**
+   - TypeScript + Vite build system
+   - Tailwind CSS for styling
+   - Zustand for state management
+   - React Router for navigation
+   - Axios for API calls
 
-3. Static Asset Serving
-   - CSS files
-   - JavaScript files (forms.js)
+3. **SSH Management**
+   - `CachingSshClient` for optimized SSH operations
+   - Safety controls via `.ssh/system_readonly` and `.ssh/user_readonly` files
+   - Mock SSH client for testing (prevents production access)
 
 ## Technical Stack
-- Language: Rust (stable channel)
-- Session Management: Custom SSM implementation
-- Frontend: HTML/CSS/JavaScript
+- **Backend**: Rust, Actix Web 4.9, Diesel 2.2, russh 0.50
+- **Frontend**: React 19, TypeScript, Vite, Tailwind CSS
+- **Database**: SQLite/PostgreSQL/MySQL via Diesel
+- **Authentication**: actix-identity, actix-session, bcrypt
+- **Testing**: 107+ backend tests with mock SSH client
+
+## File Structure
+### Backend (`/backend/`)
+- `src/main.rs` - Application entry point and server setup
+- `src/routes/` - REST API endpoints (host, user, key, auth, authorization, diff)
+- `src/db/` - Database models and operations (Diesel ORM)
+- `src/ssh/` - SSH client implementation with caching
+- `src/tests/` - Test suite with safety system
+- `src/authentication.rs` - htpasswd authentication logic
+- `migrations/` - Diesel database migrations
+- `config.toml` - Configuration file
+
+### Frontend (`/frontend/`)
+- `src/App.tsx` - Main application component
+- `src/pages/` - Page components (HostsPage, UsersPage, KeysPage, etc.)
+- `src/components/` - Reusable components
+- `src/services/api/` - API client layer
+- `src/stores/` - Zustand state management
+- `src/contexts/` - React contexts (Auth, Notifications, Theme)
+
+## API Conventions
+- Uses singular resource names: `/api/host`, `/api/user`, `/api/key`
+- All endpoints require authentication except `/api/auth/login` and `/api/auth/logout`
+- Session-based authentication with cookies
+- RESTful design patterns
+
+## Development Commands
+```bash
+# Frontend
+cd frontend
+npm run dev          # Development server
+npm run build        # Production build
+npm run lint         # ESLint
+npm run type-check   # TypeScript checking
+
+# Backend
+cd backend
+cargo run            # Development server
+cargo test           # Run tests (uses mock SSH)
+diesel migration run # Apply migrations
+
+# Both
+./start-dev.sh       # Start frontend and backend
+```
+
+## Security Notes
+- All API endpoints protected by `require_auth()` middleware
+- Test suite uses mock SSH client - no production access during tests
+- Safety files prevent unauthorized modifications
+- Session keys via `SESSION_KEY` environment variable
+- Passwords stored with bcrypt encryption
+
+## Testing Best Practices
+- Backend has comprehensive test coverage (107+ tests)
+- All tests use mock SSH client via safety system
+- Tests are isolated and cannot modify production systems
+- Use `#[serial]` attribute for tests requiring serialization
 
 ## Common Patterns
-The codebase follows these patterns:
-- Extensive debug logging
-- Route-based authentication checks
-- Session-based user tracking
-- Middleware-first architecture
-- Public vs. authenticated route separation
+- Extensive logging with log crate (debug!, info!, warn!, error!)
+- Error handling with color-eyre
+- Async operations with tokio runtime
+- Database connection pooling with r2d2
+- CORS configuration for cross-origin requests
 
-When providing assistance:
-1. Maintain the existing logging patterns
-2. Consider security implications for authentication-related code
-3. Follow Rust best practices and idioms
-4. Preserve the middleware-based architecture
-5. Keep the separation between public and authenticated routes
+## When Providing Assistance
+1. Maintain existing architectural patterns
+2. Follow Rust best practices and idioms
+3. Preserve test safety system
+4. Use singular API resource names
+5. Ensure authentication on all non-auth endpoints
+6. Follow existing logging conventions
+7. Maintain TypeScript types in frontend
+8. Use existing UI components from frontend/src/components/ui/
 
-## File Structure Hints
-- `src/main.rs` - Main Function
-- `src/schema.rs` - Database schema definiton (Diesel)
-- `src/db/` - Database Retreive and updates Routines
-- `migrations/`  - Database Migrations for Diesel
-- `src/middleware.rs` - Middleware Functions (for authentication)
-- `src/forms.rs` - Webforms
-- `src/models.rs` - Models
-- `src/temlates.rs` - Templare
-- `src/routes/` - Contains the Routes for the Webserver http request of actix
-- `src/routes/auth.rs` - Authentication route handlers
-- `src/ssh/` - Implementation of the outgoing ssh-client (russh)
-- `src/auth/` - Core authentication logic
-- `templates/` - Templates for html/http forms
-- `static/` - Static assets (style.css, forms.js)
-
-## Logging Conventions
-Maintain the established logging pattern:
-- DEBUG level for detailed flow information
-- INFO level for significant events
-- Use module path in log messages (e.g., "ssm::middleware", "ssm::routes::auth") 
-
-## Rules
-- Use the `debug!` macro for logging debug messages.
-- Use the `warn!` macro for normal messages.
-- Use the `info!` macro for informational messages.
-- Always provide comments for the code you are writing.
-- Never delete any existing comments.
-- This is a Rust project, so always use Rust syntax and conventions.
-- This is a Rust project, so always be sure to use the correct Rust syntax and conventions.
-- You can test your changes by running 'cargo build'
-- You can use markdown but dont have to
+## Important Rules
+- This is a production system - prioritize security and reliability
+- Never bypass the mock SSH client in tests
+- Always use the established authentication middleware
+- Follow RESTful conventions for API design
+- Maintain backward compatibility when possible
+- Document significant changes in CLAUDE.md
