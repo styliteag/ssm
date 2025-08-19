@@ -33,6 +33,7 @@ export interface SerializableAuthorizedKey {
   options: string;
   base64: string;
   comment?: string;
+  key_type: string;
 }
 
 export interface LoginDiff {

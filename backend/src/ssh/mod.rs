@@ -24,10 +24,8 @@ pub struct SshPublicKey {
 #[derive(Debug, Clone)]
 pub struct AuthorizedKey {
     pub options: ConfigOpts,
-    #[allow(dead_code)]
     pub algorithm: Algorithm,
     pub base64: String,
-    #[allow(dead_code)]
     pub comment: Option<String>,
 }
 

@@ -68,6 +68,7 @@ pub struct SerializableAuthorizedKey {
     options: String,
     base64: String,
     comment: Option<String>,
+    key_type: String,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -112,6 +113,7 @@ impl From<&AuthorizedKey> for SerializableAuthorizedKey {
             options: key.options.to_string(),
             base64: key.base64.clone(),
             comment: key.comment.clone(),
+            key_type: key.algorithm.to_string(),
         }
     }
 }

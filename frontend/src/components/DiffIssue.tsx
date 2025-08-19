@@ -127,9 +127,7 @@ export const DiffIssue: React.FC<DiffIssueProps> = ({ issue, onAllowKey, onAddUn
               <div className="space-y-1">
                 <span className="font-medium">Key Details:</span>
                 <div className="bg-white dark:bg-gray-700 bg-opacity-30 dark:bg-opacity-30 rounded p-2 font-mono text-xs text-current">
-                  <div><strong>Type:</strong> {issue.details.key.base64.startsWith('AAAAB3NzaC1yc2') ? 'RSA' : 
-                                                issue.details.key.base64.startsWith('AAAAC3NzaC1lZDI1NTE5') ? 'Ed25519' : 
-                                                issue.details.key.base64.startsWith('AAAAE2VjZHNhLXNoYTItbmlzdHA') ? 'ECDSA' : 'Unknown'}</div>
+                  <div><strong>Type:</strong> {issue.details.key.key_type}</div>
                   {issue.details.key.comment && <div><strong>Comment:</strong> {issue.details.key.comment}</div>}
                   {issue.details.key.options && <div><strong>Options:</strong> {issue.details.key.options}</div>}
                   <div><strong>Key (truncated):</strong> {issue.details.key.base64.substring(0, 32)}...</div>
