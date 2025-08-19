@@ -30,6 +30,7 @@ import { usersService } from '../services/api/users';
 import { keysService } from '../services/api/keys';
 import { authorizationsService } from '../services/api/authorizations';
 import { hostsService } from '../services/api/hosts';
+import UserEditModal from '../components/UserEditModal';
 import type {
   User,
   PublicUserKey,
@@ -137,8 +138,8 @@ const UsersPage: React.FC = () => {
     }
   }, [showError]);
 
-  // Form field definitions
-  const getFormFields = (isEdit: boolean = false): FormField[] => [
+  // Form field definitions for add user modal
+  const getFormFields = (): FormField[] => [
     {
       name: 'username',
       label: 'Username',
@@ -146,13 +147,11 @@ const UsersPage: React.FC = () => {
       required: true,
       placeholder: 'Enter username',
       helperText: 'Unique username for SSH access',
-      disabled: false, // Username can now be changed
       validation: {
         minLength: 2,
         maxLength: 50,
         pattern: /^[a-zA-Z0-9\-_.]+$/,
         custom: (value: unknown) => {
-          if (isEdit) return null;
           const exists = users.some(u => u.username.toLowerCase() === (value as string).toLowerCase());
           return exists ? 'Username already exists' : null;
         }
@@ -195,28 +194,12 @@ const UsersPage: React.FC = () => {
     }
   };
 
-  const handleEditUser = async (values: Record<string, unknown>) => {
-    if (!selectedUser) return;
-
-    try {
-      setSubmitting(true);
-      const userData = {
-        username: (values as Record<string, unknown>).username as string, // Use new username from form
-        enabled: (values as Record<string, unknown>).enabled === 'true'
-      };
-
-      const response = await usersService.updateUser(selectedUser.username, userData);
-      if (response.success) {
-        await loadUsers(); // Reload to get updated data
-        setShowEditModal(false);
-        setSelectedUser(null);
-        showSuccess('User updated', `${userData.username} has been updated successfully`);
-      }
-    } catch {
-      showError('Failed to update user', 'Please check your input and try again');
-    } finally {
-      setSubmitting(false);
-    }
+  // Handle user updated callback from edit modal
+  const handleUserUpdated = (_updatedUser: User) => {
+    setSelectedUser(null);
+    setShowEditModal(false);
+    // Reload users to get updated data with fresh counts
+    loadUsers();
   };
 
   const handleDeleteUser = async () => {
@@ -466,7 +449,7 @@ const UsersPage: React.FC = () => {
         size="md"
       >
         <Form
-          fields={getFormFields(false)}
+          fields={getFormFields()}
           onSubmit={(values) => handleAddUser(values)}
           submitText="Add User"
           cancelText="Cancel"
@@ -479,33 +462,16 @@ const UsersPage: React.FC = () => {
       </Modal>
 
       {/* Edit User Modal */}
-      <Modal
+      <UserEditModal
         isOpen={showEditModal}
         onClose={() => {
           setShowEditModal(false);
           setSelectedUser(null);
         }}
-        title="Edit User"
-        size="md"
-      >
-        {selectedUser && (
-          <Form
-            fields={getFormFields(true)}
-            onSubmit={(values) => handleEditUser(values)}
-            submitText="Save Changes"
-            cancelText="Cancel"
-            onCancel={() => {
-              setShowEditModal(false);
-              setSelectedUser(null);
-            }}
-            loading={submitting}
-            initialValues={{
-              username: selectedUser.username,
-              enabled: selectedUser.enabled.toString()
-            }}
-          />
-        )}
-      </Modal>
+        user={selectedUser}
+        onUserUpdated={handleUserUpdated}
+        users={users}
+      />
 
       {/* Delete Confirmation Modal */}
       <Modal
