@@ -268,9 +268,7 @@ const DiffPage: React.FC = () => {
     try {
       const keyData = {
         user_id: userId,
-        key_type: unknownKeyIssue.details.key.base64.startsWith('AAAAB3NzaC1yc2') ? 'ssh-rsa' : 
-                  unknownKeyIssue.details.key.base64.startsWith('AAAAC3NzaC1lZDI1NTE5') ? 'ssh-ed25519' : 
-                  unknownKeyIssue.details.key.base64.startsWith('AAAAE2VjZHNhLXNoYTItbmlzdHA') ? 'ecdsa-sha2-nistp256' : 'unknown',
+        key_type: unknownKeyIssue.details.key.key_type,
         key_base64: unknownKeyIssue.details.key.base64,
         key_comment: unknownKeyIssue.details.key.comment || null
       };
@@ -421,9 +419,7 @@ const DiffPage: React.FC = () => {
       // Assign the key to the new user
       const keyData = {
         user_id: newUser.id, // Use the proper numeric ID
-        key_type: unknownKeyIssue.details.key.base64.startsWith('AAAAB3NzaC1yc2') ? 'ssh-rsa' : 
-                  unknownKeyIssue.details.key.base64.startsWith('AAAAC3NzaC1lZDI1NTE5') ? 'ssh-ed25519' : 
-                  unknownKeyIssue.details.key.base64.startsWith('AAAAE2VjZHNhLXNoYTItbmlzdHA') ? 'ecdsa-sha2-nistp256' : 'unknown',
+        key_type: unknownKeyIssue.details.key.key_type,
         key_base64: unknownKeyIssue.details.key.base64,
         key_comment: unknownKeyIssue.details.key.comment || null
       };
@@ -866,9 +862,7 @@ const DiffPage: React.FC = () => {
             <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
               <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-2">Key Details</h4>
               <div className="text-sm text-gray-700 dark:text-gray-300 space-y-1">
-                <div><strong className="text-gray-900 dark:text-gray-100">Type:</strong> {unknownKeyIssue.details?.key?.base64.startsWith('AAAAB3NzaC1yc2') ? 'RSA' : 
-                                            unknownKeyIssue.details?.key?.base64.startsWith('AAAAC3NzaC1lZDI1NTE5') ? 'Ed25519' : 
-                                            unknownKeyIssue.details?.key?.base64.startsWith('AAAAE2VjZHNhLXNoYTItbmlzdHA') ? 'ECDSA' : 'Unknown'}</div>
+                <div><strong className="text-gray-900 dark:text-gray-100">Type:</strong> {unknownKeyIssue.details?.key?.key_type}</div>
                 {unknownKeyIssue.details?.key?.comment && (
                   <div><strong className="text-gray-900 dark:text-gray-100">Comment:</strong> {unknownKeyIssue.details.key.comment}</div>
                 )}
