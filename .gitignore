@@ -12,3 +12,4 @@ logs/
 __pycache__/
 docker/data/
 cookies.txt
+.DS_Store
