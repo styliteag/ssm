@@ -44,6 +44,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (response.success && response.data) {
         setIsAuthenticated(response.data.logged_in);
         setUsername(response.data.username || null);
+        
+        // If authenticated, fetch CSRF token
+        if (response.data.logged_in) {
+          try {
+            await authService.getCsrfToken();
+          } catch (error) {
+            console.warn('Failed to fetch CSRF token:', error);
+          }
+        }
       } else {
         setIsAuthenticated(false);
         setUsername(null);

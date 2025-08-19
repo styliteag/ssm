@@ -42,7 +42,7 @@ macro_rules! create_inline_test_service {
                 .app_data(web::Data::new(test_config.db_pool.clone()))
                 .app_data(web::Data::new(test_config.config.clone()))
                 .app_data(web::Data::new(caching_ssh))
-                .wrap(IdentityMiddleware::default())
+                .wrap(crate::middleware::CsrfProtection)
                 .wrap(
                     SessionMiddleware::builder(
                         CookieSessionStore::default(),
@@ -51,6 +51,7 @@ macro_rules! create_inline_test_service {
                     .cookie_secure(false)
                     .build(),
                 )
+                .wrap(IdentityMiddleware::default())
                 .configure(crate::routes::route_config)
         ).await;
         
@@ -59,13 +60,19 @@ macro_rules! create_inline_test_service {
 }
 
 /// Extract JSON from an actix-web service response
-pub async fn extract_json(resp: actix_web::dev::ServiceResponse) -> serde_json::Value {
+pub async fn extract_json<B>(resp: actix_web::dev::ServiceResponse<B>) -> serde_json::Value 
+where
+    B: actix_web::body::MessageBody,
+{
     let body = test::read_body(resp).await;
     serde_json::from_slice(&body).expect("Failed to parse JSON response")
 }
 
 /// Assert that response has successful status and valid JSON structure
-pub async fn assert_success_response(resp: actix_web::dev::ServiceResponse) -> serde_json::Value {
+pub async fn assert_success_response<B>(resp: actix_web::dev::ServiceResponse<B>) -> serde_json::Value 
+where
+    B: actix_web::body::MessageBody,
+{
     assert_eq!(resp.status(), StatusCode::OK);
     let json = extract_json(resp).await;
     assert_eq!(json["success"], true);
@@ -73,7 +80,10 @@ pub async fn assert_success_response(resp: actix_web::dev::ServiceResponse) -> s
 }
 
 /// Assert that response has error status and valid error structure
-pub async fn assert_error_response(resp: actix_web::dev::ServiceResponse, expected_status: StatusCode) -> serde_json::Value {
+pub async fn assert_error_response<B>(resp: actix_web::dev::ServiceResponse<B>, expected_status: StatusCode) -> serde_json::Value 
+where
+    B: actix_web::body::MessageBody,
+{
     assert_eq!(resp.status(), expected_status);
     let json = extract_json(resp).await;
     assert_eq!(json["success"], false);
@@ -81,7 +91,10 @@ pub async fn assert_error_response(resp: actix_web::dev::ServiceResponse, expect
 }
 
 /// Assert that response has NOT_FOUND status with flexible error structure
-pub async fn assert_not_found_response(resp: actix_web::dev::ServiceResponse) -> serde_json::Value {
+pub async fn assert_not_found_response<B>(resp: actix_web::dev::ServiceResponse<B>) -> serde_json::Value 
+where
+    B: actix_web::body::MessageBody,
+{
     assert_eq!(resp.status(), StatusCode::NOT_FOUND);
     let json = extract_json(resp).await;
     assert_eq!(json["success"], false);

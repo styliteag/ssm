@@ -1,4 +1,5 @@
 use actix_identity::Identity;
+use actix_session::Session;
 use actix_web::{
     get, post,
     web::{self, Data, Json},
@@ -9,6 +10,8 @@ use log::error;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use std::fs;
+use base64::{engine::general_purpose::STANDARD, Engine};
+use rand::Rng;
 
 use crate::{Configuration, api_types::*};
 
@@ -23,12 +26,24 @@ pub struct LoginResponse {
     pub success: bool,
     pub username: String,
     pub message: String,
+    pub csrf_token: String,
 }
 
 #[derive(Serialize, ToSchema)]
 pub struct StatusResponse {
     pub logged_in: bool,
     pub username: Option<String>,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct CsrfTokenResponse {
+    pub csrf_token: String,
+}
+
+fn generate_csrf_token() -> String {
+    let mut rng = rand::thread_rng();
+    let token_bytes: [u8; 32] = rng.gen();
+    STANDARD.encode(token_bytes)
 }
 
 fn verify_apache_password(password: &str, hash: &str) -> Result<bool, BcryptError> {
@@ -61,6 +76,7 @@ fn verify_apache_password(password: &str, hash: &str) -> Result<bool, BcryptErro
 #[post("/login")]
 async fn login(
     req: HttpRequest,
+    session: Session,
     json: Json<LoginRequest>,
     config: Data<Configuration>,
 ) -> Result<impl Responder> {
@@ -103,10 +119,17 @@ async fn login(
     if is_valid {
         Identity::login(&req.extensions(), json.username.clone())
             .map_err(actix_web::error::ErrorInternalServerError)?;
+        
+        // Generate and store CSRF token in session
+        let csrf_token = generate_csrf_token();
+        session.insert("csrf_token", &csrf_token)
+            .map_err(actix_web::error::ErrorInternalServerError)?;
+        
         Ok(HttpResponse::Ok().json(ApiResponse::success(LoginResponse {
             success: true,
             username: json.username.clone(),
             message: "Login successful".to_string(),
+            csrf_token,
         })))
     } else {
         Ok(HttpResponse::Unauthorized().json(ApiError::new(
@@ -124,9 +147,11 @@ async fn login(
     )
 )]
 #[post("/logout")]
-async fn logout(identity: Option<Identity>) -> impl Responder {
+async fn logout(identity: Option<Identity>, session: Session) -> impl Responder {
     if let Some(id) = identity {
         id.logout();
+        // Clear CSRF token from session
+        session.remove("csrf_token");
     }
     HttpResponse::Ok().json(ApiResponse::success_message(
         "Logged out successfully".to_string(),
@@ -150,8 +175,39 @@ async fn auth_status(identity: Option<Identity>) -> impl Responder {
     }))
 }
 
+/// Get current CSRF token
+#[utoipa::path(
+    get,
+    path = "/api/auth/csrf",
+    responses(
+        (status = 200, description = "CSRF token", body = CsrfTokenResponse),
+        (status = 401, description = "Not authenticated", body = ApiError)
+    )
+)]
+#[get("/csrf")]
+async fn get_csrf_token(identity: Option<Identity>, session: Session) -> Result<impl Responder> {
+    if identity.is_none() {
+        return Ok(HttpResponse::Unauthorized().json(ApiError::unauthorized()));
+    }
+    
+    // Get existing token or generate a new one
+    let csrf_token = if let Ok(Some(token)) = session.get::<String>("csrf_token") {
+        token
+    } else {
+        let new_token = generate_csrf_token();
+        session.insert("csrf_token", &new_token)
+            .map_err(actix_web::error::ErrorInternalServerError)?;
+        new_token
+    };
+    
+    Ok(HttpResponse::Ok().json(ApiResponse::success(CsrfTokenResponse {
+        csrf_token,
+    })))
+}
+
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(login)
         .service(logout)
-        .service(auth_status);
+        .service(auth_status)
+        .service(get_csrf_token);
 }
