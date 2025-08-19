@@ -2,7 +2,7 @@
 
 # Run the development server with auto-reload on file changes
 dev:
-    RUST_LOG=debug cargo watch -x run
+    cargo watch -x run
     #cargo watch -x run --env RUST_LOG=debug
 
 # Run the development server without auto-reload
