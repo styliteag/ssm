@@ -13,3 +13,4 @@ pub mod security_first_api_tests;   // THE NEW STANDARD - inline security tests
 pub mod user_lifecycle_simple;      // SIMPLIFIED E2E workflow tests
 pub mod real_http_auth_test;         // REAL HTTP Authentication with cookies, CSRF, sessions!
 pub mod real_http_auth_success;     // PROOF that real HTTP auth works perfectly!
+pub mod complete_workflow_test;      // COMPLETE E2E workflow: user → key → host → authorization → diff
