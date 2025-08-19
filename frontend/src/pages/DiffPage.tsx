@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Activity, RefreshCw, Upload, Filter } from 'lucide-react';
+import { Activity, RefreshCw, Upload, Filter, Edit2 } from 'lucide-react';
 import {
   Card,
   CardContent,
@@ -8,9 +8,13 @@ import {
   Button,
   DataTable,
   Modal,
-  type Column
+  Form,
+  type Column,
+  type FormField
 } from '../components/ui';
 import { diffApi, DiffHost, DetailedDiffResponse } from '../services/api/diff';
+import { hostsService } from '../services/api/hosts';
+import type { Host, HostFormData } from '../types';
 import DiffIssue from '../components/DiffIssue';
 import { useNotifications } from '../contexts/NotificationContext';
 
@@ -24,6 +28,12 @@ const DiffPage: React.FC = () => {
   const [showModal, setShowModal] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | 'synchronized' | 'needs-sync' | 'error' | 'loading'>('all');
+  
+  // Edit modal state
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingHost, setEditingHost] = useState<DiffHost | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [jumpHosts, setJumpHosts] = useState<Host[]>([]);
 
   useEffect(() => {
     const fetchHosts = async () => {
@@ -98,7 +108,134 @@ const DiffPage: React.FC = () => {
     };
 
     fetchHosts();
+    loadJumpHosts();
   }, [showError]);
+
+  // Load jump hosts for dropdown
+  const loadJumpHosts = async () => {
+    try {
+      const response = await hostsService.getAllHosts();
+      if (response.success && response.data) {
+        setJumpHosts(response.data);
+      }
+    } catch (error) {
+      console.error('Failed to load jump hosts:', error);
+    }
+  };
+
+  // Form field definitions for host editing
+  const getFormFields = (): FormField[] => [
+    {
+      name: 'name',
+      label: 'Host Name',
+      type: 'text',
+      required: true,
+      placeholder: 'Enter a unique name for this host',
+      helperText: 'A friendly name to identify this host',
+      validation: {
+        minLength: 2,
+        maxLength: 50,
+        pattern: /^[a-zA-Z0-9\-_.]+$/
+      }
+    },
+    {
+      name: 'address',
+      label: 'Address',
+      type: 'text',
+      required: true,
+      placeholder: 'hostname.example.com or 192.168.1.100',
+      helperText: 'Hostname or IP address of the remote server'
+    },
+    {
+      name: 'port',
+      label: 'SSH Port',
+      type: 'number',
+      required: true,
+      placeholder: '22',
+      helperText: 'SSH port number (usually 22)',
+      validation: {
+        min: 1,
+        max: 65535
+      }
+    },
+    {
+      name: 'username',
+      label: 'Username',
+      type: 'text',
+      required: true,
+      placeholder: 'root',
+      helperText: 'Username to connect as'
+    },
+    {
+      name: 'jump_via',
+      label: 'Jump Host',
+      type: 'select',
+      required: false,
+      placeholder: 'Select a jump host (optional)',
+      helperText: 'Connect through another host (bastion/jump host)',
+      options: [
+        { value: '', label: 'No jump host' },
+        ...jumpHosts
+          .filter(h => h.id !== editingHost?.id)
+          .map(h => ({ value: h.id.toString(), label: `${h.name} (${h.address})` }))
+      ]
+    },
+    {
+      name: 'key_fingerprint',
+      label: 'Key Fingerprint',
+      type: 'text',
+      required: false,
+      placeholder: 'SHA256:ABC123... (optional)',
+      helperText: 'Expected SSH host key fingerprint for security'
+    }
+  ];
+
+  // Handle edit host
+  const handleEditHost = async (values: HostFormData) => {
+    if (!editingHost) return;
+    try {
+      setSubmitting(true);
+      const hostData = {
+        name: values.name,
+        address: values.address,
+        port: Number(values.port),
+        username: values.username,
+        jump_via: values.jump_via && String(values.jump_via) !== '' ? String(values.jump_via) : '',
+        key_fingerprint: values.key_fingerprint && values.key_fingerprint.trim() !== '' ? values.key_fingerprint.trim() : ''
+      };
+      
+      const payload = {
+        name: hostData.name,
+        address: hostData.address,
+        port: hostData.port,
+        username: hostData.username,
+        jump_via: hostData.jump_via,
+        key_fingerprint: hostData.key_fingerprint
+      };
+      
+      const response = await hostsService.updateHost(editingHost.name, payload);
+      
+      if (response.success) {
+        setShowEditModal(false);
+        setEditingHost(null);
+        showSuccess('Host updated', `${hostData.name} has been updated successfully`);
+        
+        // Update the host in the list
+        setHosts(prev => prev.map(h => 
+          h.id === editingHost.id 
+            ? { ...h, name: hostData.name, address: hostData.address }
+            : h
+        ));
+      } else {
+        showError('Failed to update host', response.message || 'Please check your input and try again');
+      }
+    } catch (error) {
+      console.error('Host update error:', error);
+      showError('Failed to update host', 'Please check your input and try again');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const handleHostClick = async (host: DiffHost) => {
     setSelectedHost(host);
@@ -155,9 +292,35 @@ const DiffPage: React.FC = () => {
       key: 'name',
       header: 'Name',
       sortable: true,
-      render: (value) => (
-        <div className="font-medium text-gray-900 dark:text-gray-100">
-          {value as string}
+      render: (value, host) => (
+        <div className="flex items-center space-x-2">
+          <span className="font-medium text-gray-900 dark:text-gray-100">
+            {value as string}
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={async (e) => {
+              e.stopPropagation();
+              try {
+                // Fetch full host details
+                const response = await hostsService.getHostByName(host.name);
+                if (response.success && response.data) {
+                  setEditingHost({ ...host, ...response.data });
+                  setShowEditModal(true);
+                } else {
+                  showError('Failed to load host details', 'Please try again');
+                }
+              } catch (error) {
+                console.error('Error fetching host details:', error);
+                showError('Failed to load host details', 'Please try again');
+              }
+            }}
+            title="Edit host"
+            className="p-1 h-auto hover:bg-gray-100 dark:hover:bg-gray-700"
+          >
+            <Edit2 size={14} className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300" />
+          </Button>
         </div>
       )
     },
@@ -463,6 +626,41 @@ const DiffPage: React.FC = () => {
               </div>
             </div>
           </div>
+        )}
+      </Modal>
+
+      {/* Edit Host Modal */}
+      <Modal
+        isOpen={showEditModal}
+        onClose={() => {
+          setShowEditModal(false);
+          setEditingHost(null);
+        }}
+        title="Edit Host"
+        size="lg"
+      >
+        {editingHost && (
+          <Form
+            fields={getFormFields()}
+            onSubmit={(values) => handleEditHost(values as unknown as HostFormData)}
+            submitText="Save Changes"
+            cancelText="Cancel"
+            onCancel={() => {
+              setShowEditModal(false);
+              setEditingHost(null);
+            }}
+            loading={submitting}
+            layout="grid"
+            gridCols={2}
+            initialValues={{
+              name: editingHost.name,
+              address: editingHost.address,
+              port: (editingHost as any).port || 22,
+              username: (editingHost as any).username || '',
+              key_fingerprint: (editingHost as any).key_fingerprint || '',
+              jump_via: (editingHost as any).jump_via || ''
+            }}
+          />
         )}
       </Modal>
     </div>
