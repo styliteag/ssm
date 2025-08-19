@@ -322,7 +322,7 @@ const HostsPage: React.FC = () => {
   };
 
   // Handle host updated callback from edit modal
-  const handleHostUpdated = (_updatedHost: Host) => {
+  const handleHostUpdated = () => {
     setSelectedHost(null);
     setShowEditModal(false);
     // Refresh the hosts list to get updated data
