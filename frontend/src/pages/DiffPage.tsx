@@ -11,8 +11,9 @@ import {
   type Column
 } from '../components/ui';
 import { diffApi, DiffHost, DetailedDiffResponse, DiffItemResponse } from '../services/api/diff';
+import { usersService } from '../services/api/users';
 import { hostsService } from '../services/api/hosts';
-import type { Host } from '../types';
+import type { Host, User, UserFormData } from '../types';
 import DiffIssue from '../components/DiffIssue';
 import HostEditModal from '../components/HostEditModal';
 import { useNotifications } from '../contexts/NotificationContext';
@@ -32,6 +33,12 @@ const DiffPage: React.FC = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingHost, setEditingHost] = useState<Host | null>(null);
   const [jumpHosts, setJumpHosts] = useState<Host[]>([]);
+  
+  // Unknown key assignment modal state
+  const [showUnknownKeyModal, setShowUnknownKeyModal] = useState(false);
+  const [unknownKeyIssue, setUnknownKeyIssue] = useState<DiffItemResponse | null>(null);
+  const [allUsers, setAllUsers] = useState<User[]>([]);
+
 
   useEffect(() => {
     const fetchHosts = async () => {
@@ -107,7 +114,9 @@ const DiffPage: React.FC = () => {
 
     fetchHosts();
     loadJumpHosts();
-  }, [showError]);
+    loadAllUsers();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Load jump hosts for dropdown
   const loadJumpHosts = async () => {
@@ -118,6 +127,18 @@ const DiffPage: React.FC = () => {
       }
     } catch (error) {
       console.error('Failed to load jump hosts:', error);
+    }
+  };
+
+  // Load all users for dropdown
+  const loadAllUsers = async () => {
+    try {
+      const response = await usersService.getAllUsers();
+      if (response.success && response.data) {
+        setAllUsers(response.data);
+      }
+    } catch (error) {
+      console.error('Failed to load users:', error);
     }
   };
 
@@ -220,6 +241,146 @@ const DiffPage: React.FC = () => {
       console.error('Error allowing key:', error);
       const errorMessage = error instanceof Error ? error.message : 'Please try again later';
       showError('Failed to authorize key', errorMessage);
+    }
+  };
+
+  // Handle adding unknown keys to existing or new users
+  const handleAddUnknownKey = (issue: DiffItemResponse) => {
+    setUnknownKeyIssue(issue);
+    setShowUnknownKeyModal(true);
+  };
+
+  // Handle assigning unknown key to existing user
+  const handleAssignToExistingUser = async (userId: number) => {
+    if (!unknownKeyIssue || !unknownKeyIssue.details?.key) return;
+
+    try {
+      const keyData = {
+        user_id: userId,
+        key_type: unknownKeyIssue.details.key.base64.startsWith('AAAAB3NzaC1yc2') ? 'ssh-rsa' : 
+                  unknownKeyIssue.details.key.base64.startsWith('AAAAC3NzaC1lZDI1NTE5') ? 'ssh-ed25519' : 
+                  unknownKeyIssue.details.key.base64.startsWith('AAAAE2VjZHNhLXNoYTItbmlzdHA') ? 'ecdsa-sha2-nistp256' : 'unknown',
+        key_base64: unknownKeyIssue.details.key.base64,
+        key_comment: unknownKeyIssue.details.key.comment || null
+      };
+
+      await usersService.assignKeyToUser(keyData);
+      
+      const selectedUser = allUsers.find(u => u.id === userId);
+      showSuccess('Key assigned', `Key has been assigned to user "${selectedUser?.username}"`);
+      
+      setShowUnknownKeyModal(false);
+      setUnknownKeyIssue(null);
+      
+      // Refresh the host details to show updated status
+      if (selectedHost) {
+        const refreshedDetails = await diffApi.getHostDiffDetails(selectedHost.name, true);
+        setHostDetails(refreshedDetails);
+      }
+    } catch (error) {
+      console.error('Error assigning key to user:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Please try again later';
+      showError('Failed to assign key', errorMessage);
+    }
+  };
+
+  // Handle creating new user with unknown key
+  const handleCreateNewUser = async () => {
+    if (!unknownKeyIssue || !unknownKeyIssue.details?.key) return;
+
+    const keyComment = unknownKeyIssue.details.key.comment;
+    if (!keyComment || keyComment.trim() === '') {
+      showError('Cannot create user', 'Key comment is empty. Please provide a username.');
+      return;
+    }
+
+    try {
+      // Validate and clean username
+      const cleanUsername = keyComment.trim();
+      
+      // Basic username validation
+      if (cleanUsername.length < 2) {
+        showError('Invalid username', 'Username must be at least 2 characters long.');
+        return;
+      }
+      
+      if (!/^[a-zA-Z0-9._-]+$/.test(cleanUsername)) {
+        showError('Invalid username', 'Username can only contain letters, numbers, dots, underscores, and hyphens.');
+        return;
+      }
+      
+      // Check if user already exists
+      const existingUser = allUsers.find(u => u.username.toLowerCase() === cleanUsername.toLowerCase());
+      
+      if (existingUser) {
+        showError('Username already exists', `User "${cleanUsername}" already exists. Please assign the key to the existing user instead.`);
+        return;
+      }
+
+      // Create new user with key comment as username
+      const userData: UserFormData = {
+        username: cleanUsername,
+        enabled: true
+      };
+
+      const userResponse = await usersService.createUser(userData);
+      console.log('Full user creation response:', userResponse);
+      console.log('User data from response:', userResponse.data);
+      
+      if (!userResponse.success || !userResponse.data) {
+        // Provide more specific error messaging
+        let errorMsg = userResponse.message || 'Failed to create user';
+        if (errorMsg.includes('database error') || errorMsg.includes('constraint')) {
+          errorMsg = `User "${cleanUsername}" might already exist or contain invalid characters. Please try a different username.`;
+        }
+        throw new Error(errorMsg);
+      }
+
+      // The backend returns username in 'id' field, we need to find the actual numeric ID
+      // Fetch the user list again to get the newly created user with proper ID
+      const freshUsersResponse = await usersService.getAllUsers();
+      if (!freshUsersResponse.success || !freshUsersResponse.data) {
+        throw new Error('Could not fetch users to find the newly created user');
+      }
+      
+      // Find the newly created user to get the proper numeric ID
+      const newUser = freshUsersResponse.data.find(u => u.username === cleanUsername);
+      
+      if (!newUser) {
+        throw new Error('User was created but could not be found to assign the key');
+      }
+
+      console.log('Found created user:', newUser);
+
+      // Assign the key to the new user
+      const keyData = {
+        user_id: newUser.id, // Use the proper numeric ID
+        key_type: unknownKeyIssue.details.key.base64.startsWith('AAAAB3NzaC1yc2') ? 'ssh-rsa' : 
+                  unknownKeyIssue.details.key.base64.startsWith('AAAAC3NzaC1lZDI1NTE5') ? 'ssh-ed25519' : 
+                  unknownKeyIssue.details.key.base64.startsWith('AAAAE2VjZHNhLXNoYTItbmlzdHA') ? 'ecdsa-sha2-nistp256' : 'unknown',
+        key_base64: unknownKeyIssue.details.key.base64,
+        key_comment: unknownKeyIssue.details.key.comment || null
+      };
+      console.log('Key data being sent:', keyData);
+      console.log('user_id type:', typeof keyData.user_id, 'value:', keyData.user_id);
+
+      await usersService.assignKeyToUser(keyData);
+      
+      showSuccess('User created', `New user "${userData.username}" has been created with the key`);
+      
+      setShowUnknownKeyModal(false);
+      setUnknownKeyIssue(null);
+      
+      // Refresh users list and host details
+      await loadAllUsers();
+      if (selectedHost) {
+        const refreshedDetails = await diffApi.getHostDiffDetails(selectedHost.name, true);
+        setHostDetails(refreshedDetails);
+      }
+    } catch (error) {
+      console.error('Error creating user with key:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Please try again later';
+      showError('Failed to create user', errorMessage);
     }
   };
 
@@ -541,7 +702,7 @@ const DiffPage: React.FC = () => {
                           {loginDiff.issues.map((issue, issueIndex) => (
                             <div key={issueIndex} className="min-w-0">
                               <div className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-2 hover:shadow-sm transition-shadow">
-                                <DiffIssue issue={issue} onAllowKey={handleAllowKey} />
+                                <DiffIssue issue={issue} onAllowKey={handleAllowKey} onAddUnknownKey={handleAddUnknownKey} />
                               </div>
                             </div>
                           ))}
@@ -579,6 +740,114 @@ const DiffPage: React.FC = () => {
                       Sync Keys
                     </Button>
                   )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Unknown Key Assignment Modal */}
+      <Modal
+        isOpen={showUnknownKeyModal}
+        onClose={() => {
+          setShowUnknownKeyModal(false);
+          setUnknownKeyIssue(null);
+        }}
+        title="Add Unknown Key"
+        size="md"
+      >
+        {unknownKeyIssue && (
+          <div className="space-y-4">
+            <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
+              <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-2">Key Details</h4>
+              <div className="text-sm text-gray-700 dark:text-gray-300 space-y-1">
+                <div><strong className="text-gray-900 dark:text-gray-100">Type:</strong> {unknownKeyIssue.details?.key?.base64.startsWith('AAAAB3NzaC1yc2') ? 'RSA' : 
+                                            unknownKeyIssue.details?.key?.base64.startsWith('AAAAC3NzaC1lZDI1NTE5') ? 'Ed25519' : 
+                                            unknownKeyIssue.details?.key?.base64.startsWith('AAAAE2VjZHNhLXNoYTItbmlzdHA') ? 'ECDSA' : 'Unknown'}</div>
+                {unknownKeyIssue.details?.key?.comment && (
+                  <div><strong className="text-gray-900 dark:text-gray-100">Comment:</strong> {unknownKeyIssue.details.key.comment}</div>
+                )}
+                <div><strong className="text-gray-900 dark:text-gray-100">Key (truncated):</strong> {unknownKeyIssue.details?.key?.base64.substring(0, 32)}...</div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <h4 className="font-medium text-gray-900 dark:text-gray-100">Choose an option:</h4>
+              
+              {/* Assign to existing user */}
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Assign to existing user:
+                </label>
+                <select
+                  className="w-full h-10 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      handleAssignToExistingUser(Number(e.target.value));
+                    }
+                  }}
+                  defaultValue=""
+                >
+                  <option value="">Select a user...</option>
+                  {allUsers.length === 0 ? (
+                    <option disabled>No users found</option>
+                  ) : (
+                    allUsers.filter(u => u.enabled).map(user => (
+                      <option key={user.id} value={user.id}>
+                        {user.username}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
+
+              {/* Create new user */}
+              <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Create new user
+                    </p>
+                    {unknownKeyIssue.details?.key?.comment ? (
+                      <div className="space-y-1">
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          Username: <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">
+                            {unknownKeyIssue.details.key.comment.trim()}
+                          </code>
+                        </p>
+                        {(() => {
+                          const username = unknownKeyIssue.details.key.comment.trim();
+                          const existingUser = allUsers.find(u => u.username.toLowerCase() === username.toLowerCase());
+                          const isValid = username.length >= 2 && /^[a-zA-Z0-9._-]+$/.test(username);
+                          
+                          if (existingUser) {
+                            return <p className="text-xs text-amber-500">⚠ User already exists</p>;
+                          } else if (!isValid) {
+                            return <p className="text-xs text-red-500">⚠ Invalid username format</p>;
+                          }
+                          return null;
+                        })()}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-red-500">
+                        Key has no comment - cannot create user
+                      </p>
+                    )}
+                  </div>
+                  <Button
+                    onClick={handleCreateNewUser}
+                    disabled={(() => {
+                      if (!unknownKeyIssue.details?.key?.comment) return true;
+                      const username = unknownKeyIssue.details.key.comment.trim();
+                      const existingUser = allUsers.find(u => u.username.toLowerCase() === username.toLowerCase());
+                      const isValid = username.length >= 2 && /^[a-zA-Z0-9._-]+$/.test(username);
+                      return !!existingUser || !isValid;
+                    })()}
+                    size="sm"
+                  >
+                    Create User
+                  </Button>
                 </div>
               </div>
             </div>

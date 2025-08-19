@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Check } from 'lucide-react';
+import { Check, Plus } from 'lucide-react';
 import { DiffItemResponse } from '../services/api/diff';
 
 interface DiffIssueProps {
   issue: DiffItemResponse;
   onAllowKey?: (issue: DiffItemResponse) => void;
+  onAddUnknownKey?: (issue: DiffItemResponse) => void;
 }
 
 const getIssueIcon = (type: string) => {
@@ -62,7 +63,7 @@ const getSeverityClasses = (severity: string) => {
   }
 };
 
-export const DiffIssue: React.FC<DiffIssueProps> = ({ issue, onAllowKey }) => {
+export const DiffIssue: React.FC<DiffIssueProps> = ({ issue, onAllowKey, onAddUnknownKey }) => {
   const [expanded, setExpanded] = useState(false);
   const severity = getIssueSeverity(issue.type);
   const severityClasses = getSeverityClasses(severity);
@@ -92,6 +93,19 @@ export const DiffIssue: React.FC<DiffIssueProps> = ({ issue, onAllowKey }) => {
             >
               <Check size={12} />
               <span>Allow</span>
+            </button>
+          )}
+          {/* Add button for unknown key issues */}
+          {issue.type === 'unknown_key' && onAddUnknownKey && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onAddUnknownKey(issue);
+              }}
+              className="inline-flex items-center space-x-1 px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded transition-colors"
+            >
+              <Plus size={12} />
+              <span>Add</span>
             </button>
           )}
           <button className="text-sm font-medium text-current">
