@@ -17,6 +17,7 @@ import { authorizationsService } from '../services/api/authorizations';
 import type { Host, User, UserFormData } from '../types';
 import DiffIssue from '../components/DiffIssue';
 import HostEditModal from '../components/HostEditModal';
+import SyncModal from '../components/SyncModal';
 import { useNotifications } from '../contexts/NotificationContext';
 
 const DiffPage: React.FC = () => {
@@ -39,6 +40,9 @@ const DiffPage: React.FC = () => {
   const [showUnknownKeyModal, setShowUnknownKeyModal] = useState(false);
   const [unknownKeyIssue, setUnknownKeyIssue] = useState<DiffItemResponse | null>(null);
   const [allUsers, setAllUsers] = useState<User[]>([]);
+  
+  // Sync modal state
+  const [showSyncModal, setShowSyncModal] = useState(false);
 
 
   useEffect(() => {
@@ -335,6 +339,33 @@ const DiffPage: React.FC = () => {
       console.error('Error assigning key to user:', error);
       const errorMessage = error instanceof Error ? error.message : 'Please try again later';
       showError('Failed to assign key', errorMessage);
+    }
+  };
+
+  // Handle syncing SSH keys to host
+  const handleSyncKeys = async () => {
+    if (!selectedHost || !hostDetails) return;
+    
+    try {
+      // Apply the sync changes
+      await diffApi.syncKeys(selectedHost.name);
+      
+      showSuccess('Keys synchronized', `SSH keys have been synchronized to ${selectedHost.name}`);
+      
+      // Refresh the host details to show updated status
+      const refreshedDetails = await diffApi.getHostDiffDetails(selectedHost.name, true);
+      setHostDetails(refreshedDetails);
+      
+      // Update the host in the list to reflect synchronized status
+      setHosts(prev => prev.map(h => 
+        h.id === selectedHost.id 
+          ? { ...h, is_empty: true, total_items: 0, diff_summary: "No differences found" }
+          : h
+      ));
+    } catch (error) {
+      console.error('Error syncing keys:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Please try again later';
+      showError('Failed to sync keys', errorMessage);
     }
   };
 
@@ -669,7 +700,22 @@ const DiffPage: React.FC = () => {
       <Modal
         isOpen={showModal}
         onClose={closeModal}
-        title={`Host Details: ${selectedHost?.name || ''}`}
+        title={
+          <div className="flex items-center justify-between w-full">
+            <span>Host Details: {selectedHost?.name || ''}</span>
+            {hostDetails && hostDetails.logins.length > 0 && (
+              <Button
+                onClick={() => setShowSyncModal(true)}
+                leftIcon={<Upload size={16} />}
+                variant="primary"
+                className="bg-blue-600 hover:bg-blue-700 font-medium px-4 py-2"
+                size="sm"
+              >
+                Sync Keys
+              </Button>
+            )}
+          </div>
+        }
         size="full"
       >
         {detailsLoading ? (
@@ -952,6 +998,14 @@ const DiffPage: React.FC = () => {
           </div>
         )}
       </Modal>
+
+      {/* Sync Modal */}
+      <SyncModal
+        isOpen={showSyncModal}
+        onClose={() => setShowSyncModal(false)}
+        hostDetails={hostDetails}
+        onSync={handleSyncKeys}
+      />
 
       {/* Edit Host Modal */}
       <HostEditModal

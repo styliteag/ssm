@@ -6,7 +6,7 @@ import Button from './Button';
 export interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
-  title?: string;
+  title?: React.ReactNode;
   children: React.ReactNode;
   size?: 'sm' | 'md' | 'lg' | 'xl' | 'full';
   showCloseButton?: boolean;
@@ -157,12 +157,12 @@ const Modal: React.FC<ModalProps> = ({
             headerClassName
           )}>
             {title && (
-              <h2
+              <div
                 id="modal-title"
-                className="text-lg font-semibold text-gray-900 dark:text-gray-100"
+                className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex-1"
               >
                 {title}
-              </h2>
+              </div>
             )}
             {showCloseButton && (
               <Button
