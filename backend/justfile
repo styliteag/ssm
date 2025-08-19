@@ -1,4 +1,10 @@
 # Development commands for the SSH Key Manager backend
+#
+# Test Logging Levels:
+# - just test              → Clean output (no logs)
+# - just test-verbose      → Shows log::info! messages  
+# - just test-debug        → Shows all debug logs
+# - just test-quiet        → Only warnings/errors
 
 # Run the development server with auto-reload on file changes
 dev:
@@ -9,17 +15,45 @@ dev:
 run:
     cargo run
 
-# Run all tests
+# Run all tests (clean output, no logs)
 test:
     cargo test
 
-# Run a specific test
+# Run a specific test (clean output)
 test-name name:
     cargo test {{name}}
 
-# Run tests with output
+# Run tests with detailed logging (shows log::info! messages)
 test-verbose:
     cargo test -- --nocapture
+
+# Run specific test with detailed logging
+test-name-verbose name:
+    cargo test {{name}} -- --nocapture
+
+# Run tests with debug logging (most verbose)
+test-debug:
+    RUST_LOG=debug cargo test -- --nocapture
+
+# Run specific test with debug logging
+test-name-debug name:
+    RUST_LOG=debug cargo test {{name}} -- --nocapture
+
+# Run tests with minimal logging (warnings/errors only)
+test-quiet:
+    RUST_LOG=warn cargo test -- --nocapture
+
+# Run only authentication tests with logging
+test-auth:
+    cargo test real_http_auth -- --nocapture
+
+# Run only security tests with logging
+test-security:
+    cargo test security_first_api -- --nocapture
+
+# Run only user lifecycle tests with logging
+test-lifecycle:
+    cargo test user_lifecycle -- --nocapture
 
 # Check code without building
 check:

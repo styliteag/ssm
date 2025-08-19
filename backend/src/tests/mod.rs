@@ -3,14 +3,13 @@
 /// Clean, minimal testing setup that actually works.
 
 // Core test utilities - keep these minimal
-pub mod test_utils;
 pub mod safety;
+pub mod test_config;
 
-// Modern test framework - build incrementally  
-pub mod test_app;
-
-// Mock SSH - only if we need it
-pub mod mock_ssh;
-
-// Test modules - add one at a time
+// Test modules
 pub mod basic_tests;
+pub mod test_api;
+pub mod security_first_api_tests;   // THE NEW STANDARD - inline security tests
+pub mod user_lifecycle_simple;      // SIMPLIFIED E2E workflow tests
+pub mod real_http_auth_test;         // REAL HTTP Authentication with cookies, CSRF, sessions!
+pub mod real_http_auth_success;     // PROOF that real HTTP auth works perfectly!

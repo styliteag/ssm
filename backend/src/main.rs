@@ -34,6 +34,17 @@ mod ssh;
 #[cfg(test)]
 mod tests;
 
+#[cfg(test)]
+macro_rules! test_only {
+    () => {
+        #[cfg(not(test))]
+        panic!("This function can only be called during testing");
+    };
+}
+
+#[cfg(test)]
+pub(crate) use test_only;
+
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!();
 
 #[derive(diesel::MultiConnection)]
