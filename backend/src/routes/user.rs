@@ -54,7 +54,7 @@ impl From<User> for UserResponse {
 /// Get all users
 #[utoipa::path(
     get,
-    path = "/api/users",
+    path = "/api/user",
     security(
         ("session_auth" = [])
     ),
@@ -86,7 +86,7 @@ async fn get_all_users(
 /// Get a user by username
 #[utoipa::path(
     get,
-    path = "/api/users/{name}",
+    path = "/api/user/{name}",
     security(
         ("session_auth" = [])
     ),
@@ -119,7 +119,7 @@ async fn get_user(
 /// Create a new user
 #[utoipa::path(
     post,
-    path = "/api/users",
+    path = "/api/user",
     security(
         ("session_auth" = [])
     ),
@@ -155,7 +155,7 @@ async fn create_user(
 /// Delete a user by username
 #[utoipa::path(
     delete,
-    path = "/api/users/{username}",
+    path = "/api/user/{username}",
     security(
         ("session_auth" = [])
     ),
@@ -199,7 +199,7 @@ pub struct UserKeysResponse {
 /// Get SSH keys for a user
 #[utoipa::path(
     get,
-    path = "/api/users/{username}/keys",
+    path = "/api/user/{username}/keys",
     security(
         ("session_auth" = [])
     ),
@@ -258,7 +258,7 @@ pub struct UserAuthorizationsResponse {
 /// Get user authorizations (hosts they can access)
 #[utoipa::path(
     get,
-    path = "/api/users/{username}/authorizations",
+    path = "/api/user/{username}/authorizations",
     security(
         ("session_auth" = [])
     ),
@@ -302,7 +302,7 @@ pub struct AssignKeyRequest {
 /// Assign an SSH key to a user
 #[utoipa::path(
     post,
-    path = "/api/users/assign_key",
+    path = "/api/user/assign_key",
     security(
         ("session_auth" = [])
     ),
@@ -354,7 +354,7 @@ pub struct UpdateUserRequest {
 /// Update a user's information
 #[utoipa::path(
     put,
-    path = "/api/users/{old_username}",
+    path = "/api/user/{old_username}",
     security(
         ("session_auth" = [])
     ),
@@ -397,7 +397,7 @@ pub struct AddKeyResponse {
 /// Add SSH key dialog (preview key before assignment)
 #[utoipa::path(
     post,
-    path = "/api/users/add_key",
+    path = "/api/user/add_key",
     request_body = SshPublicKey,
     responses(
         (status = 200, description = "Key preview", body = AddKeyResponse)

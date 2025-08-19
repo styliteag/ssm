@@ -46,7 +46,7 @@ pub struct KeysResponse {
 /// Get all SSH keys
 #[utoipa::path(
     get,
-    path = "/api/keys",
+    path = "/api/key",
     security(
         ("session_auth" = [])
     ),
@@ -78,7 +78,7 @@ pub async fn get_all_keys(
 /// Delete an SSH key by ID
 #[utoipa::path(
     delete,
-    path = "/api/keys/{id}",
+    path = "/api/key/{id}",
     security(
         ("session_auth" = [])
     ),
@@ -115,7 +115,7 @@ pub struct UpdateKeyCommentRequest {
 /// Update SSH key comment
 #[utoipa::path(
     put,
-    path = "/api/keys/{id}/comment",
+    path = "/api/key/{id}/comment",
     security(
         ("session_auth" = [])
     ),

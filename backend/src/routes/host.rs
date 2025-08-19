@@ -65,8 +65,8 @@ impl From<Host> for HostResponse {
 /// Get all hosts
 #[utoipa::path(
     get,
-    path = "/api/hosts",
-    tag = "hosts",
+    path = "/api/host",
+    tag = "host",
     security(
         ("session_auth" = [])
     ),
@@ -102,7 +102,7 @@ pub struct LoginsResponse {
 /// Get available logins for a host
 #[utoipa::path(
     get,
-    path = "/api/hosts/{name}/logins",
+    path = "/api/host/{name}/logins",
     security(
         ("session_auth" = [])
     ),
@@ -144,7 +144,7 @@ async fn get_logins(
 /// Get a host by name
 #[utoipa::path(
     get,
-    path = "/api/hosts/{name}",
+    path = "/api/host/{name}",
     security(
         ("session_auth" = [])
     ),
@@ -222,7 +222,7 @@ pub struct HostkeyConfirmation {
 /// Add host key for SSH connection
 #[utoipa::path(
     post,
-    path = "/api/hosts/{id}/add_hostkey",
+    path = "/api/host/{id}/add_hostkey",
     params(
         ("id" = i32, Path, description = "Host ID")
     ),
@@ -314,7 +314,7 @@ async fn add_host_key(
 /// Create a new host
 #[utoipa::path(
     post,
-    path = "/api/hosts",
+    path = "/api/host",
     request_body = CreateHostRequest,
     responses(
         (status = 201, description = "Host created successfully", body = HostResponse),
@@ -427,7 +427,7 @@ pub struct AuthorizeUserRequest {
 /// Authorize a user to access a host
 #[utoipa::path(
     post,
-    path = "/api/hosts/user/authorize",
+    path = "/api/host/user/authorize",
     request_body = AuthorizeUserRequest,
     responses(
         (status = 200, description = "User authorized successfully"),
@@ -474,7 +474,7 @@ pub struct AuthorizedKeysResponse {
 /// Generate authorized_keys file for a host
 #[utoipa::path(
     post,
-    path = "/api/hosts/gen_authorized_keys",
+    path = "/api/host/gen_authorized_keys",
     request_body = GenAuthorizedKeysRequest,
     responses(
         (status = 200, description = "Authorized keys generated", body = GenAuthorizedKeysResponse),
@@ -538,7 +538,7 @@ pub struct SetAuthorizedKeysRequest {
 /// Set authorized_keys file on a host
 #[utoipa::path(
     post,
-    path = "/api/hosts/{name}/set_authorized_keys",
+    path = "/api/host/{name}/set_authorized_keys",
     params(
         ("name" = String, Path, description = "Host name")
     ),
@@ -583,7 +583,7 @@ pub struct HostDeleteRequest {
 /// Delete a host
 #[utoipa::path(
     delete,
-    path = "/api/hosts/{name}",
+    path = "/api/host/{name}",
     params(
         ("name" = String, Path, description = "Host name")
     ),
@@ -648,7 +648,7 @@ pub struct HostAuthorizationsResponse {
 /// List all authorizations for a host
 #[utoipa::path(
     get,
-    path = "/api/hosts/{name}/authorizations",
+    path = "/api/host/{name}/authorizations",
     params(
         ("name" = String, Path, description = "Host name")
     ),
@@ -687,7 +687,7 @@ struct DeleteAuthorizationRequest {
 /// Delete an authorization
 #[utoipa::path(
     delete,
-    path = "/api/hosts/authorization/{id}",
+    path = "/api/host/authorization/{id}",
     params(
         ("id" = i32, Path, description = "Authorization ID")
     ),
@@ -756,7 +756,7 @@ pub struct UpdateHostRequest {
 /// Update a host
 #[utoipa::path(
     put,
-    path = "/api/hosts/{name}",
+    path = "/api/host/{name}",
     params(
         ("name" = String, Path, description = "Host name")
     ),
