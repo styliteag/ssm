@@ -12,6 +12,7 @@ use crate::{
         http_test_helpers::{extract_json},
     },
     create_inline_test_service,
+    authenticated_request,
 };
 
 #[tokio::test]
@@ -64,8 +65,7 @@ async fn test_get_diff_between_hosts() {
     PublicUserKey::add_key(&mut conn, new_key).expect("Failed to add test key");
     
     // Test diff endpoint
-    let req = test::TestRequest::get()
-        .uri("/api/diff/diffhost1/diffhost2")
+    let req = authenticated_request!(&app, get, "/api/diff/diffhost1/diffhost2")
         .to_request();
     
     let resp = test::call_service(&app, req).await;
@@ -104,8 +104,7 @@ async fn test_get_diff_for_specific_login() {
     let _host_id = Host::add_host(&mut conn, &host).expect("Failed to create host");
     
     // Test login-specific diff endpoint
-    let req = test::TestRequest::get()
-        .uri("/api/diff/loginhost/ubuntu")
+    let req = authenticated_request!(&app, get, "/api/diff/loginhost/ubuntu")
         .to_request();
     
     let resp = test::call_service(&app, req).await;
@@ -173,8 +172,7 @@ async fn test_diff_response_format_validation() {
     }
     
     // Test diff format with query parameters
-    let req = test::TestRequest::get()
-        .uri("/api/diff/formathost?format=json")
+    let req = authenticated_request!(&app, get, "/api/diff/formathost?format=json")
         .to_request();
     
     let resp = test::call_service(&app, req).await;
@@ -269,8 +267,7 @@ async fn test_diff_with_authorization_filtering() {
     );
     
     // Test diff with authorization context
-    let req = test::TestRequest::get()
-        .uri("/api/diff/authhost/deploy")
+    let req = authenticated_request!(&app, get, "/api/diff/authhost/deploy")
         .to_request();
     
     let resp = test::call_service(&app, req).await;
@@ -299,28 +296,31 @@ async fn test_diff_with_authorization_filtering() {
 async fn test_diff_error_scenarios() {
     let (app, _test_config) = create_inline_test_service!();
     
-    // Get authentication cookie
+    // Login to get session
     let login_req = test::TestRequest::post()
         .uri("/api/auth/login")
         .set_json(&json!({"username": "testuser", "password": "testpass"}))
         .to_request();
     let login_resp = test::call_service(&app, login_req).await;
     assert_eq!(login_resp.status(), StatusCode::OK);
-    let mut cookie = String::new();
-    for (name, value) in login_resp.headers().iter() {
-        if name == "set-cookie" {
-            if let Some(cookie_value) = value.to_str().unwrap().split(';').next() {
-                cookie = cookie_value.to_string();
-            }
-            break;
-        }
-    }
-    assert!(!cookie.is_empty());
+
+    let session_cookie = crate::tests::http_test_helpers::extract_session_cookie(&login_resp);
+
+    // Get CSRF token
+    let csrf_req = test::TestRequest::get()
+        .uri("/api/auth/csrf")
+        .insert_header(("Cookie", session_cookie.clone()))
+        .to_request();
+    let csrf_resp = test::call_service(&app, csrf_req).await;
+    assert_eq!(csrf_resp.status(), 200);
+    let csrf_body: serde_json::Value = test::read_body_json(csrf_resp).await;
+    let csrf_token = csrf_body["data"]["csrf_token"].as_str().unwrap();
     
     // Test diff with nonexistent host
     let req = test::TestRequest::get()
         .uri("/api/diff/nonexistenthost")
-        .insert_header(("Cookie", cookie.clone()))
+        .insert_header(("Cookie", session_cookie.clone()))
+        .insert_header(("X-CSRF-Token", csrf_token))
         .to_request();
     
     let resp = test::call_service(&app, req).await;
@@ -329,7 +329,8 @@ async fn test_diff_error_scenarios() {
     // Test diff between nonexistent hosts
     let req = test::TestRequest::get()
         .uri("/api/diff/nonexistent1/nonexistent2")
-        .insert_header(("Cookie", cookie.clone()))
+        .insert_header(("Cookie", session_cookie.clone()))
+        .insert_header(("X-CSRF-Token", csrf_token))
         .to_request();
     
     let resp = test::call_service(&app, req).await;
@@ -338,7 +339,8 @@ async fn test_diff_error_scenarios() {
     // Test diff with invalid login
     let req = test::TestRequest::get()
         .uri("/api/diff/somehost/invalidlogin@#$")
-        .insert_header(("Cookie", cookie))
+        .insert_header(("Cookie", session_cookie))
+        .insert_header(("X-CSRF-Token", csrf_token))
         .to_request();
     
     let resp = test::call_service(&app, req).await;
@@ -407,8 +409,7 @@ async fn test_diff_with_complex_scenarios() {
     }
     
     // Test diff with jump host scenario
-    let req = test::TestRequest::get()
-        .uri("/api/diff/targethost?include_jump=true")
+    let req = authenticated_request!(&app, get, "/api/diff/targethost?include_jump=true")
         .to_request();
     
     let resp = test::call_service(&app, req).await;

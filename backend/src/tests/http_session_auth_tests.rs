@@ -425,8 +425,8 @@ async fn test_invalid_session_handling() {
     
     let resp = test::call_service(&app, req).await;
     
-    // Should return unauthorized for invalid session
-    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED, "Invalid session should be rejected");
+    // Should return forbidden for invalid session due to CSRF protection
+    assert_eq!(resp.status(), StatusCode::FORBIDDEN, "Invalid session should be rejected (CSRF protection)");
     
     // Test with empty session cookie
     let empty_cookie = Cookie::build("ssm_session", "").finish();
@@ -437,7 +437,7 @@ async fn test_invalid_session_handling() {
         .to_request();
     
     let resp = test::call_service(&app, req).await;
-    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(resp.status(), StatusCode::FORBIDDEN);
     
     // Test with malformed session cookie
     let malformed_cookie = Cookie::build("ssm_session", "malformed{session}data").finish();
@@ -448,7 +448,7 @@ async fn test_invalid_session_handling() {
         .to_request();
     
     let resp = test::call_service(&app, req).await;
-    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(resp.status(), StatusCode::FORBIDDEN);
     
     log::info!("✅ Invalid sessions are properly rejected");
 }

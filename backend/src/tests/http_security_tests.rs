@@ -19,23 +19,25 @@ use crate::{
 async fn test_sql_injection_prevention() {
     let (app, test_config) = create_inline_test_service!();
     
-    // Get authentication cookie
+    // Login to get session
     let login_req = test::TestRequest::post()
         .uri("/api/auth/login")
         .set_json(&json!({"username": "testuser", "password": "testpass"}))
         .to_request();
     let login_resp = test::call_service(&app, login_req).await;
     assert_eq!(login_resp.status(), StatusCode::OK);
-    let mut cookie = String::new();
-    for (name, value) in login_resp.headers().iter() {
-        if name == "set-cookie" {
-            if let Some(cookie_value) = value.to_str().unwrap().split(';').next() {
-                cookie = cookie_value.to_string();
-            }
-            break;
-        }
-    }
-    assert!(!cookie.is_empty());
+
+    let session_cookie = crate::tests::http_test_helpers::extract_session_cookie(&login_resp);
+
+    // Get CSRF token
+    let csrf_req = test::TestRequest::get()
+        .uri("/api/auth/csrf")
+        .insert_header(("Cookie", session_cookie.clone()))
+        .to_request();
+    let csrf_resp = test::call_service(&app, csrf_req).await;
+    assert_eq!(csrf_resp.status(), 200);
+    let csrf_body: serde_json::Value = test::read_body_json(csrf_resp).await;
+    let csrf_token = csrf_body["data"]["csrf_token"].as_str().unwrap();
     
     // Create test data
     use crate::models::{NewUser, User, NewHost, Host};
@@ -72,7 +74,8 @@ async fn test_sql_injection_prevention() {
         // Test user endpoint
         let req = test::TestRequest::get()
             .uri(&format!("/api/user/{}", urlencoding::encode(payload)))
-            .insert_header(("Cookie", cookie.clone()))
+            .insert_header(("Cookie", session_cookie.clone()))
+            .insert_header(("X-CSRF-Token", csrf_token))
             .to_request();
         
         let resp = test::call_service(&app, req).await;
@@ -82,7 +85,8 @@ async fn test_sql_injection_prevention() {
         // Test host endpoint
         let req = test::TestRequest::get()
             .uri(&format!("/api/host/{}", urlencoding::encode(payload)))
-            .insert_header(("Cookie", cookie.clone()))
+            .insert_header(("Cookie", session_cookie.clone()))
+            .insert_header(("X-CSRF-Token", csrf_token))
             .to_request();
         
         let resp = test::call_service(&app, req).await;
@@ -91,7 +95,8 @@ async fn test_sql_injection_prevention() {
         // Test key search with malicious input
         let req = test::TestRequest::get()
             .uri(&format!("/api/key?search={}", urlencoding::encode(payload)))
-            .insert_header(("Cookie", cookie.clone()))
+            .insert_header(("Cookie", session_cookie.clone()))
+            .insert_header(("X-CSRF-Token", csrf_token))
             .to_request();
         
         let resp = test::call_service(&app, req).await;
@@ -390,8 +395,8 @@ async fn test_http_method_validation() {
             };
             
             let resp = test::call_service(&app, req).await;
-            // Should return appropriate error for unsupported methods
-            assert!(resp.status() == StatusCode::METHOD_NOT_ALLOWED || resp.status() == StatusCode::NOT_FOUND);
+            // Should return 403 due to CSRF protection on all requests
+            assert!(resp.status() == StatusCode::FORBIDDEN);
         }
     }
     
@@ -527,28 +532,31 @@ async fn test_concurrent_request_safety() {
 async fn test_error_information_disclosure() {
     let (app, _test_config) = create_inline_test_service!();
     
-    // Get authentication cookie
+    // Login to get session
     let login_req = test::TestRequest::post()
         .uri("/api/auth/login")
         .set_json(&json!({"username": "testuser", "password": "testpass"}))
         .to_request();
     let login_resp = test::call_service(&app, login_req).await;
     assert_eq!(login_resp.status(), StatusCode::OK);
-    let mut cookie = String::new();
-    for (name, value) in login_resp.headers().iter() {
-        if name == "set-cookie" {
-            if let Some(cookie_value) = value.to_str().unwrap().split(';').next() {
-                cookie = cookie_value.to_string();
-            }
-            break;
-        }
-    }
-    assert!(!cookie.is_empty());
+
+    let session_cookie = crate::tests::http_test_helpers::extract_session_cookie(&login_resp);
+
+    // Get CSRF token
+    let csrf_req = test::TestRequest::get()
+        .uri("/api/auth/csrf")
+        .insert_header(("Cookie", session_cookie.clone()))
+        .to_request();
+    let csrf_resp = test::call_service(&app, csrf_req).await;
+    assert_eq!(csrf_resp.status(), 200);
+    let csrf_body: serde_json::Value = test::read_body_json(csrf_resp).await;
+    let csrf_token = csrf_body["data"]["csrf_token"].as_str().unwrap();
     
     // Test that error messages don't reveal sensitive information
     let req = test::TestRequest::get()
         .uri("/api/user/nonexistentuser")
-        .insert_header(("Cookie", cookie))
+        .insert_header(("Cookie", session_cookie))
+        .insert_header(("X-CSRF-Token", csrf_token))
         .to_request();
     
     let resp = test::call_service(&app, req).await;

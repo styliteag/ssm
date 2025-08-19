@@ -12,6 +12,7 @@ use crate::{
         http_test_helpers::{extract_json, assert_not_found_response},
     },
     create_inline_test_service,
+    authenticated_request,
 };
 
 #[tokio::test]
@@ -33,27 +34,30 @@ async fn test_get_all_hosts_with_data_validation() {
     let mut conn = test_config.db_pool.get().unwrap();
     let _host_id = Host::add_host(&mut conn, &new_host).expect("Failed to create test host");
     
-    // Get authentication cookie
+    // Login to get session
     let login_req = test::TestRequest::post()
         .uri("/api/auth/login")
         .set_json(&json!({"username": "testuser", "password": "testpass"}))
         .to_request();
     let login_resp = test::call_service(&app, login_req).await;
     assert_eq!(login_resp.status(), StatusCode::OK);
-    let mut cookie = String::new();
-    for (name, value) in login_resp.headers().iter() {
-        if name == "set-cookie" {
-            if let Some(cookie_value) = value.to_str().unwrap().split(';').next() {
-                cookie = cookie_value.to_string();
-            }
-            break;
-        }
-    }
-    assert!(!cookie.is_empty());
+    
+    let session_cookie = crate::tests::http_test_helpers::extract_session_cookie(&login_resp);
+    
+    // Get CSRF token
+    let csrf_req = test::TestRequest::get()
+        .uri("/api/auth/csrf")
+        .insert_header(("Cookie", session_cookie.clone()))
+        .to_request();
+    let csrf_resp = test::call_service(&app, csrf_req).await;
+    assert_eq!(csrf_resp.status(), 200);
+    let csrf_body: serde_json::Value = test::read_body_json(csrf_resp).await;
+    let csrf_token = csrf_body["data"]["csrf_token"].as_str().unwrap();
     
     let req = test::TestRequest::get()
         .uri("/api/host")
-        .insert_header(("Cookie", cookie))
+        .insert_header(("Cookie", session_cookie))
+        .insert_header(("X-CSRF-Token", csrf_token))
         .to_request();
     
     let resp = test::call_service(&app, req).await;
@@ -102,27 +106,30 @@ async fn test_get_specific_host_with_data_validation() {
     let mut conn = test_config.db_pool.get().unwrap();
     let _host_id = Host::add_host(&mut conn, &new_host).expect("Failed to create test host");
     
-    // Get authentication cookie
+    // Login to get session
     let login_req = test::TestRequest::post()
         .uri("/api/auth/login")
         .set_json(&json!({"username": "testuser", "password": "testpass"}))
         .to_request();
     let login_resp = test::call_service(&app, login_req).await;
     assert_eq!(login_resp.status(), StatusCode::OK);
-    let mut cookie = String::new();
-    for (name, value) in login_resp.headers().iter() {
-        if name == "set-cookie" {
-            if let Some(cookie_value) = value.to_str().unwrap().split(';').next() {
-                cookie = cookie_value.to_string();
-            }
-            break;
-        }
-    }
-    assert!(!cookie.is_empty());
+
+    let session_cookie = crate::tests::http_test_helpers::extract_session_cookie(&login_resp);
+
+    // Get CSRF token
+    let csrf_req = test::TestRequest::get()
+        .uri("/api/auth/csrf")
+        .insert_header(("Cookie", session_cookie.clone()))
+        .to_request();
+    let csrf_resp = test::call_service(&app, csrf_req).await;
+    assert_eq!(csrf_resp.status(), 200);
+    let csrf_body: serde_json::Value = test::read_body_json(csrf_resp).await;
+    let csrf_token = csrf_body["data"]["csrf_token"].as_str().unwrap();
     
     let req = test::TestRequest::get()
         .uri("/api/host/specifichost456")
-        .insert_header(("Cookie", cookie))
+        .insert_header(("Cookie", session_cookie))
+        .insert_header(("X-CSRF-Token", csrf_token))
         .to_request();
     
     let resp = test::call_service(&app, req).await;
@@ -159,9 +166,7 @@ async fn test_create_host_endpoint() {
         "jump_via": null
     });
     
-    let req = test::TestRequest::post()
-        .uri("/api/host")
-        .set_json(&new_host_data)
+    let req = authenticated_request!(&app, post, "/api/host", &new_host_data)
         .to_request();
     
     let resp = test::call_service(&app, req).await;
@@ -229,9 +234,7 @@ async fn test_update_host_endpoint() {
         "jump_via": null
     });
     
-    let req = test::TestRequest::put()
-        .uri("/api/host/updatehost")
-        .set_json(&update_data)
+    let req = authenticated_request!(&app, put, "/api/host/updatehost", &update_data)
         .to_request();
     
     let resp = test::call_service(&app, req).await;
@@ -267,8 +270,7 @@ async fn test_delete_host_endpoint() {
     let _host_id = Host::add_host(&mut conn, &new_host).expect("Failed to create test host");
     
     // Delete the host
-    let req = test::TestRequest::delete()
-        .uri("/api/host/deletehost")
+    let req = authenticated_request!(&app, delete, "/api/host/deletehost")
         .to_request();
     
     let resp = test::call_service(&app, req).await;
@@ -327,28 +329,31 @@ async fn test_host_with_jump_host() {
     
     let _target_host_id = Host::add_host(&mut conn, &target_host).expect("Failed to create target host");
     
-    // Get authentication cookie
+    // Login to get session
     let login_req = test::TestRequest::post()
         .uri("/api/auth/login")
         .set_json(&json!({"username": "testuser", "password": "testpass"}))
         .to_request();
     let login_resp = test::call_service(&app, login_req).await;
     assert_eq!(login_resp.status(), StatusCode::OK);
-    let mut cookie = String::new();
-    for (name, value) in login_resp.headers().iter() {
-        if name == "set-cookie" {
-            if let Some(cookie_value) = value.to_str().unwrap().split(';').next() {
-                cookie = cookie_value.to_string();
-            }
-            break;
-        }
-    }
-    assert!(!cookie.is_empty());
+
+    let session_cookie = crate::tests::http_test_helpers::extract_session_cookie(&login_resp);
+
+    // Get CSRF token
+    let csrf_req = test::TestRequest::get()
+        .uri("/api/auth/csrf")
+        .insert_header(("Cookie", session_cookie.clone()))
+        .to_request();
+    let csrf_resp = test::call_service(&app, csrf_req).await;
+    assert_eq!(csrf_resp.status(), 200);
+    let csrf_body: serde_json::Value = test::read_body_json(csrf_resp).await;
+    let csrf_token = csrf_body["data"]["csrf_token"].as_str().unwrap();
     
     // Test getting the target host
     let req = test::TestRequest::get()
         .uri("/api/host/targethost")
-        .insert_header(("Cookie", cookie))
+        .insert_header(("Cookie", session_cookie))
+        .insert_header(("X-CSRF-Token", csrf_token))
         .to_request();
     
     let resp = test::call_service(&app, req).await;
@@ -383,27 +388,30 @@ async fn test_get_host_authorizations() {
     let mut conn = test_config.db_pool.get().unwrap();
     let _host_id = Host::add_host(&mut conn, &new_host).expect("Failed to create test host");
     
-    // Get authentication cookie
+    // Login to get session
     let login_req = test::TestRequest::post()
         .uri("/api/auth/login")
         .set_json(&json!({"username": "testuser", "password": "testpass"}))
         .to_request();
     let login_resp = test::call_service(&app, login_req).await;
     assert_eq!(login_resp.status(), StatusCode::OK);
-    let mut cookie = String::new();
-    for (name, value) in login_resp.headers().iter() {
-        if name == "set-cookie" {
-            if let Some(cookie_value) = value.to_str().unwrap().split(';').next() {
-                cookie = cookie_value.to_string();
-            }
-            break;
-        }
-    }
-    assert!(!cookie.is_empty());
+
+    let session_cookie = crate::tests::http_test_helpers::extract_session_cookie(&login_resp);
+
+    // Get CSRF token
+    let csrf_req = test::TestRequest::get()
+        .uri("/api/auth/csrf")
+        .insert_header(("Cookie", session_cookie.clone()))
+        .to_request();
+    let csrf_resp = test::call_service(&app, csrf_req).await;
+    assert_eq!(csrf_resp.status(), 200);
+    let csrf_body: serde_json::Value = test::read_body_json(csrf_resp).await;
+    let csrf_token = csrf_body["data"]["csrf_token"].as_str().unwrap();
     
     let req = test::TestRequest::get()
         .uri("/api/host/authhost/authorizations")
-        .insert_header(("Cookie", cookie))
+        .insert_header(("Cookie", session_cookie))
+        .insert_header(("X-CSRF-Token", csrf_token))
         .to_request();
     
     let resp = test::call_service(&app, req).await;
@@ -438,8 +446,7 @@ async fn test_host_keys_endpoint() {
     let mut conn = test_config.db_pool.get().unwrap();
     let _host_id = Host::add_host(&mut conn, &new_host).expect("Failed to create test host");
     
-    let req = test::TestRequest::get()
-        .uri("/api/host/keyhost/keys")
+    let req = authenticated_request!(&app, get, "/api/host/keyhost/keys")
         .to_request();
     
     let resp = test::call_service(&app, req).await;
@@ -459,27 +466,30 @@ async fn test_host_keys_endpoint() {
 async fn test_get_nonexistent_host() {
     let (app, _test_config) = create_inline_test_service!();
     
-    // Get authentication cookie
+    // Login to get session
     let login_req = test::TestRequest::post()
         .uri("/api/auth/login")
         .set_json(&json!({"username": "testuser", "password": "testpass"}))
         .to_request();
     let login_resp = test::call_service(&app, login_req).await;
     assert_eq!(login_resp.status(), StatusCode::OK);
-    let mut cookie = String::new();
-    for (name, value) in login_resp.headers().iter() {
-        if name == "set-cookie" {
-            if let Some(cookie_value) = value.to_str().unwrap().split(';').next() {
-                cookie = cookie_value.to_string();
-            }
-            break;
-        }
-    }
-    assert!(!cookie.is_empty());
+
+    let session_cookie = crate::tests::http_test_helpers::extract_session_cookie(&login_resp);
+
+    // Get CSRF token
+    let csrf_req = test::TestRequest::get()
+        .uri("/api/auth/csrf")
+        .insert_header(("Cookie", session_cookie.clone()))
+        .to_request();
+    let csrf_resp = test::call_service(&app, csrf_req).await;
+    assert_eq!(csrf_resp.status(), 200);
+    let csrf_body: serde_json::Value = test::read_body_json(csrf_resp).await;
+    let csrf_token = csrf_body["data"]["csrf_token"].as_str().unwrap();
     
     let req = test::TestRequest::get()
         .uri("/api/host/nonexistenthost")
-        .insert_header(("Cookie", cookie))
+        .insert_header(("Cookie", session_cookie))
+        .insert_header(("X-CSRF-Token", csrf_token))
         .to_request();
     
     let resp = test::call_service(&app, req).await;

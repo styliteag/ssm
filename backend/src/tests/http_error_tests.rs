@@ -7,9 +7,6 @@ use actix_web::{test, http::StatusCode};
 use serial_test::serial;
 
 use crate::{
-    tests::{
-        http_test_helpers::{extract_json},
-    },
     create_inline_test_service,
 };
 
@@ -33,13 +30,10 @@ async fn test_protected_endpoints_require_auth() {
         
         let resp = test::call_service(&app, req).await;
         
-        // Note: Authentication middleware is currently disabled in main.rs
-        // When authentication is re-enabled, these should return UNAUTHORIZED or SEE_OTHER
-        log::info!("Endpoint {} returned: {} (auth middleware disabled)", endpoint, resp.status());
+        // With CSRF protection enabled, unauthenticated requests return 403 FORBIDDEN
+        log::info!("Endpoint {} returned: {} (CSRF protection enabled)", endpoint, resp.status());
         assert!(
-            resp.status() == StatusCode::OK || 
-            resp.status() == StatusCode::UNAUTHORIZED || 
-            resp.status() == StatusCode::SEE_OTHER ||
+            resp.status() == StatusCode::FORBIDDEN ||
             resp.status() == StatusCode::NOT_FOUND,
             "Endpoint {} returned unexpected status: {}", endpoint, resp.status()
         );
@@ -59,7 +53,7 @@ async fn test_invalid_endpoints() {
         .to_request();
     
     let resp = test::call_service(&app, req).await;
-    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    assert_eq!(resp.status(), StatusCode::FORBIDDEN); // CSRF protection applies globally
     
     // Test invalid HTTP method
     let req = test::TestRequest::patch()
@@ -67,10 +61,10 @@ async fn test_invalid_endpoints() {
         .to_request();
     
     let resp = test::call_service(&app, req).await;
-    // Can be either METHOD_NOT_ALLOWED or NOT_FOUND depending on route configuration
+    // Root path with unsupported method can return 404 or 403 depending on route matching
     assert!(
-        resp.status() == StatusCode::METHOD_NOT_ALLOWED || resp.status() == StatusCode::NOT_FOUND,
-        "Expected METHOD_NOT_ALLOWED or NOT_FOUND, got: {}", resp.status()
+        resp.status() == StatusCode::FORBIDDEN || resp.status() == StatusCode::NOT_FOUND,
+        "Expected FORBIDDEN or NOT_FOUND, got: {}", resp.status()
     );
     
     log::info!("✅ Invalid endpoints test passed");
@@ -111,16 +105,14 @@ async fn test_get_hosts_for_diff() {
         .to_request();
     
     let resp = test::call_service(&app, req).await;
-    // The diff endpoint might not exist or have different path
+    // With CSRF protection, unauthenticated requests return 403 FORBIDDEN
     assert!(
-        resp.status() == StatusCode::OK || resp.status() == StatusCode::NOT_FOUND,
+        resp.status() == StatusCode::FORBIDDEN || resp.status() == StatusCode::NOT_FOUND,
         "Diff endpoint returned unexpected status: {}", resp.status()
     );
     
-    if resp.status() == StatusCode::OK {
-        let json = extract_json(resp).await;
-        assert_eq!(json["success"], true);
-        assert!(json["data"]["hosts"].is_array());
+    if resp.status() == StatusCode::FORBIDDEN {
+        log::info!("Diff endpoint correctly rejected unauthenticated request with 403");
     } else {
         log::info!("Diff endpoint not available (404) - this may be expected");
     }

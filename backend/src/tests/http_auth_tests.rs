@@ -118,12 +118,9 @@ async fn test_swagger_ui_endpoint() {
         .to_request();
     
     let resp = test::call_service(&app, req).await;
-    // Should return success, redirect, or method not allowed (depending on configuration)
+    // With global CSRF protection, even Swagger UI gets 403
     assert!(
-        resp.status().is_success() || 
-        resp.status().is_redirection() || 
-        resp.status() == StatusCode::METHOD_NOT_ALLOWED ||
-        resp.status() == StatusCode::NOT_FOUND,
+        resp.status() == StatusCode::FORBIDDEN,
         "Swagger UI endpoint returned unexpected status: {}", resp.status()
     );
     

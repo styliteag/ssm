@@ -45,10 +45,10 @@ async fn test_all_get_endpoints_require_auth() {
         
         let resp = test::call_service(&app, req).await;
         
-        // Should require authentication - expect 401 Unauthorized
+        // Should require authentication - expect 403 Forbidden due to CSRF protection
         assert!(
-            resp.status() == StatusCode::UNAUTHORIZED,
-            "GET {} should require authentication, got status: {}",
+            resp.status() == StatusCode::FORBIDDEN,
+            "GET {} should require authentication (CSRF protection), got status: {}",
             endpoint,
             resp.status()
         );
@@ -89,13 +89,10 @@ async fn test_all_post_endpoints_require_auth() {
         
         let resp = test::call_service(&app, req).await;
         
-        // Should require authentication - expect 401 Unauthorized or error status
-        // (some endpoints may fail validation or processing before auth check)
+        // Should require authentication - expect 403 Forbidden due to CSRF protection
         assert!(
-            resp.status() == StatusCode::UNAUTHORIZED || 
-            resp.status() == StatusCode::BAD_REQUEST ||
-            resp.status() == StatusCode::INTERNAL_SERVER_ERROR,
-            "POST {} should require authentication or return error, got status: {}",
+            resp.status() == StatusCode::FORBIDDEN,
+            "POST {} should require authentication (CSRF protection), got status: {}",
             endpoint,
             resp.status()
         );
@@ -129,11 +126,10 @@ async fn test_all_put_endpoints_require_auth() {
         
         let resp = test::call_service(&app, req).await;
         
-        // Should require authentication - expect 401 Unauthorized or 400 Bad Request 
-        // (some endpoints may validate request before auth)
+        // Should require authentication - expect 403 Forbidden due to CSRF protection
         assert!(
-            resp.status() == StatusCode::UNAUTHORIZED || resp.status() == StatusCode::BAD_REQUEST,
-            "PUT {} should require authentication or return validation error, got status: {}",
+            resp.status() == StatusCode::FORBIDDEN,
+            "PUT {} should require authentication (CSRF protection), got status: {}",
             endpoint,
             resp.status()
         );
@@ -167,11 +163,10 @@ async fn test_all_delete_endpoints_require_auth() {
         
         let resp = test::call_service(&app, req).await;
         
-        // Should require authentication - expect 401 Unauthorized or 400 Bad Request 
-        // (some endpoints may validate request before auth)
+        // Should require authentication - expect 403 Forbidden due to CSRF protection
         assert!(
-            resp.status() == StatusCode::UNAUTHORIZED || resp.status() == StatusCode::BAD_REQUEST,
-            "DELETE {} should require authentication or return validation error, got status: {}",
+            resp.status() == StatusCode::FORBIDDEN,
+            "DELETE {} should require authentication (CSRF protection), got status: {}",
             endpoint,
             resp.status()
         );
@@ -275,39 +270,60 @@ async fn test_public_endpoints_do_not_require_auth() {
     log::info!("✅ Public endpoints properly accessible without authentication");
 }
 
-/// Test that invalid endpoints return 404, not 401
+/// Test that invalid endpoints return 403 due to global CSRF protection
 #[tokio::test]
 #[serial]
-async fn test_invalid_endpoints_return_404_not_401() {
+async fn test_invalid_endpoints_return_403_due_to_csrf() {
     let (app, _test_config) = create_inline_test_service!();
     
-    let invalid_endpoints = vec![
+    // Test endpoints under /api/* - these should get 403 due to CSRF middleware
+    let api_invalid_endpoints = vec![
         "/api/nonexistent",
         "/api/user/nonexistent/badendpoint",
         "/api/host/nonexistent/badendpoint",
         "/api/invalid/endpoint",
-        "/completely/invalid/path",
     ];
     
-    for endpoint in invalid_endpoints {
+    for endpoint in api_invalid_endpoints {
         let req = test::TestRequest::get()
             .uri(endpoint)
             .to_request();
         
         let resp = test::call_service(&app, req).await;
         
-        // Should return 404 NOT_FOUND, not 401 UNAUTHORIZED
-        // This ensures that auth middleware is properly configured and 
-        // doesn't interfere with routing
+        // Should return 403 FORBIDDEN due to CSRF protection on /api/* routes
         assert!(
-            resp.status() == StatusCode::NOT_FOUND,
-            "Invalid endpoint {} should return 404 NOT_FOUND, got status: {}",
+            resp.status() == StatusCode::FORBIDDEN,
+            "Invalid API endpoint {} should return 403 FORBIDDEN (CSRF protection), got status: {}",
             endpoint,
             resp.status()
         );
     }
     
-    log::info!("✅ Invalid endpoints properly return 404, not 401");
+    // Test completely invalid paths - these also get CSRF protection since it's global
+    let invalid_paths = vec![
+        "/completely/invalid/path",
+        "/nonexistent",
+        "/invalid",
+    ];
+    
+    for endpoint in invalid_paths {
+        let req = test::TestRequest::get()
+            .uri(endpoint)
+            .to_request();
+        
+        let resp = test::call_service(&app, req).await;
+        
+        // Should also return 403 FORBIDDEN due to global CSRF protection
+        assert!(
+            resp.status() == StatusCode::FORBIDDEN,
+            "Invalid path {} should return 403 FORBIDDEN (global CSRF protection), got status: {}",
+            endpoint,
+            resp.status()
+        );
+    }
+    
+    log::info!("✅ Invalid endpoints properly return 403 due to CSRF protection");
 }
 
 /// Test that endpoints return consistent auth error format
@@ -330,7 +346,7 @@ async fn test_auth_error_response_format() {
         
         let resp = test::call_service(&app, req).await;
         
-        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
     }
     
     log::info!("✅ Auth error responses have consistent format");

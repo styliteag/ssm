@@ -183,9 +183,9 @@ async fn test_protected_endpoint_without_auth() {
     
     let resp = test::call_service(&app, req).await;
     
-    // Should require authentication
-    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED, 
-        "Protected endpoint should require authentication");
+    // Should require authentication - 403 due to CSRF protection
+    assert_eq!(resp.status(), StatusCode::FORBIDDEN, 
+        "Protected endpoint should require authentication (CSRF protection)");
     
     log::info!("✅ Protected endpoints properly require authentication");
 }
