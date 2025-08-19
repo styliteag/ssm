@@ -109,7 +109,7 @@ impl NewPublicUserKey {
     }
 }
 
-#[derive(Queryable, Selectable, Clone, Serialize, ToSchema)]
+#[derive(Queryable, Selectable, Clone, Debug, Serialize, ToSchema)]
 #[diesel(table_name = crate::schema::user)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct User {
