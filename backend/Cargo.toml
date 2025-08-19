@@ -48,4 +48,6 @@ utoipa-swagger-ui = { version = "4.0", features = ["actix-web"] }
 utoipauto = "0.3.0-alpha.2"
 toml = "0.7" # Pin to avoid version conflicts
 urlencoding = "2.1"
+rand = "0.8"
+base64 = "0.22"
 

@@ -1,5 +1,6 @@
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import { ApiResponse, ApiError } from '../../types';
+import { getCsrfToken } from '../csrf';
 
 // Create axios instance with default config
 const createApiClient = (): AxiosInstance => {
@@ -14,10 +15,23 @@ const createApiClient = (): AxiosInstance => {
     withCredentials: true, // Include cookies for session-based auth
   });
 
-  // Request interceptor (no auth token needed for session-based auth)
+  // Request interceptor to add CSRF token for ALL API requests
   client.interceptors.request.use(
     (config) => {
-      // Session-based auth uses cookies, no need to add Authorization header
+      const method = config.method?.toUpperCase();
+      const url = config.url || '';
+      
+      // Add CSRF token for all API requests except auth endpoints
+      if (!url.startsWith('/auth/')) {
+        const token = getCsrfToken();
+        console.log(`${method} request to ${config.url}, CSRF token:`, token); // Debug log
+        if (token) {
+          config.headers['X-CSRF-Token'] = token;
+          console.log('Added X-CSRF-Token header'); // Debug log
+        } else {
+          console.warn('No CSRF token available for', method, 'request to', url); // Debug log
+        }
+      }
       return config;
     },
     (error) => Promise.reject(error)

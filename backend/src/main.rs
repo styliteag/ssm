@@ -274,12 +274,14 @@ async fn main() -> Result<(), std::io::Error> {
                 header::AUTHORIZATION,
                 header::ACCEPT,
                 header::CONTENT_TYPE,
+                actix_web::http::header::HeaderName::from_static("x-csrf-token"),
             ])
             .supports_credentials();
 
         App::new()
             .wrap(cors)
             .wrap(Logger::new("%a \"%r\" %s %b \"%{Referer}i\" \"%{User-Agent}i\" %T"))
+            .wrap(middleware::CsrfProtection)
             .wrap(
                 SessionMiddleware::builder(CookieSessionStore::default(), secret_key.clone())
                     .cookie_name("ssm_session".to_owned())

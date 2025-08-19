@@ -4,16 +4,25 @@ import {
   TokenResponse,
   ApiResponse,
 } from '../../types';
+import { setCsrfToken, clearCsrfToken } from '../csrf';
 
 export const authService = {
   // Login with username and password (session-based auth)
-  login: async (credentials: LoginRequest): Promise<ApiResponse<{ success: boolean; username: string; message: string }>> => {
-    return api.post<{ success: boolean; username: string; message: string }>('/auth/login', credentials);
+  login: async (credentials: LoginRequest): Promise<ApiResponse<{ success: boolean; username: string; message: string; csrf_token: string }>> => {
+    const response = await api.post<{ success: boolean; username: string; message: string; csrf_token: string }>('/auth/login', credentials);
+    // Store CSRF token on successful login
+    if (response.data?.csrf_token) {
+      setCsrfToken(response.data.csrf_token);
+    }
+    return response;
   },
 
   // Logout current user
   logout: async (): Promise<ApiResponse<null>> => {
-    return api.post<null>('/auth/logout');
+    const response = await api.post<null>('/auth/logout');
+    // Clear CSRF token on logout
+    clearCsrfToken();
+    return response;
   },
 
   // Get current authentication status
@@ -53,6 +62,15 @@ export const authService = {
   // Refresh not needed for session-based auth
   refresh: async (): Promise<ApiResponse<TokenResponse>> => {
     throw new Error('Refresh not available with session-based authentication');
+  },
+
+  // Get CSRF token from server
+  getCsrfToken: async (): Promise<ApiResponse<{ csrf_token: string }>> => {
+    const response = await api.get<{ csrf_token: string }>('/auth/csrf');
+    if (response.data?.csrf_token) {
+      setCsrfToken(response.data.csrf_token);
+    }
+    return response;
   },
 };
 

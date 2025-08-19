@@ -41,6 +41,7 @@ pub mod http_authentication_tests;
 pub mod http_endpoint_auth_protection_tests;
 pub mod http_session_auth_tests;
 pub mod http_session_auth_functional_tests;
+pub mod http_csrf_tests;
 
 // SSH and integration tests
 pub mod ssh_integration_tests;
