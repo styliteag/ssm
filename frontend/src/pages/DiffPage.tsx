@@ -391,26 +391,26 @@ const DiffPage: React.FC = () => {
             </div>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-5">
             {/* Basic Host Information */}
-            <div>
-              <h3 className="text-base font-medium text-gray-900 dark:text-gray-100 mb-2">Host Information</h3>
-              <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 grid grid-cols-4 gap-3 text-sm">
-                <div>
-                  <span className="font-medium text-gray-700 dark:text-gray-300">ID:</span>
-                  <span className="text-gray-900 dark:text-gray-100 ml-1">{hostDetails.host.id}</span>
+            <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3 border-b border-gray-200 dark:border-gray-700 pb-2">Host Information</h3>
+              <div className="grid grid-cols-4 gap-4">
+                <div className="flex flex-col">
+                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">ID</span>
+                  <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 mt-1">{hostDetails.host.id}</span>
                 </div>
-                <div>
-                  <span className="font-medium text-gray-700 dark:text-gray-300">Name:</span>
-                  <span className="text-gray-900 dark:text-gray-100 ml-1">{hostDetails.host.name}</span>
+                <div className="flex flex-col">
+                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Name</span>
+                  <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 mt-1">{hostDetails.host.name}</span>
                 </div>
-                <div>
-                  <span className="font-medium text-gray-700 dark:text-gray-300">Address:</span>
-                  <span className="text-gray-900 dark:text-gray-100 ml-1">{hostDetails.host.address}</span>
+                <div className="flex flex-col">
+                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Address</span>
+                  <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 mt-1">{hostDetails.host.address}</span>
                 </div>
-                <div>
-                  <span className="font-medium text-gray-700 dark:text-gray-300">Updated:</span>
-                  <span className="text-gray-900 dark:text-gray-100 ml-1">
+                <div className="flex flex-col">
+                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Last Updated</span>
+                  <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 mt-1">
                     {new Date(hostDetails.cache_timestamp).toLocaleString()}
                   </span>
                 </div>
@@ -418,45 +418,43 @@ const DiffPage: React.FC = () => {
             </div>
 
             {/* Summary */}
-            <div>
-              <h3 className="text-base font-medium text-gray-900 dark:text-gray-100 mb-2">Diff Summary</h3>
-              <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
-                <div className="flex items-center justify-between mb-2">
-                  <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                    hostDetails.logins.length === 0 
-                      ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300' 
-                      : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300'
-                  }`}>
-                    {hostDetails.logins.length === 0 ? 'Synchronized' : 'Needs Sync'}
-                  </span>
-                  <div className="text-xs text-gray-600 dark:text-gray-400">
-                    {hostDetails.expected_keys.length} expected keys
-                  </div>
+            <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3 border-b border-gray-200 dark:border-gray-700 pb-2">Status Summary</h3>
+              <div className="flex items-center justify-between mb-3">
+                <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-semibold ${
+                  hostDetails.logins.length === 0 
+                    ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 border border-green-200 dark:border-green-800' 
+                    : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 border border-red-200 dark:border-red-800'
+                }`}>
+                  {hostDetails.logins.length === 0 ? '✓ Synchronized' : '⚠ Needs Sync'}
+                </span>
+                <div className="text-sm text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-3 py-1 rounded-full">
+                  {hostDetails.expected_keys.length} expected keys
                 </div>
-                <p className="text-sm text-gray-900 dark:text-gray-100">{hostDetails.summary}</p>
               </div>
+              <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{hostDetails.summary}</p>
             </div>
 
             {/* Expected Keys */}
             {hostDetails.expected_keys.length > 0 && (
-              <div>
-                <h3 className="text-base font-medium text-gray-900 dark:text-gray-100 mb-2">Expected Keys</h3>
-                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 max-h-32 overflow-y-auto">
-                  <div className="grid grid-cols-2 gap-2">
+              <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3 border-b border-gray-200 dark:border-gray-700 pb-2">Expected Keys</h3>
+                <div className="max-h-40 overflow-y-auto">
+                  <div className="grid grid-cols-2 gap-3">
                     {hostDetails.expected_keys.map((key, index) => (
-                      <div key={index} className="bg-white dark:bg-gray-700 rounded p-2 text-xs">
-                        <div className="flex justify-between items-start">
+                      <div key={index} className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-3 hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors">
+                        <div className="flex justify-between items-start mb-2">
                           <div className="truncate">
-                            <span className="font-medium text-gray-900 dark:text-gray-100">{key.username}</span> 
-                            <span className="text-gray-600 dark:text-gray-400"> → {key.login}</span>
-                            {key.comment && <span className="text-gray-500 dark:text-gray-400 ml-1">({key.comment})</span>}
+                            <span className="font-semibold text-gray-900 dark:text-gray-100 text-sm">{key.username}</span> 
+                            <span className="text-gray-600 dark:text-gray-400 text-sm"> → {key.login}</span>
+                            {key.comment && <span className="text-gray-500 dark:text-gray-400 ml-1 text-xs">({key.comment})</span>}
                           </div>
-                          <span className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-1 py-0.5 rounded ml-1 flex-shrink-0">
+                          <span className="text-xs bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200 px-2 py-1 rounded-full ml-2 flex-shrink-0 font-medium">
                             {key.key_type}
                           </span>
                         </div>
                         {key.options && (
-                          <div className="text-xs text-gray-600 dark:text-gray-400 mt-1 font-mono truncate">
+                          <div className="text-xs text-gray-600 dark:text-gray-400 font-mono bg-gray-100 dark:bg-gray-700 p-1 rounded truncate">
                             Options: {key.options}
                           </div>
                         )}
@@ -469,31 +467,36 @@ const DiffPage: React.FC = () => {
 
             {/* Detailed Issues */}
             {hostDetails.logins.length > 0 && (
-              <div>
-                <h3 className="text-base font-medium text-gray-900 dark:text-gray-100 mb-2">Issues Found</h3>
-                <div className="space-y-3">
+              <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3 border-b border-gray-200 dark:border-gray-700 pb-2">Issues Found</h3>
+                <div className="space-y-4">
                   {hostDetails.logins.map((loginDiff, loginIndex) => (
-                    <div key={loginIndex} className="border border-gray-200 dark:border-gray-700 rounded-lg">
-                      <div className="bg-gray-50 dark:bg-gray-800 px-3 py-2 border-b border-gray-200 dark:border-gray-700">
+                    <div key={loginIndex} className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                      <div className="bg-gradient-to-r from-gray-100 to-gray-50 dark:from-gray-800 dark:to-gray-750 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
                         <div className="flex items-center justify-between">
-                          <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                            Login: <code className="bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-1.5 py-0.5 rounded text-xs">{loginDiff.login}</code>
+                          <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 flex items-center">
+                            <span className="text-gray-600 dark:text-gray-400 mr-2">Login:</span>
+                            <code className="bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200 px-2 py-1 rounded-md text-xs font-bold">{loginDiff.login}</code>
                           </h4>
-                          <span className="text-xs text-gray-600 dark:text-gray-400">
+                          <span className="text-xs text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-700 px-2 py-1 rounded-full font-medium">
                             {loginDiff.issues.length} issue{loginDiff.issues.length !== 1 ? 's' : ''}
                           </span>
                         </div>
                         {loginDiff.readonly_condition && (
-                          <div className="text-xs text-yellow-700 dark:text-yellow-400 mt-1">
-                            Readonly: {loginDiff.readonly_condition}
+                          <div className="text-xs text-amber-700 dark:text-amber-400 mt-2 flex items-center">
+                            <span className="mr-1">🔒</span>
+                            <span className="font-medium">Readonly:</span>
+                            <span className="ml-1">{loginDiff.readonly_condition}</span>
                           </div>
                         )}
                       </div>
-                      <div className="p-3">
-                        <div className="grid grid-cols-3 gap-2">
+                      <div className="p-4 bg-white dark:bg-gray-900">
+                        <div className="grid grid-cols-3 gap-3">
                           {loginDiff.issues.map((issue, issueIndex) => (
                             <div key={issueIndex} className="min-w-0">
-                              <DiffIssue issue={issue} />
+                              <div className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-2 hover:shadow-sm transition-shadow">
+                                <DiffIssue issue={issue} />
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -505,25 +508,31 @@ const DiffPage: React.FC = () => {
             )}
 
             {/* Actions */}
-            <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
-              <div className="flex space-x-2">
-                <Button 
-                  onClick={handleRefreshHost}
-                  loading={detailsLoading}
-                  leftIcon={<RefreshCw size={14} />}
-                  size="sm"
-                >
-                  Refresh Data
-                </Button>
-                {hostDetails.logins.length > 0 && (
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+              <div className="flex justify-between items-center">
+                <div className="text-sm text-gray-600 dark:text-gray-400">
+                  <span className="font-medium">Ready to apply changes?</span>
+                </div>
+                <div className="flex space-x-3">
                   <Button 
-                    variant="primary"
-                    leftIcon={<Upload size={14} />}
-                    size="sm"
+                    onClick={handleRefreshHost}
+                    loading={detailsLoading}
+                    leftIcon={<RefreshCw size={16} />}
+                    variant="secondary"
+                    className="font-medium"
                   >
-                    Sync Keys
+                    Refresh Data
                   </Button>
-                )}
+                  {hostDetails.logins.length > 0 && (
+                    <Button 
+                      variant="primary"
+                      leftIcon={<Upload size={16} />}
+                      className="bg-blue-600 hover:bg-blue-700 font-medium px-6"
+                    >
+                      Sync Keys
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
