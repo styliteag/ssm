@@ -24,6 +24,7 @@ import {
 } from '../components/ui';
 import { useNotifications } from '../contexts/NotificationContext';
 import { hostsService } from '../services/api/hosts';
+import HostEditModal from '../components/HostEditModal';
 import type { 
   Host, 
   HostFormData
@@ -175,8 +176,8 @@ const HostsPage: React.FC = () => {
     }
   }, [showSuccess, showError]);
 
-  // Form field definitions
-  const getFormFields = (isEdit: boolean = false): FormField[] => [
+  // Form field definitions for add host modal
+  const getFormFields = (): FormField[] => [
     {
       name: 'name',
       label: 'Host Name',
@@ -190,8 +191,7 @@ const HostsPage: React.FC = () => {
         pattern: /^[a-zA-Z0-9\-_.]+$/,
         custom: (value: unknown) => {
           const exists = hosts.some(h => 
-            h.name.toLowerCase() === (value as string).toLowerCase() && 
-            (!isEdit || h.id !== selectedHost?.id)
+            h.name.toLowerCase() === (value as string).toLowerCase()
           );
           return exists ? 'Host name already exists' : null;
         }
@@ -321,41 +321,13 @@ const HostsPage: React.FC = () => {
     }
   };
 
-  const handleEditHost = async (values: HostFormData) => {
-    if (!selectedHost) return;
-
-    try {
-      setSubmitting(true);
-      const hostData = {
-        name: values.name,
-        address: values.address,
-        port: Number(values.port),
-        username: values.username,
-        jump_via: values.jump_via && String(values.jump_via) !== '' ? Number(values.jump_via) : undefined,
-        key_fingerprint: values.key_fingerprint && values.key_fingerprint.trim() !== '' ? values.key_fingerprint : undefined
-      };
-
-      console.log('Updating host:', selectedHost.name, 'with data:', hostData);
-      const response = await hostsService.updateHost(selectedHost.name, {
-        ...hostData,
-        jump_via: hostData.jump_via,
-        key_fingerprint: hostData.key_fingerprint
-      });
-      if (response.success) {
-        setShowEditModal(false);
-        setSelectedHost(null);
-        // Use the new name if it was changed
-        const updatedName = values.name !== selectedHost.name ? values.name : selectedHost.name;
-        showSuccess('Host updated', `${updatedName} has been updated successfully`);
-        await loadHosts(); // Refresh the entire hosts table with fresh data
-        await loadJumpHosts(); // Refresh jump hosts list
-      }
-    } catch (error) {
-      console.error('Error updating host:', error);
-      showError('Failed to update host', `Error: ${error}`);
-    } finally {
-      setSubmitting(false);
-    }
+  // Handle host updated callback from edit modal
+  const handleHostUpdated = (_updatedHost: Host) => {
+    setSelectedHost(null);
+    setShowEditModal(false);
+    // Refresh the hosts list to get updated data
+    loadHosts();
+    loadJumpHosts();
   };
 
   const handleDeleteHost = async () => {
@@ -559,7 +531,7 @@ const HostsPage: React.FC = () => {
         size="lg"
       >
         <Form
-          fields={getFormFields(false)}
+          fields={getFormFields()}
           onSubmit={(values) => handleAddHost(values as unknown as HostFormData)}
           submitText="Add Host"
           cancelText="Cancel"
@@ -574,39 +546,16 @@ const HostsPage: React.FC = () => {
       </Modal>
 
       {/* Edit Host Modal */}
-      <Modal
+      <HostEditModal
         isOpen={showEditModal}
         onClose={() => {
           setShowEditModal(false);
           setSelectedHost(null);
         }}
-        title="Edit Host"
-        size="lg"
-      >
-        {selectedHost && (
-          <Form
-            fields={getFormFields(true)}
-            onSubmit={(values) => handleEditHost(values as unknown as HostFormData)}
-            submitText="Save Changes"
-            cancelText="Cancel"
-            onCancel={() => {
-              setShowEditModal(false);
-              setSelectedHost(null);
-            }}
-            loading={submitting}
-            layout="grid"
-            gridCols={2}
-            initialValues={{
-              name: selectedHost.name,
-              address: selectedHost.address,
-              port: selectedHost.port,
-              username: selectedHost.username,
-              key_fingerprint: selectedHost.key_fingerprint || '',
-              jump_via: selectedHost.jump_via
-            }}
-          />
-        )}
-      </Modal>
+        host={selectedHost}
+        onHostUpdated={handleHostUpdated}
+        jumpHosts={jumpHosts}
+      />
 
       {/* Delete Confirmation Modal */}
       <Modal

@@ -8,14 +8,13 @@ import {
   Button,
   DataTable,
   Modal,
-  Form,
-  type Column,
-  type FormField
+  type Column
 } from '../components/ui';
 import { diffApi, DiffHost, DetailedDiffResponse } from '../services/api/diff';
 import { hostsService } from '../services/api/hosts';
-import type { Host, HostFormData } from '../types';
+import type { Host } from '../types';
 import DiffIssue from '../components/DiffIssue';
+import HostEditModal from '../components/HostEditModal';
 import { useNotifications } from '../contexts/NotificationContext';
 
 const DiffPage: React.FC = () => {
@@ -31,8 +30,7 @@ const DiffPage: React.FC = () => {
   
   // Edit modal state
   const [showEditModal, setShowEditModal] = useState(false);
-  const [editingHost, setEditingHost] = useState<DiffHost | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+  const [editingHost, setEditingHost] = useState<Host | null>(null);
   const [jumpHosts, setJumpHosts] = useState<Host[]>([]);
 
   useEffect(() => {
@@ -123,118 +121,15 @@ const DiffPage: React.FC = () => {
     }
   };
 
-  // Form field definitions for host editing
-  const getFormFields = (): FormField[] => [
-    {
-      name: 'name',
-      label: 'Host Name',
-      type: 'text',
-      required: true,
-      placeholder: 'Enter a unique name for this host',
-      helperText: 'A friendly name to identify this host',
-      validation: {
-        minLength: 2,
-        maxLength: 50,
-        pattern: /^[a-zA-Z0-9\-_.]+$/
-      }
-    },
-    {
-      name: 'address',
-      label: 'Address',
-      type: 'text',
-      required: true,
-      placeholder: 'hostname.example.com or 192.168.1.100',
-      helperText: 'Hostname or IP address of the remote server'
-    },
-    {
-      name: 'port',
-      label: 'SSH Port',
-      type: 'number',
-      required: true,
-      placeholder: '22',
-      helperText: 'SSH port number (usually 22)',
-      validation: {
-        min: 1,
-        max: 65535
-      }
-    },
-    {
-      name: 'username',
-      label: 'Username',
-      type: 'text',
-      required: true,
-      placeholder: 'root',
-      helperText: 'Username to connect as'
-    },
-    {
-      name: 'jump_via',
-      label: 'Jump Host',
-      type: 'select',
-      required: false,
-      placeholder: 'Select a jump host (optional)',
-      helperText: 'Connect through another host (bastion/jump host)',
-      options: [
-        { value: '', label: 'No jump host' },
-        ...jumpHosts
-          .filter(h => h.id !== editingHost?.id)
-          .map(h => ({ value: h.id.toString(), label: `${h.name} (${h.address})` }))
-      ]
-    },
-    {
-      name: 'key_fingerprint',
-      label: 'Key Fingerprint',
-      type: 'text',
-      required: false,
-      placeholder: 'SHA256:ABC123... (optional)',
-      helperText: 'Expected SSH host key fingerprint for security'
-    }
-  ];
-
-  // Handle edit host
-  const handleEditHost = async (values: HostFormData) => {
-    if (!editingHost) return;
-    try {
-      setSubmitting(true);
-      const hostData = {
-        name: values.name,
-        address: values.address,
-        port: Number(values.port),
-        username: values.username,
-        jump_via: values.jump_via && String(values.jump_via) !== '' ? String(values.jump_via) : '',
-        key_fingerprint: values.key_fingerprint && values.key_fingerprint.trim() !== '' ? values.key_fingerprint.trim() : ''
-      };
-      
-      const payload = {
-        name: hostData.name,
-        address: hostData.address,
-        port: hostData.port,
-        username: hostData.username,
-        jump_via: hostData.jump_via,
-        key_fingerprint: hostData.key_fingerprint
-      };
-      
-      const response = await hostsService.updateHost(editingHost.name, payload);
-      
-      if (response.success) {
-        setShowEditModal(false);
-        setEditingHost(null);
-        showSuccess('Host updated', `${hostData.name} has been updated successfully`);
-        
-        // Update the host in the list
-        setHosts(prev => prev.map(h => 
-          h.id === editingHost.id 
-            ? { ...h, name: hostData.name, address: hostData.address }
-            : h
-        ));
-      } else {
-        showError('Failed to update host', response.message || 'Please check your input and try again');
-      }
-    } catch (error) {
-      console.error('Host update error:', error);
-      showError('Failed to update host', 'Please check your input and try again');
-    } finally {
-      setSubmitting(false);
-    }
+  // Handle host updated callback from modal
+  const handleHostUpdated = (updatedHost: Host) => {
+    setEditingHost(null);
+    // Update the host in the list
+    setHosts(prev => prev.map(h => 
+      h.id === updatedHost.id 
+        ? { ...h, name: updatedHost.name, address: updatedHost.address }
+        : h
+    ));
   };
 
   const handleHostClick = async (host: DiffHost) => {
@@ -306,7 +201,7 @@ const DiffPage: React.FC = () => {
                 // Fetch full host details
                 const response = await hostsService.getHostByName(host.name);
                 if (response.success && response.data) {
-                  setEditingHost({ ...host, ...response.data });
+                  setEditingHost(response.data);
                   setShowEditModal(true);
                 } else {
                   showError('Failed to load host details', 'Please try again');
@@ -630,39 +525,16 @@ const DiffPage: React.FC = () => {
       </Modal>
 
       {/* Edit Host Modal */}
-      <Modal
+      <HostEditModal
         isOpen={showEditModal}
         onClose={() => {
           setShowEditModal(false);
           setEditingHost(null);
         }}
-        title="Edit Host"
-        size="lg"
-      >
-        {editingHost && (
-          <Form
-            fields={getFormFields()}
-            onSubmit={(values) => handleEditHost(values as unknown as HostFormData)}
-            submitText="Save Changes"
-            cancelText="Cancel"
-            onCancel={() => {
-              setShowEditModal(false);
-              setEditingHost(null);
-            }}
-            loading={submitting}
-            layout="grid"
-            gridCols={2}
-            initialValues={{
-              name: editingHost.name,
-              address: editingHost.address,
-              port: (editingHost as any).port || 22,
-              username: (editingHost as any).username || '',
-              key_fingerprint: (editingHost as any).key_fingerprint || '',
-              jump_via: (editingHost as any).jump_via || ''
-            }}
-          />
-        )}
-      </Modal>
+        host={editingHost}
+        onHostUpdated={handleHostUpdated}
+        jumpHosts={jumpHosts}
+      />
     </div>
   );
 };
