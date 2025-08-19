@@ -70,7 +70,7 @@ impl fmt::Display for SshClientError {
                 write!(f, "Command failed. Expected: {expected}, got: '{out}'")
             }
             Self::IndirectError(host, original_error) => {
-                write!(f, "Jump host {host} is not reachable: {original_error}")
+                write!(f, "Cannot connect via jump host {host}: {original_error}")
             }
             Self::UnknownKey => write!(f, "Host responded with an unknown hostkey."),
             Self::NotAuthenticated => write!(f, "Couldn't authenticate on the host."),
