@@ -33,6 +33,7 @@ import { useNotifications } from '../contexts/NotificationContext';
 import { keysService } from '../services/api/keys';
 import { usersService } from '../services/api/users';
 import { authorizationsService } from '../services/api/authorizations';
+import UserEditModal from '../components/UserEditModal';
 import type {
   PublicUserKey,
   User,
@@ -72,6 +73,7 @@ const KeysPage: React.FC = () => {
   const [selectedKey, setSelectedKey] = useState<ExtendedKey | null>(null);
   const [keyDetails, setKeyDetails] = useState<KeyDetails | null>(null);
   const [filters, setFilters] = useState<KeyFilters>({});
+  const [editingUser, setEditingUser] = useState<User | null>(null);
   
   // Modal states
   const [showAddModal, setShowAddModal] = useState(false);
@@ -80,6 +82,7 @@ const KeysPage: React.FC = () => {
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [showBulkAssignModal, setShowBulkAssignModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showUserEditModal, setShowUserEditModal] = useState(false);
   
   // Edit state for inline comment editing
   const [editingComment, setEditingComment] = useState(false);
@@ -317,6 +320,14 @@ const KeysPage: React.FC = () => {
     }
   };
 
+  // Handle user updated callback from edit modal
+  const handleUserUpdated = () => {
+    setEditingUser(null);
+    setShowUserEditModal(false);
+    // Reload users and keys to get updated data
+    loadKeys();
+  };
+
   // Handle bulk assignment
   const handleBulkAssign = async () => {
     try {
@@ -457,6 +468,26 @@ const KeysPage: React.FC = () => {
           <span className={item.user_id && item.user_id !== 0 ? 'text-gray-900 dark:text-gray-100' : 'text-gray-400'}>
             {(value as string) || 'Unassigned'}
           </span>
+          {item.user_id && item.user_id !== 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={async (e) => {
+                e.stopPropagation();
+                const user = users.find(u => u.id === item.user_id);
+                if (user) {
+                  setEditingUser(user);
+                  setShowUserEditModal(true);
+                } else {
+                  showError('User not found', 'Unable to load user details');
+                }
+              }}
+              title="Edit user"
+              className="p-1 h-auto hover:bg-gray-100 dark:hover:bg-gray-700"
+            >
+              <Edit2 size={14} className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300" />
+            </Button>
+          )}
         </div>
       ),
     },
@@ -1147,6 +1178,18 @@ const KeysPage: React.FC = () => {
           />
         </div>
       </Modal>
+
+      {/* Edit User Modal */}
+      <UserEditModal
+        isOpen={showUserEditModal}
+        onClose={() => {
+          setShowUserEditModal(false);
+          setEditingUser(null);
+        }}
+        user={editingUser}
+        onUserUpdated={handleUserUpdated}
+        users={users}
+      />
     </div>
   );
 };
