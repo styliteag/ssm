@@ -24,6 +24,12 @@ export const debugCsrfToken = () => {
 
 // Expose debug function to window for browser console access
 if (typeof window !== 'undefined') {
-  (window as any).debugCsrfToken = debugCsrfToken;
-  (window as any).getCsrfTokenDebug = getCsrfToken;
+  (window as typeof window & {
+    debugCsrfToken?: typeof debugCsrfToken;
+    getCsrfTokenDebug?: typeof getCsrfToken;
+  }).debugCsrfToken = debugCsrfToken;
+  (window as typeof window & {
+    debugCsrfToken?: typeof debugCsrfToken;
+    getCsrfTokenDebug?: typeof getCsrfToken;
+  }).getCsrfTokenDebug = getCsrfToken;
 }
