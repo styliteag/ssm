@@ -111,6 +111,15 @@ export const getHostDiffDetails = async (hostName: string, forceUpdate = false):
   };
 };
 
+// Sync SSH keys to a host (apply all changes)
+export const syncKeys = async (hostName: string): Promise<void> => {
+  const response = await api.post<unknown>(`/diff/${encodeURIComponent(hostName)}/sync`);
+
+  if (!response.success) {
+    throw new Error(response.message || 'Failed to sync keys');
+  }
+};
+
 // Authorize an unauthorized key by creating an authorization
 export const authorizeKey = async (hostName: string, username: string, login: string, options?: string): Promise<void> => {
   // First get the host and user IDs
@@ -144,6 +153,7 @@ export const diffApi = {
   getAllHosts,
   getHostDiff,
   getHostDiffDetails,
+  syncKeys,
   authorizeKey,
 };
 
