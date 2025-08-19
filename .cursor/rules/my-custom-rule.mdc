@@ -1,6 +1,5 @@
 ---
-description: Rust SSM Application Assistant
-globs: 
+alwaysApply: true
 ---
 # Rust SSM Application Assistant
 
