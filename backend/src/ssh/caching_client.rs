@@ -201,4 +201,46 @@ impl CachingSshClient {
 
         logins.map(|logins| logins.into_iter().map(|response| response.login).collect())
     }
+
+    /// Apply changes to synchronize SSH keys on a host
+    pub async fn apply_host_changes(&self, host: Host) -> Result<(), SshClientError> {
+        // Get the current diff to understand what changes need to be applied
+        let (_, diff_result) = self.get_host_diff(host.clone(), true).await;
+        
+        match diff_result {
+            Ok(diffs) => {
+                // If there are no differences, nothing to do
+                if diffs.is_empty() {
+                    return Ok(());
+                }
+                
+                // Get the expected authorized keys from the database
+                let mut conn = self.conn.get().unwrap();
+                let expected_keys = host.get_authorized_keys(&mut conn)?;
+                
+                // Group keys by login to get unique logins
+                let mut logins = std::collections::HashSet::new();
+                for key in &expected_keys {
+                    logins.insert(key.login.clone());
+                }
+                
+                // Apply authorized_keys for each login using existing method
+                for login in logins {
+                    let mut conn = self.conn.get().unwrap();
+                    let authorized_keys_content = host.get_authorized_keys_file_for(&self.ssh_client, &mut conn, &login)?;
+                    
+                    self.ssh_client.clone().set_authorized_keys(host.name.clone(), login, authorized_keys_content).await?;
+                }
+                
+                Ok(())
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Invalidate the cache for a specific host
+    pub async fn invalidate_cache(&self, host_name: &str) {
+        let mut lock = self.cache.write().await;
+        let _ = lock.remove(host_name);
+    }
 }

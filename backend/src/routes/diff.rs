@@ -3,7 +3,7 @@ use crate::{
     ssh::{CachingSshClient, DiffItem, AuthorizedKey},
 };
 use actix_web::{
-    get,
+    get, post,
     web::{self, Data, Path, Query},
     HttpResponse, Responder, Result,
 };
@@ -23,7 +23,8 @@ use crate::models::Host;
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(get_hosts_for_diff)
         .service(get_host_diff)
-        .service(get_diff_details);
+        .service(get_diff_details)
+        .service(sync_host_keys);
 }
 
 #[derive(Serialize, ToSchema)]
@@ -437,6 +438,72 @@ async fn get_diff_details(
         Err(error) => {
             error!("Failed to get detailed diff for host '{}': {}", host.name, error);
             Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error.to_string())))
+        }
+    }
+}
+
+/// Sync SSH keys to a host by applying all pending changes
+#[utoipa::path(
+    post,
+    path = "/api/diff/{name}/sync",
+    security(
+        ("session_auth" = [])
+    ),
+    params(
+        ("name" = String, Path, description = "Host name")
+    ),
+    responses(
+        (status = 200, description = "SSH keys synchronized successfully", body = ApiResponse<serde_json::Value>),
+        (status = 404, description = "Host not found", body = ApiError),
+        (status = 401, description = "Unauthorized - authentication required", body = ApiError),
+        (status = 500, description = "Sync operation failed", body = ApiError)
+    )
+)]
+#[post("/{name}/sync")]
+async fn sync_host_keys(
+    conn: Data<ConnectionPool>,
+    caching_ssh_client: Data<CachingSshClient>,
+    host_name: Path<String>,
+    identity: Option<Identity>,
+) -> Result<impl Responder> {
+    require_auth(identity)?;
+    info!("POST /api/diff/{}/sync - Starting SSH key synchronization", host_name);
+    
+    let res = Host::get_from_name(conn.get().unwrap(), host_name.to_string()).await;
+
+    let host = match res {
+        Ok(maybe_host) => {
+            let Some(host) = maybe_host else {
+                warn!("Host '{}' not found for sync operation", host_name);
+                return Ok(HttpResponse::NotFound().json(ApiError::not_found("Host not found".to_string())));
+            };
+            info!("Found host for sync: {} (id: {}, address: {})", host.name, host.id, host.address);
+            host
+        }
+        Err(error) => {
+            error!("Database error while looking up host '{}' for sync: {}", host_name, error);
+            return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error)));
+        }
+    };
+
+    info!("Applying SSH key synchronization for host '{}'", host.name);
+
+    // Apply the sync changes using the SSH client
+    match caching_ssh_client.apply_host_changes(host.clone()).await {
+        Ok(_) => {
+            info!("Successfully synchronized SSH keys for host '{}'", host.name);
+            
+            // Clear the cache for this host to force a fresh diff on next request
+            caching_ssh_client.invalidate_cache(&host.name).await;
+            
+            Ok(HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+                "message": format!("SSH keys synchronized successfully for host '{}'", host.name),
+                "host": host.name
+            }))))
+        }
+        Err(error) => {
+            error!("Failed to sync SSH keys for host '{}': {}", host.name, error);
+            Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(format!("Sync operation failed: {}", error))))
         }
     }
 }
