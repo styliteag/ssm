@@ -75,9 +75,10 @@ export const HostEditModal: React.FC<HostEditModalProps> = ({
     {
       name: 'jump_via',
       label: 'Jump Host',
-      type: 'select',
-      placeholder: 'Select a jump host (optional)',
-      helperText: 'Optional: Use another host as a jump/bastion host',
+      type: 'searchable-select',
+      placeholder: 'Search and select a jump host (optional)',
+      helperText: 'Optional: Use another host as a jump/bastion host. You can search by name or address.',
+      forcePosition: 'top',
       options: [
         { value: '', label: 'None (no jump host)' },
         ...jumpHosts

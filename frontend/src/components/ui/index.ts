@@ -8,3 +8,5 @@ export { default as Modal } from './Modal';
 export type { ModalProps } from './Modal';
 export { default as Form } from './Form';
 export type { FormField, FormProps, FormErrors } from './Form';
+export { default as SearchableSelect } from './SearchableSelect';
+export type { SearchableSelectProps, SelectOption } from './SearchableSelect';
