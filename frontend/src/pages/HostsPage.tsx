@@ -34,10 +34,7 @@ import type {
 } from '../types';
 
 interface ExtendedHost extends Host {
-  connectionStatus?: 'online' | 'offline' | 'testing' | 'unknown';
   lastTested?: Date;
-  authorizations?: Array<{ id: number; username: string; login: string; options?: string }>;
-  connectionError?: string;
   [key: string]: unknown;
 }
 
@@ -61,68 +58,77 @@ const HostsPage: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [testing, setTesting] = useState<Record<number, boolean>>({});
 
-  // Load statuses for all hosts in parallel batches
-  const loadHostStatuses = useCallback(async (hostList: ExtendedHost[]) => {
-    const batchSize = 5;
+  // Refresh host status by fetching updated host details
+  const refreshHostStatus = useCallback(async (host: ExtendedHost) => {
+    try {
+      const response = await hostsService.getHostByName(host.name);
+      if (response.success && response.data) {
+        setHosts(prev => prev.map(h => 
+          h.id === host.id 
+            ? { ...response.data!, lastTested: new Date() }
+            : h
+        ));
+      }
+    } catch (error) {
+      console.error('Failed to refresh host status for', host.name, error);
+    }
+  }, []);
+
+  // Poll individual host statuses in parallel batches
+  const pollHostStatuses = useCallback(async (hostsList: ExtendedHost[]) => {
+    const batchSize = 10;
     
-    // Process hosts in batches of 5
-    for (let i = 0; i < hostList.length; i += batchSize) {
-      const batch = hostList.slice(i, i + batchSize);
+    // Process hosts in batches of 10
+    for (let i = 0; i < hostsList.length; i += batchSize) {
+      const batch = hostsList.slice(i, i + batchSize);
       
-      // Set all hosts in this batch to testing
-      setHosts(prev => prev.map(h => 
-        batch.some(batchHost => batchHost.id === h.id)
-          ? { ...h, connectionStatus: 'testing' }
-          : h
-      ));
-      
-      // Check all hosts in this batch in parallel
+      // Poll this batch in parallel
       const promises = batch.map(async (host) => {
         try {
-          // Test connection
-          const connectionResponse = await hostsService.testConnection(host.name);
-          const status = connectionResponse.success && connectionResponse.data?.success ? 'online' : 'offline';
-          let connectionError = undefined;
-          
-          if (!connectionResponse.success) {
-            // API call failed
-            connectionError = connectionResponse.message || 'Connection failed';
-          } else if (connectionResponse.data?.success === false) {
-            // API succeeded but connection test failed
-            connectionError = connectionResponse.data.message || 'Connection test failed';
+          const response = await hostsService.getHostByName(host.name);
+          if (response.success && response.data) {
+            setHosts(prev => prev.map(h => 
+              h.id === host.id 
+                ? { ...response.data!, lastTested: new Date() }
+                : h
+            ));
+          } else {
+            // API returned error - update host with error status
+            console.error('API error for host', host.name, response.message);
+            setHosts(prev => prev.map(h => 
+              h.id === host.id 
+                ? { 
+                    ...h, 
+                    connection_status: 'error',
+                    connection_error: response.message || 'API request failed',
+                    lastTested: new Date() 
+                  }
+                : h
+            ));
           }
-          
-          // Load authorizations
-          let authorizations: Array<{ id: number; username: string; login: string; options?: string }> = [];
-          try {
-            const authResponse = await hostsService.getHostAuthorizations(host.name);
-            if (authResponse.success && authResponse.data) {
-              authorizations = authResponse.data;
-            }
-          } catch (error) {
-            console.error('Failed to load authorizations for', host.name, error);
-          }
-          
-          setHosts(prev => prev.map(h => 
-            h.id === host.id 
-              ? { ...h, connectionStatus: status, lastTested: new Date(), connectionError, authorizations }
-              : h
-          ));
         } catch (error) {
+          console.error('Failed to poll status for host', host.name, error);
+          // Update host with network/request error
+          const errorMessage = error instanceof Error ? error.message : 'Network error';
           setHosts(prev => prev.map(h => 
             h.id === host.id 
-              ? { ...h, connectionStatus: 'offline', lastTested: new Date(), connectionError: error instanceof Error ? error.message : 'Connection failed' }
+              ? { 
+                  ...h, 
+                  connection_status: 'error',
+                  connection_error: `Polling failed: ${errorMessage}`,
+                  lastTested: new Date() 
+                }
               : h
           ));
         }
       });
       
-      // Wait for all hosts in this batch to complete
+      // Wait for this batch to complete before starting the next batch
       await Promise.allSettled(promises);
       
-      // Small delay before next batch to avoid overwhelming server
-      if (i + batchSize < hostList.length) {
-        await new Promise(resolve => setTimeout(resolve, 100));
+      // Small delay between batches to prevent overwhelming the backend
+      if (i + batchSize < hostsList.length) {
+        await new Promise(resolve => setTimeout(resolve, 200));
       }
     }
   }, []);
@@ -133,21 +139,22 @@ const HostsPage: React.FC = () => {
       setLoading(true);
       const response = await hostsService.getHosts();
       if (response.success && response.data) {
-        const hostsWithStatus = response.data.items.map(host => ({
-          ...host,
-          connectionStatus: 'unknown' as const
+        // Host data includes basic info with "unknown" status - will be updated individually
+        const hostsWithUnknownStatus = response.data.items.map(host => ({ 
+          ...host, 
+          lastTested: new Date() 
         }));
-        setHosts(hostsWithStatus);
+        setHosts(hostsWithUnknownStatus);
         
-        // Start async status checks for all hosts
-        loadHostStatuses(hostsWithStatus);
+        // Start polling individual host statuses in background
+        pollHostStatuses(hostsWithUnknownStatus);
       }
     } catch {
       showError('Failed to load hosts', 'Please try again later');
     } finally {
       setLoading(false);
     }
-  }, [showError, loadHostStatuses]);
+  }, [showError, pollHostStatuses]);
 
   // Load jump hosts for dropdown
   const loadJumpHosts = useCallback(async () => {
@@ -170,46 +177,28 @@ const HostsPage: React.FC = () => {
   const testConnection = useCallback(async (host: ExtendedHost) => {
     try {
       setTesting(prev => ({ ...prev, [host.id]: true }));
-      setHosts(prev => prev.map(h => 
-        h.id === host.id 
-          ? { ...h, connectionStatus: 'testing' }
-          : h
-      ));
-
-      const response = await hostsService.testConnection(host.name);
-      const status = response.success && response.data?.success ? 'online' : 'offline';
       
-      let connectionError = undefined;
-      if (!response.success) {
-        connectionError = response.message || 'Connection failed';
-      } else if (response.data?.success === false) {
-        connectionError = response.data.message || 'Connection test failed';
-      }
+      // Refresh host data which includes updated connection status
+      await refreshHostStatus(host);
       
-      setHosts(prev => prev.map(h => 
-        h.id === host.id 
-          ? { ...h, connectionStatus: status, lastTested: new Date(), connectionError }
-          : h
-      ));
-
-      if (status === 'online') {
-        showSuccess('Connection successful', `Successfully connected to ${host.name}`);
-      } else {
-        const errorMsg = connectionError || 'Unable to connect to host';
-        showError('Connection failed', errorMsg);
+      // Get the updated host to check its status
+      const updatedResponse = await hostsService.getHostByName(host.name);
+      if (updatedResponse.success && updatedResponse.data) {
+        const updatedHost = updatedResponse.data;
+        if (updatedHost.connection_status === 'online') {
+          showSuccess('Connection successful', `Successfully connected to ${host.name}`);
+        } else {
+          const errorMsg = updatedHost.connection_error || 'Unable to connect to host';
+          showError('Connection failed', errorMsg);
+        }
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Connection failed';
-      setHosts(prev => prev.map(h => 
-        h.id === host.id 
-          ? { ...h, connectionStatus: 'offline', lastTested: new Date(), connectionError: errorMessage }
-          : h
-      ));
       showError('Connection test failed', errorMessage);
     } finally {
       setTesting(prev => ({ ...prev, [host.id]: false }));
     }
-  }, [showSuccess, showError]);
+  }, [showSuccess, showError, refreshHostStatus]);
 
   // Form field definitions for add host modal
   const getFormFields = (): FormField[] => [
@@ -432,12 +421,14 @@ const HostsPage: React.FC = () => {
         {/* Portal tooltip rendered at document body level */}
         {isVisible && (
           <div 
-            className="fixed bg-gray-900 dark:bg-gray-800 text-white text-sm rounded-lg shadow-xl border border-gray-700 p-4 min-w-80 max-w-96 pointer-events-none transition-opacity duration-200"
+            className="fixed bg-gray-900 dark:bg-gray-800 text-white text-sm rounded-lg shadow-xl border border-gray-700 p-4 pointer-events-none transition-opacity duration-200"
             style={{
               left: `${position.x}px`,
               top: `${position.y}px`,
               transform: 'translateX(-50%) translateY(-100%)',
-              zIndex: 99999
+              zIndex: 99999,
+              width: '480px',
+              maxWidth: '480px'
             }}
           >
             {/* Arrow */}
@@ -447,28 +438,28 @@ const HostsPage: React.FC = () => {
             <div className="space-y-3">
               <div className="border-b border-gray-700 pb-2">
                 <h4 className="font-semibold text-white flex items-center gap-2">
-                  <Server size={16} />
-                  {host.name}
+                  <Server size={16} className="flex-shrink-0" />
+                  <span style={{ wordBreak: 'break-word' }}>{host.name}</span>
                 </h4>
                 <p className="text-gray-300 text-xs flex items-center gap-1">
-                  <Globe size={12} />
-                  {host.address}:{host.port}
+                  <Globe size={12} className="flex-shrink-0" />
+                  <span style={{ wordBreak: 'break-word' }}>{host.address}:{host.port}</span>
                 </p>
               </div>
               
               {/* Connection Status */}
               <div>
                 <div className="flex items-center gap-2 mb-1">
-                  {host.connectionStatus === 'online' && <CheckCircle size={14} className="text-green-400" />}
-                  {host.connectionStatus === 'offline' && <AlertCircle size={14} className="text-red-400" />}
-                  {host.connectionStatus === 'testing' && <Clock size={14} className="text-yellow-400" />}
-                  {host.connectionStatus === 'unknown' && <Activity size={14} className="text-gray-400" />}
+                  {host.connection_status === 'online' && <CheckCircle size={14} className="text-green-400" />}
+                  {host.connection_status === 'offline' && <AlertCircle size={14} className="text-red-400" />}
+                  {host.connection_status === 'error' && <AlertCircle size={14} className="text-orange-400" />}
+                  {(!host.connection_status || host.connection_status === 'unknown') && <Activity size={14} className="text-gray-400" />}
                   
                   <span className="font-medium">
-                    {host.connectionStatus === 'online' && 'Online'}
-                    {host.connectionStatus === 'offline' && 'Offline'}
-                    {host.connectionStatus === 'testing' && 'Testing...'}
-                    {host.connectionStatus === 'unknown' && 'Unknown'}
+                    {host.connection_status === 'online' && 'Online'}
+                    {host.connection_status === 'offline' && 'Offline'}
+                    {host.connection_status === 'error' && 'Error'}
+                    {(!host.connection_status || host.connection_status === 'unknown') && 'Unknown'}
                   </span>
                 </div>
                 
@@ -478,11 +469,23 @@ const HostsPage: React.FC = () => {
                   </p>
                 )}
                 
-                {host.connectionError && (
-                  <p className="text-red-400 text-xs mt-1 flex items-start gap-1">
-                    <span>❌</span>
-                    <span>{host.connectionError}</span>
-                  </p>
+                {host.connection_error && (
+                  <div className="text-red-400 text-xs mt-1">
+                    <div className="flex items-start gap-1" style={{ maxWidth: '100%' }}>
+                      <span className="flex-shrink-0">❌</span>
+                      <span 
+                        className="flex-1" 
+                        style={{ 
+                          wordBreak: 'break-word',
+                          overflowWrap: 'anywhere',
+                          minWidth: 0,
+                          maxWidth: '100%'
+                        }}
+                      >
+                        {host.connection_error}
+                      </span>
+                    </div>
+                  </div>
                 )}
               </div>
               
@@ -492,13 +495,17 @@ const HostsPage: React.FC = () => {
                   <Key size={14} />
                   <span className="font-medium">SSH Details</span>
                 </div>
-                <div className="text-xs text-gray-300 space-y-1">
-                  <div>User: <code className="bg-gray-800 px-1 rounded">{host.username}</code></div>
+                <div className="text-xs text-gray-300 space-y-1" style={{ maxWidth: '100%' }}>
+                  <div style={{ wordBreak: 'break-word' }}>User: <code className="bg-gray-800 px-1 rounded">{host.username}</code></div>
                   {host.key_fingerprint && (
-                    <div>Fingerprint: <code className="bg-gray-800 px-1 rounded text-xs">{host.key_fingerprint.slice(0, 20)}...</code></div>
+                    <div style={{ wordBreak: 'break-word' }}>
+                      Fingerprint: <code className="bg-gray-800 px-1 rounded text-xs" style={{ wordBreak: 'break-all' }}>
+                        {host.key_fingerprint.slice(0, 20)}...
+                      </code>
+                    </div>
                   )}
-                  {host.jump_via && (
-                    <div>Jump host: {jumpHosts.find(h => h.id === host.jump_via)?.name || 'Unknown'}</div>
+                  {host.jumphost_name && (
+                    <div style={{ wordBreak: 'break-word' }}>Jump host: {host.jumphost_name}</div>
                   )}
                 </div>
               </div>
@@ -512,9 +519,9 @@ const HostsPage: React.FC = () => {
                   </div>
                   <div className="text-xs text-gray-300 space-y-1 max-h-20 overflow-y-auto">
                     {host.authorizations.map((auth, index) => (
-                      <div key={auth.id || index} className="flex justify-between">
-                        <span>{auth.username}</span>
-                        <code className="bg-gray-800 px-1 rounded">{auth.login}</code>
+                      <div key={auth.id || index} className="flex justify-between gap-2" style={{ alignItems: 'flex-start' }}>
+                        <span style={{ wordBreak: 'break-word', flex: 1 }}>{auth.username}</span>
+                        <code className="bg-gray-800 px-1 rounded flex-shrink-0" style={{ fontSize: '10px' }}>{auth.login}</code>
                       </div>
                     ))}
                   </div>
@@ -578,28 +585,28 @@ const HostsPage: React.FC = () => {
       )
     },
     {
-      key: 'connectionStatus',
+      key: 'connection_status',
       header: 'Status',
       sortable: true,
       render: (status, host) => {
         const icons = {
           online: <CheckCircle size={16} className="text-green-500" />,
           offline: <AlertCircle size={16} className="text-red-500" />,
-          testing: <Clock size={16} className="text-yellow-500 animate-pulse" />,
+          error: <AlertCircle size={16} className="text-orange-500" />,
           unknown: <Activity size={16} className="text-gray-400" />
         };
 
         const labels = {
           online: 'Online',
           offline: 'Offline',
-          testing: 'Testing...',
+          error: 'Error',
           unknown: 'Unknown'
         };
 
         const colors = {
           online: 'text-green-700 bg-green-50 dark:text-green-400 dark:bg-green-900/20',
           offline: 'text-red-700 bg-red-50 dark:text-red-400 dark:bg-red-900/20',
-          testing: 'text-yellow-700 bg-yellow-50 dark:text-yellow-400 dark:bg-yellow-900/20',
+          error: 'text-orange-700 bg-orange-50 dark:text-orange-400 dark:bg-orange-900/20',
           unknown: 'text-gray-700 bg-gray-50 dark:text-gray-400 dark:bg-gray-900/20'
         };
 
@@ -615,17 +622,15 @@ const HostsPage: React.FC = () => {
       }
     },
     {
-      key: 'jump_via',
+      key: 'jumphost_name',
       header: 'Jump Host',
-      render: (jumpVia) => {
-        if (!jumpVia) return <span className="text-gray-400">—</span>;
-        const jumpHost = jumpHosts.find(h => h.id === jumpVia);
-        return jumpHost ? (
+      render: (jumpHostName) => {
+        return jumpHostName ? (
           <span className="text-sm text-gray-600 dark:text-gray-400">
-            {jumpHost.name}
+            {jumpHostName}
           </span>
         ) : (
-          <span className="text-gray-400">Unknown</span>
+          <span className="text-gray-400">—</span>
         );
       }
     },
