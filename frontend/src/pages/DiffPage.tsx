@@ -13,6 +13,7 @@ import {
 import { diffApi, DiffHost, DetailedDiffResponse, DiffItemResponse } from '../services/api/diff';
 import { usersService } from '../services/api/users';
 import { hostsService } from '../services/api/hosts';
+import { authorizationsService } from '../services/api/authorizations';
 import type { Host, User, UserFormData } from '../types';
 import DiffIssue from '../components/DiffIssue';
 import HostEditModal from '../components/HostEditModal';
@@ -252,7 +253,17 @@ const DiffPage: React.FC = () => {
 
   // Handle assigning unknown key to existing user
   const handleAssignToExistingUser = async (userId: number) => {
-    if (!unknownKeyIssue || !unknownKeyIssue.details?.key) return;
+    if (!unknownKeyIssue || !unknownKeyIssue.details?.key || !selectedHost || !hostDetails) return;
+
+    // Find the login from the current login section where the unknown key issue is
+    const currentLogin = hostDetails.logins.find(login => 
+      login.issues.some(i => i === unknownKeyIssue)
+    )?.login;
+    
+    if (!currentLogin) {
+      showError('Cannot assign key', 'Login not found for this unknown key');
+      return;
+    }
 
     try {
       const keyData = {
@@ -264,19 +275,64 @@ const DiffPage: React.FC = () => {
         key_comment: unknownKeyIssue.details.key.comment || null
       };
 
-      await usersService.assignKeyToUser(keyData);
+      // Try to assign the key to the user
+      let keyAssigned = false;
+      try {
+        await usersService.assignKeyToUser(keyData);
+        keyAssigned = true;
+      } catch (keyError) {
+        // Key might already exist, which means it's already assigned to a user
+        const errorMessage = keyError instanceof Error ? keyError.message : String(keyError);
+        console.log('Caught key assignment error:', errorMessage);
+        
+        // Check for database error message from backend
+        if (errorMessage.includes('database error') || 
+            errorMessage.includes('UNIQUE constraint') || 
+            errorMessage.includes('already exists') || 
+            errorMessage.includes('key_base64')) {
+          console.log('Key already exists in the system');
+          // Don't re-throw, just continue without the key assigned
+        } else {
+          throw keyError; // Re-throw if it's a different error
+        }
+      }
+      
+      // Also create authorization to add the user to this host (if not already exists)
+      const authData = {
+        host_id: selectedHost.id,
+        user_id: userId,
+        login: currentLogin,
+        options: unknownKeyIssue.details.key.options || undefined
+      };
+      
+      let authorizationCreated = false;
+      try {
+        await authorizationsService.createAuthorization(authData);
+        authorizationCreated = true;
+      } catch (authError) {
+        // Authorization might already exist, which is fine
+        console.log('Authorization might already exist:', authError);
+      }
       
       const selectedUser = allUsers.find(u => u.id === userId);
-      showSuccess('Key assigned', `Key has been assigned to user "${selectedUser?.username}"`);
+      
+      // Construct appropriate success message based on what actually happened
+      if (keyAssigned && authorizationCreated) {
+        showSuccess('Key assigned and user added to host', `Key has been assigned to user "${selectedUser?.username}" and user has been added to host "${selectedHost.name}"`);
+      } else if (keyAssigned && !authorizationCreated) {
+        showSuccess('Key assigned', `Key has been assigned to user "${selectedUser?.username}" (user was already authorized on this host)`);
+      } else if (!keyAssigned && authorizationCreated) {
+        showSuccess('User added to host', `User "${selectedUser?.username}" has been added to host "${selectedHost.name}" (key was already assigned)`);
+      } else {
+        showSuccess('No changes needed', `User "${selectedUser?.username}" already has this key and is already authorized on this host`);
+      }
       
       setShowUnknownKeyModal(false);
       setUnknownKeyIssue(null);
       
       // Refresh the host details to show updated status
-      if (selectedHost) {
-        const refreshedDetails = await diffApi.getHostDiffDetails(selectedHost.name, true);
-        setHostDetails(refreshedDetails);
-      }
+      const refreshedDetails = await diffApi.getHostDiffDetails(selectedHost.name, true);
+      setHostDetails(refreshedDetails);
     } catch (error) {
       console.error('Error assigning key to user:', error);
       const errorMessage = error instanceof Error ? error.message : 'Please try again later';
@@ -286,7 +342,17 @@ const DiffPage: React.FC = () => {
 
   // Handle creating new user with unknown key
   const handleCreateNewUser = async () => {
-    if (!unknownKeyIssue || !unknownKeyIssue.details?.key) return;
+    if (!unknownKeyIssue || !unknownKeyIssue.details?.key || !selectedHost || !hostDetails) return;
+
+    // Find the login from the current login section where the unknown key issue is
+    const currentLogin = hostDetails.logins.find(login => 
+      login.issues.some(i => i === unknownKeyIssue)
+    )?.login;
+    
+    if (!currentLogin) {
+      showError('Cannot create user', 'Login not found for this unknown key');
+      return;
+    }
 
     const keyComment = unknownKeyIssue.details.key.comment;
     if (!keyComment || keyComment.trim() === '') {
@@ -364,19 +430,57 @@ const DiffPage: React.FC = () => {
       console.log('Key data being sent:', keyData);
       console.log('user_id type:', typeof keyData.user_id, 'value:', keyData.user_id);
 
-      await usersService.assignKeyToUser(keyData);
+      let keyAssigned = false;
+      try {
+        await usersService.assignKeyToUser(keyData);
+        keyAssigned = true;
+      } catch (keyError) {
+        // For a new user, key shouldn't already exist, but handle gracefully
+        const errorMessage = keyError instanceof Error ? keyError.message : String(keyError);
+        console.log('Caught key assignment error:', errorMessage);
+        
+        // Check for database error message from backend
+        if (errorMessage.includes('database error') || 
+            errorMessage.includes('UNIQUE constraint') || 
+            errorMessage.includes('already exists') || 
+            errorMessage.includes('key_base64')) {
+          console.log('Key already exists in the system - this is unexpected for a new user');
+          showError('Key already exists', 'This key is already assigned to another user. The new user was created but the key could not be assigned.');
+          // Don't re-throw, just continue without the key assigned
+        } else {
+          throw keyError; // Re-throw if it's a different error
+        }
+      }
       
-      showSuccess('User created', `New user "${userData.username}" has been created with the key`);
+      // Also create authorization to add the user to this host (only if key was assigned)
+      if (keyAssigned) {
+        const authData = {
+          host_id: selectedHost.id,
+          user_id: newUser.id,
+          login: currentLogin,
+          options: unknownKeyIssue.details.key.options || undefined
+        };
+        
+        try {
+          await authorizationsService.createAuthorization(authData);
+          showSuccess('User created and added to host', `New user "${userData.username}" has been created with the key and added to host "${selectedHost.name}"`);
+        } catch (authError) {
+          // This shouldn't happen for new users, but handle gracefully
+          console.log('Could not create authorization for new user:', authError);
+          showSuccess('User created', `New user "${userData.username}" has been created with the key`);
+        }
+      } else {
+        // If key wasn't assigned (already exists), just notify about user creation
+        showSuccess('User created', `New user "${userData.username}" has been created (key already exists in system)`);
+      }
       
       setShowUnknownKeyModal(false);
       setUnknownKeyIssue(null);
       
       // Refresh users list and host details
       await loadAllUsers();
-      if (selectedHost) {
-        const refreshedDetails = await diffApi.getHostDiffDetails(selectedHost.name, true);
-        setHostDetails(refreshedDetails);
-      }
+      const refreshedDetails = await diffApi.getHostDiffDetails(selectedHost.name, true);
+      setHostDetails(refreshedDetails);
     } catch (error) {
       console.error('Error creating user with key:', error);
       const errorMessage = error instanceof Error ? error.message : 'Please try again later';
