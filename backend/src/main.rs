@@ -15,8 +15,7 @@ use log::{error, info};
 use serde::Deserialize;
 use ssh::{CachingSshClient, SshClient};
 
-use diesel::r2d2::ConnectionManager;
-use diesel::r2d2::Pool;
+use diesel::r2d2::{ConnectionManager, CustomizeConnection, Pool};
 
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use russh::keys::load_secret_key;
@@ -58,6 +57,28 @@ pub enum DbConnection {
 }
 
 pub type ConnectionPool = Pool<ConnectionManager<DbConnection>>;
+
+#[derive(Debug)]
+struct SqliteConnectionCustomizer;
+
+impl CustomizeConnection<DbConnection, diesel::r2d2::Error> for SqliteConnectionCustomizer {
+    fn on_acquire(&self, conn: &mut DbConnection) -> Result<(), diesel::r2d2::Error> {
+        use diesel::{sql_query, RunQueryDsl};
+        
+        match conn {
+            DbConnection::Sqlite(_) => {
+                sql_query("PRAGMA foreign_keys = ON")
+                    .execute(conn)
+                    .map_err(|e| diesel::r2d2::Error::QueryError(e))?;
+            }
+            #[cfg(feature = "postgres")]
+            DbConnection::Postgresql(_) => {}
+            #[cfg(feature = "mysql")]
+            DbConnection::Mysql(_) => {}
+        }
+        Ok(())
+    }
+}
 
 const fn default_timeout() -> Duration {
     Duration::from_secs(120)
@@ -225,6 +246,7 @@ async fn main() -> Result<(), std::io::Error> {
     let database_url = configuration.database_url.clone();
     let manager = ConnectionManager::<DbConnection>::new(database_url);
     let pool: ConnectionPool = Pool::builder()
+        .connection_customizer(Box::new(SqliteConnectionCustomizer))
         .build(manager)
         .expect("Database URL should be a valid URI");
 
