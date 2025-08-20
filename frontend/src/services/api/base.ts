@@ -18,18 +18,13 @@ const createApiClient = (): AxiosInstance => {
   // Request interceptor to add CSRF token for ALL API requests
   client.interceptors.request.use(
     (config) => {
-      const method = config.method?.toUpperCase();
       const url = config.url || '';
       
       // Add CSRF token for all API requests except auth endpoints
       if (!url.startsWith('/auth/')) {
         const token = getCsrfToken();
-        console.log(`${method} request to ${config.url}, CSRF token:`, token); // Debug log
         if (token) {
           config.headers['X-CSRF-Token'] = token;
-          console.log('Added X-CSRF-Token header'); // Debug log
-        } else {
-          console.warn('No CSRF token available for', method, 'request to', url); // Debug log
         }
       }
       return config;
