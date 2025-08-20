@@ -44,8 +44,13 @@ export const hostsService = {
   },
 
   // Update existing host by name
-  updateHost: async (name: string, host: Partial<Host>): Promise<ApiResponse<Host>> => {
-    return api.put<Host>(`/host/${encodeURIComponent(name)}`, host);
+  updateHost: async (name: string, host: Partial<Host> & { jump_via?: string | number }): Promise<ApiResponse<Host>> => {
+    // Convert jump_via to string for backend compatibility
+    const requestData = {
+      ...host,
+      jump_via: host.jump_via !== undefined ? String(host.jump_via) : ''
+    };
+    return api.put<Host>(`/host/${encodeURIComponent(name)}`, requestData);
   },
 
   // Delete host by name
