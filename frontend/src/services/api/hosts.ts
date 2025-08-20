@@ -133,13 +133,21 @@ export const hostsService = {
           }
         };
       }
-    } catch (error) {
+    } catch (error: any) {
+      // Extract error message from API response if available
+      let errorMessage = 'Connection failed';
+      if (error?.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error?.message) {
+        errorMessage = error.message;
+      }
+
       return {
         success: false,
-        message: 'Connection failed',
+        message: errorMessage,
         data: {
           success: false,
-          message: error instanceof Error ? error.message : 'Unknown error occurred'
+          message: errorMessage
         }
       };
     }
