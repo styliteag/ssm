@@ -137,3 +137,27 @@ The API uses singular resource names in the URL paths:
 - Authentication: `.htpasswd` file for user credentials (bcrypt encrypted)
 - Environment variables: `DATABASE_URL`, `RUST_LOG`, `CONFIG`, `VITE_API_URL`, `SESSION_KEY`
 - Security: All API endpoints require authentication except `/api/auth/login` and `/api/auth/logout`
+
+## Critical Frontend/Backend Data Type Compatibility Issues
+
+### Jump Host (jump_via) Field Handling
+**⚠️ CRITICAL**: The `jump_via` field requires special handling due to type system differences:
+
+- **Backend Expectation**: `UpdateHostRequest.jump_via` field uses custom deserializer `empty_string_as_none_int` that expects a **STRING** which gets parsed to `Option<i32>`
+  - Empty string `""` → `None` (no jump host)
+  - Non-empty string like `"123"` → `Some(123)` (jump host with ID 123)
+
+- **Frontend Type System**: `Host.jump_via` is typed as `number | undefined` in TypeScript
+
+- **Solution Applied**: The `hostsService.updateHost()` function in `frontend/src/services/api/hosts.ts` automatically converts the `jump_via` field to string before sending to backend:
+  ```typescript
+  const requestData = {
+    ...host,
+    jump_via: host.jump_via !== undefined ? String(host.jump_via) : ''
+  };
+  ```
+
+**Never modify the jump_via handling without ensuring compatibility between:**
+1. Frontend TypeScript types (`Host.jump_via?: number`)
+2. Backend Rust deserializer (`empty_string_as_none_int` expecting string)
+3. The conversion logic in `hostsService.updateHost()`
