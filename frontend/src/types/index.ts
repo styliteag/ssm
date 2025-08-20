@@ -49,6 +49,10 @@ export interface Host {
   port: number;
   key_fingerprint?: string;
   jump_via?: number;
+  jumphost_name?: string;
+  connection_status: string;
+  connection_error?: string;
+  authorizations: Array<{ id: number; username: string; login: string; options?: string }>;
 }
 
 export interface NewHost {

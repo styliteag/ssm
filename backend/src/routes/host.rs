@@ -45,6 +45,9 @@ pub struct HostResponse {
     key_fingerprint: Option<String>,
     jump_via: Option<i32>,
     jumphost_name: Option<String>,
+    connection_status: String,
+    connection_error: Option<String>,
+    authorizations: Vec<UserAndOptions>,
 }
 
 impl From<Host> for HostResponse {
@@ -58,6 +61,9 @@ impl From<Host> for HostResponse {
             key_fingerprint: host.key_fingerprint,
             jump_via: host.jump_via,
             jumphost_name: None, // Will be populated separately if needed
+            connection_status: "unknown".to_string(),
+            connection_error: None,
+            authorizations: Vec::new(),
         }
     }
 }
@@ -83,11 +89,49 @@ async fn get_all_hosts(
 ) -> Result<impl Responder> {
     // Check authentication
     require_auth(identity)?;
-    let hosts = web::block(move || Host::get_all_hosts(&mut conn.get().unwrap())).await?;
+    
+    let conn_clone = conn.clone();
+    let hosts = web::block(move || Host::get_all_hosts(&mut conn_clone.get().unwrap())).await?;
     
     match hosts {
         Ok(hosts) => {
-            let host_responses: Vec<HostResponse> = hosts.into_iter().map(HostResponse::from).collect();
+            let mut host_responses: Vec<HostResponse> = Vec::new();
+            
+            for host in hosts {
+                let mut host_response = HostResponse::from(host.clone());
+                
+                // Set jumphost name if applicable
+                if let Some(jumphost_id) = host.jump_via {
+                    match Host::get_from_id(conn.get().unwrap(), jumphost_id).await {
+                        Ok(Some(jumphost)) => {
+                            host_response.jumphost_name = Some(jumphost.name);
+                        }
+                        Ok(None) => {
+                            log::warn!("Jumphost with ID {} not found for host {}", jumphost_id, host.name);
+                        }
+                        Err(error) => {
+                            log::warn!("Failed to get jumphost for host {}: {}", host.name, error);
+                        }
+                    }
+                }
+                
+                // Don't test SSH connections in bulk - keep as unknown for performance
+                // Individual host endpoint will test connections when needed
+                
+                // Get authorizations for this host
+                match host.get_authorized_users(&mut conn.get().unwrap()) {
+                    Ok(authorizations) => {
+                        host_response.authorizations = authorizations;
+                    }
+                    Err(error) => {
+                        // Log error but don't fail the request
+                        log::warn!("Failed to get authorizations for host {}: {}", host.name, error);
+                    }
+                }
+                
+                host_responses.push(host_response);
+            }
+            
             Ok(HttpResponse::Ok().json(ApiResponse::success(host_responses)))
         }
         Err(error) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error))),
@@ -160,6 +204,7 @@ async fn get_logins(
 #[get("/{name}")]
 async fn get_host(
     conn: Data<ConnectionPool>,
+    caching_ssh_client: Data<CachingSshClient>,
     host_name: Path<String>,
     identity: Option<Identity>,
 ) -> Result<impl Responder> {
@@ -176,6 +221,7 @@ async fn get_host(
 
     let mut host_response = HostResponse::from(host.clone());
     
+    // Set jumphost name if applicable
     if let Some(jumphost_id) = host.jump_via {
         match Host::get_from_id(conn.get().unwrap(), jumphost_id).await {
             Ok(Some(jumphost)) => {
@@ -187,6 +233,29 @@ async fn get_host(
             Err(error) => {
                 return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error)));
             }
+        }
+    }
+    
+    // Test SSH connection to get status
+    match caching_ssh_client.get_logins(host.clone(), false).await {
+        Ok(_logins) => {
+            host_response.connection_status = "online".to_string();
+            host_response.connection_error = None;
+        }
+        Err(error) => {
+            host_response.connection_status = "offline".to_string();
+            host_response.connection_error = Some(error.to_string());
+        }
+    }
+    
+    // Get authorizations for this host
+    match host.get_authorized_users(&mut conn.get().unwrap()) {
+        Ok(authorizations) => {
+            host_response.authorizations = authorizations;
+        }
+        Err(error) => {
+            // Log error but don't fail the request
+            log::warn!("Failed to get authorizations for host {}: {}", host.name, error);
         }
     }
 
