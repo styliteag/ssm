@@ -2,11 +2,12 @@ import React, { useState, useCallback } from 'react';
 import { cn } from '../../utils/cn';
 import Button from './Button';
 import Input from './Input';
+import SearchableSelect from './SearchableSelect';
 
 export interface FormField {
   name: string;
   label: string;
-  type?: 'text' | 'email' | 'password' | 'number' | 'tel' | 'url' | 'search' | 'textarea' | 'select';
+  type?: 'text' | 'email' | 'password' | 'number' | 'tel' | 'url' | 'search' | 'textarea' | 'select' | 'searchable-select';
   placeholder?: string;
   required?: boolean;
   disabled?: boolean;
@@ -23,6 +24,7 @@ export interface FormField {
   className?: string;
   inputClassName?: string;
   rows?: number; // For textarea
+  forcePosition?: 'top' | 'bottom'; // For searchable-select positioning
 }
 
 export interface FormProps {
@@ -259,6 +261,34 @@ const Form: React.FC<FormProps> = ({
                 </option>
               ))}
             </select>
+            {error && (
+              <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+            )}
+            {field.helperText && !error && (
+              <p className="text-sm text-gray-500 dark:text-gray-400">{field.helperText}</p>
+            )}
+          </div>
+        );
+
+      case 'searchable-select':
+        return (
+          <div key={field.name} className={cn('space-y-1', field.className)}>
+            <label
+              htmlFor={field.name}
+              className="block text-sm font-medium text-gray-700 dark:text-gray-300"
+            >
+              {field.label}
+              {field.required && <span className="text-red-500 ml-1">*</span>}
+            </label>
+            <SearchableSelect
+              {...commonProps}
+              value={(values[field.name] as string) || ''}
+              options={field.options || []}
+              placeholder={field.placeholder}
+              onValueChange={(value) => handleChange(field.name, value)}
+              onBlur={() => handleBlur(field.name)}
+              forcePosition={field.forcePosition}
+            />
             {error && (
               <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
             )}
