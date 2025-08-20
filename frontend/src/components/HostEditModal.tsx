@@ -111,7 +111,7 @@ export const HostEditModal: React.FC<HostEditModalProps> = ({
         port: hostData.port,
         username: hostData.username,
         key_fingerprint: hostData.key_fingerprint,
-        jump_via: hostData.jump_via
+        jump_via: hostData.jump_via ? Number(hostData.jump_via) : undefined
       });
       
       if (response.success) {
