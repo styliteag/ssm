@@ -49,8 +49,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         if (response.data.logged_in) {
           try {
             await authService.getCsrfToken();
-          } catch (error) {
-            console.warn('Failed to fetch CSRF token:', error);
+          } catch {
+            // Failed to fetch CSRF token
           }
         }
       } else {

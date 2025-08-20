@@ -133,13 +133,14 @@ export const hostsService = {
           }
         };
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Extract error message from API response if available
       let errorMessage = 'Connection failed';
-      if (error?.response?.data?.message) {
-        errorMessage = error.response.data.message;
-      } else if (error?.message) {
-        errorMessage = error.message;
+      const errorObj = error as { response?: { data?: { message?: string } }; message?: string };
+      if (errorObj?.response?.data?.message) {
+        errorMessage = errorObj.response.data.message;
+      } else if (errorObj?.message) {
+        errorMessage = errorObj.message;
       }
 
       return {
