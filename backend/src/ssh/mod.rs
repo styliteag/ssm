@@ -1,4 +1,4 @@
-use log::info;
+use log::debug;
 use russh::keys::ssh_encoding::{Base64Writer, Encode};
 use russh::keys::{ssh_key::authorized_keys::ConfigOpts, Algorithm};
 use serde::Deserialize;
@@ -64,11 +64,11 @@ impl ConnectionDetails {
         key_fingerprint: String,
     ) -> Result<Self, SshClientError> {
         let lookup = format!("{address}:{port}");
-        info!("{host_name}: Trying to resolve address {lookup}");
+        debug!("{host_name}: Trying to resolve address {lookup}");
         match lookup_host(lookup.clone()).await {
             Ok(mut socket) => {
                 let resolved_addr = socket.next().ok_or(SshClientError::LookupFailure)?;
-                info!("{host_name}: Resolved {lookup} to {resolved_addr}");
+                debug!("{host_name}: Resolved {lookup} to {resolved_addr}");
 
                 Ok(Self {
                     host_name,
@@ -79,7 +79,7 @@ impl ConnectionDetails {
                 })
             }
             Err(e) => {
-                info!("{host_name}: Lookup failed: {}", e.to_string());
+                debug!("{host_name}: Lookup failed: {}", e.to_string());
                 Err(SshClientError::LookupFailure)
             }
         }
@@ -95,9 +95,9 @@ impl ConnectionDetails {
         } = self;
         match jump_via {
             Some(jumphost) => {
-                info!("{host_name}: Connection attempt to {address} via {jumphost} as {login}");
+                debug!("{host_name}: Connection attempt to {address} via {jumphost} as {login}");
             }
-            None => info!("{host_name}: Connection attempt to {address} as {login}"),
+            None => debug!("{host_name}: Connection attempt to {address} as {login}"),
         }
     }
 
@@ -110,7 +110,7 @@ impl ConnectionDetails {
             key_fingerprint: _,
         } = self;
 
-        info!("{host_name}: Trying to open jump channel to {target}")
+        debug!("{host_name}: Trying to open jump channel to {target}")
     }
 }
 
