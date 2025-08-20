@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { 
   Server, 
@@ -8,7 +8,10 @@ import {
   Activity, 
   AlertCircle, 
   CheckCircle, 
-  Clock
+  Clock,
+  Users,
+  Key,
+  Globe
 } from 'lucide-react';
 import {
   Card,
@@ -33,6 +36,8 @@ import type {
 interface ExtendedHost extends Host {
   connectionStatus?: 'online' | 'offline' | 'testing' | 'unknown';
   lastTested?: Date;
+  authorizations?: Array<{ id: number; username: string; login: string; options?: string }>;
+  connectionError?: string;
   [key: string]: unknown;
 }
 
@@ -74,18 +79,39 @@ const HostsPage: React.FC = () => {
       // Check all hosts in this batch in parallel
       const promises = batch.map(async (host) => {
         try {
-          const response = await hostsService.testConnection(host.name);
-          const status = response.success && response.data?.success ? 'online' : 'offline';
+          // Test connection
+          const connectionResponse = await hostsService.testConnection(host.name);
+          const status = connectionResponse.success && connectionResponse.data?.success ? 'online' : 'offline';
+          let connectionError = undefined;
+          
+          if (!connectionResponse.success) {
+            // API call failed
+            connectionError = connectionResponse.message || 'Connection failed';
+          } else if (connectionResponse.data?.success === false) {
+            // API succeeded but connection test failed
+            connectionError = connectionResponse.data.message || 'Connection test failed';
+          }
+          
+          // Load authorizations
+          let authorizations: Array<{ id: number; username: string; login: string; options?: string }> = [];
+          try {
+            const authResponse = await hostsService.getHostAuthorizations(host.name);
+            if (authResponse.success && authResponse.data) {
+              authorizations = authResponse.data;
+            }
+          } catch (error) {
+            console.error('Failed to load authorizations for', host.name, error);
+          }
           
           setHosts(prev => prev.map(h => 
             h.id === host.id 
-              ? { ...h, connectionStatus: status, lastTested: new Date() }
+              ? { ...h, connectionStatus: status, lastTested: new Date(), connectionError, authorizations }
               : h
           ));
-        } catch {
+        } catch (error) {
           setHosts(prev => prev.map(h => 
             h.id === host.id 
-              ? { ...h, connectionStatus: 'offline', lastTested: new Date() }
+              ? { ...h, connectionStatus: 'offline', lastTested: new Date(), connectionError: error instanceof Error ? error.message : 'Connection failed' }
               : h
           ));
         }
@@ -153,24 +179,33 @@ const HostsPage: React.FC = () => {
       const response = await hostsService.testConnection(host.name);
       const status = response.success && response.data?.success ? 'online' : 'offline';
       
+      let connectionError = undefined;
+      if (!response.success) {
+        connectionError = response.message || 'Connection failed';
+      } else if (response.data?.success === false) {
+        connectionError = response.data.message || 'Connection test failed';
+      }
+      
       setHosts(prev => prev.map(h => 
         h.id === host.id 
-          ? { ...h, connectionStatus: status, lastTested: new Date() }
+          ? { ...h, connectionStatus: status, lastTested: new Date(), connectionError }
           : h
       ));
 
       if (status === 'online') {
         showSuccess('Connection successful', `Successfully connected to ${host.name}`);
       } else {
-        showError('Connection failed', response.data?.message || 'Unable to connect to host');
+        const errorMsg = connectionError || 'Unable to connect to host';
+        showError('Connection failed', errorMsg);
       }
-    } catch {
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Connection failed';
       setHosts(prev => prev.map(h => 
         h.id === host.id 
-          ? { ...h, connectionStatus: 'offline', lastTested: new Date() }
+          ? { ...h, connectionStatus: 'offline', lastTested: new Date(), connectionError: errorMessage }
           : h
       ));
-      showError('Connection test failed', 'Please check your network connection');
+      showError('Connection test failed', errorMessage);
     } finally {
       setTesting(prev => ({ ...prev, [host.id]: false }));
     }
@@ -350,6 +385,158 @@ const HostsPage: React.FC = () => {
     }
   };
 
+  // Host Status Tooltip Component
+  const HostStatusTooltip: React.FC<{ host: ExtendedHost; children: React.ReactNode }> = ({ host, children }) => {
+    const [isVisible, setIsVisible] = useState(false);
+    const [position, setPosition] = useState({ x: 0, y: 0 });
+    const triggerRef = useRef<HTMLDivElement>(null);
+    const timeoutRef = useRef<NodeJS.Timeout>();
+
+    const handleMouseEnter = useCallback(() => {
+      if (triggerRef.current) {
+        const rect = triggerRef.current.getBoundingClientRect();
+        setPosition({
+          x: rect.left + rect.width / 2,
+          y: rect.top - 8
+        });
+      }
+      timeoutRef.current = setTimeout(() => setIsVisible(true), 100);
+    }, []);
+
+    const handleMouseLeave = useCallback(() => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+      setIsVisible(false);
+    }, []);
+
+    useEffect(() => {
+      return () => {
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current);
+        }
+      };
+    }, []);
+
+    return (
+      <>
+        <div 
+          ref={triggerRef}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+          className="p-1 -m-1"
+        >
+          {children}
+        </div>
+        
+        {/* Portal tooltip rendered at document body level */}
+        {isVisible && (
+          <div 
+            className="fixed bg-gray-900 dark:bg-gray-800 text-white text-sm rounded-lg shadow-xl border border-gray-700 p-4 min-w-80 max-w-96 pointer-events-none transition-opacity duration-200"
+            style={{
+              left: `${position.x}px`,
+              top: `${position.y}px`,
+              transform: 'translateX(-50%) translateY(-100%)',
+              zIndex: 99999
+            }}
+          >
+            {/* Arrow */}
+            <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900 dark:border-t-gray-800"></div>
+            
+            {/* Host Info */}
+            <div className="space-y-3">
+              <div className="border-b border-gray-700 pb-2">
+                <h4 className="font-semibold text-white flex items-center gap-2">
+                  <Server size={16} />
+                  {host.name}
+                </h4>
+                <p className="text-gray-300 text-xs flex items-center gap-1">
+                  <Globe size={12} />
+                  {host.address}:{host.port}
+                </p>
+              </div>
+              
+              {/* Connection Status */}
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  {host.connectionStatus === 'online' && <CheckCircle size={14} className="text-green-400" />}
+                  {host.connectionStatus === 'offline' && <AlertCircle size={14} className="text-red-400" />}
+                  {host.connectionStatus === 'testing' && <Clock size={14} className="text-yellow-400" />}
+                  {host.connectionStatus === 'unknown' && <Activity size={14} className="text-gray-400" />}
+                  
+                  <span className="font-medium">
+                    {host.connectionStatus === 'online' && 'Online'}
+                    {host.connectionStatus === 'offline' && 'Offline'}
+                    {host.connectionStatus === 'testing' && 'Testing...'}
+                    {host.connectionStatus === 'unknown' && 'Unknown'}
+                  </span>
+                </div>
+                
+                {host.lastTested && (
+                  <p className="text-gray-400 text-xs">
+                    Last tested: {host.lastTested.toLocaleString()}
+                  </p>
+                )}
+                
+                {host.connectionError && (
+                  <p className="text-red-400 text-xs mt-1 flex items-start gap-1">
+                    <span>❌</span>
+                    <span>{host.connectionError}</span>
+                  </p>
+                )}
+              </div>
+              
+              {/* SSH Info */}
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <Key size={14} />
+                  <span className="font-medium">SSH Details</span>
+                </div>
+                <div className="text-xs text-gray-300 space-y-1">
+                  <div>User: <code className="bg-gray-800 px-1 rounded">{host.username}</code></div>
+                  {host.key_fingerprint && (
+                    <div>Fingerprint: <code className="bg-gray-800 px-1 rounded text-xs">{host.key_fingerprint.slice(0, 20)}...</code></div>
+                  )}
+                  {host.jump_via && (
+                    <div>Jump host: {jumpHosts.find(h => h.id === host.jump_via)?.name || 'Unknown'}</div>
+                  )}
+                </div>
+              </div>
+              
+              {/* Authorized Users */}
+              {host.authorizations && host.authorizations.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <Users size={14} />
+                    <span className="font-medium">Authorized Users ({host.authorizations.length})</span>
+                  </div>
+                  <div className="text-xs text-gray-300 space-y-1 max-h-20 overflow-y-auto">
+                    {host.authorizations.map((auth, index) => (
+                      <div key={auth.id || index} className="flex justify-between">
+                        <span>{auth.username}</span>
+                        <code className="bg-gray-800 px-1 rounded">{auth.login}</code>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {host.authorizations && host.authorizations.length === 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <Users size={14} />
+                    <span className="font-medium">Authorized Users</span>
+                  </div>
+                  <p className="text-gray-400 text-xs">No authorized users</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </>
+    );
+  };
+
   // Table column definitions
   const columns: Column<ExtendedHost>[] = [
     {
@@ -394,7 +581,7 @@ const HostsPage: React.FC = () => {
       key: 'connectionStatus',
       header: 'Status',
       sortable: true,
-      render: (status) => {
+      render: (status, host) => {
         const icons = {
           online: <CheckCircle size={16} className="text-green-500" />,
           offline: <AlertCircle size={16} className="text-red-500" />,
@@ -418,10 +605,12 @@ const HostsPage: React.FC = () => {
 
         const currentStatus = (status || 'unknown') as keyof typeof colors;
         return (
-          <div className={`inline-flex items-center space-x-1 px-2 py-1 rounded-full text-xs font-medium ${colors[currentStatus]}`}>
-            {icons[currentStatus]}
-            <span>{labels[currentStatus]}</span>
-          </div>
+          <HostStatusTooltip host={host}>
+            <div className={`inline-flex items-center space-x-1 px-2 py-1 rounded-full text-xs font-medium cursor-pointer ${colors[currentStatus]}`}>
+              {icons[currentStatus]}
+              <span>{labels[currentStatus]}</span>
+            </div>
+          </HostStatusTooltip>
         );
       }
     },
@@ -510,16 +699,18 @@ const HostsPage: React.FC = () => {
         <CardHeader>
           <CardTitle>SSH Hosts ({hosts.length})</CardTitle>
         </CardHeader>
-        <CardContent>
-          <DataTable
-            data={hosts}
-            columns={columns}
-            loading={loading}
-            emptyMessage="No hosts found. Add your first SSH host to get started."
-            searchPlaceholder="Search hosts by name, address, or username..."
-            initialSort={{ key: 'name', direction: 'asc' }}
-            initialSearch={(location.state as { searchTerm?: string })?.searchTerm || ''}
-          />
+        <CardContent className="overflow-visible">
+          <div className="overflow-visible">
+            <DataTable
+              data={hosts}
+              columns={columns}
+              loading={loading}
+              emptyMessage="No hosts found. Add your first SSH host to get started."
+              searchPlaceholder="Search hosts by name, address, or username..."
+              initialSort={{ key: 'name', direction: 'asc' }}
+              initialSearch={(location.state as { searchTerm?: string })?.searchTerm || ''}
+            />
+          </div>
         </CardContent>
       </Card>
 
