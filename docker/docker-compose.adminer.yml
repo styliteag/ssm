@@ -1,0 +1,15 @@
+services:
+  sqlite-web:
+    image: coleifer/sqlite-web
+    container_name: ssm-sqlite-web
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./backend/ssm.db:/data/database.db:ro
+    command: sqlite_web -H 0.0.0.0 -x /data/database.db
+    networks:
+      - ssm-network
+
+networks:
+  ssm-network:
+    driver: bridge

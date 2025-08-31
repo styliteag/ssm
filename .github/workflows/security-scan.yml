@@ -1,0 +1,146 @@
+name: Security Scan
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  secret-detection:
+    name: Secret Detection
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Full history for comprehensive scanning
+    
+    - name: Run TruffleHog OSS
+      id: trufflehog
+      uses: trufflesecurity/trufflehog@main
+      with:
+        path: ./
+        base: ${{ github.event.repository.default_branch }}
+        head: HEAD
+        extra_args: --debug --only-verified
+    
+    - name: Run GitLeaks
+      uses: gitleaks/gitleaks-action@v2
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }} # Only required for Organizations, not needed for personal accounts.
+    
+    - name: Custom Secret Pattern Check
+      run: |
+        echo "🔍 Running custom secret patterns..."
+        
+        # Check for patterns that might not be caught by other tools
+        SECRETS_FOUND=0
+        
+        # Private keys
+        if grep -r "-----BEGIN.*PRIVATE KEY-----" . --exclude-dir=.git --exclude-dir=.github --exclude-dir=.githooks; then
+          echo "❌ Private keys detected"
+          SECRETS_FOUND=1
+        fi
+        
+        # Custom API key patterns
+        if grep -rE "(api_key|apikey|secret_key|secretkey).*=.*[\"'][^\"']{20,}[\"']" . --exclude-dir=.git --exclude-dir=.github --exclude-dir=.githooks --exclude=".secrets-whitelist"; then
+          echo "❌ API keys detected"
+          SECRETS_FOUND=1
+        fi
+        
+        # Long passwords
+        if grep -rE "password.*=.*[\"'][^\"']{12,}[\"']" . --exclude-dir=.git --exclude-dir=.github --exclude-dir=.githooks --exclude=".secrets-whitelist"; then
+          echo "❌ Long passwords detected"
+          SECRETS_FOUND=1
+        fi
+        
+        # Database URLs with passwords
+        if grep -rE "(postgres|mysql|mongodb)://[^:]+:[^@]{8,}@" . --exclude-dir=.git --exclude-dir=.github --exclude-dir=.githooks --exclude=".secrets-whitelist"; then
+          echo "❌ Database URLs with passwords detected"
+          SECRETS_FOUND=1
+        fi
+        
+        if [ $SECRETS_FOUND -eq 1 ]; then
+          echo "🚨 Custom secret patterns detected! Check the output above."
+          exit 1
+        else
+          echo "✅ No custom secret patterns detected"
+        fi
+    
+    - name: Check whitelist configuration
+      run: |
+        if [ -f ".secrets-whitelist" ]; then
+          echo "✅ Secrets whitelist found"
+          echo "📋 Whitelist summary:"
+          grep -c "^[^#]" .secrets-whitelist || echo "0 entries"
+          echo "💡 VALUE entries: $(grep -c "^VALUE:" .secrets-whitelist || echo "0")"
+        else
+          echo "⚠️ No secrets whitelist found"
+        fi
+
+  dependency-check:
+    name: Dependency Vulnerability Scan  
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+    
+    - name: Upload Trivy scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+  git-hooks-check:
+    name: Verify Git Hooks Setup
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Check git hooks infrastructure
+      run: |
+        echo "🔍 Checking git hooks infrastructure..."
+        
+        # Check if shared hooks exist
+        if [ -d ".githooks" ] && [ -f ".githooks/pre-commit" ]; then
+          echo "✅ Shared git hooks found"
+        else
+          echo "❌ Shared git hooks missing"
+          exit 1
+        fi
+        
+        # Check if installation script exists
+        if [ -f "install-hooks.sh" ] && [ -x "install-hooks.sh" ]; then
+          echo "✅ Hook installation script found and executable"
+        else
+          echo "❌ Hook installation script missing or not executable"
+          exit 1
+        fi
+        
+        # Check if whitelist exists
+        if [ -f ".secrets-whitelist" ]; then
+          echo "✅ Secrets whitelist found"
+        else
+          echo "❌ Secrets whitelist missing"
+          exit 1
+        fi
+        
+        # Test hook installation (dry run)
+        echo "🧪 Testing hook installation..."
+        ./install-hooks.sh
+        
+        echo "✅ All git hooks infrastructure verified"

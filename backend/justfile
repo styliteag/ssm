@@ -1,0 +1,108 @@
+# Development commands for the SSH Key Manager backend
+#
+# Test Logging Levels:
+# - just test              → Clean output (no logs)
+# - just test-verbose      → Shows log::info! messages  
+# - just test-debug        → Shows all debug logs
+# - just test-quiet        → Only warnings/errors
+
+# Run the development server with auto-reload on file changes
+dev:
+    cargo watch -x run
+    #cargo watch -x run --env RUST_LOG=debug
+
+# Run the development server without auto-reload
+run:
+    cargo run
+
+# Run all tests (clean output, no logs)
+test:
+    cargo test
+
+# Run a specific test (clean output)
+test-name name:
+    cargo test {{name}}
+
+# Run tests with detailed logging (shows log::info! messages)
+test-verbose:
+    cargo test -- --nocapture
+
+# Run specific test with detailed logging
+test-name-verbose name:
+    cargo test {{name}} -- --nocapture
+
+# Run tests with debug logging (most verbose)
+test-debug:
+    RUST_LOG=debug cargo test -- --nocapture
+
+# Run specific test with debug logging
+test-name-debug name:
+    RUST_LOG=debug cargo test {{name}} -- --nocapture
+
+# Run tests with minimal logging (warnings/errors only)
+test-quiet:
+    RUST_LOG=warn cargo test -- --nocapture
+
+# Run only authentication tests with logging
+test-auth:
+    cargo test real_http_auth -- --nocapture
+
+# Run only security tests with logging
+test-security:
+    cargo test security_first_api -- --nocapture
+
+# Run only user lifecycle tests with logging
+test-lifecycle:
+    cargo test user_lifecycle -- --nocapture
+
+# Run complete workflow tests with logging
+test-workflow:
+    cargo test complete_workflow_test -- --nocapture
+
+# Check code without building
+check:
+    cargo check
+
+# Build the project
+build:
+    cargo build
+
+# Build for release
+build-release:
+    cargo build --release
+
+# Run clippy linter
+lint:
+    cargo clippy
+
+# Format code
+fmt:
+    cargo fmt
+
+# Apply database migrations
+migrate:
+    diesel migration run
+
+# Create a new migration
+migration name:
+    diesel migration generate {{name}}
+
+# Setup database (create and migrate)
+db-setup:
+    diesel setup
+
+# Reset database (drop, create, and migrate)
+db-reset:
+    diesel database reset
+
+# Clean build artifacts
+clean:
+    cargo clean
+
+# Install cargo-watch if not already installed
+install-watch:
+    cargo install cargo-watch
+
+# Show available commands
+help:
+    just --list
