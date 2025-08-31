@@ -1,0 +1,58 @@
+services:
+  app:
+    container_name: ssm-app
+    build:
+      context: ..
+      dockerfile: docker/app/Dockerfile
+      args:
+        VITE_API_URL: http://localhost/api
+    image: ssh-key-manager:latest
+    ports:
+      - "80:80"
+    volumes:      
+      # Database persistence
+      - ./data/db:/app/db
+      # Configuration files
+      - ./data/config.toml:/app/config.toml:ro
+      - ./data/.htpasswd:/app/.htpasswd:ro
+      # SSH keys (read-only for security)
+      - ./data/keys:/app/keys:ro
+      # Logs (optional)
+      - ./data/logs:/app/logs
+    environment:
+      - CONFIG=/app/config.toml
+      - DATABASE_URL=sqlite:///app/db/ssm.db
+      - RUST_LOG=info
+    networks:
+      - ssm-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "/app/health-check.sh"]
+      start_period: 30s
+      timeout: 10s
+      interval: 30s
+      retries: 3
+
+  # Optional: SQLite Web-based database administration tool
+  # Uncomment to enable database management interface
+  #sqlite-web:
+  #  container_name: ssm-sqlite-web
+  #  image: coleifer/sqlite-web:latest
+  #  ports:
+  #    - "81:8080"
+  #  volumes:
+  #    - ./data/db:/data
+  #  environment:
+  #    SQLITE_DATABASE: /data/ssm.db
+  #  networks:
+  #    - ssm-network
+  #  restart: unless-stopped
+  #  healthcheck:
+  #    test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/"]
+  #    timeout: 30s
+  #    interval: 30s
+  #    retries: 3
+
+networks:
+  ssm-network:
+    driver: bridge

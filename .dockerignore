@@ -1,2 +1,88 @@
-target
-ssm.db
+# Backend Rust build artifacts
+backend/target/
+target/
+backend/config.toml
+backend/.htpasswd
+backend/ssm.db
+backend/data/
+backend/target/
+*.db
+*.db-*
+ssm.db*
+
+# Frontend Node.js artifacts
+frontend/node_modules/
+frontend/dist/
+frontend/npm-debug.log*
+frontend/.npm
+node_modules/
+
+# Common development files
+.git/
+.gitignore
+.vscode/
+.idea/
+*.log
+*.pid
+*.seed
+*.tar
+*.tar.gz
+*.zip
+
+# Development configuration
+.env
+.env.local
+.env.development
+.env.production
+config.toml
+.htpasswd
+.htuploaders
+
+# SSH keys and sensitive data
+*.pem
+*.key
+*.crt
+*.p12
+id_rsa*
+id_ed25519*
+known_hosts
+authorized_keys
+
+# Documentation and metadata
+README.md
+WHAT-IT-DOES.md
+LICENSE.txt
+*.md
+docs/
+
+# Development scripts and tools
+start-dev.sh
+justfile
+flake.*
+*.nix
+
+# Python artifacts (if any)
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Docker and compose files (to avoid recursive copying)
+docker/data/
+docker/compose*.yml
+docker-compose*.yml
+compose*.yml
+!docker/app/
+
+# Build and CI artifacts
+.github/
+.gitlab-ci.yml
+.travis.yml
