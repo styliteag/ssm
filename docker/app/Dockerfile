@@ -56,17 +56,18 @@ RUN apk add --no-cache \
 COPY --from=planner /app/recipe.json recipe.json
 
 # Build dependencies based on recipe with enhanced caching
+# This layer should be cached unless Cargo.toml/Cargo.lock changes
 RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,target=/app/target,sharing=locked \
-    cargo chef cook --release --recipe-path recipe.json
+    CARGO_NET_GIT_FETCH_WITH_CLI=true cargo chef cook --release --recipe-path recipe.json
 
 # Copy backend source and other necessary files
-COPY backend/src ./src/
 COPY backend/Cargo.toml backend/Cargo.lock ./
 COPY backend/build.rs ./
 COPY backend/migrations ./migrations/
 COPY backend/diesel.toml ./
 COPY backend/rust-toolchain.toml ./
+COPY backend/src ./src/
 
 # Build the actual application statically with enhanced caching
 RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
