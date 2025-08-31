@@ -25,6 +25,7 @@ jobs:
       with:
         prefix-key: "v0-rust-test"
         shared-key: "stable"
+        workspaces: "backend"
         
     - name: Test build with optimizations (no push)
       uses: docker/build-push-action@v6
