@@ -204,11 +204,12 @@ main() {
     # Confirm with user
     echo
     print_warning "This will:"
-    echo "  • Update VERSION from $current_version to $new_version"
+    echo "  • Update VERSION from $current_version to $new_version on $original_branch"
+    echo "  • Push $original_branch with version update"
     echo "  • Create release branch: release-$new_version"
     echo "  • Create git tag: v$new_version"
-    echo "  • Push branch and tag to origin"
-    echo "  • Update main branch with new version"
+    echo "  • Push release branch and tag to origin"
+    echo "  • Return to $original_branch"
     echo
     read -p "Proceed with release? (y/N): " -n 1 -r
     echo
@@ -217,40 +218,37 @@ main() {
         exit 0
     fi
     
-    # Create release branch
-    local release_branch="release-$new_version"
-    print_info "Creating and checking out branch: $release_branch"
-    git checkout -b "$release_branch"
-    
-    # Update VERSION file
-    print_info "Updating VERSION file to $new_version"
+    # Update VERSION file on current branch first
+    print_info "Updating VERSION file to $new_version on $original_branch"
     echo "$new_version" > VERSION
     
-    # Commit version change
-    print_info "Committing version change"
+    # Commit version change to current branch
+    print_info "Committing version change to $original_branch"
     git add VERSION
     git commit -m "chore: bump version to $new_version"
     
-    # Create tag
+    # Push current branch with version update
+    print_info "Pushing $original_branch with version update"
+    git push origin "$original_branch"
+    
+    # Create release branch from updated current branch
+    local release_branch="release-$new_version"
+    print_info "Creating and checking out release branch: $release_branch"
+    git checkout -b "$release_branch"
+    
+    # Create tag on release branch
     print_info "Creating tag: v$new_version"
     git tag -a "v$new_version" -m "Release version $new_version"
     
-    # Push branch and tag
-    print_info "Pushing branch and tag to origin"
+    # Push release branch and tag
+    print_info "Pushing release branch and tag to origin"
     git push origin "$release_branch"
     git push origin "v$new_version"
     
-    # Switch back to original branch and update version there too
-    print_info "Switching back to $original_branch to update version"
+    # Switch back to original branch
+    print_info "Switching back to $original_branch"
     git checkout "$original_branch"
     
-    # Update VERSION on original branch too
-    echo "$new_version" > VERSION
-    git add VERSION
-    git commit -m "chore: sync version to $new_version after release"
-    git push origin "$original_branch"
-    
-    print_info "Version updated on both $original_branch and $release_branch"
     print_success "Returned to original branch: $original_branch"
     
     print_success "Release $new_version created successfully!"
