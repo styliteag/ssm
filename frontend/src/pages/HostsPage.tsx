@@ -155,9 +155,15 @@ const HostsPage: React.FC = () => {
     }
   }, [showError, pollHostStatuses]);
 
-  // Load jump hosts for dropdown
+  // Load jump hosts for dropdown - reuse hosts data to avoid duplicate API calls
   const loadJumpHosts = useCallback(async () => {
     try {
+      // Only fetch if hosts list is empty, otherwise reuse existing data
+      if (hosts.length > 0) {
+        setJumpHosts(hosts);
+        return;
+      }
+      
       const response = await hostsService.getAllHosts();
       if (response.success && response.data) {
         setJumpHosts(response.data);
@@ -165,12 +171,18 @@ const HostsPage: React.FC = () => {
     } catch (error) {
       console.error('Failed to load jump hosts:', error);
     }
-  }, []);
+  }, [hosts]);
 
   useEffect(() => {
     loadHosts();
-    loadJumpHosts();
-  }, [loadHosts, loadJumpHosts]);
+  }, [loadHosts]);
+
+  // Load jump hosts after hosts are loaded to reuse data
+  useEffect(() => {
+    if (hosts.length > 0) {
+      loadJumpHosts();
+    }
+  }, [hosts.length, loadJumpHosts]);
 
   // Test SSH connection
   const testConnection = useCallback(async (host: ExtendedHost) => {
@@ -317,7 +329,7 @@ const HostsPage: React.FC = () => {
             }]);
             setShowAddModal(false);
             showSuccess('Host added', `${finalResponse.data!.name} has been added successfully`);
-            await loadJumpHosts(); // Refresh jump hosts list
+            // Jump hosts will be updated automatically via useEffect when hosts change
           } else {
             console.error('Final host creation failed:', finalResponse);
             showError('Failed to add host', finalResponse.message || 'Failed to confirm host key');
@@ -330,7 +342,7 @@ const HostsPage: React.FC = () => {
           }]);
           setShowAddModal(false);
           showSuccess('Host added', `${response.data!.name} has been added successfully`);
-          await loadJumpHosts(); // Refresh jump hosts list
+          // Jump hosts will be updated automatically via useEffect when hosts change
         }
       } else {
         console.error('Host creation failed:', response);
@@ -350,7 +362,7 @@ const HostsPage: React.FC = () => {
     setShowEditModal(false);
     // Refresh the hosts list to get updated data
     loadHosts();
-    loadJumpHosts();
+    // Jump hosts will be updated automatically via useEffect when hosts change
   };
 
   const handleDeleteHost = async () => {
@@ -364,7 +376,7 @@ const HostsPage: React.FC = () => {
         setShowDeleteModal(false);
         setSelectedHost(null);
         showSuccess('Host deleted', `${selectedHost.name} has been deleted successfully`);
-        await loadJumpHosts(); // Refresh jump hosts list
+        // Jump hosts will be updated automatically via useEffect when hosts change
       }
     } catch {
       showError('Failed to delete host', 'Please try again later');
