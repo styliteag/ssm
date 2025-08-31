@@ -1,4 +1,0 @@
-This file contains allowlisted secrets that should pass:
-api_key = "sk_test_12345678901234567890123456789012345678"
-password = "supersecretpassword123"
-SESSION_KEY = "super-secret-session-key-for-production"
