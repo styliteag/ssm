@@ -390,7 +390,7 @@ const HostsPage: React.FC = () => {
     const [isVisible, setIsVisible] = useState(false);
     const [position, setPosition] = useState({ x: 0, y: 0 });
     const triggerRef = useRef<HTMLDivElement>(null);
-    const timeoutRef = useRef<NodeJS.Timeout>();
+    const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     const handleMouseEnter = useCallback(() => {
       if (triggerRef.current) {
@@ -400,7 +400,7 @@ const HostsPage: React.FC = () => {
           y: rect.top - 8
         });
       }
-      timeoutRef.current = setTimeout(() => setIsVisible(true), 100);
+      timeoutRef.current = setTimeout(() => setIsVisible(true), 100) as NodeJS.Timeout;
     }, []);
 
     const handleMouseLeave = useCallback(() => {
@@ -635,10 +635,10 @@ const HostsPage: React.FC = () => {
     {
       key: 'jumphost_name',
       header: 'Jump Host',
-      render: (jumpHostName) => {
+      render: (jumpHostName: unknown) => {
         return jumpHostName ? (
           <span className="text-sm text-gray-600 dark:text-gray-400">
-            {jumpHostName}
+            {String(jumpHostName)}
           </span>
         ) : (
           <span className="text-gray-400">—</span>
