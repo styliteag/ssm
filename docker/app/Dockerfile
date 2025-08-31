@@ -19,9 +19,20 @@ COPY frontend/. .
 ENV VITE_API_URL=${VITE_API_URL}
 RUN npm run build
 
-# Rust backend builder stage  
-FROM rust:1.89-alpine AS backend-builder
+# Rust backend builder stage with cargo-chef for better dependency caching
+FROM rust:1.89-alpine AS chef
+# Install build dependencies needed for cargo-chef
+RUN apk add --no-cache musl-dev gcc
+RUN cargo install cargo-chef
+WORKDIR /app
 
+FROM chef AS planner
+# Copy entire backend to analyze dependencies
+COPY backend/. .
+# Generate dependency recipe (this changes less frequently than Cargo.toml)
+RUN cargo chef prepare --recipe-path recipe.json
+
+FROM chef AS backend-builder
 WORKDIR /app
 
 # Install build dependencies for static compilation
@@ -40,23 +51,21 @@ RUN apk add --no-cache \
 # Set environment variables for static compilation
 # ENV PKG_CONFIG_ALLOW_CROSS=1
 
-# Copy backend project files for better caching
-COPY backend/Cargo.toml backend/Cargo.lock ./
+# Copy the dependency recipe from planner stage
+COPY --from=planner /app/recipe.json recipe.json
 
-# Create a dummy src/main.rs to cache dependencies
-RUN mkdir src && echo "fn main() {}" > src/main.rs
-
-# Build dependencies
-RUN cargo build --release && rm -rf src/
+# Build dependencies based on recipe (this layer is cached unless dependencies actually change)
+RUN cargo chef cook --release --recipe-path recipe.json
 
 # Copy backend source and other necessary files
 COPY backend/src ./src/
+COPY backend/Cargo.toml backend/Cargo.lock ./
 COPY backend/build.rs ./
 COPY backend/migrations ./migrations/
 COPY backend/diesel.toml ./
 COPY backend/rust-toolchain.toml ./
 
-# Build the actual application statically
+# Build the actual application statically (only rebuilds your code, not dependencies)
 RUN cargo build --release
 
 # Main application stage
