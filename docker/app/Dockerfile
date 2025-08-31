@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.4
 # Multi-stage build combining frontend and backend for SSH Key Manager
 FROM node:24-alpine AS frontend-builder
 
@@ -35,7 +36,7 @@ RUN cargo chef prepare --recipe-path recipe.json
 FROM chef AS backend-builder
 WORKDIR /app
 
-# Install build dependencies for static compilation
+# Install build dependencies for static compilation and cross-compilation
 RUN apk add --no-cache \
     musl-dev \
     sqlite-dev \
@@ -43,19 +44,22 @@ RUN apk add --no-cache \
     openssl-dev \
     openssl-libs-static \
     pkgconfig \
-    gcc
+    gcc \
+    clang \
+    lld
 
-# Add musl target for static compilation
-# RUN rustup target add x86_64-unknown-linux-musl
-
-# Set environment variables for static compilation
-# ENV PKG_CONFIG_ALLOW_CROSS=1
+# Set up cross-compilation environment for multi-arch builds
+ENV CC_aarch64_unknown_linux_musl=clang
+ENV AR_aarch64_unknown_linux_musl=llvm-ar
+ENV CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_RUSTFLAGS="-Clink-self-contained=yes -Clinker=rust-lld"
 
 # Copy the dependency recipe from planner stage
 COPY --from=planner /app/recipe.json recipe.json
 
-# Build dependencies based on recipe (this layer is cached unless dependencies actually change)
-RUN cargo chef cook --release --recipe-path recipe.json
+# Build dependencies based on recipe with enhanced caching
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,target=/app/target,sharing=locked \
+    cargo chef cook --release --recipe-path recipe.json
 
 # Copy backend source and other necessary files
 COPY backend/src ./src/
@@ -65,8 +69,11 @@ COPY backend/migrations ./migrations/
 COPY backend/diesel.toml ./
 COPY backend/rust-toolchain.toml ./
 
-# Build the actual application statically (only rebuilds your code, not dependencies)
-RUN cargo build --release
+# Build the actual application statically with enhanced caching
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,target=/app/target,sharing=locked \
+    cargo build --release && \
+    cp target/release/ssm /app/ssm-binary
 
 # Main application stage
 FROM alpine:3.20
@@ -89,7 +96,7 @@ COPY docker/app/health-check.sh /app/health-check.sh
 COPY --from=frontend-builder /app/dist /usr/share/nginx/html
 
 # Copy statically compiled backend binary
-COPY --from=backend-builder /app/target/release/ssm /app/ssm
+COPY --from=backend-builder /app/ssm-binary /app/ssm
 
 # Copy backend migrations and diesel config
 COPY --from=backend-builder /app/migrations /app/migrations
