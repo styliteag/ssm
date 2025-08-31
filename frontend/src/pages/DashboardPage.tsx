@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Server, Users, Key, Shield, Activity, AlertCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, Loading } from '../components/ui';
-import { hostsService, usersService, keysService, authorizationsService } from '../services/api';
+import { hostsService, usersService, keysService, authorizationsService, systemService } from '../services/api';
 
 interface DashboardStats {
   hosts: number;
@@ -18,6 +18,7 @@ const DashboardPage: React.FC = () => {
     keys: 0,
     authorizations: 0,
   });
+  const [version, setVersion] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,12 +31,13 @@ const DashboardPage: React.FC = () => {
       setIsLoading(true);
       setError(null);
 
-      // Load basic counts for dashboard
-      const [hostsResponse, usersResponse, keysResponse, authResponse] = await Promise.allSettled([
+      // Load basic counts for dashboard and system info
+      const [hostsResponse, usersResponse, keysResponse, authResponse, systemResponse] = await Promise.allSettled([
         hostsService.getAllHosts(),
         usersService.getAllUsers(),
         keysService.getKeys({ per_page: 1 }),
         authorizationsService.getAuthorizations({ per_page: 1 }),
+        systemService.getApiInfo(),
       ]);
 
       const newStats: DashboardStats = {
@@ -46,6 +48,11 @@ const DashboardPage: React.FC = () => {
       };
 
       setStats(newStats);
+      
+      // Set version from API info
+      if (systemResponse.status === 'fulfilled') {
+        setVersion(systemResponse.value.data?.version || '');
+      }
     } catch (err: unknown) {
       setError('Failed to load dashboard data');
       console.error('Dashboard load error:', err);
@@ -100,13 +107,21 @@ const DashboardPage: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-          Dashboard
-        </h1>
-        <p className="text-gray-600 dark:text-gray-400">
-          Welcome to SSH Key Manager - Overview of your infrastructure
-        </p>
+      <div className="flex justify-between items-start">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+            Dashboard
+          </h1>
+          <p className="text-gray-600 dark:text-gray-400">
+            Welcome to SSH Key Manager - Overview of your infrastructure
+          </p>
+        </div>
+        {version && (
+          <div className="text-right">
+            <p className="text-sm text-gray-500 dark:text-gray-400">Version</p>
+            <p className="text-sm font-mono text-gray-700 dark:text-gray-300">{version}</p>
+          </div>
+        )}
       </div>
 
       {/* Error Alert */}
