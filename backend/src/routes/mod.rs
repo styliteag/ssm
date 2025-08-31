@@ -29,6 +29,7 @@ pub fn require_auth(identity: Option<Identity>) -> Result<String, actix_web::Err
 
 pub fn route_config(cfg: &mut web::ServiceConfig) {
     cfg.service(api_info)
+        .service(health)
         .service(openapi_json)
         .service(crate::openapi::swagger_ui())
         .service(
@@ -83,6 +84,19 @@ async fn api_info() -> Result<impl Responder> {
         version: env!("CARGO_PKG_VERSION").to_string(),
         description: "REST API for managing SSH keys across multiple hosts".to_string(),
     })))
+}
+
+/// Health check endpoint for load balancers and monitoring
+#[utoipa::path(
+    get,
+    path = "/health",
+    responses(
+        (status = 200, description = "Service healthy")
+    )
+)]
+#[get("/health")]
+async fn health() -> Result<impl Responder> {
+    Ok(HttpResponse::Ok().json(ApiResponse::success_message("ok".to_string())))
 }
 
 /// Serve the OpenAPI specification as JSON

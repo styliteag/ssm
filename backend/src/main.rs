@@ -131,6 +131,7 @@ pub struct SshConfig {
     update_schedule: Option<Cron>,
 
     /// Path to an OpenSSH Private Key
+    #[serde(default = "default_private_key_file")]
     private_key_file: PathBuf,
     /// Passphrase for the key
     private_key_passphrase: Option<String>,
@@ -149,7 +150,7 @@ const fn default_listen() -> IpAddr {
 }
 
 const fn default_port() -> u16 {
-    8080
+    8000
 }
 
 fn default_loglevel() -> String {
@@ -165,6 +166,10 @@ fn default_session_key() -> String {
 
 fn default_htpasswd_path() -> PathBuf {
     PathBuf::from(".htpasswd")
+}
+
+fn default_private_key_file() -> PathBuf {
+    PathBuf::from("/app/id")
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -318,6 +323,9 @@ async fn main() -> Result<(), std::io::Error> {
             .wrap(
                 SessionMiddleware::builder(CookieSessionStore::default(), secret_key.clone())
                     .cookie_name("ssm_session".to_owned())
+                    .cookie_secure(std::env::var("HTTPS_ENABLED").is_ok()) // Only secure in HTTPS mode
+                    .cookie_http_only(true)
+                    .cookie_same_site(actix_web::cookie::SameSite::Lax)
                     .build(),
             )
             .wrap(IdentityMiddleware::default())
