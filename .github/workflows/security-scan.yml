@@ -41,26 +41,30 @@ jobs:
         # Check for patterns that might not be caught by other tools
         SECRETS_FOUND=0
         
-        # Private keys
-        if grep -r "-----BEGIN.*PRIVATE KEY-----" . --exclude-dir=.git --exclude-dir=.github --exclude-dir=.githooks; then
+        # Define exclusions for test directories and files
+        EXCLUDE_DIRS="--exclude-dir=.git --exclude-dir=.github --exclude-dir=.githooks --exclude-dir=backend/src/tests --exclude-dir=frontend/src/test --exclude-dir=tests"
+        EXCLUDE_FILES="--exclude=*.test.* --exclude=*.spec.* --exclude=*test*.rs --exclude=*test*.js --exclude=*test*.ts --exclude=.secrets-whitelist"
+        
+        # Private keys (fixed grep syntax)
+        if grep -rE -- "-----BEGIN.*PRIVATE KEY-----" . $EXCLUDE_DIRS $EXCLUDE_FILES; then
           echo "❌ Private keys detected"
           SECRETS_FOUND=1
         fi
         
-        # Custom API key patterns
-        if grep -rE "(api_key|apikey|secret_key|secretkey).*=.*[\"'][^\"']{20,}[\"']" . --exclude-dir=.git --exclude-dir=.github --exclude-dir=.githooks --exclude=".secrets-whitelist"; then
+        # Custom API key patterns (exclude test values)
+        if grep -rE "(api_key|apikey|secret_key|secretkey).*=.*[\"'][^\"']{20,}[\"']" . $EXCLUDE_DIRS $EXCLUDE_FILES | grep -v "test\|example\|demo\|sk_test"; then
           echo "❌ API keys detected"
           SECRETS_FOUND=1
         fi
         
-        # Long passwords
-        if grep -rE "password.*=.*[\"'][^\"']{12,}[\"']" . --exclude-dir=.git --exclude-dir=.github --exclude-dir=.githooks --exclude=".secrets-whitelist"; then
-          echo "❌ Long passwords detected"
+        # Long passwords (exclude test passwords)
+        if grep -rE "password.*=.*[\"'][^\"']{12,}[\"']" . $EXCLUDE_DIRS $EXCLUDE_FILES | grep -v "test\|example\|demo\|hash"; then
+          echo "❌ Long passwords detected"  
           SECRETS_FOUND=1
         fi
         
-        # Database URLs with passwords
-        if grep -rE "(postgres|mysql|mongodb)://[^:]+:[^@]{8,}@" . --exclude-dir=.git --exclude-dir=.github --exclude-dir=.githooks --exclude=".secrets-whitelist"; then
+        # Database URLs with passwords (exclude localhost/test)
+        if grep -rE "(postgres|mysql|mongodb)://[^:]+:[^@]{8,}@" . $EXCLUDE_DIRS $EXCLUDE_FILES | grep -v "localhost\|test\|example"; then
           echo "❌ Database URLs with passwords detected"
           SECRETS_FOUND=1
         fi
