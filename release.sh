@@ -222,9 +222,14 @@ main() {
     print_info "Updating VERSION file to $new_version on $original_branch"
     echo "$new_version" > VERSION
     
-    # Commit version change to current branch
-    print_info "Committing version change to $original_branch"
-    git add VERSION
+    # Update Cargo.toml version
+    print_info "Updating Cargo.toml version to $new_version"
+    sed -i.bak "s/^version = \".*\"/version = \"$new_version\"/" backend/Cargo.toml
+    rm -f backend/Cargo.toml.bak
+    
+    # Commit version changes to current branch
+    print_info "Committing version changes to $original_branch"
+    git add VERSION backend/Cargo.toml
     git commit -m "chore: bump version to $new_version"
     
     # Push current branch with version update
