@@ -1,7 +1,10 @@
 name: Docker Image CI (Disabled)
 
 # Disabled - use release-docker.yml workflow for releases only
-on: []
+on:
+  push:
+    branches:
+      - 'disabled-workflow-branch-that-does-not-exist'
 
 jobs:
   build:
