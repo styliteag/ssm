@@ -1,0 +1,229 @@
+#!/bin/bash
+#
+# Pre-commit hook to prevent secrets from being committed
+#
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+WHITELIST_FILE="$REPO_ROOT/.secrets-whitelist"
+
+# Colors for output
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+GREEN='\033[0;32m'
+NC='\033[0m' # No Color
+
+# Function to check if file is whitelisted
+is_whitelisted() {
+    local file="$1"
+    if [[ -f "$WHITELIST_FILE" ]]; then
+        while IFS= read -r pattern || [[ -n "$pattern" ]]; do
+            # Skip empty lines and comments
+            [[ -z "$pattern" || "$pattern" =~ ^[[:space:]]*# ]] && continue
+            
+            # Skip VALUE: entries (handled separately)
+            [[ "$pattern" =~ ^VALUE: ]] && continue
+            
+            # Check if file matches pattern (simple glob matching)
+            case "$file" in
+                $pattern) return 0 ;;
+            esac
+        done < "$WHITELIST_FILE"
+    fi
+    return 1
+}
+
+# Function to check if a specific value is allowlisted
+is_value_allowlisted() {
+    local value="$1"
+    if [[ -f "$WHITELIST_FILE" ]]; then
+        while IFS= read -r line || [[ -n "$line" ]]; do
+            # Skip empty lines and comments
+            [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+            
+            # Check for VALUE: prefix
+            if [[ "$line" =~ ^VALUE: ]]; then
+                local allowlisted_value="${line#VALUE:}"
+                # Exact match for allowlisted values
+                if [[ "$value" == "$allowlisted_value" ]]; then
+                    return 0
+                fi
+            fi
+        done < "$WHITELIST_FILE"
+    fi
+    return 1
+}
+
+# Extract and check if a potential secret value is allowlisted
+check_secret_value() {
+    local content="$1"
+    local pattern="$2"
+    local secret_type="$3"
+    local file="$4"
+    
+    # Extract potential secret values using the pattern
+    local matches
+    matches=$(echo "$content" | grep -oE "$pattern" | sed 's/.*["'\'']\([^"'\'']*\)["'\''].*/\1/' | head -5)
+    
+    if [[ -n "$matches" ]]; then
+        local found_unallowed=0
+        while IFS= read -r match; do
+            [[ -z "$match" ]] && continue
+            
+            if is_value_allowlisted "$match"; then
+                echo -e "${YELLOW}   ✓ Allowlisted $secret_type: $match${NC}"
+            else
+                echo -e "${RED}❌ $secret_type detected in $file${NC}"
+                echo -e "${RED}   Value: ${match:0:20}...${NC}"
+                found_unallowed=1
+            fi
+        done <<< "$matches"
+        
+        return $found_unallowed
+    fi
+    return 0
+}
+
+# Check for secrets in staged files
+check_for_secrets() {
+    local file="$1"
+    local content="$2"
+    local found_secrets=0
+    
+    # Private keys
+    if echo "$content" | grep -q -- "-----BEGIN.*PRIVATE KEY-----"; then
+        # Extract the full key content
+        local key_content
+        key_content=$(echo "$content" | sed -n '/-----BEGIN.*PRIVATE KEY-----/,/-----END.*PRIVATE KEY-----/p')
+        
+        if ! is_value_allowlisted "$key_content"; then
+            echo -e "${RED}❌ PRIVATE KEY detected in $file${NC}"
+            found_secrets=1
+        else
+            echo -e "${YELLOW}   ✓ Allowlisted private key in $file${NC}"
+        fi
+    fi
+    
+    # API keys and secrets (20+ character values)
+    if ! check_secret_value "$content" "(api_key|apikey|secret_key|secretkey|access_token|accesstoken).*=.*[\"'][^\"']{20,}[\"']" "API KEY/SECRET" "$file"; then
+        found_secrets=1
+    fi
+    
+    # Passwords (8+ characters)
+    if ! check_secret_value "$content" "password.*=.*[\"'][^\"']{8,}[\"']" "PASSWORD" "$file"; then
+        found_secrets=1
+    fi
+    
+    # Session keys
+    if ! check_secret_value "$content" "SESSION_KEY.*=.*[\"'][^\"']{20,}[\"']" "SESSION KEY" "$file"; then
+        found_secrets=1
+    fi
+    
+    # Database URLs with passwords
+    local db_urls
+    db_urls=$(echo "$content" | grep -oE "(postgres|mysql|mongodb)://[^:]+:[^@]{8,}@[^/]*" | head -5)
+    if [[ -n "$db_urls" ]]; then
+        while IFS= read -r url; do
+            [[ -z "$url" ]] && continue
+            
+            if is_value_allowlisted "$url"; then
+                echo -e "${YELLOW}   ✓ Allowlisted database URL in $file${NC}"
+            else
+                echo -e "${RED}❌ DATABASE URL with password detected in $file${NC}"
+                echo -e "${RED}   URL: ${url:0:30}...${NC}"
+                found_secrets=1
+            fi
+        done <<< "$db_urls"
+    fi
+    
+    # Bearer tokens
+    local bearer_tokens
+    bearer_tokens=$(echo "$content" | grep -oE "bearer [a-zA-Z0-9_-]{20,}" | head -5)
+    if [[ -n "$bearer_tokens" ]]; then
+        while IFS= read -r token; do
+            [[ -z "$token" ]] && continue
+            
+            if is_value_allowlisted "$token"; then
+                echo -e "${YELLOW}   ✓ Allowlisted bearer token in $file${NC}"
+            else
+                echo -e "${RED}❌ BEARER TOKEN detected in $file${NC}"
+                echo -e "${RED}   Token: ${token:0:30}...${NC}"
+                found_secrets=1
+            fi
+        done <<< "$bearer_tokens"
+    fi
+    
+    # htpasswd hashes (bcrypt format)
+    local htpasswd_lines
+    htpasswd_lines=$(echo "$content" | grep -E "^[^:]+:\\\$2[aby]\\\$[0-9]+\\\$[A-Za-z0-9./]{53}$" | head -5)
+    if [[ -n "$htpasswd_lines" ]]; then
+        while IFS= read -r line; do
+            [[ -z "$line" ]] && continue
+            
+            if is_value_allowlisted "$line"; then
+                echo -e "${YELLOW}   ✓ Allowlisted password hash in $file${NC}"
+            else
+                echo -e "${RED}❌ PASSWORD HASH detected in $file${NC}"
+                echo -e "${RED}   Hash: ${line:0:20}...${NC}"
+                found_secrets=1
+            fi
+        done <<< "$htpasswd_lines"
+    fi
+    
+    return $found_secrets
+}
+
+# Main execution
+echo -e "${GREEN}🔍 Scanning for secrets in staged files...${NC}"
+
+# Get list of files to be committed
+FILES_TO_CHECK=$(git diff --cached --name-only --diff-filter=ACM)
+
+if [[ -z "$FILES_TO_CHECK" ]]; then
+    exit 0
+fi
+
+SECRETS_FOUND=0
+
+# Check each staged file
+while IFS= read -r file; do
+    # Skip binary files
+    if git diff --cached --binary "$file" | head -1 | grep -q "^Binary files"; then
+        continue
+    fi
+    
+    # Check if file is whitelisted
+    if is_whitelisted "$file"; then
+        echo -e "${YELLOW}⚠️  Skipping whitelisted file: $file${NC}"
+        continue
+    fi
+    
+    # Get staged content of the file
+    STAGED_CONTENT=$(git show ":$file" 2>/dev/null)
+    if [[ -z "$STAGED_CONTENT" ]]; then
+        continue
+    fi
+    
+    # Check for secrets
+    if ! check_for_secrets "$file" "$STAGED_CONTENT"; then
+        SECRETS_FOUND=1
+    fi
+    
+done <<< "$FILES_TO_CHECK"
+
+if [[ $SECRETS_FOUND -eq 1 ]]; then
+    echo
+    echo -e "${RED}🚨 COMMIT REJECTED: Potential secrets detected!${NC}"
+    echo
+    echo -e "${YELLOW}To fix this issue:${NC}"
+    echo "1. Remove the secrets from your staged files"
+    echo "2. Add legitimate test/example files to .secrets-whitelist"
+    echo "3. Use environment variables or config files for secrets"
+    echo
+    echo -e "${YELLOW}If this is a false positive, add the file pattern to:${NC}"
+    echo "   $WHITELIST_FILE"
+    echo
+    exit 1
+fi
+
+echo -e "${GREEN}✅ No secrets detected. Commit allowed.${NC}"
+exit 0
