@@ -198,8 +198,6 @@ main() {
     
     print_info "New version: $new_version"
     
-    # Run build verification
-    run_build_tests
 
     # Confirm with user
     echo
@@ -226,7 +224,11 @@ main() {
     print_info "Updating Cargo.toml version to $new_version"
     sed -i.bak "s/^version = \".*\"/version = \"$new_version\"/" backend/Cargo.toml
     rm -f backend/Cargo.toml.bak
-    
+
+    # Run build verification
+    # This also updates Cargo.lock
+    run_build_tests
+   
     # Commit version changes to current branch
     print_info "Committing version changes to $original_branch"
     git add VERSION backend/Cargo.toml backend/Cargo.lock
