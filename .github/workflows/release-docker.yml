@@ -76,11 +76,11 @@ jobs:
           styliteag/ssh-key-manager:${{ steps.version.outputs.version }}
           styliteag/ssh-key-manager:release-${{ steps.version.outputs.major }}.${{ steps.version.outputs.minor }}
           styliteag/ssh-key-manager:release-${{ steps.version.outputs.major }}
-          styliteag/ssh-key-manager:release-latest
+          styliteag/ssh-key-manager:latest
           ghcr.io/${{ github.repository }}/ssh-key-manager:${{ steps.version.outputs.version }}
           ghcr.io/${{ github.repository }}/ssh-key-manager:release-${{ steps.version.outputs.major }}.${{ steps.version.outputs.minor }}
           ghcr.io/${{ github.repository }}/ssh-key-manager:release-${{ steps.version.outputs.major }}
-          ghcr.io/${{ github.repository }}/ssh-key-manager:release-latest
+          ghcr.io/${{ github.repository }}/ssh-key-manager:latest
           
     - name: Create GitHub release
       uses: actions/create-release@v1
