@@ -8,24 +8,6 @@
         "@agentdeskai/browser-tools-mcp"
       ],
       "env": {}
-    },
-    "playwright": {
-      "type": "stdio",
-      "command": "npx",
-      "args": [
-        "-y",
-        "@playwright/mcp-server"
-      ],
-      "env": {}
-    },
-    "puppeteer": {
-      "type": "stdio",
-      "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-puppeteer"
-      ],
-      "env": {}
     }
   }
 }
