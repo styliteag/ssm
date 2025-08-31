@@ -161,3 +161,57 @@ The API uses singular resource names in the URL paths:
 1. Frontend TypeScript types (`Host.jump_via?: number`)
 2. Backend Rust deserializer (`empty_string_as_none_int` expecting string)
 3. The conversion logic in `hostsService.updateHost()`
+
+## Git Hooks Setup
+
+**🔒 SECURITY**: This repository includes git hooks to prevent accidental commit of secrets, passwords, and private keys.
+
+### Initial Setup (Required for all developers)
+```bash
+# After cloning the repository, install the git hooks:
+./install-hooks.sh
+```
+
+### What the hooks protect against:
+- Private SSH keys (`-----BEGIN PRIVATE KEY-----`)
+- API keys, secret keys, access tokens (20+ chars)
+- Passwords (8+ chars)
+- Session keys and JWT secrets
+- Database URLs with embedded passwords
+- Bearer tokens
+- Password hashes (bcrypt format)
+
+### Whitelist Configuration
+The hooks use `.secrets-whitelist` for legitimate exceptions:
+
+**File Patterns** (allow entire files):
+```
+*.example           # Example config files
+*test*.rs          # Test files
+README.md          # Documentation
+```
+
+**Specific Values** (allow known safe secrets):
+```
+VALUE:sk_test_12345678901234567890123456789012345678
+VALUE:test-password-for-example-only
+VALUE:ssh-rsa AAAAB3NzaC1yc2EAAAADAQAB... test@example.com
+```
+
+### When commits are blocked:
+1. **Remove real secrets** from your staged files
+2. **Add test/example files** to `.secrets-whitelist` file patterns
+3. **Add known safe values** to `.secrets-whitelist` with `VALUE:` prefix
+4. **Use environment variables** for production secrets
+
+### Hook Management:
+```bash
+# Install/update hooks for all users
+./install-hooks.sh
+
+# Test hooks manually
+git add <file-with-secrets> && git commit -m "test"
+
+# View hook output
+cat .git/hooks/pre-commit
+```
