@@ -24,18 +24,6 @@ RUN npm run build
 FROM rust:1.89-alpine AS chef
 # Install build dependencies needed for cargo-chef
 RUN apk add --no-cache musl-dev gcc
-RUN cargo install cargo-chef
-WORKDIR /app
-
-FROM chef AS planner
-# Copy entire backend to analyze dependencies
-COPY backend/. .
-# Generate dependency recipe (this changes less frequently than Cargo.toml)
-RUN cargo chef prepare --recipe-path recipe.json
-
-FROM chef AS backend-builder
-WORKDIR /app
-
 # Install build dependencies for static compilation and cross-compilation
 RUN apk add --no-cache \
     musl-dev \
@@ -48,9 +36,18 @@ RUN apk add --no-cache \
     clang \
     lld \
     libgcc
+RUN cargo install cargo-chef
 
-# Set up cross-compilation environment for multi-arch builds
-# Let Rust handle cross-compilation automatically with Docker's BUILDPLATFORM
+WORKDIR /app
+
+FROM chef AS planner
+# Copy entire backend to analyze dependencies
+COPY backend/. .
+# Generate dependency recipe (this changes less frequently than Cargo.toml)
+RUN cargo chef prepare --recipe-path recipe.json
+
+FROM chef AS backend-builder
+WORKDIR /app
 
 # Copy the dependency recipe from planner stage
 COPY --from=planner /app/recipe.json recipe.json
