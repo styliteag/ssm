@@ -106,6 +106,9 @@ check_git_status() {
 run_build_tests() {
     print_info "Running build verification..."
     
+    # Store current directory to return to it
+    local original_dir=$(pwd)
+    
     # Check if we're in the project root
     if [ ! -f "frontend/package.json" ] || [ ! -f "backend/Cargo.toml" ]; then
         print_error "Not in project root. Please run this script from the repository root."
@@ -119,11 +122,11 @@ run_build_tests() {
         print_error "Frontend build failed!"
         print_error "Build log:"
         cat /tmp/frontend-build.log
-        cd ..
+        cd "$original_dir"
         exit 1
     fi
     print_success "Frontend build completed"
-    cd ..
+    cd "$original_dir"
     
     # Build backend
     print_info "Building backend..."
@@ -132,11 +135,11 @@ run_build_tests() {
         print_error "Backend build failed!"
         print_error "Build log:"
         cat /tmp/backend-build.log
-        cd ..
+        cd "$original_dir"
         exit 1
     fi
     print_success "Backend build completed"
-    cd ..
+    cd "$original_dir"
     
     ## Run backend tests
     #print_info "Running backend tests..."
@@ -145,11 +148,11 @@ run_build_tests() {
     #    print_error "Backend tests failed!"
     #    print_error "Test log:"
     #    cat /tmp/backend-test.log
-    #    cd ..
+    #    cd "$original_dir"
     #    exit 1
     #fi
     #print_success "Backend tests passed"
-    cd ..
+    #cd "$original_dir"
     
     print_success "All builds and tests completed successfully"
 }
