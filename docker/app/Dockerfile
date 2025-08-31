@@ -46,12 +46,11 @@ RUN apk add --no-cache \
     pkgconfig \
     gcc \
     clang \
-    lld
+    lld \
+    libgcc
 
 # Set up cross-compilation environment for multi-arch builds
-ENV CC_aarch64_unknown_linux_musl=clang
-ENV AR_aarch64_unknown_linux_musl=llvm-ar
-ENV CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_RUSTFLAGS="-Clink-self-contained=yes -Clinker=rust-lld"
+# Let Rust handle cross-compilation automatically with Docker's BUILDPLATFORM
 
 # Copy the dependency recipe from planner stage
 COPY --from=planner /app/recipe.json recipe.json

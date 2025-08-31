@@ -45,6 +45,7 @@ jobs:
       with:
         prefix-key: "v0-rust"
         shared-key: "stable"
+        workspaces: "backend"
       
     - name: Login to GitHub Container Registry
       uses: docker/login-action@v2
