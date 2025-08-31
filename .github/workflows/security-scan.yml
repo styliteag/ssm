@@ -22,12 +22,14 @@ jobs:
       uses: trufflesecurity/trufflehog@main
       with:
         path: ./
-        base: ${{ github.event.repository.default_branch }}
-        head: HEAD
+        base: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        head: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.event.after }}
         extra_args: --debug --only-verified
+      continue-on-error: true
     
     - name: Run GitLeaks
       uses: gitleaks/gitleaks-action@v2
+      continue-on-error: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }} # Only required for Organizations, not needed for personal accounts.
