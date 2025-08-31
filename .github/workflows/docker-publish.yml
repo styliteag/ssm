@@ -1,11 +1,12 @@
-name: Docker Image CI
+name: Docker Image CI (Disabled)
 
+# Disabled - use release-docker.yml workflow for releases only
 on:
-  workflow_dispatch:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+  # workflow_dispatch:
+  # push:
+  #   branches: [ "main" ]
+  # pull_request:
+  #   branches: [ "main" ]
 
 jobs:
   build:
