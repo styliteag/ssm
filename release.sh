@@ -69,9 +69,24 @@ increment_version() {
 
 # Function to validate git status
 check_git_status() {
+    print_info "Checking git status..."
+    
     if ! git diff-index --quiet HEAD --; then
         print_error "Working directory is not clean. Please commit or stash your changes first."
+        git status --short
         exit 1
+    fi
+    
+    # Check for untracked files that might be important
+    local untracked_files=$(git ls-files --others --exclude-standard)
+    if [ -n "$untracked_files" ]; then
+        print_warning "Untracked files found:"
+        echo "$untracked_files" | sed 's/^/  /'
+        read -p "Continue with untracked files? (y/N): " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            exit 1
+        fi
     fi
     
     local current_branch=$(git branch --show-current)
@@ -83,6 +98,60 @@ check_git_status() {
             exit 1
         fi
     fi
+    
+    print_success "Git status is clean"
+}
+
+# Function to run build tests
+run_build_tests() {
+    print_info "Running build verification..."
+    
+    # Check if we're in the project root
+    if [ ! -f "frontend/package.json" ] || [ ! -f "backend/Cargo.toml" ]; then
+        print_error "Not in project root. Please run this script from the repository root."
+        exit 1
+    fi
+    
+    # Build frontend
+    print_info "Building frontend..."
+    cd frontend
+    if ! npm run build > /tmp/frontend-build.log 2>&1; then
+        print_error "Frontend build failed!"
+        print_error "Build log:"
+        cat /tmp/frontend-build.log
+        cd ..
+        exit 1
+    fi
+    print_success "Frontend build completed"
+    cd ..
+    
+    # Build backend
+    print_info "Building backend..."
+    cd backend
+    if ! cargo build --release > /tmp/backend-build.log 2>&1; then
+        print_error "Backend build failed!"
+        print_error "Build log:"
+        cat /tmp/backend-build.log
+        cd ..
+        exit 1
+    fi
+    print_success "Backend build completed"
+    cd ..
+    
+    # Run backend tests
+    print_info "Running backend tests..."
+    cd backend
+    if ! cargo test > /tmp/backend-test.log 2>&1; then
+        print_error "Backend tests failed!"
+        print_error "Test log:"
+        cat /tmp/backend-test.log
+        cd ..
+        exit 1
+    fi
+    print_success "Backend tests passed"
+    cd ..
+    
+    print_success "All builds and tests completed successfully"
 }
 
 # Main script
@@ -111,6 +180,12 @@ main() {
     # Check git status
     check_git_status
     
+    # Run build verification
+    run_build_tests
+    
+    # Store current branch to return to it later
+    local original_branch=$(git branch --show-current)
+    
     # Read current version
     local current_version=$(cat VERSION | tr -d '\n')
     print_info "Current version: $current_version"
@@ -130,6 +205,7 @@ main() {
     echo "  • Create release branch: release-$new_version"
     echo "  • Create git tag: v$new_version"
     echo "  • Push branch and tag to origin"
+    echo "  • Update main branch with new version"
     echo
     read -p "Proceed with release? (y/N): " -n 1 -r
     echo
@@ -160,6 +236,19 @@ main() {
     print_info "Pushing branch and tag to origin"
     git push origin "$release_branch"
     git push origin "v$new_version"
+    
+    # Switch back to original branch and update version there too
+    print_info "Switching back to $original_branch to update version"
+    git checkout "$original_branch"
+    
+    # Update VERSION on original branch too
+    echo "$new_version" > VERSION
+    git add VERSION
+    git commit -m "chore: sync version to $new_version after release"
+    git push origin "$original_branch"
+    
+    print_info "Version updated on both $original_branch and $release_branch"
+    print_success "Returned to original branch: $original_branch"
     
     print_success "Release $new_version created successfully!"
     print_info "Release branch: $release_branch"
