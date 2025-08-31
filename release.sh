@@ -182,10 +182,7 @@ main() {
     
     # Check git status
     check_git_status
-    
-    # Run build verification
-    run_build_tests
-    
+        
     # Store current branch to return to it later
     local original_branch=$(git branch --show-current)
     
@@ -201,6 +198,9 @@ main() {
     
     print_info "New version: $new_version"
     
+    # Run build verification
+    run_build_tests
+
     # Confirm with user
     echo
     print_warning "This will:"
@@ -229,7 +229,7 @@ main() {
     
     # Commit version changes to current branch
     print_info "Committing version changes to $original_branch"
-    git add VERSION backend/Cargo.toml
+    git add VERSION backend/Cargo.toml backend/Cargo.lock
     git commit -m "chore: bump version to $new_version"
     
     # Push current branch with version update
