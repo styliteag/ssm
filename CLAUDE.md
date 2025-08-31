@@ -215,3 +215,60 @@ git add <file-with-secrets> && git commit -m "test"
 # View hook output
 cat .git/hooks/pre-commit
 ```
+
+## GitHub Server-Side Secret Protection
+
+**🌐 MULTI-LAYER SECURITY**: The repository includes both local git hooks AND server-side GitHub protection.
+
+### GitHub Secret Scanning Setup
+1. **Enable GitHub Secret Scanning** (Repository Settings > Code security):
+   - Secret scanning: ✅ Enabled
+   - Push protection: ✅ Enabled  
+   - Historical scanning: ✅ Enabled
+
+2. **GitHub Actions Workflow** (`.github/workflows/security-scan.yml`):
+   - Runs TruffleHog OSS for secret detection
+   - Runs GitLeaks for additional patterns
+   - Custom pattern matching for project-specific secrets
+   - Dependency vulnerability scanning with Trivy
+   - Verifies git hooks infrastructure
+
+3. **Branch Protection Rules** (Recommended):
+   ```bash
+   # Require security scan to pass before merge
+   gh api repos/:owner/:repo/branches/main/protection \
+     --method PUT \
+     --field required_status_checks='{"strict":true,"contexts":["Secret Detection"]}'
+   ```
+
+### Security Layers Overview:
+```
+Developer Commits
+       ↓
+🛡️ Local Git Hook (pre-commit)    ← Catches secrets before commit
+       ↓
+📤 Push to GitHub
+       ↓  
+🛡️ GitHub Secret Scanning        ← Server-side detection + push protection
+       ↓
+🛡️ GitHub Actions Workflow       ← Additional patterns + dependency scan
+       ↓
+🔒 Protected Branch Rules         ← Requires all checks to pass
+       ↓
+✅ Code merged to main branch
+```
+
+### When secrets are detected:
+- **Local**: Git hook blocks commit with detailed output
+- **GitHub Push**: Push protection prevents push with secret detected
+- **GitHub Actions**: PR/build fails with security scan results
+- **Branch Protection**: Merge blocked until security checks pass
+
+### Bypassing Protection (Emergency):
+```bash
+# Local only (NOT recommended):
+git commit --no-verify -m "emergency fix"
+
+# GitHub: Cannot bypass server-side protection
+# Must remove secrets or add to whitelist properly
+```
