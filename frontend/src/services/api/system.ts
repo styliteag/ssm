@@ -10,5 +10,5 @@ export const systemService = {
   /**
    * Get API information including version
    */
-  getApiInfo: () => api.get<ApiInfo>('/'),
+  getApiInfo: () => api.get<ApiInfo>('/info'),
 };

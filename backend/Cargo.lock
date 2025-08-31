@@ -3012,7 +3012,7 @@ dependencies = [
 
 [[package]]
 name = "ssm"
-version = "0.0.1-alpha"
+version = "0.0.8"
 dependencies = [
  "actix",
  "actix-cors",

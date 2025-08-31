@@ -34,6 +34,7 @@ pub fn route_config(cfg: &mut web::ServiceConfig) {
         .service(crate::openapi::swagger_ui())
         .service(
             web::scope("/api")
+                .service(api_info_scoped)
                 .service(web::scope("/host").configure(host::config))
                 .service(web::scope("/user").configure(user::config))
                 .service(web::scope("/key").configure(key::config))
@@ -79,6 +80,23 @@ async fn not_found() -> Result<impl Responder> {
 )]
 #[get("/")]
 async fn api_info() -> Result<impl Responder> {
+    Ok(HttpResponse::Ok().json(ApiResponse::success(ApiInfo {
+        name: "SSH Key Manager API".to_string(),
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        description: "REST API for managing SSH keys across multiple hosts".to_string(),
+    })))
+}
+
+/// Get API information (scoped under /api)
+#[utoipa::path(
+    get,
+    path = "/api/info",
+    responses(
+        (status = 200, description = "API information", body = ApiInfo)
+    )
+)]
+#[get("/info")]
+async fn api_info_scoped() -> Result<impl Responder> {
     Ok(HttpResponse::Ok().json(ApiResponse::success(ApiInfo {
         name: "SSH Key Manager API".to_string(),
         version: env!("CARGO_PKG_VERSION").to_string(),
