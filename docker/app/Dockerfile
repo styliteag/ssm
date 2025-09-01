@@ -43,9 +43,11 @@ RUN cargo install cargo-chef
 
 # Pre-warm Rust toolchain components to cache downloads
 # This prevents rustc/cargo component downloads during build
-RUN rustup component add rust-src && \
+RUN rustup toolchain install stable-x86_64-unknown-linux-musl && \
     rustup target add x86_64-unknown-linux-musl && \
     rustup target add aarch64-unknown-linux-musl && \
+    rustup component add rust-src && \
+    rustup default stable-x86_64-unknown-linux-musl && \
     cargo version && \
     rustc --version
 
@@ -76,8 +78,8 @@ RUN cargo chef prepare --recipe-path recipe.json && rm -rf src
 FROM chef AS backend-builder
 WORKDIR /app
 
-# Copy src directory from planner stage
-COPY backend/src ./src
+# Ensure toolchain is set correctly (should be cached from chef stage)
+RUN rustup default stable-x86_64-unknown-linux-musl
 
 # Copy the dependency recipe from planner stage
 COPY --from=planner /app/recipe.json recipe.json
@@ -101,7 +103,7 @@ COPY backend/src ./src/
 RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,target=/app/target,sharing=locked \
     cargo build --release && \
-    cp  target/release/ssm /app/ssm-binary
+    cp target/release/ssm /app/ssm-binary
 
 
 
