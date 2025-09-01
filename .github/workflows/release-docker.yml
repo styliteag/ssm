@@ -65,6 +65,12 @@ jobs:
         platforms: linux/amd64,linux/arm64
         cache-from: type=gha
         cache-to: type=gha,mode=max
+        sbom: true
+        provenance: true
+        build-args: |
+          VERSION=${{ steps.version.outputs.version }}
+          VCS_REF=${{ github.sha }}
+          VITE_API_URL=/api
         tags: |
           styliteag/ssh-key-manager:${{ steps.version.outputs.version }}
           styliteag/ssh-key-manager:release-${{ steps.version.outputs.major }}.${{ steps.version.outputs.minor }}
