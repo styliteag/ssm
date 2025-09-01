@@ -25,6 +25,9 @@ RUN npm run build
 # Rust backend builder stage with cargo-chef for better dependency caching
 FROM rust:1.89-alpine AS chef
 #FROM lukemathwalker/cargo-chef:latest-rust-1.89.0 AS chef
+ENV CARGO_HOME=/usr/local/cargo \
+    RUSTUP_HOME=/usr/local/rustup \
+    CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse
 
 # Install build dependencies for static compilation and cross-compilation
 RUN apk add --no-cache \
@@ -42,7 +45,9 @@ RUN apk add --no-cache \
 WORKDIR /app
 COPY backend/rust-toolchain.toml ./rust-toolchain.toml
 # Install cargo-chef in separate layer for better caching
-RUN cargo install cargo-chef
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,target=/usr/local/cargo/git,sharing=locked \
+    cargo install --locked cargo-chef
 
 # Pre-warm Rust toolchain components to cache downloads
 # This prevents rustc/cargo component downloads during build
@@ -102,7 +107,11 @@ COPY --from=planner /app/recipe.json recipe.json
 
 # Build dependencies based on recipe with enhanced caching
 # This layer should be cached unless Cargo.toml/Cargo.lock changes
-RUN cargo chef cook --release --recipe-path recipe.json --locked
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,target=/usr/local/cargo/git,sharing=locked \
+    --mount=type=cache,target=/app/target \
+    CARGO_TARGET_DIR=/app/target \
+    cargo chef cook --release --recipe-path recipe.json --locked
 
 # Copy backend source and other necessary files
 COPY backend/Cargo.toml backend/Cargo.lock backend/rust-toolchain.toml ./
@@ -114,7 +123,11 @@ COPY backend/src ./src/
 COPY VERSION /VERSION
 
 # Build the actual application statically with enhanced caching
-RUN cargo build --release --locked && \
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,target=/usr/local/cargo/git,sharing=locked \
+    --mount=type=cache,target=/app/target \
+    CARGO_TARGET_DIR=/app/target \
+    cargo build --release --locked && \
     apk add --no-cache binutils && \
     strip target/release/ssm && \
     cp target/release/ssm /app/ssm-binary
