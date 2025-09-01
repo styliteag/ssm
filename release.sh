@@ -21,10 +21,9 @@ show_usage() {
     echo ""
     echo "This script will:"
     echo "  1. Increment the version in ./VERSION file"
-    echo "  2. Create and checkout a new release branch"
-    echo "  3. Commit the version change"
-    echo "  4. Create a git tag"
-    echo "  5. Push the branch and tag to origin"
+    echo "  2. Commit the version change on current branch"
+    echo "  3. Create a git tag"
+    echo "  4. Push the branch and tag to origin"
     echo ""
     echo "Version increment types:"
     echo "  major: X.0.0 (breaking changes)"
@@ -203,11 +202,9 @@ main() {
     echo
     print_warning "This will:"
     echo "  • Update VERSION from $current_version to $new_version on $original_branch"
-    echo "  • Push $original_branch with version update"
-    echo "  • Create release branch: release-$new_version"
+    echo "  • Commit and push $original_branch with version update"
     echo "  • Create git tag: v$new_version"
-    echo "  • Push release branch and tag to origin"
-    echo "  • Return to $original_branch"
+    echo "  • Push tag to origin (this will trigger the Docker build)"
     echo
     read -p "Proceed with release? (y/N): " -n 1 -r
     echo
@@ -216,7 +213,7 @@ main() {
         exit 0
     fi
     
-    # Update VERSION file on current branch first
+    # Update VERSION file on current branch
     print_info "Updating VERSION file to $new_version on $original_branch"
     echo "$new_version" > VERSION
     
@@ -234,33 +231,20 @@ main() {
     git add VERSION backend/Cargo.toml backend/Cargo.lock
     git commit -m "chore: bump version to $new_version"
     
-    # Push current branch with version update
-    print_info "Pushing $original_branch with version update"
-    git push origin "$original_branch"
-    
-    # Create release branch from updated current branch
-    local release_branch="release-$new_version"
-    print_info "Creating and checking out release branch: $release_branch"
-    git checkout -b "$release_branch"
-    
-    # Create tag on release branch
+    # Create tag on current branch
     print_info "Creating tag: v$new_version"
     git tag -a "v$new_version" -m "Release version $new_version"
     
-    # Push release branch and tag
-    print_info "Pushing release branch and tag to origin"
-    git push origin "$release_branch"
+    # Push current branch with version update and tag
+    print_info "Pushing $original_branch with version update"
+    git push origin "$original_branch"
+    
+    print_info "Pushing tag to origin (this will trigger the GitHub Actions build)"
     git push origin "v$new_version"
     
-    # Switch back to original branch
-    print_info "Switching back to $original_branch"
-    git checkout "$original_branch"
-    
-    print_success "Returned to original branch: $original_branch"
-    
     print_success "Release $new_version created successfully!"
-    print_info "Release branch: $release_branch"
     print_info "Git tag: v$new_version"
+    print_info "Branch: $original_branch"
     print_info ""
     print_info "The GitHub Action will now build and publish Docker images:"
     print_info "  • styliteag/ssh-key-manager:$new_version"

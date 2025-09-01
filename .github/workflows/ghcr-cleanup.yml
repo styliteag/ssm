@@ -12,7 +12,7 @@ on:
         required: true
         default: "0"
       preserve_tags:
-        description: "Comma-separated tags or globs to preserve (e.g. latest,release-*)"
+        description: "Comma-separated tags or globs to preserve (e.g. latest,v*.*.*)"
         required: false
         default: "latest"
       dry_run:

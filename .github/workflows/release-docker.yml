@@ -2,8 +2,8 @@ name: Release Docker Build
 
 on:
   push:
-    branches: 
-      - 'release-*'
+    tags:
+      - 'v*.*.*'
 
 jobs:
   build:
@@ -36,12 +36,12 @@ jobs:
         echo "minor=$MINOR" >> $GITHUB_OUTPUT
         echo "Major: $MAJOR, Minor: $MINOR"
         
-    - name: Extract branch name
-      id: branch
+    - name: Extract tag name
+      id: tag
       run: |
-        BRANCH_NAME=${GITHUB_REF#refs/heads/}
-        echo "branch=$BRANCH_NAME" >> $GITHUB_OUTPUT
-        echo "Branch: $BRANCH_NAME"
+        TAG_NAME=${GITHUB_REF#refs/tags/}
+        echo "tag=$TAG_NAME" >> $GITHUB_OUTPUT
+        echo "Tag: $TAG_NAME"
         
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3    
@@ -69,6 +69,7 @@ jobs:
         cache-from: |
           type=gha,scope=${{ matrix.arch }}
           type=gha,scope=shared
+          type=gha
         cache-to: |
           type=gha,mode=max,scope=${{ matrix.arch }}
           type=gha,mode=max,scope=shared
@@ -104,12 +105,12 @@ jobs:
         echo "minor=$MINOR" >> $GITHUB_OUTPUT
         echo "Major: $MAJOR, Minor: $MINOR"
         
-    - name: Extract branch name
-      id: branch
+    - name: Extract tag name
+      id: tag
       run: |
-        BRANCH_NAME=${GITHUB_REF#refs/heads/}
-        echo "branch=$BRANCH_NAME" >> $GITHUB_OUTPUT
-        echo "Branch: $BRANCH_NAME"
+        TAG_NAME=${GITHUB_REF#refs/tags/}
+        echo "tag=$TAG_NAME" >> $GITHUB_OUTPUT
+        echo "Tag: $TAG_NAME"
       
     - name: Login to Docker Hub
       uses: docker/login-action@v3
@@ -138,12 +139,12 @@ jobs:
           styliteag/ssh-key-manager:${{ steps.version.outputs.version }}-arm64
         
         docker buildx imagetools create \
-          -t styliteag/ssh-key-manager:release-${{ steps.version.outputs.major }}.${{ steps.version.outputs.minor }} \
+          -t styliteag/ssh-key-manager:${{ steps.version.outputs.major }}.${{ steps.version.outputs.minor }} \
           styliteag/ssh-key-manager:${{ steps.version.outputs.version }}-amd64 \
           styliteag/ssh-key-manager:${{ steps.version.outputs.version }}-arm64
         
         docker buildx imagetools create \
-          -t styliteag/ssh-key-manager:release-${{ steps.version.outputs.major }} \
+          -t styliteag/ssh-key-manager:${{ steps.version.outputs.major }} \
           styliteag/ssh-key-manager:${{ steps.version.outputs.version }}-amd64 \
           styliteag/ssh-key-manager:${{ steps.version.outputs.version }}-arm64
         
@@ -159,12 +160,12 @@ jobs:
           ghcr.io/${{ github.repository }}/ssh-key-manager:${{ steps.version.outputs.version }}-arm64
         
         docker buildx imagetools create \
-          -t ghcr.io/${{ github.repository }}/ssh-key-manager:release-${{ steps.version.outputs.major }}.${{ steps.version.outputs.minor }} \
+          -t ghcr.io/${{ github.repository }}/ssh-key-manager:${{ steps.version.outputs.major }}.${{ steps.version.outputs.minor }} \
           ghcr.io/${{ github.repository }}/ssh-key-manager:${{ steps.version.outputs.version }}-amd64 \
           ghcr.io/${{ github.repository }}/ssh-key-manager:${{ steps.version.outputs.version }}-arm64
         
         docker buildx imagetools create \
-          -t ghcr.io/${{ github.repository }}/ssh-key-manager:release-${{ steps.version.outputs.major }} \
+          -t ghcr.io/${{ github.repository }}/ssh-key-manager:${{ steps.version.outputs.major }} \
           ghcr.io/${{ github.repository }}/ssh-key-manager:${{ steps.version.outputs.version }}-amd64 \
           ghcr.io/${{ github.repository }}/ssh-key-manager:${{ steps.version.outputs.version }}-arm64
 
@@ -178,7 +179,7 @@ jobs:
         body: |
           Release v${{ steps.version.outputs.version }}
           
-          Built from branch: ${{ steps.branch.outputs.branch }}
+          Built from tag: ${{ steps.tag.outputs.tag }}
           
           Docker Images:
           - `styliteag/ssh-key-manager:${{ steps.version.outputs.version }}`
