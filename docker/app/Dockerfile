@@ -11,7 +11,7 @@ WORKDIR /app
 COPY frontend/package*.json ./
 
 # Install frontend dependencies
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
 
 # Copy frontend source
 COPY frontend/. .
@@ -101,7 +101,7 @@ COPY --from=planner /app/recipe.json recipe.json
 # This layer should be cached unless Cargo.toml/Cargo.lock changes
 RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,target=/app/target,sharing=locked \
-    cargo chef cook --release --recipe-path recipe.json
+    cargo chef cook --release --recipe-path recipe.json --locked
 
 # Copy backend source and other necessary files
 COPY backend/Cargo.toml backend/Cargo.lock ./
@@ -109,12 +109,15 @@ COPY backend/build.rs ./
 COPY backend/migrations ./migrations/
 COPY backend/diesel.toml ./
 COPY backend/rust-toolchain.toml ./
+COPY VERSION /VERSION
 COPY backend/src ./src/
 
 # Build the actual application statically with enhanced caching
 RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,target=/app/target,sharing=locked \
-    cargo build --release && \
+    cargo build --release --locked && \
+    apk add --no-cache binutils && \
+    strip target/release/ssm && \
     cp target/release/ssm /app/ssm-binary
 
 
@@ -128,7 +131,8 @@ WORKDIR /app
 RUN apk add --no-cache \
     nginx \
     ca-certificates \
-    curl
+    curl \
+    wget
 
 # Copy nginx configuration
 COPY docker/app/nginx-main.conf /etc/nginx/nginx.conf
@@ -194,6 +198,15 @@ RUN mkdir -p /var/cache/nginx /var/run/nginx /app/db /app/keys /var/log/nginx &&
 EXPOSE 80
 
 COPY VERSION /app/VERSION
-LABEL version="$(cat /app/VERSION)"
+
+# Image metadata
+ARG VERSION
+ARG VCS_REF
+LABEL org.opencontainers.image.title="ssh-key-manager" \
+      org.opencontainers.image.version=$VERSION \
+      org.opencontainers.image.revision=$VCS_REF \
+      org.opencontainers.image.source="https://github.com/styliteag/ssm"
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s CMD /app/health-check.sh || exit 1
 
 CMD ["/app/start.sh"]
