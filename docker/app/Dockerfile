@@ -11,7 +11,7 @@ WORKDIR /app
 COPY frontend/package*.json ./
 
 # Install frontend dependencies
-RUN ci --no-audit --no-fund
+RUN npm ci --no-audit --no-fund
 
 # Copy frontend source
 COPY frontend/. .
