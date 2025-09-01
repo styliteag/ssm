@@ -35,11 +35,7 @@ jobs:
         echo "Branch: $BRANCH_NAME"
         
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-      
-    - name: Set up sccache
-      uses: mozilla-actions/sccache-action@v0.0.7
-      
+      uses: docker/setup-buildx-action@v3    
     - name: Set up Rust cache
       uses: Swatinem/rust-cache@v2
       with:
@@ -62,9 +58,6 @@ jobs:
         
     - name: Build and push release Docker images
       uses: docker/build-push-action@v6
-      env:
-        SCCACHE_GHA_ENABLED: "true"
-        RUSTC_WRAPPER: "sccache"
       with:
         push: true
         context: .
