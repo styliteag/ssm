@@ -36,8 +36,3 @@ jobs:
         cache-to: type=gha,mode=max,scope=test
         tags: |
           test/ssh-key-manager:latest
-          
-    - name: Show sccache stats
-      run: |
-        echo "sccache statistics:"
-        sccache --show-stats || echo "sccache stats not available"
