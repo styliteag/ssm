@@ -41,6 +41,14 @@ RUN apk add --no-cache \
 # Install cargo-chef in separate layer for better caching
 RUN cargo install cargo-chef
 
+# Pre-warm Rust toolchain components to cache downloads
+# This prevents rustc/cargo component downloads during build
+RUN rustup component add rust-src && \
+    rustup target add x86_64-unknown-linux-musl && \
+    rustup target add aarch64-unknown-linux-musl && \
+    cargo version && \
+    rustc --version
+
 WORKDIR /app
 
 
@@ -93,11 +101,11 @@ COPY backend/src ./src/
 RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,target=/app/target,sharing=locked \
     cargo build --release && \
-    cp target/release/ssm /app/ssm-binary
+    cp  target/release/ssm /app/ssm-binary
 
 
 
-    # Main application stage
+# Main application stage
 FROM alpine:3.20
 
 WORKDIR /app
