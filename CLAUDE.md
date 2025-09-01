@@ -41,6 +41,54 @@ diesel migration run        # Apply migrations
 docker-compose -f docker/compose.prod.yml up --build
 ```
 
+## Release Process
+
+### Creating a New Release
+Use the automated release script to create new versions:
+
+```bash
+# Create a patch release (bug fixes)
+./release.sh patch
+
+# Create a minor release (new features)
+./release.sh minor
+
+# Create a major release (breaking changes)
+./release.sh major
+```
+
+### Release Workflow
+The release process:
+1. **Validates**: Ensures working directory is clean and builds succeed
+2. **Updates versions**: Updates VERSION file and backend/Cargo.toml
+3. **Commits**: Creates a version commit on current branch (typically main)
+4. **Tags**: Creates a git tag (e.g., `v1.2.3`)
+5. **Pushes**: Pushes branch and tag to origin
+6. **Triggers CI**: Tag push automatically triggers Docker image builds
+
+### GitHub Actions Release Pipeline
+- **Trigger**: Git tags matching `v*.*.*` (e.g., `v1.0.0`)
+- **Cache Strategy**: Uses GitHub Actions cache with branch continuity for optimal performance
+- **Multi-arch**: Builds for both AMD64 and ARM64 architectures
+- **Registries**: Publishes to both Docker Hub and GitHub Container Registry
+- **Manifests**: Creates multi-arch manifests with version, latest, and semantic version tags
+
+### Manual Release (Alternative)
+```bash
+# Update version manually
+echo "1.2.3" > VERSION
+sed -i 's/^version = ".*"/version = "1.2.3"/' backend/Cargo.toml
+
+# Commit and tag
+git add VERSION backend/Cargo.toml
+git commit -m "chore: bump version to 1.2.3"
+git tag -a v1.2.3 -m "Release version 1.2.3"
+
+# Push (this triggers the build)
+git push origin main
+git push origin v1.2.3
+```
+
 ## Authentication Setup
 
 **🔐 CRITICAL**: This application requires authentication for all API endpoints except login/logout.
