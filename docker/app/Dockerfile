@@ -86,6 +86,10 @@ RUN sed '/^version = /c\version = "0.0.1"' Cargo.toml > Cargo.toml.deps && \
 
 # Generate dependency recipe (this layer is cached unless dependencies in Cargo.toml/Cargo.lock change)
 # Version bumps no longer invalidate this expensive step!
+# This step is fast, so it's worth caching.
+#RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+#    --mount=type=cache,target=/usr/local/cargo/git,sharing=locked \
+#    cargo chef prepare --recipe-path recipe.json && rm -rf src
 RUN cargo chef prepare --recipe-path recipe.json && rm -rf src
 
 
