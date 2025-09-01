@@ -22,8 +22,7 @@ RUN npm run build
 
 # Rust backend builder stage with cargo-chef for better dependency caching
 FROM rust:1.89-alpine AS chef
-# Install build dependencies needed for cargo-chef
-RUN apk add --no-cache musl-dev gcc
+
 # Install build dependencies for static compilation and cross-compilation
 RUN apk add --no-cache \
     musl-dev \
@@ -36,14 +35,17 @@ RUN apk add --no-cache \
     clang \
     lld \
     libgcc
+
+# Install cargo-chef in separate layer for better caching
 RUN cargo install cargo-chef
 
 WORKDIR /app
 
 FROM chef AS planner
-# Copy entire backend to analyze dependencies
-COPY backend/. .
-# Generate dependency recipe (this changes less frequently than Cargo.toml)
+# Copy only the files needed for dependency analysis (faster than entire backend)
+COPY backend/Cargo.toml backend/Cargo.lock ./
+COPY backend/build.rs ./
+# Generate dependency recipe (this layer is cached unless Cargo.toml/Cargo.lock changes)
 RUN cargo chef prepare --recipe-path recipe.json
 
 FROM chef AS backend-builder
