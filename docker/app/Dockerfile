@@ -110,8 +110,8 @@ COPY backend/build.rs ./
 COPY backend/migrations ./migrations/
 COPY backend/diesel.toml ./
 COPY backend/rust-toolchain.toml ./
-COPY VERSION /VERSION
 COPY backend/src ./src/
+COPY VERSION /VERSION
 
 # Build the actual application statically with enhanced caching
 RUN cargo build --release --locked && \
