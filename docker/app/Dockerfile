@@ -43,11 +43,18 @@ RUN cargo install cargo-chef
 
 # Pre-warm Rust toolchain components to cache downloads
 # This prevents rustc/cargo component downloads during build
-RUN rustup toolchain install stable-x86_64-unknown-linux-musl && \
+# Handle both x86_64 and arm64 platforms properly
+RUN ARCH=$(uname -m) && \
+    if [ "$ARCH" = "x86_64" ]; then \
+        rustup toolchain install stable-x86_64-unknown-linux-musl && \
+        rustup default stable-x86_64-unknown-linux-musl; \
+    elif [ "$ARCH" = "aarch64" ]; then \
+        rustup toolchain install stable-aarch64-unknown-linux-musl && \
+        rustup default stable-aarch64-unknown-linux-musl; \
+    fi && \
     rustup target add x86_64-unknown-linux-musl && \
     rustup target add aarch64-unknown-linux-musl && \
     rustup component add rust-src && \
-    rustup default stable-x86_64-unknown-linux-musl && \
     cargo version && \
     rustc --version
 
@@ -78,8 +85,13 @@ RUN cargo chef prepare --recipe-path recipe.json && rm -rf src
 FROM chef AS backend-builder
 WORKDIR /app
 
-# Ensure toolchain is set correctly (should be cached from chef stage)
-RUN rustup default stable-x86_64-unknown-linux-musl
+# Ensure toolchain is set correctly for current architecture
+RUN ARCH=$(uname -m) && \
+    if [ "$ARCH" = "x86_64" ]; then \
+        rustup default stable-x86_64-unknown-linux-musl; \
+    elif [ "$ARCH" = "aarch64" ]; then \
+        rustup default stable-aarch64-unknown-linux-musl; \
+    fi
 
 # Copy the dependency recipe from planner stage
 COPY --from=planner /app/recipe.json recipe.json
