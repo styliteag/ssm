@@ -20,6 +20,8 @@ COPY frontend/. .
 ENV VITE_API_URL=${VITE_API_URL}
 RUN npm run build
 
+
+
 # Rust backend builder stage with cargo-chef for better dependency caching
 FROM rust:1.89-alpine AS chef
 
@@ -41,24 +43,43 @@ RUN cargo install cargo-chef
 
 WORKDIR /app
 
+
+
 FROM chef AS planner
-# Copy only the files needed for dependency analysis (faster than entire backend)
+# Copy files needed for dependency analysis and project structure
 COPY backend/Cargo.toml backend/Cargo.lock ./
 COPY backend/build.rs ./
-# Generate dependency recipe (this layer is cached unless Cargo.toml/Cargo.lock changes)
-RUN cargo chef prepare --recipe-path recipe.json
+# COPY backend/src ./src
+RUN mkdir -p src
+RUN echo "fn main() {}" > src/main.rs
+# RUN echo "fn main() {}" > src/lib.rs
+
+# Create dependency-only Cargo.toml that excludes version changes for better caching
+# This ensures recipe generation only rebuilds when dependencies actually change
+RUN sed '/^version = /c\version = "0.0.1"' Cargo.toml > Cargo.toml.deps && \
+    mv Cargo.toml.deps Cargo.toml
+
+# Generate dependency recipe (this layer is cached unless dependencies in Cargo.toml/Cargo.lock change)
+# Version bumps no longer invalidate this expensive step!
+RUN cargo chef prepare --recipe-path recipe.json && rm -rf src
+
+
 
 FROM chef AS backend-builder
 WORKDIR /app
 
+# Copy src directory from planner stage
+COPY backend/src ./src
+
 # Copy the dependency recipe from planner stage
 COPY --from=planner /app/recipe.json recipe.json
+
 
 # Build dependencies based on recipe with enhanced caching
 # This layer should be cached unless Cargo.toml/Cargo.lock changes
 RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,target=/app/target,sharing=locked \
-    CARGO_NET_GIT_FETCH_WITH_CLI=true cargo chef cook --release --recipe-path recipe.json
+    cargo chef cook --release --recipe-path recipe.json
 
 # Copy backend source and other necessary files
 COPY backend/Cargo.toml backend/Cargo.lock ./
@@ -74,7 +95,9 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
     cargo build --release && \
     cp target/release/ssm /app/ssm-binary
 
-# Main application stage
+
+
+    # Main application stage
 FROM alpine:3.20
 
 WORKDIR /app
