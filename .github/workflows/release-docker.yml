@@ -66,8 +66,12 @@ jobs:
         context: .
         file: docker/app/Dockerfile
         platforms: ${{ matrix.platform }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
+        cache-from: |
+          type=gha,scope=${{ matrix.arch }}
+          type=gha,scope=shared
+        cache-to: |
+          type=gha,mode=max,scope=${{ matrix.arch }}
+          type=gha,mode=max,scope=shared
         sbom: true
         provenance: true
         build-args: |
