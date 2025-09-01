@@ -11,7 +11,7 @@ WORKDIR /app
 COPY frontend/package*.json ./
 
 # Install frontend dependencies
-RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
+RUN ci --no-audit --no-fund
 
 # Copy frontend source
 COPY frontend/. .
@@ -24,6 +24,7 @@ RUN npm run build
 
 # Rust backend builder stage with cargo-chef for better dependency caching
 FROM rust:1.89-alpine AS chef
+#FROM lukemathwalker/cargo-chef:latest-rust-1.89.0 AS chef
 
 # Install build dependencies for static compilation and cross-compilation
 RUN apk add --no-cache \
@@ -38,25 +39,27 @@ RUN apk add --no-cache \
     lld \
     libgcc
 
+WORKDIR /app
+COPY backend/rust-toolchain.toml ./rust-toolchain.toml
 # Install cargo-chef in separate layer for better caching
 RUN cargo install cargo-chef
 
 # Pre-warm Rust toolchain components to cache downloads
 # This prevents rustc/cargo component downloads during build
 # Handle both x86_64 and arm64 platforms properly
-RUN ARCH=$(uname -m) && \
-    if [ "$ARCH" = "x86_64" ]; then \
-        rustup toolchain install stable-x86_64-unknown-linux-musl && \
-        rustup default stable-x86_64-unknown-linux-musl; \
-    elif [ "$ARCH" = "aarch64" ]; then \
-        rustup toolchain install stable-aarch64-unknown-linux-musl && \
-        rustup default stable-aarch64-unknown-linux-musl; \
-    fi && \
-    rustup target add x86_64-unknown-linux-musl && \
-    rustup target add aarch64-unknown-linux-musl && \
-    rustup component add rust-src && \
-    cargo version && \
-    rustc --version
+#RUN ARCH=$(uname -m) && \
+#    if [ "$ARCH" = "x86_64" ]; then \
+#        rustup toolchain install stable-x86_64-unknown-linux-musl && \
+#        rustup default stable-x86_64-unknown-linux-musl; \
+#    elif [ "$ARCH" = "aarch64" ]; then \
+#        rustup toolchain install stable-aarch64-unknown-linux-musl && \
+#        rustup default stable-aarch64-unknown-linux-musl; \
+#    fi && \
+#    rustup target add x86_64-unknown-linux-musl && \
+#    rustup target add aarch64-unknown-linux-musl && \
+#    rustup component add rust-src && \
+#    cargo version && \
+#    rustc --version
 
 WORKDIR /app
 
@@ -99,9 +102,7 @@ COPY --from=planner /app/recipe.json recipe.json
 
 # Build dependencies based on recipe with enhanced caching
 # This layer should be cached unless Cargo.toml/Cargo.lock changes
-RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
-    --mount=type=cache,target=/app/target,sharing=locked \
-    cargo chef cook --release --recipe-path recipe.json --locked
+RUN cargo chef cook --release --recipe-path recipe.json --locked
 
 # Copy backend source and other necessary files
 COPY backend/Cargo.toml backend/Cargo.lock ./
@@ -113,9 +114,7 @@ COPY VERSION /VERSION
 COPY backend/src ./src/
 
 # Build the actual application statically with enhanced caching
-RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
-    --mount=type=cache,target=/app/target,sharing=locked \
-    cargo build --release --locked && \
+RUN cargo build --release --locked && \
     apk add --no-cache binutils && \
     strip target/release/ssm && \
     cp target/release/ssm /app/ssm-binary
