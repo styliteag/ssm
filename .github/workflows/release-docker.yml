@@ -66,10 +66,10 @@ jobs:
         context: .
         file: docker/app/Dockerfile
         platforms: ${{ matrix.platform }}
-        cache-from: type=gha,scope=linux-${{ matrix.arch }}
-        cache-to: type=gha,scope=linux-${{ matrix.arch }},mode=max
-        #cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/buildcache:linux-${{ matrix.arch }}
-        #cache-to: type=registry,ref=ghcr.io/${{ github.repository }}/buildcache:linux-${{ matrix.arch }},mode=max
+        #cache-from: type=gha,scope=linux-${{ matrix.arch }}
+        #cache-to: type=gha,scope=linux-${{ matrix.arch }},mode=max
+        cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/buildcache:linux-${{ matrix.arch }}
+        cache-to: type=registry,ref=ghcr.io/${{ github.repository }}/buildcache:linux-${{ matrix.arch }},mode=max
 
         sbom: true
         provenance: true
