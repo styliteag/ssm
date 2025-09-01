@@ -67,7 +67,7 @@ WORKDIR /app
 
 FROM chef AS planner
 # Copy files needed for dependency analysis and project structure
-COPY backend/Cargo.toml backend/Cargo.lock ./
+COPY backend/Cargo.toml backend/Cargo.lock backend/rust-toolchain.toml ./
 COPY backend/build.rs ./
 # COPY backend/src ./src
 RUN mkdir -p src
@@ -105,7 +105,7 @@ COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json --locked
 
 # Copy backend source and other necessary files
-COPY backend/Cargo.toml backend/Cargo.lock ./
+COPY backend/Cargo.toml backend/Cargo.lock backend/rust-toolchain.toml ./
 COPY backend/build.rs ./
 COPY backend/migrations ./migrations/
 COPY backend/diesel.toml ./
