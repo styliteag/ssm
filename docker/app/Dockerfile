@@ -37,7 +37,8 @@ RUN apk add --no-cache \
     gcc \
     clang \
     lld \
-    libgcc
+    libgcc \
+    curl
 
 WORKDIR /app
 COPY backend/rust-toolchain.toml ./rust-toolchain.toml
