@@ -114,10 +114,8 @@ impl ConnectionDetails {
 
 #[derive(Debug, Clone)]
 pub enum KeyDiffItem {
-    #[allow(dead_code)]
-    Added(String),
-    #[allow(dead_code)]
-    Removed(String),
+    Added(#[allow(dead_code)] String),
+    Removed(#[allow(dead_code)] String),
 }
 
 type Expected = ConfigOpts;
@@ -130,7 +128,6 @@ pub type HostDiff = (
 );
 
 #[derive(Clone, Debug)]
-#[allow(dead_code)]
 pub enum DiffItem {
     /// A key that is authorized is missing with the Username
     KeyMissing(AuthorizedKey, String),

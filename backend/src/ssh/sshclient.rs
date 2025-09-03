@@ -359,7 +359,7 @@ impl SshClient {
         // };
 
         use sha2::{Digest, Sha256};
-        // TODO: i would like to precompute this, but sha2 doesn't seem to work in const context
+        // Note: Could precompute this hash at compile time, but sha2 doesn't support const context
         let own_script_hash = Sha256::digest(SCRIPT_SRC);
 
         let is_script_hash = Sha256::digest(cmd_out);
