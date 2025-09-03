@@ -10,7 +10,6 @@ use utoipa::ToSchema;
 use crate::{
     api_types::*,
     db::UsernameAndKey,
-    routes::require_auth,
     ConnectionPool,
 };
 
@@ -58,9 +57,8 @@ pub struct KeysResponse {
 pub async fn get_all_keys(
     conn: Data<ConnectionPool>,
     _pagination: Query<PaginationQuery>,
-    identity: Option<Identity>,
+    _identity: Option<Identity>,
 ) -> Result<impl Responder> {
-    require_auth(identity)?;
     let all_keys =
         web::block(move || PublicUserKey::get_all_keys_with_username(&mut conn.get().unwrap()))
             .await?;
@@ -95,9 +93,8 @@ pub async fn get_all_keys(
 pub async fn delete_key(
     conn: Data<ConnectionPool>,
     key_id: Path<i32>,
-    identity: Option<Identity>,
+    _identity: Option<Identity>,
 ) -> Result<impl Responder> {
-    require_auth(identity)?;
     let res =
         web::block(move || PublicUserKey::delete_key(&mut conn.get().unwrap(), *key_id)).await?;
 
@@ -134,9 +131,8 @@ pub async fn update_key_comment(
     conn: Data<ConnectionPool>,
     key_id: Path<i32>,
     json: Json<UpdateKeyCommentRequest>,
-    identity: Option<Identity>,
+    _identity: Option<Identity>,
 ) -> Result<impl Responder> {
-    require_auth(identity)?;
     let key_id = key_id.into_inner();
     let result = web::block(move || {
         let mut conn = conn.get().unwrap();

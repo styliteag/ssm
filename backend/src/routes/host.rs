@@ -13,7 +13,7 @@ use utoipa::ToSchema;
 use crate::{
     api_types::*,
     db::UserAndOptions,
-    routes::{ForceUpdateQuery, require_auth},
+    routes::ForceUpdateQuery,
     ssh::{CachingSshClient, SshClient, SshFirstConnectionHandler},
     ConnectionPool,
 };
@@ -85,11 +85,8 @@ impl From<Host> for HostResponse {
 async fn get_all_hosts(
     conn: Data<ConnectionPool>,
     _pagination: Query<PaginationQuery>,
-    identity: Option<Identity>,
+    _identity: Option<Identity>,
 ) -> Result<impl Responder> {
-    // Check authentication
-    require_auth(identity)?;
-    
     let conn_clone = conn.clone();
     let hosts = web::block(move || Host::get_all_hosts(&mut conn_clone.get().unwrap())).await?;
     
@@ -165,9 +162,8 @@ async fn get_logins(
     caching_ssh_client: Data<CachingSshClient>,
     host_name: Path<String>,
     update: Query<ForceUpdateQuery>,
-    identity: Option<Identity>,
+    _identity: Option<Identity>,
 ) -> Result<impl Responder> {
-    require_auth(identity)?;
     let host = Host::get_from_name(conn.get().unwrap(), host_name.to_string()).await;
 
     match host {
@@ -206,9 +202,8 @@ async fn get_host(
     conn: Data<ConnectionPool>,
     caching_ssh_client: Data<CachingSshClient>,
     host_name: Path<String>,
-    identity: Option<Identity>,
+    _identity: Option<Identity>,
 ) -> Result<impl Responder> {
-    require_auth(identity)?;
     let host = match Host::get_from_name(conn.get().unwrap(), host_name.to_string()).await {
         Ok(Some(host)) => host,
         Ok(None) => {
@@ -307,9 +302,8 @@ async fn add_host_key(
     ssh_client: Data<SshClient>,
     host_id: Path<i32>,
     json: Json<AddHostkeyRequest>,
-    identity: Option<Identity>,
+    _identity: Option<Identity>,
 ) -> Result<impl Responder> {
-    require_auth(identity)?;
     let host = match Host::get_from_id(conn.get().unwrap(), *host_id).await {
         Ok(Some(h)) => h,
         Ok(None) => return Ok(HttpResponse::NotFound().json(ApiError::not_found("Host not found".to_string()))),
@@ -395,9 +389,8 @@ async fn create_host(
     conn: Data<ConnectionPool>,
     ssh_client: Data<SshClient>,
     json: Json<CreateHostRequest>,
-    identity: Option<Identity>,
+    _identity: Option<Identity>,
 ) -> Result<impl Responder> {
-    require_auth(identity)?;
     let jumphost = json.jump_via
         .and_then(|host| if host < 0 { None } else { Some(host) });
 
@@ -507,9 +500,8 @@ pub struct AuthorizeUserRequest {
 async fn authorize_user(
     conn: Data<ConnectionPool>,
     json: Json<AuthorizeUserRequest>,
-    identity: Option<Identity>,
+    _identity: Option<Identity>,
 ) -> Result<impl Responder> {
-    require_auth(identity)?;
     let res = web::block(move || {
         Host::authorize_user(
             &mut conn.get().unwrap(),
@@ -555,9 +547,8 @@ async fn gen_authorized_keys(
     conn: Data<ConnectionPool>,
     ssh_client: Data<SshClient>,
     json: Json<GenAuthorizedKeysRequest>,
-    identity: Option<Identity>,
+    _identity: Option<Identity>,
 ) -> Result<impl Responder> {
-    require_auth(identity)?;
     let host_name = &json.host_name;
     let login = &json.login;
 
@@ -667,9 +658,8 @@ async fn delete_host(
     caching_ssh_client: Data<CachingSshClient>,
     json: Json<HostDeleteRequest>,
     host_name: Path<String>,
-    identity: Option<Identity>,
+    _identity: Option<Identity>,
 ) -> Result<impl Responder> {
-    require_auth(identity)?;
     let host = match Host::get_from_name(conn.get().unwrap(), host_name.to_owned()).await {
         Ok(None) => {
             return Ok(HttpResponse::NotFound().json(ApiError::not_found("Host not found".to_string())));
@@ -730,9 +720,8 @@ pub struct HostAuthorizationsResponse {
 async fn list_host_authorizations(
     host_name: Path<String>,
     conn: Data<ConnectionPool>,
-    identity: Option<Identity>,
+    _identity: Option<Identity>,
 ) -> Result<impl Responder> {
-    require_auth(identity)?;
     let host = match Host::get_from_name(conn.get().unwrap(), host_name.to_string()).await {
         Ok(Some(host)) => host,
         Ok(None) => return Ok(HttpResponse::NotFound().json(ApiError::not_found("Host not found".to_string()))),
@@ -769,9 +758,8 @@ struct DeleteAuthorizationRequest {
 async fn delete_authorization(
     authorization_id: Path<i32>,
     conn: Data<ConnectionPool>,
-    identity: Option<Identity>,
+    _identity: Option<Identity>,
 ) -> Result<impl Responder> {
-    require_auth(identity)?;
     let res = web::block(move || {
         let mut connection = conn.get().unwrap();
         Host::delete_authorization(&mut connection, *authorization_id)
@@ -840,9 +828,8 @@ async fn update_host(
     conn: Data<crate::ConnectionPool>,
     host_name: Path<String>,
     json: Json<UpdateHostRequest>,
-    identity: Option<Identity>,
+    _identity: Option<Identity>,
 ) -> Result<impl Responder> {
-    require_auth(identity)?;
     let mut db_conn = conn.get().unwrap();
     match Host::update_host(
         &mut db_conn,

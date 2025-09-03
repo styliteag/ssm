@@ -1,13 +1,12 @@
 use actix_identity::Identity;
 use actix_session::{Session, SessionExt};
 use actix_web::{
-    body::{EitherBody, BoxBody},
+    body::EitherBody,
     dev::{ServiceRequest, ServiceResponse, Service, Transform},
-    middleware::Next,
-    Error, FromRequest, HttpResponse,
+    Error, HttpMessage, HttpResponse,
 };
 use futures_util::future::LocalBoxFuture;
-use log::{info, debug};
+use log::{info, debug, warn};
 use std::future::{Ready, ready};
 use std::rc::Rc;
 
@@ -74,10 +73,12 @@ where
             let method = req.method();
             
             // Skip CSRF check for:
-            // - Authentication endpoints (needed for login)
+            // - Authentication endpoints (needed for login/logout)
             // - Static files and documentation
             // - Health checks and root
             // - OPTIONS requests (CORS preflight)
+            // Note: Since AuthEnforcement runs first, these paths won't reach here
+            // unless they are in the public list, but we keep the checks for consistency
             if path.starts_with("/api/auth/")
                 || path.starts_with("/static/")
                 || path.starts_with("/api-docs/")
@@ -116,41 +117,103 @@ where
     }
 }
 
-#[allow(dead_code)]
-pub async fn authentication(
-    request: ServiceRequest,
-    next: Next<EitherBody<BoxBody>>,
-) -> Result<ServiceResponse<EitherBody<BoxBody>>, Error> {
-    let path = request.path();
-    let method = request.method();
+/// Authentication Enforcement Middleware
+/// Forces authentication on all routes except explicitly excluded ones
+pub struct AuthEnforcement;
 
-    // Skip authentication for login page, static files, and assets
-    if path.starts_with("/authentication/")
-        || path.starts_with("/static/")
-        || path.ends_with(".css")
-        || path.ends_with(".js")
-    {
-        info!(target: LOG_TARGET, "{} {} (public path)", method, path);
-        return next.call(request).await;
+impl<S, B> Transform<S, ServiceRequest> for AuthEnforcement
+where
+    S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error> + 'static,
+    S::Future: 'static,
+    B: 'static,
+{
+    type Response = ServiceResponse<EitherBody<B>>;
+    type Error = Error;
+    type InitError = ();
+    type Transform = AuthEnforcementMiddleware<S>;
+    type Future = Ready<Result<Self::Transform, Self::InitError>>;
+
+    fn new_transform(&self, service: S) -> Self::Future {
+        ready(Ok(AuthEnforcementMiddleware {
+            service: Rc::new(service),
+        }))
     }
-
-    let identity = Identity::extract(request.parts().0);
-
-    let Ok(id) = identity.await else {
-        info!(target: LOG_TARGET, "{} {} (unauthorized)", method, path);
-        let response = HttpResponse::Unauthorized()
-            .json(crate::api_types::ApiError::unauthorized())
-            .map_into_boxed_body()
-            .map_into_right_body();
-        return Ok(ServiceResponse::new(request.into_parts().0, response));
-    };
-
-    info!(
-        target: LOG_TARGET,
-        "{} {} (authenticated user: {})",
-        method,
-        path,
-        id.id().unwrap_or_else(|_| "unknown".to_owned())
-    );
-    next.call(request).await
 }
+
+pub struct AuthEnforcementMiddleware<S> {
+    service: Rc<S>,
+}
+
+impl<S, B> Service<ServiceRequest> for AuthEnforcementMiddleware<S>
+where
+    S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error> + 'static,
+    S::Future: 'static,
+    B: 'static,
+{
+    type Response = ServiceResponse<EitherBody<B>>;
+    type Error = Error;
+    type Future = LocalBoxFuture<'static, Result<Self::Response, Self::Error>>;
+
+    actix_web::dev::forward_ready!(service);
+
+    fn call(&self, req: ServiceRequest) -> Self::Future {
+        let service = self.service.clone();
+
+        Box::pin(async move {
+            let path = req.path();
+            let method = req.method();
+
+            // Define public routes that don't require authentication
+            let public_paths = [
+                "/",                                    // API info
+                "/health",                             // Health check
+                "/api-docs/openapi.json",              // OpenAPI spec
+                "/api/auth/login",                     // Login (must be public)
+                "/api/auth/logout",                    // Logout (must be public)
+                "/api/auth/status",                    // Auth status (must be public)
+            ];
+
+            // Check if path starts with any public path
+            let is_public = public_paths.iter().any(|public_path| {
+                if *public_path == "/" {
+                    path == "/"
+                } else {
+                    path.starts_with(public_path)
+                }
+            });
+
+            // Skip authentication for public paths
+            if is_public {
+                debug!("Skipping auth enforcement for public path: {} {}", method, path);
+                let res = service.call(req).await?;
+                return Ok(res.map_into_left_body());
+            }
+
+            // For all other paths, require authentication
+            debug!("Enforcing authentication for {} {}", method, path);
+
+            // Check if user is authenticated before consuming the request
+            let has_valid_auth = if let Some(identity) = req.parts().0.extensions().get::<Identity>() {
+                identity.id().is_ok()
+            } else {
+                false
+            };
+
+            if has_valid_auth {
+                debug!("User authenticated, proceeding with request");
+                let res = service.call(req).await?;
+                Ok(res.map_into_left_body())
+            } else {
+                warn!("No valid authentication for {} {}", method, path);
+                let (http_req, _payload) = req.into_parts();
+                let response = HttpResponse::Unauthorized()
+                    .json(crate::api_types::ApiError::unauthorized())
+                    .map_into_boxed_body()
+                    .map_into_right_body();
+                Ok(ServiceResponse::new(http_req, response))
+            }
+        })
+    }
+}
+
+
