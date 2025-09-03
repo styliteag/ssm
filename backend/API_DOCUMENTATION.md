@@ -31,31 +31,31 @@ The auto-generated documentation covers all API endpoints:
 - `POST /api/auth/logout` - User logout
 - `GET /api/auth/status` - Check authentication status
 
-### Host Management (`/api/hosts/*`)
-- `GET /api/hosts` - List all hosts
-- `GET /api/hosts/{name}` - Get host by name
-- `POST /api/hosts` - Create new host
-- `PUT /api/hosts/{name}` - Update host
-- `DELETE /api/hosts/{name}` - Delete host
-- `GET /api/hosts/{name}/logins` - Get available logins
-- `POST /api/hosts/{id}/add_hostkey` - Add host SSH key
-- `POST /api/hosts/{name}/set_authorized_keys` - Set authorized keys
+### Host Management (`/api/host/*`)
+- `GET /api/host` - List all hosts
+- `GET /api/host/{name}` - Get host by name
+- `POST /api/host` - Create new host
+- `PUT /api/host/{name}` - Update host
+- `DELETE /api/host/{name}` - Delete host
+- `GET /api/host/{name}/logins` - Get available logins
+- `POST /api/host/{id}/add_hostkey` - Add host SSH key
+- `POST /api/host/{name}/set_authorized_keys` - Set authorized keys
 
-### User Management (`/api/users/*`)
-- `GET /api/users` - List all users
-- `GET /api/users/{name}` - Get user by username
-- `POST /api/users` - Create new user
-- `PUT /api/users/{old_username}` - Update user
-- `DELETE /api/users/{username}` - Delete user
-- `GET /api/users/{username}/keys` - Get user's SSH keys
-- `GET /api/users/{username}/authorizations` - Get user's host authorizations
-- `POST /api/users/assign_key` - Assign SSH key to user
-- `POST /api/users/add_key` - Preview SSH key before assignment
+### User Management (`/api/user/*`)
+- `GET /api/user` - List all users
+- `GET /api/user/{name}` - Get user by username
+- `POST /api/user` - Create new user
+- `PUT /api/user/{old_username}` - Update user
+- `DELETE /api/user/{username}` - Delete user
+- `GET /api/user/{username}/keys` - Get user's SSH keys
+- `GET /api/user/{username}/authorizations` - Get user's host authorizations
+- `POST /api/user/assign_key` - Assign SSH key to user
+- `POST /api/user/add_key` - Preview SSH key before assignment
 
-### SSH Key Management (`/api/keys/*`)
-- `GET /api/keys` - List all SSH keys
-- `DELETE /api/keys/{id}` - Delete SSH key
-- `PUT /api/keys/{id}/comment` - Update key comment
+### SSH Key Management (`/api/key/*`)
+- `GET /api/key` - List all SSH keys
+- `DELETE /api/key/{id}` - Delete SSH key
+- `PUT /api/key/{id}/comment` - Update key comment
 
 ### Authorization Management (`/api/authorization/*`)
 - `POST /api/authorization/dialog_data` - Get authorization dialog data
