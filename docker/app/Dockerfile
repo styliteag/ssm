@@ -41,7 +41,7 @@ RUN apk add --no-cache \
     curl
 
 WORKDIR /app
-COPY backend/rust-toolchain.toml ./rust-toolchain.toml
+# COPY backend/rust-toolchain.toml ./rust-toolchain.toml
 # Install cargo-chef in separate layer for better caching
 RUN cargo install --locked cargo-chef
 
@@ -68,7 +68,7 @@ WORKDIR /app
 
 FROM chef AS planner
 # Copy files needed for dependency analysis and project structure
-COPY backend/Cargo.toml backend/Cargo.lock backend/rust-toolchain.toml ./
+COPY backend/Cargo.toml backend/Cargo.lock ./
 # COPY backend/build.rs ./
 # COPY backend/src ./src
 RUN mkdir -p src
@@ -91,12 +91,12 @@ FROM chef AS backend-builder
 WORKDIR /app
 
 # Ensure toolchain is set correctly for current architecture
-RUN ARCH=$(uname -m) && \
-    if [ "$ARCH" = "x86_64" ]; then \
-        rustup default stable-x86_64-unknown-linux-musl; \
-    elif [ "$ARCH" = "aarch64" ]; then \
-        rustup default stable-aarch64-unknown-linux-musl; \
-    fi
+#RUN ARCH=$(uname -m) && \
+#    if [ "$ARCH" = "x86_64" ]; then \
+#        rustup default stable-x86_64-unknown-linux-musl; \
+#    elif [ "$ARCH" = "aarch64" ]; then \
+#        rustup default stable-aarch64-unknown-linux-musl; \
+#    fi
 
 # Copy the dependency recipe from planner stage
 COPY --from=planner /app/recipe.json recipe.json
@@ -107,11 +107,11 @@ COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json --locked
 
 # Copy backend source and other necessary files
-COPY backend/Cargo.toml backend/Cargo.lock backend/rust-toolchain.toml ./
-# COPY backend/build.rs ./
+COPY backend/Cargo.toml backend/Cargo.lock ./
+COPY backend/build.rs ./
 COPY backend/migrations ./migrations/
 COPY backend/diesel.toml ./
-COPY backend/rust-toolchain.toml ./
+#COPY backend/rust-toolchain.toml ./
 COPY backend/src ./src/
 COPY VERSION /VERSION
 
