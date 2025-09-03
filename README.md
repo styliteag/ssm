@@ -75,7 +75,7 @@ SSH Key Manager provides a web interface for managing `authorized_keys` files on
 1. **Clone the repository**:
    ```bash
    git clone <repository-url>
-   cd ssh-key-manager
+   cd ssm
    ```
 
 2. **Set up authentication**:
@@ -419,7 +419,7 @@ curl -b cookies.txt http://localhost:8000/api/diff
 ## 📁 Project Structure
 
 ```
-ssh-key-manager/
+ssm/
 ├── frontend/                 # React frontend application
 │   ├── src/
 │   │   ├── components/      # Reusable React components

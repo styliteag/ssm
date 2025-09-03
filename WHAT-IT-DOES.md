@@ -49,7 +49,7 @@ The application uses a modern split architecture with separate frontend and back
 
 ### Project Structure
 ```text
-ssh-key-manager/
+ssm/
 ├── frontend/                 # React frontend application
 │   ├── src/
 │   │   ├── components/      # Reusable React components
@@ -148,4 +148,4 @@ ssh-key-manager/
 
 ---
 
-*Created by ssh-key-manager tooling.*
+*Created by ssm tooling.*

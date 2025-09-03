@@ -201,7 +201,7 @@ COPY VERSION /app/VERSION
 # Image metadata
 ARG VERSION
 ARG VCS_REF
-LABEL org.opencontainers.image.title="ssh-key-manager" \
+LABEL org.opencontainers.image.title="ssm" \
       org.opencontainers.image.version=$VERSION \
       org.opencontainers.image.revision=$VCS_REF \
       org.opencontainers.image.source="https://github.com/styliteag/ssm"

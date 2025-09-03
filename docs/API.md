@@ -785,7 +785,7 @@ curl -X POST http://localhost:8000/api/hosts \\
 
 ### Postman Collection
 
-A Postman collection with all endpoints and example requests is available in `/docs/postman/ssh-key-manager.json`.
+A Postman collection with all endpoints and example requests is available in `/docs/postman/ssm.json`.
 
 ### API Testing Tools
 
