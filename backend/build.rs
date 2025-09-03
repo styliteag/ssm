@@ -1,5 +1,4 @@
 use std::process::Command;
-use std::path::Path;
 
 fn main() {
     // Print build information
