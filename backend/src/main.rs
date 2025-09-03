@@ -319,6 +319,7 @@ async fn main() -> Result<(), std::io::Error> {
         App::new()
             .wrap(cors)
             .wrap(Logger::new("%a \"%r\" %s %b \"%{Referer}i\" \"%{User-Agent}i\" %T"))
+            .wrap(middleware::AuthEnforcement)  // Enforce authentication by default
             .wrap(middleware::CsrfProtection)
             .wrap(
                 SessionMiddleware::builder(CookieSessionStore::default(), secret_key.clone())

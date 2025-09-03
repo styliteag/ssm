@@ -14,7 +14,6 @@ use time;
 use utoipa::ToSchema;
 
 use crate::{
-    routes::require_auth,
     ConnectionPool,
 };
 
@@ -196,8 +195,7 @@ pub struct DiffHostsResponse {
     )
 )]
 #[get("")]
-async fn get_hosts_for_diff(conn: Data<ConnectionPool>, identity: Option<Identity>) -> Result<impl Responder> {
-    require_auth(identity)?;
+async fn get_hosts_for_diff(conn: Data<ConnectionPool>, _identity: Option<Identity>) -> Result<impl Responder> {
     info!("GET /api/diff - Fetching hosts available for diff comparison");
     debug!("Getting all hosts from database for diff view");
     
@@ -250,9 +248,8 @@ async fn get_host_diff(
     caching_ssh_client: Data<CachingSshClient>,
     host_name: Path<String>,
     query: Query<DiffQuery>,
-    identity: Option<Identity>,
+    _identity: Option<Identity>,
 ) -> Result<impl Responder> {
-    require_auth(identity)?;
     info!("GET /api/diff/{} - Starting diff comparison", host_name);
     debug!("Query parameters: force_update={:?}, show_empty={:?}", 
            query.force_update, query.show_empty);
@@ -365,9 +362,8 @@ async fn get_diff_details(
     caching_ssh_client: Data<CachingSshClient>,
     host_name: Path<String>,
     query: Query<DiffQuery>,
-    identity: Option<Identity>,
+    _identity: Option<Identity>,
 ) -> Result<impl Responder> {
-    require_auth(identity)?;
     info!("GET /api/diff/{}/details - Fetching detailed diff with raw content", host_name);
     debug!("Looking up host '{}' for detailed diff analysis", host_name);
     
@@ -464,9 +460,8 @@ async fn sync_host_keys(
     conn: Data<ConnectionPool>,
     caching_ssh_client: Data<CachingSshClient>,
     host_name: Path<String>,
-    identity: Option<Identity>,
+    _identity: Option<Identity>,
 ) -> Result<impl Responder> {
-    require_auth(identity)?;
     info!("POST /api/diff/{}/sync - Starting SSH key synchronization", host_name);
     
     let res = Host::get_from_name(conn.get().unwrap(), host_name.to_string()).await;

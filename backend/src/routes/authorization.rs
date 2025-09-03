@@ -10,7 +10,6 @@ use utoipa::ToSchema;
 use crate::{
     api_types::*,
     models::{Host, User},
-    routes::require_auth,
     ConnectionPool,
 };
 
@@ -38,8 +37,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
     )
 )]
 #[post("/change_options")]
-async fn change_options(identity: Option<Identity>) -> Result<impl Responder> {
-    require_auth(identity)?;
+async fn change_options(_identity: Option<Identity>) -> Result<impl Responder> {
     // TODO: Implement authorization options change
     Ok(HttpResponse::NotImplemented().json(ApiError::new("Not implemented".to_string())))
 }
@@ -84,9 +82,8 @@ pub struct AuthorizeUserRequest {
 async fn get_authorization_dialog_data(
     conn: Data<ConnectionPool>,
     json: Json<AuthorizeUserRequest>,
-    identity: Option<Identity>,
+    _identity: Option<Identity>,
 ) -> Result<impl Responder> {
-    require_auth(identity)?;
     let options = json.options.clone();
     let login = json.login.clone();
     let (user, host) = web::block(move || {

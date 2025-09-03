@@ -10,7 +10,6 @@ use utoipa::ToSchema;
 use crate::{
     api_types::*,
     db::UserAndOptions,
-    routes::require_auth,
     ssh::SshPublicKey,
     ConnectionPool,
 };
@@ -67,9 +66,8 @@ impl From<User> for UserResponse {
 async fn get_all_users(
     conn: Data<ConnectionPool>,
     _pagination: Query<PaginationQuery>,
-    identity: Option<Identity>,
+    _identity: Option<Identity>,
 ) -> Result<impl Responder> {
-    require_auth(identity)?;
     let all_users = web::block(move || User::get_all_users(&mut conn.get().unwrap())).await?;
 
     match all_users {
@@ -103,9 +101,8 @@ async fn get_all_users(
 async fn get_user(
     conn: Data<ConnectionPool>,
     username: Path<String>,
-    identity: Option<Identity>,
+    _identity: Option<Identity>,
 ) -> Result<impl Responder> {
-    require_auth(identity)?;
     let mut conn = conn.clone().get().unwrap();
     let maybe_user = web::block(move || User::get_user(&mut conn, username.to_string())).await?;
 
@@ -134,9 +131,8 @@ async fn get_user(
 async fn create_user(
     conn: Data<ConnectionPool>,
     json: Json<NewUser>,
-    identity: Option<Identity>,
+    _identity: Option<Identity>,
 ) -> Result<impl Responder> {
-    require_auth(identity)?;
     let new_user = json.into_inner();
 
     let res = web::block(move || User::add_user(&mut conn.get().unwrap(), new_user)).await?;
@@ -172,9 +168,8 @@ async fn create_user(
 async fn delete_user(
     conn: Data<ConnectionPool>,
     username: Path<String>,
-    identity: Option<Identity>,
+    _identity: Option<Identity>,
 ) -> Result<impl Responder> {
-    require_auth(identity)?;
     let res = web::block(move || User::delete_user(&mut conn.get().unwrap(), username.as_str())).await?;
     match res {
         Ok(()) => Ok(HttpResponse::Ok().json(ApiResponse::success_message("User deleted successfully".to_string()))),
@@ -216,9 +211,8 @@ pub struct UserKeysResponse {
 async fn get_user_keys(
     conn: Data<ConnectionPool>,
     username: Path<String>,
-    identity: Option<Identity>,
+    _identity: Option<Identity>,
 ) -> Result<impl Responder> {
-    require_auth(identity)?;
     let maybe_user_keys = web::block(move || {
         let mut connection = conn.get().unwrap();
         let user = User::get_user(&mut connection, username.to_string())?;
@@ -275,9 +269,8 @@ pub struct UserAuthorizationsResponse {
 async fn get_user_authorizations(
     conn: Data<ConnectionPool>,
     username: Path<String>,
-    identity: Option<Identity>,
+    _identity: Option<Identity>,
 ) -> Result<impl Responder> {
-    require_auth(identity)?;
     let maybe_user_auth = web::block(move || {
         let mut connection = conn.get().unwrap();
         let user = User::get_user(&mut connection, username.to_string())?;
@@ -317,9 +310,8 @@ pub struct AssignKeyRequest {
 async fn assign_key_to_user(
     conn: Data<ConnectionPool>,
     json: Json<AssignKeyRequest>,
-    identity: Option<Identity>,
+    _identity: Option<Identity>,
 ) -> Result<impl Responder> {
-    require_auth(identity)?;
     // Validate that the key type is valid
     let algorithm = match russh::keys::Algorithm::new(&json.key_type) {
         Ok(algo) => algo,
@@ -373,9 +365,8 @@ async fn update_user(
     conn: Data<ConnectionPool>,
     old_username: Path<String>,
     json: Json<UpdateUserRequest>,
-    identity: Option<Identity>,
+    _identity: Option<Identity>,
 ) -> Result<impl Responder> {
-    require_auth(identity)?;
     let mut conn = conn.get().unwrap();
     match User::update_user(
         &mut conn,
@@ -404,8 +395,7 @@ pub struct AddKeyResponse {
     )
 )]
 #[post("/add_key")]
-async fn add_key_dialog(json: Json<SshPublicKey>, identity: Option<Identity>) -> Result<impl Responder> {
-    require_auth(identity)?;
+async fn add_key_dialog(json: Json<SshPublicKey>, _identity: Option<Identity>) -> Result<impl Responder> {
     Ok(HttpResponse::Ok().json(ApiResponse::success(AddKeyResponse {
         key: json.into_inner(),
         suggested_action: "Assign this key to a user".to_string(),
