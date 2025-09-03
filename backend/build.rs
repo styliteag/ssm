@@ -108,10 +108,40 @@ fn check_ssh_key_file() {
 
 /// Check if htpasswd authentication file exists
 fn check_htpasswd_file() {
-    let htpasswd_paths = [".htpasswd", "backend/.htpasswd"];
+    // First try to read htpasswd path from config
+    let htpasswd_path = if Path::new("config.toml").exists() {
+        match fs::read_to_string("config.toml") {
+            Ok(content) => {
+                // Simple search for htpasswd_path
+                if let Some(line) = content.lines().find(|l| l.contains("htpasswd_path")) {
+                    if let Some(path_start) = line.find('"') {
+                        if let Some(path_end) = line[path_start + 1..].find('"') {
+                            Some(line[path_start + 1..path_start + 1 + path_end].to_string())
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            }
+            Err(_) => None,
+        }
+    } else {
+        None
+    };
 
-    for path in &htpasswd_paths {
-        let htpasswd_path = Path::new(path);
+    // Check configured path first, then fallbacks
+    let paths_to_check = if let Some(config_path) = htpasswd_path {
+        vec![config_path, ".htpasswd".to_string(), "backend/.htpasswd".to_string()]
+    } else {
+        vec![".htpasswd".to_string(), "backend/.htpasswd".to_string()]
+    };
+
+    for path in paths_to_check {
+        let htpasswd_path = Path::new(&path);
         if htpasswd_path.exists() {
             match fs::read_to_string(htpasswd_path) {
                 Ok(content) => {
@@ -133,8 +163,39 @@ fn check_htpasswd_file() {
     println!("cargo:warning=Create with: htpasswd -c .htpasswd username");
 }
 
-/// Check if database migrations exist
+/// Check if database migrations exist and database URL is configured
 fn check_database_migrations() {
+    // Check database URL from config
+    let database_url = if Path::new("config.toml").exists() {
+        match fs::read_to_string("config.toml") {
+            Ok(content) => {
+                if let Some(line) = content.lines().find(|l| l.contains("database_url")) {
+                    if let Some(url_start) = line.find('"') {
+                        if let Some(url_end) = line[url_start + 1..].find('"') {
+                            Some(line[url_start + 1..url_start + 1 + url_end].to_string())
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            }
+            Err(_) => None,
+        }
+    } else {
+        None
+    };
+
+    if let Some(url) = &database_url {
+        println!("cargo:warning=Database URL configured: {}", url);
+    } else {
+        println!("cargo:warning=Database URL not found in config, will use default");
+    }
+
+    // Check migrations directory
     let migrations_dir = Path::new("migrations");
 
     if migrations_dir.exists() && migrations_dir.is_dir() {
