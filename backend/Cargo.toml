@@ -11,14 +11,14 @@ license = "GPL-3.0"
 
 [dependencies]
 
-actix-web = "4.9"
+actix-web = "4.11"
 actix-cors = "0.7"
 actix-identity = "0.8"
 actix-session = { version = "0.10", features = ["cookie-session"] }
 cookie = { version = "0.16", features = ["secure"] }
 futures-util = "0.3"
 color-eyre = { version = "0.6.3", default-features = false }
-config = { version = "0.14.0", default-features = false, features = ["toml"] }
+config = { version = "0.15", default-features = false, features = ["toml"] }
 diesel = { version = "2.2.0", features = ["sqlite", "r2d2"] }
 diesel_migrations = { version = "2.2.0", features = ["sqlite"] }
 futures = "0.3.30"
@@ -27,18 +27,18 @@ pretty_env_logger = "0.5.0"
 russh = "0.54.1"
 serde = "1.0.203"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "sync", "time"] }
-bcrypt = "0.15"
+bcrypt = "0.17"
 similar = { version = "2.6.0", features = ["inline"] }
-time = "0.3.37"
-tokio-cron-scheduler = "0.13.0"
+time = "0.3.43"
+tokio-cron-scheduler = "0.14.0"
 croner = "2.1.0"
-serde_json = "1.0.138"
+serde_json = "1.0.143"
 sha2 = "0.10.8"
-chrono = "0.4.40"
+chrono = "0.4.41"
 rand = "0.8"
 base64 = "0.22"
 
-utoipa = { version = "4.0", features = ["actix_extras", "chrono"] }
+utoipa = { version = "4.2", features = ["actix_extras", "chrono"] }
 utoipa-swagger-ui = { version = "4.0", features = ["actix-web"] }
 
 [dev-dependencies]
