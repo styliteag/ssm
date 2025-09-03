@@ -477,7 +477,7 @@ async fn create_host(
 }
 
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct AuthorizeUserRequest {
     host_id: i32,
     user_id: i32,
@@ -518,13 +518,13 @@ async fn authorize_user(
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct GenAuthorizedKeysRequest {
     host_name: String,
     login: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct AuthorizedKeysResponse {
     login: String,
     authorized_keys: String,
@@ -537,7 +537,7 @@ pub struct AuthorizedKeysResponse {
     path = "/api/host/gen_authorized_keys",
     request_body = GenAuthorizedKeysRequest,
     responses(
-        (status = 200, description = "Authorized keys generated", body = GenAuthorizedKeysResponse),
+        (status = 200, description = "Authorized keys generated", body = AuthorizedKeysResponse),
         (status = 400, description = "Bad request", body = ApiError)
     )
 )]
@@ -588,7 +588,7 @@ async fn gen_authorized_keys(
     })))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct SetAuthorizedKeysRequest {
     login: String,
     authorized_keys: String,
@@ -633,7 +633,7 @@ pub struct DeleteHostResponse {
     affected_hosts: Vec<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct HostDeleteRequest {
     #[serde(default)]
     confirm: bool,
@@ -698,7 +698,7 @@ async fn delete_host(
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct HostAuthorizationsResponse {
     authorizations: Vec<UserAndOptions>,
 }
@@ -793,7 +793,7 @@ where
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct UpdateHostRequest {
     name: String,
     address: String,
