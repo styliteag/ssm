@@ -41,7 +41,6 @@ RUN apk add --no-cache \
     curl
 
 WORKDIR /app
-# COPY backend/rust-toolchain.toml ./rust-toolchain.toml
 # Install cargo-chef in separate layer for better caching
 RUN cargo install --locked cargo-chef
 
@@ -111,7 +110,6 @@ COPY backend/Cargo.toml backend/Cargo.lock ./
 COPY backend/build.rs ./
 COPY backend/migrations ./migrations/
 COPY backend/diesel.toml ./
-#COPY backend/rust-toolchain.toml ./
 COPY backend/src ./src/
 COPY VERSION /VERSION
 
