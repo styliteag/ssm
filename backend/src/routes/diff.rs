@@ -52,17 +52,7 @@ pub struct DiffItemResponse {
     details: Option<serde_json::Value>,
 }
 
-#[derive(Serialize, ToSchema)]
-pub struct AuthorizedKeysResponse {
-    login: String,
-    content: String,
-}
 
-#[derive(Serialize, ToSchema)]
-pub struct KeyComparisonResponse {
-    identical: bool,
-    changes: Vec<String>,
-}
 
 #[derive(Serialize, ToSchema)]
 pub struct SerializableAuthorizedKey {

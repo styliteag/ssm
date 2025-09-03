@@ -48,11 +48,6 @@ pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!();
 
 #[derive(diesel::MultiConnection)]
 pub enum DbConnection {
-    #[cfg(feature = "postgres")]
-    Postgresql(diesel::PgConnection),
-    #[cfg(feature = "mysql")]
-    Mysql(diesel::MysqlConnection),
-
     Sqlite(diesel::SqliteConnection),
 }
 
@@ -71,10 +66,6 @@ impl CustomizeConnection<DbConnection, diesel::r2d2::Error> for SqliteConnection
                     .execute(conn)
                     .map_err(|e| diesel::r2d2::Error::QueryError(e))?;
             }
-            #[cfg(feature = "postgres")]
-            DbConnection::Postgresql(_) => {}
-            #[cfg(feature = "mysql")]
-            DbConnection::Mysql(_) => {}
         }
         Ok(())
     }

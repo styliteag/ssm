@@ -966,17 +966,10 @@ version = "2.2.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "229850a212cd9b84d4f0290ad9d294afc0ae70fccaa8949dbe8b43ffafa1e20c"
 dependencies = [
- "bitflags",
- "byteorder",
  "diesel_derives",
- "itoa",
  "libsqlite3-sys",
- "mysqlclient-sys",
- "percent-encoding",
- "pq-sys",
  "r2d2",
  "time",
- "url",
 ]
 
 [[package]]
@@ -2011,17 +2004,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mysqlclient-sys"
-version = "0.4.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "86a34a2bdec189f1060343ba712983e14cad7e87515cfd9ac4653e207535b6b1"
-dependencies = [
- "pkg-config",
- "semver",
- "vcpkg",
-]
-
-[[package]]
 name = "nix"
 version = "0.29.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2392,16 +2374,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "85eae3c4ed2f50dcfe72643da4befc30deadb458a9b590d720cde2f2b1e97da9"
 dependencies = [
  "zerocopy",
-]
-
-[[package]]
-name = "pq-sys"
-version = "0.7.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dfd6cf44cca8f9624bc19df234fc4112873432f5fda1caff174527846d026fa9"
-dependencies = [
- "libc",
- "vcpkg",
 ]
 
 [[package]]
@@ -3145,7 +3117,6 @@ dependencies = [
  "tokio-cron-scheduler",
  "utoipa",
  "utoipa-swagger-ui",
- "utoipauto",
 ]
 
 [[package]]
@@ -3561,38 +3532,6 @@ dependencies = [
  "serde_json",
  "utoipa",
  "zip",
-]
-
-[[package]]
-name = "utoipauto"
-version = "0.3.0-alpha.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5b51f6104f5a48663a7172fa48d1242f1417dc16788bc578bde069079b6786f6"
-dependencies = [
- "utoipauto-macro",
-]
-
-[[package]]
-name = "utoipauto-core"
-version = "0.3.0-alpha.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f5623bca4252102afc1cc58c3a6c5744a740c1c17c861641d8c1a5634a996f47"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.105",
-]
-
-[[package]]
-name = "utoipauto-macro"
-version = "0.3.0-alpha.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e0b93fc5998da9473226222d019c619cbaf9baebe2073f86a7e128f290a1ad68"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.105",
- "utoipauto-core",
 ]
 
 [[package]]
