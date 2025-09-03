@@ -10,8 +10,7 @@ use log::{info, debug, warn};
 use std::future::{Ready, ready};
 use std::rc::Rc;
 
-#[allow(dead_code)]
-const LOG_TARGET: &str = "ssm:webserver";
+
 
 /// Helper function to validate CSRF tokens
 pub fn validate_csrf_token(session: &Session, header_token: Option<&str>) -> Result<(), String> {

@@ -3,6 +3,7 @@ use actix_web::{
     web::{self, Data, Json, Path, Query},
     HttpResponse, Responder, Result,
 };
+
 use actix_identity::Identity;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -395,7 +396,7 @@ pub struct AddKeyResponse {
     )
 )]
 #[post("/add_key")]
-async fn add_key_dialog(json: Json<SshPublicKey>, _identity: Option<Identity>) -> Result<impl Responder> {
+async fn add_key_dialog(json: Json<SshPublicKey>) -> Result<impl Responder> {
     Ok(HttpResponse::Ok().json(ApiResponse::success(AddKeyResponse {
         key: json.into_inner(),
         suggested_action: "Assign this key to a user".to_string(),

@@ -3,6 +3,7 @@ use actix_web::{
     web::{self, Data, Json},
     HttpResponse, Responder, Result,
 };
+
 use actix_identity::Identity;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -37,7 +38,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
     )
 )]
 #[post("/change_options")]
-async fn change_options(_identity: Option<Identity>) -> Result<impl Responder> {
+async fn change_options() -> Result<impl Responder> {
     // TODO: Implement authorization options change
     Ok(HttpResponse::NotImplemented().json(ApiError::new("Not implemented".to_string())))
 }
