@@ -38,8 +38,8 @@ chrono = "0.4.41"
 rand = "0.8"
 base64 = "0.22"
 
-utoipa = { version = "4.2", features = ["actix_extras", "chrono"] }
-utoipa-swagger-ui = { version = "4.0", features = ["actix-web"] }
+utoipa = { version = "5.4", features = ["actix_extras", "chrono"] }
+utoipa-swagger-ui = { version = "9.0", features = ["actix-web"] }
 
 [dev-dependencies]
 serial_test = "3.0"
