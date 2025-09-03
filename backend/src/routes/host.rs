@@ -735,11 +735,7 @@ async fn list_host_authorizations(
     }
 }
 
-#[derive(Deserialize)]
-#[allow(dead_code)]
-struct DeleteAuthorizationRequest {
-    authorization_id: i32,
-}
+
 
 /// Delete an authorization
 #[utoipa::path(

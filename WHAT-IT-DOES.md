@@ -7,11 +7,14 @@ instructions, see the project README.md.
 
 ## Purpose
 
-Secure SSH Manager (ssm) is a Rust-based web application that centralizes
-management of SSH public keys across multiple servers. It offers a user-
-friendly web UI for adding, removing and rotating keys on remote hosts,
-viewing diffs of `authorized_keys`, and scheduling automatic updates via
-cron-style rules.
+Secure SSH Manager (SSM) is a modern web application that centralizes
+management of SSH public keys across multiple servers. It provides a
+user-friendly web interface for adding, removing and rotating keys on
+remote hosts, viewing diffs of `authorized_keys`, and scheduling automatic
+updates via cron-style rules.
+
+The application is built with a modern split architecture featuring a
+React frontend and Rust backend for optimal performance and maintainability.
 
 ## Key Features
 
@@ -30,60 +33,88 @@ cron-style rules.
 
 ## Architecture Overview
 
+The application uses a modern split architecture with separate frontend and backend services:
+
+### Frontend (`frontend/`)
+- **Framework**: React 19 with TypeScript
+- **Styling**: Tailwind CSS with component library
+- **State Management**: Zustand + React Context
+- **Build**: Vite for fast development and production builds
+
+### Backend (`backend/`)
+- **Framework**: Rust + Actix Web
+- **Database**: SQLite (default) with PostgreSQL/MySQL support
+- **Authentication**: Session-based with htpasswd
+- **SSH Client**: russh for remote host connections
+
+### Project Structure
 ```text
-ssm/                          # Project root
-├── Cargo.toml                # Rust manifest and dependencies
-├── build.rs                  # Embed static assets and migrations
-├── config.toml               # Default configuration file (TOML)
-├── convert_ssh_config.py     # Helper to import ~/.ssh/config entries
-├── migrations/               # Diesel database migrations
-├── src/                      # Rust source code
-│   ├── main.rs               # Server setup and entry point
-│   ├── scheduler.rs          # Cron-based job scheduler
-│   ├── ssh/                  # SSH client and caching logic
-│   ├── routes/               # Actix-web route handlers
-│   ├── models.rs, schema.rs  # Diesel ORM models and schema
-│   └── templates.rs          # Generated Askama templates
-├── static/                   # CSS & JavaScript assets
-├── templates/                # HTML templates for the web UI
-├── Dockerfile                # Container image definition
-├── justfile                  # Convenience task runner (just)
-└── README.md                 # Detailed setup and developer guide
+ssh-key-manager/
+├── frontend/                 # React frontend application
+│   ├── src/
+│   │   ├── components/      # Reusable React components
+│   │   ├── pages/          # Route components
+│   │   ├── services/       # API communication
+│   │   └── types/          # TypeScript definitions
+│   ├── package.json
+│   └── vite.config.ts
+├── backend/                  # Rust API backend
+│   ├── src/
+│   │   ├── main.rs          # Server setup and entry point
+│   │   ├── middleware.rs    # Authentication middleware
+│   │   ├── routes/          # API endpoint handlers
+│   │   ├── ssh/             # SSH client and caching logic
+│   │   ├── db/              # Database models
+│   │   └── scheduler.rs     # Cron-based job scheduler
+│   ├── migrations/          # Database migrations
+│   ├── Cargo.toml
+│   └── config.toml
+├── docker/                   # Docker deployment configuration
+├── start-dev.sh              # Development environment startup
+└── README.md                 # Detailed setup guide
 ```
 
 ## Getting Started (Quickstart)
 
 1. **Install prerequisites**:
    - Rust toolchain (stable)
+   - Node.js (18+)
    - SQLite or PostgreSQL/MySQL server
    - Diesel CLI (`cargo install diesel_cli --no-default-features --features sqlite`)
-   - `htpasswd` (for Basic auth)
+   - `htpasswd` (for authentication)
 
-2. **Configure**:
+2. **Set up backend**:
+   - Navigate to `backend/` directory
    - Copy or edit `config.toml` to set `database_url`, listening `port`,
      `ssh.private_key_file`, cron schedules, etc.
    - Create an htpasswd file:
      ```sh
      htpasswd -Bc .htpasswd admin
      ```
+   - Initialize the database:
+     ```sh
+     cd backend
+     diesel setup
+     diesel migration run
+     ```
 
-3. **Initialize the database** (migrations will also run automatically on startup):
+3. **Set up frontend**:
+   - Navigate to `frontend/` directory
+   - Install dependencies:
+     ```sh
+     cd frontend
+     npm install
+     ```
+
+4. **Run development servers**:
    ```sh
-   diesel setup
+   # From project root
+   ./start-dev.sh
    ```
 
-4. **(Optional) Import hosts from SSH config**:
-   ```sh
-   ./convert_ssh_config.py
-   ```
-
-5. **Run the server**:
-   ```sh
-   cargo run
-   ```
-
-6. **Open the UI**:
-   Visit `http://localhost:8080` and log in with your htpasswd user.
+5. **Open the UI**:
+   - Frontend: `http://localhost:5173`
+   - Backend API: `http://localhost:8000`
 
 ## Advanced Usage
 
