@@ -9,7 +9,7 @@ impl OpenApi for ApiDoc {
         OpenApiBuilder::new()
             .info(InfoBuilder::new()
                 .title("SSH Key Manager API")
-                .version("0.1.0")
+                .version("0.1.1")
                 .description(Some("Secure API for managing SSH keys across multiple hosts"))
                 .build()
             )
