@@ -5,6 +5,7 @@ use actix_web::{
     web::{self, Data, Json, Path, Query},
     HttpResponse, Responder, Result,
 };
+
 use actix_identity::Identity;
 use log::error;
 use serde::{Deserialize, Serialize};
@@ -85,7 +86,6 @@ impl From<Host> for HostResponse {
 async fn get_all_hosts(
     conn: Data<ConnectionPool>,
     _pagination: Query<PaginationQuery>,
-    _identity: Option<Identity>,
 ) -> Result<impl Responder> {
     let conn_clone = conn.clone();
     let hosts = web::block(move || Host::get_all_hosts(&mut conn_clone.get().unwrap())).await?;
@@ -162,7 +162,6 @@ async fn get_logins(
     caching_ssh_client: Data<CachingSshClient>,
     host_name: Path<String>,
     update: Query<ForceUpdateQuery>,
-    _identity: Option<Identity>,
 ) -> Result<impl Responder> {
     let host = Host::get_from_name(conn.get().unwrap(), host_name.to_string()).await;
 

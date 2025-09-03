@@ -14,7 +14,7 @@ postgres = ["diesel/postgres", "diesel_migrations/postgres"]
 mysql = ["diesel/mysql", "diesel_migrations/mysql"]
 
 [dependencies]
-actix = "0.13"
+
 actix-web = "4.9"
 actix-cors = "0.7"
 actix-identity = "0.8"
@@ -39,15 +39,15 @@ croner = "2.1.0"
 serde_json = "1.0.138"
 sha2 = "0.10.8"
 chrono = "0.4.40"
-uuid = { version = "1.0", features = ["v4"] }
-tempfile = "3.8"
+
+
 serial_test = "3.0"
 env_logger = "0.11"
-utoipa = { version = "4.0", features = ["actix_extras", "chrono", "uuid"] }
+utoipa = { version = "4.0", features = ["actix_extras", "chrono"] }
 utoipa-swagger-ui = { version = "4.0", features = ["actix-web"] }
 utoipauto = "0.3.0-alpha.2"
-toml = "0.7" # Pin to avoid version conflicts
-urlencoding = "2.1"
+
+
 rand = "0.8"
 base64 = "0.22"
 

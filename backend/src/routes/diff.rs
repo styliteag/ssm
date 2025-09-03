@@ -7,6 +7,7 @@ use actix_web::{
     web::{self, Data, Path, Query},
     HttpResponse, Responder, Result,
 };
+
 use actix_identity::Identity;
 use log::{debug, info, warn, error};
 use serde::{Deserialize, Serialize};
@@ -195,7 +196,7 @@ pub struct DiffHostsResponse {
     )
 )]
 #[get("")]
-async fn get_hosts_for_diff(conn: Data<ConnectionPool>, _identity: Option<Identity>) -> Result<impl Responder> {
+async fn get_hosts_for_diff(conn: Data<ConnectionPool>) -> Result<impl Responder> {
     info!("GET /api/diff - Fetching hosts available for diff comparison");
     debug!("Getting all hosts from database for diff view");
     
