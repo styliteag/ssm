@@ -21,7 +21,7 @@ trap cleanup SIGINT SIGTERM
 
 # Check if backend dependencies are ready
 if [ ! -f "backend/Cargo.toml" ]; then
-    echo "❌ Backend not found. Make sure you're in the ssh-key-manager root directory."
+    echo "❌ Backend not found. Make sure you're in the ssm root directory."
     exit 1
 fi
 

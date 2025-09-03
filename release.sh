@@ -247,8 +247,8 @@ main() {
     print_info "Branch: $original_branch"
     print_info ""
     print_info "The GitHub Action will now build and publish Docker images:"
-    print_info "  • styliteag/ssh-key-manager:$new_version"
-    print_info "  • ghcr.io/$(git config --get remote.origin.url | sed 's/.*github.com[/:]//g' | sed 's/.git$//')/ssh-key-manager:$new_version"
+    print_info "  • styliteag/ssm:$new_version"
+    print_info "  • ghcr.io/$(git config --get remote.origin.url | sed 's/.*github.com[/:]//g' | sed 's/.git$//')/ssm:$new_version"
     print_info ""
     print_info "Monitor the build at: https://github.com/$(git config --get remote.origin.url | sed 's/.*github.com[/:]//g' | sed 's/.git$//')/actions"
 }

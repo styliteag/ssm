@@ -33,7 +33,7 @@ jobs:
     env:
       # Adjust these defaults as needed
       ORG: styliteag
-      PACKAGE_NAME: ssm/ssh-key-manager
+      PACKAGE_NAME: ssm/ssm
       KEEP: ${{ github.event.inputs.keep }}
       AGE_DAYS: ${{ github.event.inputs.age_days }}
       PRESERVE_TAGS: ${{ github.event.inputs.preserve_tags }}

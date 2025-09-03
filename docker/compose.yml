@@ -6,7 +6,7 @@ services:
       dockerfile: docker/app/Dockerfile
       args:
         VITE_API_URL: http://localhost/api
-    image: ssh-key-manager:latest
+    image: ssm:latest
     ports:
       - "80:80"
     volumes:      

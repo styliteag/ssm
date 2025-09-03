@@ -31,15 +31,15 @@ jobs:
         push: true
         context: .
         file: docker/app/Dockerfile
-        #cache-from: type=registry,ref=styliteag/ssh-key-manager:latest
+        #cache-from: type=registry,ref=styliteag/ssm:latest
         #cache-to: type=inline
         cache-from: type=gha
         cache-to: type=gha,mode=max
         tags: |
-          styliteag/ssh-key-manager:latest
-          ghcr.io/${{ github.repository }}/ssh-key-manager:latest
+          styliteag/ssm:latest
+          ghcr.io/${{ github.repository }}/ssm:latest
 #    - name: Build and push to GitHub Container Registry
 #      uses: docker/build-push-action@v6
 #      with:
 #        push: true
-#        tags: ghcr.io/${{ github.repository }}/ssh-key-manager:latest
+#        tags: ghcr.io/${{ github.repository }}/ssm:latest

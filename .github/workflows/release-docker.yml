@@ -78,8 +78,8 @@ jobs:
           VCS_REF=${{ github.sha }}
           VITE_API_URL=/api
         tags: |
-          styliteag/ssh-key-manager:${{ steps.version.outputs.version }}-${{ matrix.arch }}
-          ghcr.io/${{ github.repository }}/ssh-key-manager:${{ steps.version.outputs.version }}-${{ matrix.arch }}
+          styliteag/ssm:${{ steps.version.outputs.version }}-${{ matrix.arch }}
+          ghcr.io/${{ github.repository }}/ssm:${{ steps.version.outputs.version }}-${{ matrix.arch }}
           
   merge:
     runs-on: ubuntu-latest
@@ -127,45 +127,45 @@ jobs:
       run: |
         # Docker Hub manifests
         docker buildx imagetools create \
-          -t styliteag/ssh-key-manager:${{ steps.version.outputs.version }} \
-          styliteag/ssh-key-manager:${{ steps.version.outputs.version }}-amd64 \
-          styliteag/ssh-key-manager:${{ steps.version.outputs.version }}-arm64
+          -t styliteag/ssm:${{ steps.version.outputs.version }} \
+          styliteag/ssm:${{ steps.version.outputs.version }}-amd64 \
+          styliteag/ssm:${{ steps.version.outputs.version }}-arm64
         
         docker buildx imagetools create \
-          -t styliteag/ssh-key-manager:latest \
-          styliteag/ssh-key-manager:${{ steps.version.outputs.version }}-amd64 \
-          styliteag/ssh-key-manager:${{ steps.version.outputs.version }}-arm64
+          -t styliteag/ssm:latest \
+          styliteag/ssm:${{ steps.version.outputs.version }}-amd64 \
+          styliteag/ssm:${{ steps.version.outputs.version }}-arm64
         
         docker buildx imagetools create \
-          -t styliteag/ssh-key-manager:${{ steps.version.outputs.major }}.${{ steps.version.outputs.minor }} \
-          styliteag/ssh-key-manager:${{ steps.version.outputs.version }}-amd64 \
-          styliteag/ssh-key-manager:${{ steps.version.outputs.version }}-arm64
+          -t styliteag/ssm:${{ steps.version.outputs.major }}.${{ steps.version.outputs.minor }} \
+          styliteag/ssm:${{ steps.version.outputs.version }}-amd64 \
+          styliteag/ssm:${{ steps.version.outputs.version }}-arm64
         
         docker buildx imagetools create \
-          -t styliteag/ssh-key-manager:${{ steps.version.outputs.major }} \
-          styliteag/ssh-key-manager:${{ steps.version.outputs.version }}-amd64 \
-          styliteag/ssh-key-manager:${{ steps.version.outputs.version }}-arm64
+          -t styliteag/ssm:${{ steps.version.outputs.major }} \
+          styliteag/ssm:${{ steps.version.outputs.version }}-amd64 \
+          styliteag/ssm:${{ steps.version.outputs.version }}-arm64
         
         # GHCR manifests
         docker buildx imagetools create \
-          -t ghcr.io/${{ github.repository }}/ssh-key-manager:${{ steps.version.outputs.version }} \
-          ghcr.io/${{ github.repository }}/ssh-key-manager:${{ steps.version.outputs.version }}-amd64 \
-          ghcr.io/${{ github.repository }}/ssh-key-manager:${{ steps.version.outputs.version }}-arm64
+          -t ghcr.io/${{ github.repository }}/ssm:${{ steps.version.outputs.version }} \
+          ghcr.io/${{ github.repository }}/ssm:${{ steps.version.outputs.version }}-amd64 \
+          ghcr.io/${{ github.repository }}/ssm:${{ steps.version.outputs.version }}-arm64
         
         docker buildx imagetools create \
-          -t ghcr.io/${{ github.repository }}/ssh-key-manager:latest \
-          ghcr.io/${{ github.repository }}/ssh-key-manager:${{ steps.version.outputs.version }}-amd64 \
-          ghcr.io/${{ github.repository }}/ssh-key-manager:${{ steps.version.outputs.version }}-arm64
+          -t ghcr.io/${{ github.repository }}/ssm:latest \
+          ghcr.io/${{ github.repository }}/ssm:${{ steps.version.outputs.version }}-amd64 \
+          ghcr.io/${{ github.repository }}/ssm:${{ steps.version.outputs.version }}-arm64
         
         docker buildx imagetools create \
-          -t ghcr.io/${{ github.repository }}/ssh-key-manager:${{ steps.version.outputs.major }}.${{ steps.version.outputs.minor }} \
-          ghcr.io/${{ github.repository }}/ssh-key-manager:${{ steps.version.outputs.version }}-amd64 \
-          ghcr.io/${{ github.repository }}/ssh-key-manager:${{ steps.version.outputs.version }}-arm64
+          -t ghcr.io/${{ github.repository }}/ssm:${{ steps.version.outputs.major }}.${{ steps.version.outputs.minor }} \
+          ghcr.io/${{ github.repository }}/ssm:${{ steps.version.outputs.version }}-amd64 \
+          ghcr.io/${{ github.repository }}/ssm:${{ steps.version.outputs.version }}-arm64
         
         docker buildx imagetools create \
-          -t ghcr.io/${{ github.repository }}/ssh-key-manager:${{ steps.version.outputs.major }} \
-          ghcr.io/${{ github.repository }}/ssh-key-manager:${{ steps.version.outputs.version }}-amd64 \
-          ghcr.io/${{ github.repository }}/ssh-key-manager:${{ steps.version.outputs.version }}-arm64
+          -t ghcr.io/${{ github.repository }}/ssm:${{ steps.version.outputs.major }} \
+          ghcr.io/${{ github.repository }}/ssm:${{ steps.version.outputs.version }}-amd64 \
+          ghcr.io/${{ github.repository }}/ssm:${{ steps.version.outputs.version }}-arm64
 
     - name: Create GitHub release
       uses: actions/create-release@v1
@@ -180,7 +180,7 @@ jobs:
           Built from tag: ${{ steps.tag.outputs.tag }}
           
           Docker Images:
-          - `styliteag/ssh-key-manager:${{ steps.version.outputs.version }}`
-          - `ghcr.io/${{ github.repository }}/ssh-key-manager:${{ steps.version.outputs.version }}`
+          - `styliteag/ssm:${{ steps.version.outputs.version }}`
+          - `ghcr.io/${{ github.repository }}/ssm:${{ steps.version.outputs.version }}`
         draft: false
         prerelease: false
