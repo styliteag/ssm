@@ -627,17 +627,6 @@ async fn set_authorized_keys(
     }
 }
 
-#[derive(Serialize)]
-pub struct DeleteHostResponse {
-    authorizations: Vec<UserAndOptions>,
-    affected_hosts: Vec<String>,
-}
-
-#[derive(Deserialize, ToSchema)]
-pub struct HostDeleteRequest {
-    #[serde(default)]
-    confirm: bool,
-}
 
 /// Delete a host
 #[utoipa::path(
@@ -648,14 +637,14 @@ pub struct HostDeleteRequest {
     ),
     responses(
         (status = 200, description = "Host deleted successfully"),
-        (status = 400, description = "Bad request", body = ApiError)
+        (status = 404, description = "Host not found", body = ApiError),
+        (status = 500, description = "Internal server error", body = ApiError)
     )
 )]
 #[delete("/{name}")]
 async fn delete_host(
     conn: Data<ConnectionPool>,
     caching_ssh_client: Data<CachingSshClient>,
-    json: Json<HostDeleteRequest>,
     host_name: Path<String>,
     _identity: Option<Identity>,
 ) -> Result<impl Responder> {
@@ -669,32 +658,12 @@ async fn delete_host(
         Ok(Some(host)) => host,
     };
 
-    if json.confirm {
-        return match host.delete(&mut conn.get().unwrap()) {
-            Ok(amt) => {
-                caching_ssh_client.remove(host_name.as_str()).await;
-                Ok(HttpResponse::Ok().json(ApiResponse::success_message(format!("Deleted {amt} record(s)"))))
-            }
-            Err(e) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(format!("Failed to delete host: {e}")))),
-        };
-    }
-
-    let mut connection = conn.get().unwrap();
-
-    let res = host
-        .get_authorized_users(&mut connection)
-        .and_then(|authorizations| {
-            host.get_dependant_hosts(&mut connection)
-                .map(|hosts| (authorizations, hosts))
-        });
-
-    // TODO: resolve authorizations of dependant hosts
-    match res {
-        Ok((authorizations, affected_hosts)) => Ok(HttpResponse::Ok().json(ApiResponse::success(DeleteHostResponse {
-            authorizations,
-            affected_hosts,
-        }))),
-        Err(error) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(format!("Failed to get authorizations: {error}")))),
+    match host.delete(&mut conn.get().unwrap()) {
+        Ok(amt) => {
+            caching_ssh_client.remove(host_name.as_str()).await;
+            Ok(HttpResponse::Ok().json(ApiResponse::success_message(format!("Deleted {amt} record(s)"))))
+        }
+        Err(e) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(format!("Failed to delete host: {e}")))),
     }
 }
 
