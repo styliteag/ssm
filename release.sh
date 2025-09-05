@@ -25,7 +25,7 @@ show_usage() {
     echo "  3. Create a git tag"
     echo "  4. Push the branch and tag to origin"
     echo ""
-    echo "Version increment types:"
+    echo "Version increment types (patch is default):"
     echo "  major: X.0.0 (breaking changes)"
     echo "  minor: X.Y.0 (new features, backward compatible)"
     echo "  patch: X.Y.Z (bug fixes, backward compatible)"
@@ -158,13 +158,15 @@ run_build_tests() {
 
 # Main script
 main() {
-    # Check if increment type is provided
-    if [ $# -ne 1 ]; then
+    # Check if increment type is provided, default to patch
+    if [ $# -eq 0 ]; then
+        local increment_type="patch"
+    elif [ $# -eq 1 ]; then
+        local increment_type="$1"
+    else
         show_usage
         exit 1
     fi
-    
-    local increment_type="$1"
     
     # Validate increment type
     if [[ ! "$increment_type" =~ ^(major|minor|patch)$ ]]; then
