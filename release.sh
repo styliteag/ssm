@@ -184,9 +184,6 @@ main() {
     # Check git status
     check_git_status
 
-    # Run build verification
-    # This also updates Cargo.lock
-    run_build_tests
            
     # Read current version
     local current_version=$(cat VERSION | tr -d '\n')
@@ -201,10 +198,24 @@ main() {
     print_info "New version: $new_version"
     
 
+    
+    # Update VERSION file on current branch
+    print_info "Updating VERSION file to $new_version on $original_branch"
+    echo "$new_version" > VERSION
+    
+    # Update Cargo.toml version
+    print_info "Updating Cargo.toml version to $new_version"
+    sed -i.bak "s/^version = \".*\"/version = \"$new_version\"/" backend/Cargo.toml
+    rm -f backend/Cargo.toml.bak
+
+    # Run build verification
+    # This also updates Cargo.lock
+    run_build_tests
+
     # Confirm with user
     echo
     print_warning "This will:"
-    echo "  • Update VERSION from $current_version to $new_version on $original_branch"
+    echo "  • Push VERSION from $current_version to $new_version on $original_branch"
     echo "  • Commit and push $original_branch with version update"
     echo "  • Create git tag: v$new_version"
     echo "  • Push tag to origin (this will trigger the Docker build)"
@@ -215,15 +226,6 @@ main() {
         print_info "Release cancelled"
         exit 0
     fi
-    
-    # Update VERSION file on current branch
-    print_info "Updating VERSION file to $new_version on $original_branch"
-    echo "$new_version" > VERSION
-    
-    # Update Cargo.toml version
-    print_info "Updating Cargo.toml version to $new_version"
-    sed -i.bak "s/^version = \".*\"/version = \"$new_version\"/" backend/Cargo.toml
-    rm -f backend/Cargo.toml.bak
 
    
     # Commit version changes to current branch
