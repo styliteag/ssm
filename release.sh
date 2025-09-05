@@ -181,10 +181,11 @@ main() {
     
     # Check git status
     check_git_status
-        
-    # Store current branch to return to it later
-    local original_branch=$(git branch --show-current)
-    
+
+    # Run build verification
+    # This also updates Cargo.lock
+    run_build_tests
+           
     # Read current version
     local current_version=$(cat VERSION | tr -d '\n')
     print_info "Current version: $current_version"
@@ -222,9 +223,6 @@ main() {
     sed -i.bak "s/^version = \".*\"/version = \"$new_version\"/" backend/Cargo.toml
     rm -f backend/Cargo.toml.bak
 
-    # Run build verification
-    # This also updates Cargo.lock
-    run_build_tests
    
     # Commit version changes to current branch
     print_info "Committing version changes to $original_branch"
