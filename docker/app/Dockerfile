@@ -136,8 +136,9 @@ RUN apk add --no-cache \
 # Copy nginx configuration
 COPY docker/app/nginx-main.conf /etc/nginx/nginx.conf
 
-# Copy health check script
+# Copy health check script and startup script
 COPY docker/app/health-check.sh /app/health-check.sh
+COPY docker/app/start.sh /app/start.sh
 
 # Copy frontend build from builder stage
 COPY --from=frontend-builder /app/dist /usr/share/nginx/html
@@ -154,45 +155,9 @@ COPY backend/src/ssh/script.sh /app/script.sh
 #COPY static /app/static
 #COPY templates /app/templates
 
-# Create necessary directories and startup script
+# Setup directories and permissions
 RUN mkdir -p /var/cache/nginx /var/run/nginx /app/db /app/keys /var/log/nginx && \
-    chmod +x /app/health-check.sh && \
-    chmod +x /app/ssm && \
-    printf '#!/bin/sh\n' > /app/start.sh && \
-    printf 'set -e\n' >> /app/start.sh && \
-    printf 'echo "Starting SSH Key Manager"\n' >> /app/start.sh && \
-    printf 'echo "Version: $(cat /app/VERSION 2>/dev/null || echo unknown)"\n' >> /app/start.sh && \
-    printf '\n' >> /app/start.sh && \
-    printf '# Initialize database directory\n' >> /app/start.sh && \
-    printf 'mkdir -p /app/db\n' >> /app/start.sh && \
-    printf 'export DATABASE_URL="${DATABASE_URL:-sqlite:///app/db/ssm.db}"\n' >> /app/start.sh && \
-    printf '\n' >> /app/start.sh && \
-    printf '# Function to handle shutdown gracefully\n' >> /app/start.sh && \
-    printf 'cleanup() {\n' >> /app/start.sh && \
-    printf '    echo "Shutting down..."\n' >> /app/start.sh && \
-    printf '    kill -TERM $NGINX_PID 2>/dev/null || true\n' >> /app/start.sh && \
-    printf '    kill -TERM $SSM_PID 2>/dev/null || true\n' >> /app/start.sh && \
-    printf '    wait\n' >> /app/start.sh && \
-    printf '    exit\n' >> /app/start.sh && \
-    printf '}\n' >> /app/start.sh && \
-    printf 'trap cleanup SIGTERM SIGINT\n' >> /app/start.sh && \
-    printf '\n' >> /app/start.sh && \
-    printf '# Start nginx in background\n' >> /app/start.sh && \
-    printf 'echo "Starting nginx reverse proxy..."\n' >> /app/start.sh && \
-    printf 'echo "Nginx Config:"\n' >> /app/start.sh && \
-    printf 'nginx -T\n' >> /app/start.sh && \
-    printf 'nginx -t && nginx -g "daemon off;" &\n' >> /app/start.sh && \
-    printf 'NGINX_PID=$!\n' >> /app/start.sh && \
-    printf 'sleep 2\n' >> /app/start.sh && \
-    printf '\n' >> /app/start.sh && \
-    printf '# Start backend server in background\n' >> /app/start.sh && \
-    printf 'echo "Starting SSH Key Manager backend..."\n' >> /app/start.sh && \
-    printf 'cd /app && ./ssm &\n' >> /app/start.sh && \
-    printf 'SSM_PID=$!\n' >> /app/start.sh && \
-    printf '\n' >> /app/start.sh && \
-    printf '# Wait for both processes\n' >> /app/start.sh && \
-    printf 'wait\n' >> /app/start.sh && \
-    chmod +x /app/start.sh
+    chmod +x /app/health-check.sh /app/ssm /app/start.sh
 
 EXPOSE 80
 
