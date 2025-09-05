@@ -310,8 +310,9 @@ async fn main() -> Result<(), std::io::Error> {
         App::new()
             .wrap(cors)
             .wrap(Logger::new("%a \"%r\" %s %b \"%{Referer}i\" \"%{User-Agent}i\" %T"))
-            .wrap(middleware::AuthEnforcement)  // Enforce authentication by default
-            .wrap(middleware::CsrfProtection)
+            .wrap(middleware::CsrfProtection)      // Outermost - runs first
+            .wrap(middleware::AuthEnforcement)     // Enforce authentication by default
+            .wrap(IdentityMiddleware::default())   // Identity middleware needs to run before our auth middleware
             .wrap(
                 SessionMiddleware::builder(CookieSessionStore::default(), secret_key.clone())
                     .cookie_name("ssm_session".to_owned())
@@ -320,7 +321,6 @@ async fn main() -> Result<(), std::io::Error> {
                     .cookie_same_site(actix_web::cookie::SameSite::Lax)
                     .build(),
             )
-            .wrap(IdentityMiddleware::default())
             .app_data(Data::new(ssh_client.clone()))
             .app_data(caching_ssh_client.clone())
             .app_data(config.clone())
