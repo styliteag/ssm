@@ -3,7 +3,7 @@ use actix_session::{Session, SessionExt};
 use actix_web::{
     body::EitherBody,
     dev::{ServiceRequest, ServiceResponse, Service, Transform},
-    Error, HttpMessage, HttpResponse,
+    Error, HttpResponse, FromRequest,
 };
 use futures_util::future::LocalBoxFuture;
 use log::{info, debug, warn};
@@ -159,8 +159,8 @@ where
         let service = self.service.clone();
 
         Box::pin(async move {
-            let path = req.path();
-            let method = req.method();
+            let path = req.path().to_string();
+            let method = req.method().clone();
 
             // Define public routes that don't require authentication
             let public_paths = [
@@ -181,8 +181,8 @@ where
                 }
             });
 
-            // Skip authentication for public paths
-            if is_public {
+            // Skip authentication for public paths or OPTIONS requests (CORS preflight)
+            if is_public || method == &actix_web::http::Method::OPTIONS {
                 debug!("Skipping auth enforcement for public path: {} {}", method, path);
                 let res = service.call(req).await?;
                 return Ok(res.map_into_left_body());
@@ -192,7 +192,8 @@ where
             debug!("Enforcing authentication for {} {}", method, path);
 
             // Check if user is authenticated before consuming the request
-            let has_valid_auth = if let Some(identity) = req.parts().0.extensions().get::<Identity>() {
+            let (http_req, payload) = req.into_parts();
+            let has_valid_auth = if let Ok(identity) = Identity::extract(&http_req).await {
                 identity.id().is_ok()
             } else {
                 false
@@ -200,11 +201,11 @@ where
 
             if has_valid_auth {
                 debug!("User authenticated, proceeding with request");
+                let req = ServiceRequest::from_parts(http_req, payload);
                 let res = service.call(req).await?;
                 Ok(res.map_into_left_body())
             } else {
                 warn!("No valid authentication for {} {}", method, path);
-                let (http_req, _payload) = req.into_parts();
                 let response = HttpResponse::Unauthorized()
                     .json(crate::api_types::ApiError::unauthorized())
                     .map_into_boxed_body()
