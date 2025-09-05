@@ -789,7 +789,7 @@ const HostsPage: React.FC = () => {
             </div>
             
             <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-md">
-              <div className="text-sm space-y-1">
+              <div className="text-sm space-y-1 text-gray-900 dark:text-gray-100">
                 <div><strong>Name:</strong> {selectedHost.name}</div>
                 <div><strong>Address:</strong> {selectedHost.address}:{selectedHost.port}</div>
                 <div><strong>Username:</strong> {selectedHost.username}</div>
