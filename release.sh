@@ -200,7 +200,8 @@ main() {
 
     
     # Update VERSION file on current branch
-    print_info "Updating VERSION file to $new_version on $original_branch"
+    local current_branch=$(git branch --show-current)
+    print_info "Updating VERSION file to $new_version on $current_branch"
     echo "$new_version" > VERSION
     
     # Update Cargo.toml version
@@ -215,8 +216,8 @@ main() {
     # Confirm with user
     echo
     print_warning "This will:"
-    echo "  • Push VERSION from $current_version to $new_version on $original_branch"
-    echo "  • Commit and push $original_branch with version update"
+    echo "  • Push VERSION from $current_version to $new_version on $current_branch"
+    echo "  • Commit and push $current_branch with version update"
     echo "  • Create git tag: v$new_version"
     echo "  • Push tag to origin (this will trigger the Docker build)"
     echo
@@ -229,24 +230,24 @@ main() {
 
    
     # Commit version changes to current branch
-    print_info "Committing version changes to $original_branch"
+    print_info "Committing version changes to $current_branch"
     git add VERSION backend/Cargo.toml backend/Cargo.lock
     git commit -m "chore: bump version to $new_version"
-    
+
     # Create tag on current branch
     print_info "Creating tag: v$new_version"
     git tag -a "v$new_version" -m "Release version $new_version"
-    
+
     # Push current branch with version update and tag
-    print_info "Pushing $original_branch with version update"
-    git push origin "$original_branch"
+    print_info "Pushing $current_branch with version update"
+    git push origin "$current_branch"
     
     print_info "Pushing tag to origin (this will trigger the GitHub Actions build)"
     git push origin "v$new_version"
     
     print_success "Release $new_version created successfully!"
     print_info "Git tag: v$new_version"
-    print_info "Branch: $original_branch"
+    print_info "Branch: $current_branch"
     print_info ""
     print_info "The GitHub Action will now build and publish Docker images:"
     print_info "  • styliteag/ssm:$new_version"
