@@ -130,7 +130,7 @@ run_build_tests() {
     # Build backend
     print_info "Building backend..."
     cd backend
-    if ! cargo build --release > /tmp/backend-build.log 2>&1; then
+    if ! cargo build > /tmp/backend-build.log 2>&1; then
         print_error "Backend build failed!"
         print_error "Build log:"
         cat /tmp/backend-build.log
