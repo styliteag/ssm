@@ -651,19 +651,6 @@ const HostsPage: React.FC = () => {
       key: 'connection_status',
       header: 'Status',
       sortable: true,
-      // Custom sort value to ensure disabled hosts are sorted correctly
-      sortValue: (host: ExtendedHost) => {
-        const status = getHostStatus(host);
-        // Define sort order: disabled first, then error, offline, unknown, online
-        const sortOrder = {
-          disabled: 0,
-          error: 1,
-          offline: 2,
-          unknown: 3,
-          online: 4
-        };
-        return sortOrder[status];
-      },
       render: (_, host) => {
         const icons = {
           online: <CheckCircle size={16} className="text-green-500" />,
