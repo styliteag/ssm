@@ -49,22 +49,24 @@ pub struct HostResponse {
     connection_status: String,
     connection_error: Option<String>,
     authorizations: Vec<UserAndOptions>,
+    disabled: bool,
 }
 
 impl From<Host> for HostResponse {
     fn from(host: Host) -> Self {
         Self {
             id: host.id,
-            name: host.name,
+            name: host.name.clone(),
             address: host.address,
             port: host.port,
             username: host.username,
             key_fingerprint: host.key_fingerprint,
             jump_via: host.jump_via,
             jumphost_name: None, // Will be populated separately if needed
-            connection_status: "unknown".to_string(),
+            connection_status: if host.disabled { "disabled".to_string() } else { "unknown".to_string() },
             connection_error: None,
             authorizations: Vec::new(),
+            disabled: host.disabled,
         }
     }
 }
@@ -169,6 +171,11 @@ async fn get_logins(
         Err(error) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error))),
         Ok(None) => Ok(HttpResponse::NotFound().json(ApiError::not_found("Host not found".to_string()))),
         Ok(Some(host)) => {
+            // Return empty logins list if host is disabled
+            if host.disabled {
+                return Ok(HttpResponse::Ok().json(ApiResponse::success(LoginsResponse { logins: Vec::new() })));
+            }
+            
             let logins = caching_ssh_client
                 .get_logins(host, update.force_update.unwrap_or(false))
                 .await;
@@ -230,15 +237,20 @@ async fn get_host(
         }
     }
     
-    // Test SSH connection to get status
-    match caching_ssh_client.get_logins(host.clone(), false).await {
-        Ok(_logins) => {
-            host_response.connection_status = "online".to_string();
-            host_response.connection_error = None;
-        }
-        Err(error) => {
-            host_response.connection_status = "offline".to_string();
-            host_response.connection_error = Some(error.to_string());
+    // Test SSH connection to get status (skip if host is disabled)
+    if host.disabled {
+        host_response.connection_status = "disabled".to_string();
+        host_response.connection_error = None;
+    } else {
+        match caching_ssh_client.get_logins(host.clone(), false).await {
+            Ok(_logins) => {
+                host_response.connection_status = "online".to_string();
+                host_response.connection_error = None;
+            }
+            Err(error) => {
+                host_response.connection_status = "offline".to_string();
+                host_response.connection_error = Some(error.to_string());
+            }
         }
     }
     
@@ -269,6 +281,8 @@ pub struct CreateHostRequest {
     username: String,
     key_fingerprint: Option<String>,
     jump_via: Option<i32>,
+    #[serde(default)]
+    disabled: bool,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -453,6 +467,7 @@ async fn create_host(
         username: json.username.clone(),
         key_fingerprint: Some(key_fingerprint.clone()),
         jump_via: jumphost,
+        disabled: json.disabled,
     };
     let res = web::block(move || Host::add_host(&mut conn.get().unwrap(), &new_host)).await?;
 
@@ -467,6 +482,7 @@ async fn create_host(
                     username: json.username.clone(),
                     key_fingerprint: Some(key_fingerprint.clone()),
                     jump_via: jumphost,
+                    disabled: json.disabled,
                 }),
                 "Host created successfully".to_string(),
             ))),
@@ -551,7 +567,7 @@ async fn gen_authorized_keys(
     let host_name = &json.host_name;
     let login = &json.login;
 
-    let authorized_keys = match Host::get_from_name(conn.get().unwrap(), host_name.to_owned()).await
+    let host = match Host::get_from_name(conn.get().unwrap(), host_name.to_owned()).await
     {
         Err(error) => {
             return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error)));
@@ -559,10 +575,15 @@ async fn gen_authorized_keys(
         Ok(None) => {
             return Ok(HttpResponse::NotFound().json(ApiError::not_found("Host not found".to_string())));
         }
-        Ok(Some(host)) => {
-            host.get_authorized_keys_file_for(&ssh_client, &mut conn.get().unwrap(), login.as_ref())
-        }
+        Ok(Some(host)) => host,
     };
+    
+    // Check if host is disabled
+    if host.disabled {
+        return Ok(HttpResponse::BadRequest().json(ApiError::bad_request("Cannot generate authorized keys for disabled host".to_string())));
+    }
+    
+    let authorized_keys = host.get_authorized_keys_file_for(&ssh_client, &mut conn.get().unwrap(), login.as_ref());
 
     let authorized_keys = match authorized_keys {
         Ok(keys) => keys,
@@ -612,7 +633,24 @@ async fn set_authorized_keys(
     json: Json<SetAuthorizedKeysRequest>,
     host_name: Path<String>,
     ssh_client: Data<SshClient>,
+    conn: Data<ConnectionPool>,
 ) -> Result<impl Responder> {
+    // Check if host exists and is not disabled
+    let host = match Host::get_from_name(conn.get().unwrap(), host_name.to_string()).await {
+        Err(error) => {
+            return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error)));
+        }
+        Ok(None) => {
+            return Ok(HttpResponse::NotFound().json(ApiError::not_found("Host not found".to_string())));
+        }
+        Ok(Some(host)) => host,
+    };
+    
+    // Check if host is disabled
+    if host.disabled {
+        return Ok(HttpResponse::BadRequest().json(ApiError::bad_request("Cannot set authorized keys on disabled host".to_string())));
+    }
+    
     let res = ssh_client
         .set_authorized_keys(
             host_name.to_string(),
@@ -772,6 +810,8 @@ pub struct UpdateHostRequest {
     key_fingerprint: Option<String>,
     #[serde(deserialize_with = "empty_string_as_none_int")]
     jump_via: Option<i32>,
+    #[serde(default)]
+    disabled: bool,
 }
 
 /// Update a host
@@ -804,6 +844,7 @@ async fn update_host(
         json.port,
         json.key_fingerprint.clone(),
         json.jump_via,
+        json.disabled,
     ) {
         Ok(()) => Ok(HttpResponse::Ok().json(ApiResponse::success_message("Host updated successfully".to_string()))),
         Err(e) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e.to_string()))),

@@ -16,10 +16,12 @@ pub struct Host {
     pub port: i32,
     pub key_fingerprint: Option<String>,
     pub jump_via: Option<i32>,
+    /// Whether this host is disabled (no SSH connections will be made)
+    pub disabled: bool,
 }
 
 impl Host {
-    /// Updates the host's name, address, username, port, key_fingerprint, and jump_via. This is a stub implementation; in a real application, you should perform a database update.
+    /// Updates the host's name, address, username, port, key_fingerprint, jump_via, and disabled. This is a stub implementation; in a real application, you should perform a database update.
     pub fn update_host(
         conn: &mut crate::DbConnection,
         old_name: String,
@@ -29,17 +31,19 @@ impl Host {
         new_port: i32,
         new_key_fingerprint: Option<String>,
         new_jump_via: Option<i32>,
+        new_disabled: bool,
     ) -> Result<(), actix_web::Error> {
         use crate::schema::host::dsl::*;
         log::warn!(
-            "ssm::models::Host: Host update details for '{}':\n  Name -> {}\n  Address -> {}\n  Username -> {}\n  Port -> {}\n  Key Fingerprint -> {:?}\n  Jump Via -> {:?}",
+            "ssm::models::Host: Host update details for '{}':\n  Name -> {}\n  Address -> {}\n  Username -> {}\n  Port -> {}\n  Key Fingerprint -> {:?}\n  Jump Via -> {:?}\n  Disabled -> {}",
             old_name,
             new_name,
             new_address,
             new_username,
             new_port,
             new_key_fingerprint,
-            new_jump_via
+            new_jump_via,
+            new_disabled
         );
 
         diesel::update(host.filter(name.eq(&old_name)))
@@ -50,6 +54,7 @@ impl Host {
                 port.eq(new_port),
                 key_fingerprint.eq(new_key_fingerprint),
                 jump_via.eq(new_jump_via),
+                disabled.eq(new_disabled),
             ))
             .execute(conn)
             .map_err(actix_web::error::ErrorInternalServerError)?;
@@ -68,6 +73,7 @@ pub struct NewHost {
     pub username: String,
     pub key_fingerprint: Option<String>,
     pub jump_via: Option<i32>,
+    pub disabled: bool,
 }
 
 #[derive(Queryable, Selectable, Associations, Clone, Debug, Serialize, ToSchema)]
