@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import { 
   Server, 
@@ -10,7 +10,9 @@ import {
   CheckCircle, 
   Users,
   Key,
-  Globe
+  Globe,
+  Filter,
+  Ban
 } from 'lucide-react';
 import {
   Card,
@@ -47,6 +49,7 @@ const HostsPage: React.FC = () => {
   const [jumpHosts, setJumpHosts] = useState<Host[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedHost, setSelectedHost] = useState<ExtendedHost | null>(null);
+  const [statusFilter, setStatusFilter] = useState<'active' | 'all' | 'online' | 'offline' | 'error' | 'unknown' | 'disabled'>('active');
   
   // Modal states
   const [showAddModal, setShowAddModal] = useState(false);
@@ -404,6 +407,36 @@ const HostsPage: React.FC = () => {
     }
   };
 
+  // Helper function to get host status, considering disabled state first
+  const getHostStatus = (host: ExtendedHost): 'online' | 'offline' | 'error' | 'unknown' | 'disabled' => {
+    // Disabled state takes precedence over connection status
+    if (host.disabled) return 'disabled';
+    
+    // Then check connection status
+    if (host.connection_status === 'online') return 'online';
+    if (host.connection_status === 'offline') return 'offline';
+    if (host.connection_status === 'error') return 'error';
+    return 'unknown';
+  };
+
+  // Filter hosts based on status
+  const filteredHosts = useMemo(() => {
+    if (statusFilter === 'all') return hosts;
+    if (statusFilter === 'active') return hosts.filter(host => !host.disabled);
+    return hosts.filter(host => getHostStatus(host) === statusFilter);
+  }, [hosts, statusFilter]);
+
+  // Status filter options with counts
+  const statusFilterOptions = useMemo(() => [
+    { value: 'active', label: 'Active Hosts', count: hosts.filter(h => !h.disabled).length },
+    { value: 'all', label: 'All Hosts', count: hosts.length },
+    { value: 'online', label: 'Online', count: hosts.filter(h => getHostStatus(h) === 'online').length },
+    { value: 'offline', label: 'Offline', count: hosts.filter(h => getHostStatus(h) === 'offline').length },
+    { value: 'error', label: 'Error', count: hosts.filter(h => getHostStatus(h) === 'error').length },
+    { value: 'unknown', label: 'Unknown', count: hosts.filter(h => getHostStatus(h) === 'unknown').length },
+    { value: 'disabled', label: 'Disabled', count: hosts.filter(h => getHostStatus(h) === 'disabled').length },
+  ], [hosts]);
+
   // Host Status Tooltip Component
   const HostStatusTooltip: React.FC<{ host: ExtendedHost; children: React.ReactNode }> = ({ host, children }) => {
     const [isVisible, setIsVisible] = useState(false);
@@ -618,13 +651,26 @@ const HostsPage: React.FC = () => {
       key: 'connection_status',
       header: 'Status',
       sortable: true,
-      render: (status, host) => {
+      // Custom sort value to ensure disabled hosts are sorted correctly
+      sortValue: (host: ExtendedHost) => {
+        const status = getHostStatus(host);
+        // Define sort order: disabled first, then error, offline, unknown, online
+        const sortOrder = {
+          disabled: 0,
+          error: 1,
+          offline: 2,
+          unknown: 3,
+          online: 4
+        };
+        return sortOrder[status];
+      },
+      render: (_, host) => {
         const icons = {
           online: <CheckCircle size={16} className="text-green-500" />,
           offline: <AlertCircle size={16} className="text-red-500" />,
           error: <AlertCircle size={16} className="text-orange-500" />,
           unknown: <Activity size={16} className="text-gray-400" />,
-          disabled: <AlertCircle size={16} className="text-gray-500" />
+          disabled: <Ban size={16} className="text-gray-500" />
         };
 
         const labels = {
@@ -643,7 +689,8 @@ const HostsPage: React.FC = () => {
           disabled: 'text-gray-500 bg-gray-100 dark:text-gray-500 dark:bg-gray-800'
         };
 
-        const currentStatus = (status || 'unknown') as keyof typeof colors;
+        // Use the helper function to get status, considering disabled state first
+        const currentStatus = getHostStatus(host);
         return (
           <HostStatusTooltip host={host}>
             <div className={`inline-flex items-center space-x-1 px-2 py-1 rounded-full text-xs font-medium cursor-pointer ${colors[currentStatus]}`}>
@@ -735,15 +782,35 @@ const HostsPage: React.FC = () => {
       {/* Host List */}
       <Card>
         <CardHeader>
-          <CardTitle>SSH Hosts ({hosts.length})</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle>SSH Hosts ({filteredHosts.length}{statusFilter !== 'all' ? ` of ${hosts.length}` : ''})</CardTitle>
+            <div className="flex items-center space-x-2">
+              <Filter size={16} className="text-gray-500 dark:text-gray-400" />
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+                className="h-8 px-3 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                {statusFilterOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label} ({option.count})
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="overflow-visible">
           <div className="overflow-visible">
             <DataTable
-              data={hosts}
+              data={filteredHosts}
               columns={columns}
               loading={loading}
-              emptyMessage="No hosts found. Add your first SSH host to get started."
+              emptyMessage={
+                statusFilter === 'all' ? "No hosts found. Add your first SSH host to get started." :
+                statusFilter === 'active' ? "No active hosts found. Add your first SSH host or check the disabled hosts filter." :
+                `No hosts with status '${statusFilterOptions.find(o => o.value === statusFilter)?.label || statusFilter}'.`
+              }
               searchPlaceholder="Search hosts by name, address, or username..."
               initialSort={{ key: 'name', direction: 'asc' }}
               initialSearch={(location.state as { searchTerm?: string })?.searchTerm || ''}
