@@ -164,9 +164,22 @@ The API uses singular resource names in the URL paths:
 
 ### Database Schema
 - **Users**: SSH key owners
-- **Hosts**: Remote servers to manage
+- **Hosts**: Remote servers to manage (with `disabled` flag to prevent SSH operations)
 - **Keys**: SSH public keys belonging to users  
 - **Authorizations**: Links users to hosts with specific remote usernames
+
+### Host Disabling Feature
+- **Database**: Hosts table includes `disabled` boolean field (default: false)
+- **Backend Behavior**: 
+  - Disabled hosts skip all SSH connection attempts
+  - `/api/diff/{host}` returns "Host is disabled" without SSH operations
+  - `/api/diff/{host}/sync` blocks sync attempts with error message
+  - Connection status polling skips disabled hosts
+- **Frontend Behavior**:
+  - Shows "Disabled" status with Ban icon in UI
+  - No async loading operations for disabled hosts
+  - All SSH operations (test, sync, refresh) blocked with user feedback
+- **Use Cases**: Maintenance windows, decommissioned servers, temporary disconnection
 
 ### SSH Management System
 - Uses `russh` library for SSH connections
