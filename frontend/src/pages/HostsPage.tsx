@@ -83,6 +83,10 @@ const HostsPage: React.FC = () => {
       
       // Poll this batch in parallel
       const promises = batch.map(async (host) => {
+        // Skip polling for disabled hosts - they already have correct status from backend
+        if (host.disabled) {
+          return;
+        }
         try {
           const response = await hostsService.getHostByName(host.name);
           if (response.success && response.data) {
@@ -186,6 +190,12 @@ const HostsPage: React.FC = () => {
 
   // Test SSH connection
   const testConnection = useCallback(async (host: ExtendedHost) => {
+    // Skip testing for disabled hosts
+    if (host.disabled) {
+      showError('Host is disabled', `Cannot test connection to disabled host ${host.name}`);
+      return;
+    }
+    
     try {
       setTesting(prev => ({ ...prev, [host.id]: true }));
       
@@ -280,6 +290,12 @@ const HostsPage: React.FC = () => {
           label: `${host.name} (${host.address})`
         }))
       ]
+    },
+    {
+      name: 'disabled',
+      label: 'Disabled',
+      type: 'checkbox',
+      helperText: 'When disabled, no SSH connections will be made to this host'
     }
   ];
 
@@ -293,14 +309,16 @@ const HostsPage: React.FC = () => {
         port: Number(values.port),
         username: values.username,
         jump_via: values.jump_via && String(values.jump_via) !== '' ? Number(values.jump_via) : null,
-        key_fingerprint: values.key_fingerprint && values.key_fingerprint.trim() !== '' ? values.key_fingerprint : null
+        key_fingerprint: values.key_fingerprint && values.key_fingerprint.trim() !== '' ? values.key_fingerprint : null,
+        disabled: values.disabled || false
       };
 
       console.log('Creating host with data:', hostData);
       const response = await hostsService.createHost({
         ...hostData,
         jump_via: hostData.jump_via ?? undefined,
-        key_fingerprint: hostData.key_fingerprint ?? undefined
+        key_fingerprint: hostData.key_fingerprint ?? undefined,
+        disabled: hostData.disabled
       });
       console.log('Host creation response:', response);
       
@@ -318,7 +336,8 @@ const HostsPage: React.FC = () => {
           const finalResponse = await hostsService.createHost({
             ...confirmedHostData,
             jump_via: confirmedHostData.jump_via ?? undefined,
-            key_fingerprint: confirmedHostData.key_fingerprint ?? undefined
+            key_fingerprint: confirmedHostData.key_fingerprint ?? undefined,
+            disabled: confirmedHostData.disabled
           });
           console.log('Final host creation response:', finalResponse);
           
@@ -604,21 +623,24 @@ const HostsPage: React.FC = () => {
           online: <CheckCircle size={16} className="text-green-500" />,
           offline: <AlertCircle size={16} className="text-red-500" />,
           error: <AlertCircle size={16} className="text-orange-500" />,
-          unknown: <Activity size={16} className="text-gray-400" />
+          unknown: <Activity size={16} className="text-gray-400" />,
+          disabled: <AlertCircle size={16} className="text-gray-500" />
         };
 
         const labels = {
           online: 'Online',
           offline: 'Offline',
           error: 'Error',
-          unknown: 'Unknown'
+          unknown: 'Unknown',
+          disabled: 'Disabled'
         };
 
         const colors = {
           online: 'text-green-700 bg-green-50 dark:text-green-400 dark:bg-green-900/20',
           offline: 'text-red-700 bg-red-50 dark:text-red-400 dark:bg-red-900/20',
           error: 'text-orange-700 bg-orange-50 dark:text-orange-400 dark:bg-orange-900/20',
-          unknown: 'text-gray-700 bg-gray-50 dark:text-gray-400 dark:bg-gray-900/20'
+          unknown: 'text-gray-700 bg-gray-50 dark:text-gray-400 dark:bg-gray-900/20',
+          disabled: 'text-gray-500 bg-gray-100 dark:text-gray-500 dark:bg-gray-800'
         };
 
         const currentStatus = (status || 'unknown') as keyof typeof colors;
