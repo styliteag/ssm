@@ -86,6 +86,7 @@ pub struct DiffHostResponse {
     id: i32,
     name: String,
     address: String,
+    disabled: bool,
 }
 
 impl From<Host> for DiffHostResponse {
@@ -94,6 +95,7 @@ impl From<Host> for DiffHostResponse {
             id: host.id,
             name: host.name,
             address: host.address,
+            disabled: host.disabled,
         }
     }
 }
@@ -265,8 +267,23 @@ async fn get_host_diff(
     let force_update = query.force_update.unwrap_or(false);
     let show_empty = query.show_empty.unwrap_or(false);
     
-    info!("Getting diff for host '{}' (force_update: {}, show_empty: {})", 
-          host.name, force_update, show_empty);
+    info!("Getting diff for host '{}' (force_update: {}, show_empty: {}, disabled: {})", 
+          host.name, force_update, show_empty, host.disabled);
+
+    // Skip SSH operations for disabled hosts
+    if host.disabled {
+        info!("Host '{}' is disabled, returning empty diff", host.name);
+        return Ok(HttpResponse::Ok().json(ApiResponse::success(DiffResponse {
+            host: DiffHostResponse::from(host),
+            cache_timestamp: time::OffsetDateTime::now_utc()
+                .format(&time::format_description::well_known::Rfc3339)
+                .unwrap_or_default(),
+            diff_summary: "Host is disabled".to_string(),
+            is_empty: true,
+            total_items: 0,
+            logins: vec![],
+        })));
+    }
 
     let (cache_status, diff_result) = caching_ssh_client
         .get_host_diff(host.clone(), force_update)
@@ -377,6 +394,20 @@ async fn get_diff_details(
 
     let force_update = query.force_update.unwrap_or(false);
     
+    // Skip SSH operations for disabled hosts
+    if host.disabled {
+        info!("Host '{}' is disabled, returning empty details", host.name);
+        return Ok(HttpResponse::Ok().json(ApiResponse::success(DetailedDiffResponse {
+            host: DiffHostResponse::from(host),
+            cache_timestamp: time::OffsetDateTime::now_utc()
+                .format(&time::format_description::well_known::Rfc3339)
+                .unwrap_or_default(),
+            summary: "Host is disabled - no SSH operations available".to_string(),
+            expected_keys: vec![],
+            logins: vec![],
+        })));
+    }
+    
     // Get the expected authorized keys from database
     let expected_keys = match host.get_authorized_keys(&mut conn.get().unwrap()) {
         Ok(keys) => keys,
@@ -471,6 +502,14 @@ async fn sync_host_keys(
             return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error)));
         }
     };
+
+    // Prevent syncing to disabled hosts
+    if host.disabled {
+        warn!("Cannot sync SSH keys to disabled host '{}'", host.name);
+        return Ok(HttpResponse::BadRequest().json(ApiError::bad_request(
+            format!("Cannot sync SSH keys to disabled host '{}'", host.name)
+        )));
+    }
 
     info!("Applying SSH key synchronization for host '{}'", host.name);
 

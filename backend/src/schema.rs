@@ -15,6 +15,8 @@ diesel::table! {
         key_fingerprint -> Nullable<Text>,
         /// jumphost for ssh connections
         jump_via -> Nullable<Integer>,
+        /// whether this host is disabled
+        disabled -> Bool,
     }
 }
 
