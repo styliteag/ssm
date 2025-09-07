@@ -53,6 +53,7 @@ export interface Host {
   connection_status: string;
   connection_error?: string;
   authorizations: Array<{ id: number; username: string; login: string; options?: string }>;
+  disabled: boolean;
 }
 
 export interface NewHost {
@@ -62,6 +63,7 @@ export interface NewHost {
   username: string;
   key_fingerprint: string;
   jump_via?: number;
+  disabled?: boolean;
 }
 
 export interface User {
@@ -134,6 +136,7 @@ export interface HostFormData {
   username: string;
   key_fingerprint?: string;
   jump_via?: string | number;
+  disabled?: boolean;
 }
 
 export interface UserFormData {

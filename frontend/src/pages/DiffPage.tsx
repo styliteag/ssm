@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Activity, RefreshCw, Upload, Filter, Edit2 } from 'lucide-react';
+import { Activity, RefreshCw, Upload, Filter, Edit2, Ban } from 'lucide-react';
 import {
   Card,
   CardContent,
@@ -29,7 +29,7 @@ const DiffPage: React.FC = () => {
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<'all' | 'synchronized' | 'needs-sync' | 'error' | 'loading'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'synchronized' | 'needs-sync' | 'error' | 'loading' | 'disabled'>('all');
   
   // Edit modal state
   const [showEditModal, setShowEditModal] = useState(false);
@@ -51,8 +51,18 @@ const DiffPage: React.FC = () => {
         setLoading(true);
         const hostData = await diffApi.getAllHosts();
         
-        // Mark all hosts as loading diff data initially
-        const hostsWithLoading = hostData.map(host => ({ ...host, loading: true }));
+        // Mark only enabled hosts as loading diff data initially
+        const hostsWithLoading = hostData.map(host => ({ 
+          ...host, 
+          loading: !host.disabled,
+          // Set disabled hosts with final state immediately and clear any error state
+          ...(host.disabled && {
+            diff_summary: 'Host is disabled',
+            is_empty: true,
+            total_items: 0,
+            error: undefined // Clear any error state for disabled hosts
+          })
+        }));
         setHosts(hostsWithLoading);
         setLoading(false);
 
@@ -66,11 +76,16 @@ const DiffPage: React.FC = () => {
     };
 
     const fetchDiffDataForHosts = async (hosts: DiffHost[]) => {
-      // Process hosts in batches to avoid overwhelming the server
+      // Filter out disabled hosts - they're already handled with final state
+      const enabledHosts = hosts.filter(host => !host.disabled);
+      
+      if (enabledHosts.length === 0) return;
+      
+      // Process enabled hosts in batches to avoid overwhelming the server
       const batchSize = 5;
       
-      for (let i = 0; i < hosts.length; i += batchSize) {
-        const batch = hosts.slice(i, i + batchSize);
+      for (let i = 0; i < enabledHosts.length; i += batchSize) {
+        const batch = enabledHosts.slice(i, i + batchSize);
         
         // Process batch in parallel
         const promises = batch.map(async (host) => {
@@ -111,7 +126,7 @@ const DiffPage: React.FC = () => {
         await Promise.all(promises);
         
         // Small delay between batches to be nice to the server
-        if (i + batchSize < hosts.length) {
+        if (i + batchSize < enabledHosts.length) {
           await new Promise(resolve => setTimeout(resolve, 100));
         }
       }
@@ -164,6 +179,19 @@ const DiffPage: React.FC = () => {
     setDetailsLoading(true);
     setModalError(null);
     
+    // Skip diff operations for disabled hosts
+    if (host.disabled) {
+      setHostDetails({
+        host,
+        cache_timestamp: new Date().toISOString(),
+        summary: 'Host is disabled - no diff operations available',
+        expected_keys: [],
+        logins: []
+      });
+      setDetailsLoading(false);
+      return;
+    }
+    
     try {
       // Fetch detailed diff information
       const hostDetails = await diffApi.getHostDiffDetails(host.name);
@@ -182,6 +210,12 @@ const DiffPage: React.FC = () => {
 
   const handleRefreshHost = async () => {
     if (!selectedHost) return;
+    
+    // Cannot refresh disabled hosts
+    if (selectedHost.disabled) {
+      showError('Host is disabled', 'Cannot refresh diff data for disabled hosts');
+      return;
+    }
     
     setDetailsLoading(true);
     setModalError(null);
@@ -210,6 +244,12 @@ const DiffPage: React.FC = () => {
   // Handle allowing unauthorized keys
   const handleAllowKey = async (issue: DiffItemResponse) => {
     if (!selectedHost || !hostDetails) return;
+    
+    // Cannot authorize keys on disabled hosts
+    if (selectedHost.disabled) {
+      showError('Host is disabled', 'Cannot authorize keys on disabled hosts');
+      return;
+    }
     
     // Extract username from the issue details
     const username = issue.details?.username;
@@ -258,6 +298,12 @@ const DiffPage: React.FC = () => {
   // Handle assigning unknown key to existing user
   const handleAssignToExistingUser = async (userId: number) => {
     if (!unknownKeyIssue || !unknownKeyIssue.details?.key || !selectedHost || !hostDetails) return;
+
+    // Cannot assign keys on disabled hosts
+    if (selectedHost.disabled) {
+      showError('Host is disabled', 'Cannot assign keys on disabled hosts');
+      return;
+    }
 
     // Find the login from the current login section where the unknown key issue is
     const currentLogin = hostDetails.logins.find(login => 
@@ -346,6 +392,12 @@ const DiffPage: React.FC = () => {
   const handleSyncKeys = async () => {
     if (!selectedHost || !hostDetails) return;
     
+    // Cannot sync keys to disabled hosts
+    if (selectedHost.disabled) {
+      showError('Host is disabled', 'Cannot sync keys to disabled hosts');
+      return;
+    }
+    
     try {
       // Apply the sync changes
       await diffApi.syncKeys(selectedHost.name);
@@ -372,6 +424,12 @@ const DiffPage: React.FC = () => {
   // Handle creating new user with unknown key
   const handleCreateNewUser = async () => {
     if (!unknownKeyIssue || !unknownKeyIssue.details?.key || !selectedHost || !hostDetails) return;
+
+    // Cannot create users with keys on disabled hosts
+    if (selectedHost.disabled) {
+      showError('Host is disabled', 'Cannot create users with keys on disabled hosts');
+      return;
+    }
 
     // Find the login from the current login section where the unknown key issue is
     const currentLogin = hostDetails.logins.find(login => 
@@ -567,6 +625,15 @@ const DiffPage: React.FC = () => {
       key: 'loading',
       header: 'Status',
       render: (_, host) => {
+        if (host.disabled) {
+          return (
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-800/50 text-gray-600 dark:text-gray-400">
+              <Ban className="w-3 h-3 mr-1" />
+              Disabled
+            </span>
+          );
+        }
+
         if (host.loading) {
           return (
             <div className="flex items-center space-x-2">
@@ -609,6 +676,7 @@ const DiffPage: React.FC = () => {
       key: 'total_items',
       header: 'Differences',
       render: (_, host) => {
+        if (host.disabled) return <span className="text-gray-400 dark:text-gray-500">N/A</span>;
         if (host.loading) return '-';
         if (host.error) return 'Error';
         if (host.total_items !== undefined) {
@@ -624,7 +692,8 @@ const DiffPage: React.FC = () => {
   ];
 
   // Helper function to get host status
-  const getHostStatus = (host: DiffHost): 'synchronized' | 'needs-sync' | 'error' | 'loading' => {
+  const getHostStatus = (host: DiffHost): 'synchronized' | 'needs-sync' | 'error' | 'loading' | 'disabled' => {
+    if (host.disabled) return 'disabled';
     if (host.loading) return 'loading';
     if (host.error) return 'error';
     if (host.is_empty === false) return 'needs-sync';
@@ -645,6 +714,7 @@ const DiffPage: React.FC = () => {
     { value: 'needs-sync', label: 'Needs Sync', count: hosts.filter(h => getHostStatus(h) === 'needs-sync').length },
     { value: 'error', label: 'Error', count: hosts.filter(h => getHostStatus(h) === 'error').length },
     { value: 'loading', label: 'Loading', count: hosts.filter(h => getHostStatus(h) === 'loading').length },
+    { value: 'disabled', label: 'Disabled', count: hosts.filter(h => getHostStatus(h) === 'disabled').length },
   ];
 
   return (

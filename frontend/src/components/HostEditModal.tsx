@@ -88,6 +88,12 @@ export const HostEditModal: React.FC<HostEditModalProps> = ({
             label: `${h.name} (${h.address})`
           }))
       ]
+    },
+    {
+      name: 'disabled',
+      label: 'Disabled',
+      type: 'checkbox',
+      helperText: 'When disabled, no SSH connections will be made to this host'
     }
   ];
 
@@ -103,7 +109,8 @@ export const HostEditModal: React.FC<HostEditModalProps> = ({
         port: Number(values.port),
         username: values.username,
         jump_via: values.jump_via && String(values.jump_via) !== '' ? String(values.jump_via) : '',
-        key_fingerprint: values.key_fingerprint && values.key_fingerprint.trim() !== '' ? values.key_fingerprint.trim() : ''
+        key_fingerprint: values.key_fingerprint && values.key_fingerprint.trim() !== '' ? values.key_fingerprint.trim() : '',
+        disabled: values.disabled || false
       };
       
       const response = await hostsService.updateHost(host.name, {
@@ -112,7 +119,8 @@ export const HostEditModal: React.FC<HostEditModalProps> = ({
         port: hostData.port,
         username: hostData.username,
         key_fingerprint: hostData.key_fingerprint,
-        jump_via: hostData.jump_via ? Number(hostData.jump_via) : undefined
+        jump_via: hostData.jump_via ? Number(hostData.jump_via) : undefined,
+        disabled: hostData.disabled
       });
       
       if (response.success) {
@@ -128,7 +136,8 @@ export const HostEditModal: React.FC<HostEditModalProps> = ({
             port: hostData.port,
             username: hostData.username,
             key_fingerprint: hostData.key_fingerprint || undefined,
-            jump_via: hostData.jump_via ? Number(hostData.jump_via) : undefined
+            jump_via: hostData.jump_via ? Number(hostData.jump_via) : undefined,
+            disabled: hostData.disabled
           });
         }
       } else {
@@ -166,7 +175,8 @@ export const HostEditModal: React.FC<HostEditModalProps> = ({
           port: host.port,
           username: host.username,
           key_fingerprint: host.key_fingerprint || '',
-          jump_via: host.jump_via?.toString() || ''
+          jump_via: host.jump_via?.toString() || '',
+          disabled: host.disabled || false
         }}
       />
     </Modal>

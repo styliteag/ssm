@@ -7,7 +7,7 @@ import SearchableSelect from './SearchableSelect';
 export interface FormField {
   name: string;
   label: string;
-  type?: 'text' | 'email' | 'password' | 'number' | 'tel' | 'url' | 'search' | 'textarea' | 'select' | 'searchable-select';
+  type?: 'text' | 'email' | 'password' | 'number' | 'tel' | 'url' | 'search' | 'textarea' | 'select' | 'searchable-select' | 'checkbox';
   placeholder?: string;
   required?: boolean;
   disabled?: boolean;
@@ -71,7 +71,11 @@ const Form: React.FC<FormProps> = ({
   const [values, setValues] = useState<Record<string, unknown>>(() => {
     const initial: Record<string, unknown> = {};
     fields.forEach(field => {
-      initial[field.name] = initialValues[field.name] || '';
+      if (field.type === 'checkbox') {
+        initial[field.name] = initialValues[field.name] || false;
+      } else {
+        initial[field.name] = initialValues[field.name] || '';
+      }
     });
     return initial;
   });
@@ -289,6 +293,32 @@ const Form: React.FC<FormProps> = ({
               onBlur={() => handleBlur(field.name)}
               forcePosition={field.forcePosition}
             />
+            {error && (
+              <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+            )}
+            {field.helperText && !error && (
+              <p className="text-sm text-gray-500 dark:text-gray-400">{field.helperText}</p>
+            )}
+          </div>
+        );
+
+      case 'checkbox':
+        return (
+          <div key={field.name} className={cn('space-y-1', field.className)}>
+            <label className="flex items-center space-x-3">
+              <input
+                {...commonProps}
+                type="checkbox"
+                checked={Boolean(values[field.name])}
+                onChange={(e) => handleChange(field.name, e.target.checked)}
+                onBlur={() => handleBlur(field.name)}
+                className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:focus:ring-blue-600"
+              />
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                {field.label}
+                {field.required && <span className="text-red-500 ml-1">*</span>}
+              </span>
+            </label>
             {error && (
               <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
             )}

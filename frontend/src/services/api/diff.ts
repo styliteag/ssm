@@ -5,6 +5,7 @@ export interface DiffHost {
   id: number;
   name: string;
   address: string;
+  disabled: boolean;
   // Optional diff data that gets loaded asynchronously
   diff_summary?: string;
   is_empty?: boolean;
@@ -84,7 +85,7 @@ export const getHostDiff = async (hostName: string, forceUpdate = false): Promis
   }
   
   return response.data || {
-    host: { id: 0, name: '', address: '' },
+    host: { id: 0, name: '', address: '', disabled: false },
     cache_timestamp: '',
     diff_summary: '',
     is_empty: true,
@@ -103,7 +104,7 @@ export const getHostDiffDetails = async (hostName: string, forceUpdate = false):
   }
   
   return response.data || {
-    host: { id: 0, name: '', address: '' },
+    host: { id: 0, name: '', address: '', disabled: false },
     cache_timestamp: '',
     summary: '',
     expected_keys: [],
