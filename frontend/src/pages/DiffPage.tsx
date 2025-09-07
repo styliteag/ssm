@@ -29,7 +29,7 @@ const DiffPage: React.FC = () => {
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<'all' | 'synchronized' | 'needs-sync' | 'error' | 'loading' | 'disabled'>('all');
+  const [statusFilter, setStatusFilter] = useState<'active' | 'all' | 'synchronized' | 'needs-sync' | 'error' | 'loading' | 'disabled'>('active');
   
   // Edit modal state
   const [showEditModal, setShowEditModal] = useState(false);
@@ -704,12 +704,14 @@ const DiffPage: React.FC = () => {
   // Filter hosts based on status
   const filteredHosts = useMemo(() => {
     if (statusFilter === 'all') return hosts;
+    if (statusFilter === 'active') return hosts.filter(host => !host.disabled);
     return hosts.filter(host => getHostStatus(host) === statusFilter);
   }, [hosts, statusFilter]);
 
   // Status filter options
   const statusFilterOptions = [
-    { value: 'all', label: 'All Status', count: hosts.length },
+    { value: 'active', label: 'Active Hosts', count: hosts.filter(h => !h.disabled).length },
+    { value: 'all', label: 'All Hosts', count: hosts.length },
     { value: 'synchronized', label: 'Synchronized', count: hosts.filter(h => getHostStatus(h) === 'synchronized').length },
     { value: 'needs-sync', label: 'Needs Sync', count: hosts.filter(h => getHostStatus(h) === 'needs-sync').length },
     { value: 'error', label: 'Error', count: hosts.filter(h => getHostStatus(h) === 'error').length },
@@ -758,7 +760,11 @@ const DiffPage: React.FC = () => {
             data={filteredHosts}
             columns={columns}
             loading={loading}
-            emptyMessage={statusFilter === 'all' ? "No hosts found. Please check your host configuration." : `No hosts with status '${statusFilterOptions.find(o => o.value === statusFilter)?.label || statusFilter}'.`}
+            emptyMessage={
+              statusFilter === 'all' ? "No hosts found. Please check your host configuration." :
+              statusFilter === 'active' ? "No active hosts found. Please check your host configuration or view disabled hosts." :
+              `No hosts with status '${statusFilterOptions.find(o => o.value === statusFilter)?.label || statusFilter}'.`
+            }
             searchPlaceholder="Search hosts by name or address..."
             initialSort={{ key: 'name', direction: 'asc' }}
             onRowClick={(host) => handleHostClick(host)}
