@@ -36,6 +36,11 @@ export interface DataTableProps<T> {
   searchPlaceholder?: string;
   showSearchIcon?: boolean;
   stickyHeader?: boolean;
+  // Selection functionality
+  selectable?: boolean;
+  selectedItems?: T[];
+  onSelectionChange?: (selectedItems: T[]) => void;
+  getItemId?: (item: T) => string | number;
 }
 
 function DataTable<T extends Record<string, unknown>>({
@@ -54,11 +59,17 @@ function DataTable<T extends Record<string, unknown>>({
   searchPlaceholder = 'Search...',
   showSearchIcon = true,
   stickyHeader = false,
+  // Selection props
+  selectable = false,
+  selectedItems = [],
+  onSelectionChange,
+  getItemId = (item: T) => item.id as string | number,
 }: DataTableProps<T>) {
   const [search, setSearch] = useState(initialSearch);
   const [sortConfig, setSortConfig] = useState<SortConfig<T> | null>(initialSort || null);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(pageSize);
+
 
   // Filter data based on search
   const filteredData = useMemo(() => {
@@ -142,6 +153,50 @@ function DataTable<T extends Record<string, unknown>>({
     setCurrentPage(1);
   }, [search]);
 
+  // Selection helpers
+  const isItemSelected = (item: T): boolean => {
+    if (!selectable) return false;
+    return selectedItems.some(selected => getItemId(selected) === getItemId(item));
+  };
+
+  const handleSelectItem = (item: T, checked: boolean) => {
+    if (!selectable || !onSelectionChange) return;
+    
+    if (checked) {
+      onSelectionChange([...selectedItems, item]);
+    } else {
+      onSelectionChange(selectedItems.filter(selected => getItemId(selected) !== getItemId(item)));
+    }
+  };
+
+  const handleSelectAll = (checked: boolean) => {
+    if (!selectable || !onSelectionChange) return;
+    
+    if (checked) {
+      // Select all items in current filtered data
+      const newSelection = [...selectedItems];
+      filteredData.forEach(item => {
+        if (!selectedItems.some(selected => getItemId(selected) === getItemId(item))) {
+          newSelection.push(item);
+        }
+      });
+      onSelectionChange(newSelection);
+    } else {
+      // Deselect all items in current filtered data
+      const filteredIds = filteredData.map(getItemId);
+      onSelectionChange(selectedItems.filter(selected => !filteredIds.includes(getItemId(selected))));
+    }
+  };
+
+  // Check if all visible items are selected
+  const allVisibleSelected = selectable && filteredData.length > 0 && 
+    filteredData.every(item => selectedItems.some(selected => getItemId(selected) === getItemId(item)));
+  
+  // Check if some visible items are selected (for indeterminate state)
+  const someVisibleSelected = selectable && filteredData.length > 0 && 
+    filteredData.some(item => selectedItems.some(selected => getItemId(selected) === getItemId(item))) &&
+    !allVisibleSelected;
+
   const SortIcon: React.FC<{ column: Column<T> }> = ({ column }) => {
     if (!sortable || column.sortable === false || column.key === 'actions') {
       return null;
@@ -176,7 +231,7 @@ function DataTable<T extends Record<string, unknown>>({
 
   const LoadingRow = () => (
     <tr>
-      <td colSpan={columns.length} className="px-6 py-8 text-center">
+      <td colSpan={columns.length + (selectable ? 1 : 0)} className="px-6 py-8 text-center">
         <div className="flex items-center justify-center space-x-2">
           <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
           <span className="text-gray-500 dark:text-gray-400">Loading...</span>
@@ -187,7 +242,7 @@ function DataTable<T extends Record<string, unknown>>({
 
   const EmptyRow = () => (
     <tr>
-      <td colSpan={columns.length} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+      <td colSpan={columns.length + (selectable ? 1 : 0)} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
         {emptyMessage}
       </td>
     </tr>
@@ -243,6 +298,21 @@ function DataTable<T extends Record<string, unknown>>({
               stickyHeader && 'sticky top-0 z-10'
             )}>
               <tr>
+                {selectable && (
+                  <th className="px-6 py-3 text-left w-12">
+                    <input
+                      type="checkbox"
+                      checked={allVisibleSelected}
+                      ref={(input) => {
+                        if (input) {
+                          input.indeterminate = someVisibleSelected;
+                        }
+                      }}
+                      onChange={(e) => handleSelectAll(e.target.checked)}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    />
+                  </th>
+                )}
                 {columns.map((column) => (
                   <th
                     key={String(column.key)}
@@ -273,10 +343,28 @@ function DataTable<T extends Record<string, unknown>>({
                     key={(item.id as React.Key) || index}
                     className={cn(
                       'transition-colors',
-                      onRowClick && 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800'
+                      onRowClick && 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800',
+                      selectable && isItemSelected(item) && 'bg-blue-50 dark:bg-blue-900/20'
                     )}
-                    onClick={() => onRowClick?.(item, index)}
+                    onClick={(e) => {
+                      // Don't trigger row click if clicking on checkbox
+                      if (selectable && (e.target as HTMLInputElement).type === 'checkbox') return;
+                      onRowClick?.(item, index);
+                    }}
                   >
+                    {selectable && (
+                      <td className="px-6 py-4 whitespace-nowrap w-12">
+                        <input
+                          type="checkbox"
+                          checked={isItemSelected(item)}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            handleSelectItem(item, e.target.checked);
+                          }}
+                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                        />
+                      </td>
+                    )}
                     {columns.map((column) => (
                       <td
                         key={String(column.key)}

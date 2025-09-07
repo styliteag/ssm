@@ -29,6 +29,7 @@ import {
 import { useNotifications } from '../contexts/NotificationContext';
 import { hostsService } from '../services/api/hosts';
 import HostEditModal from '../components/HostEditModal';
+import BulkEditModal, { type BulkUpdateData } from '../components/BulkEditModal';
 import type { 
   Host, 
   HostFormData
@@ -51,10 +52,14 @@ const HostsPage: React.FC = () => {
   const [selectedHost, setSelectedHost] = useState<ExtendedHost | null>(null);
   const [statusFilter, setStatusFilter] = useState<'active' | 'all' | 'online' | 'offline' | 'error' | 'unknown' | 'disabled'>('active');
   
+  // Selection state for multiselect
+  const [selectedHosts, setSelectedHosts] = useState<ExtendedHost[]>([]);
+  
   // Modal states
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showBulkEditModal, setShowBulkEditModal] = useState(false);
   
   // Form loading states
   const [submitting, setSubmitting] = useState(false);
@@ -404,6 +409,68 @@ const HostsPage: React.FC = () => {
       showError('Failed to delete host', 'Please try again later');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // Handle bulk update
+  const handleBulkUpdate = async (updateData: BulkUpdateData) => {
+    if (selectedHosts.length === 0) return;
+
+    try {
+      // Process hosts sequentially to avoid database lock contention
+      const results = [];
+      for (const host of selectedHosts) {
+        // Create clean update payload with only the fields the backend expects
+        const hostUpdate: Partial<Host> = {
+          name: host.name,
+          username: host.username,
+          address: host.address,
+          port: host.port,
+          // Include key_fingerprint as it's required by the backend
+          key_fingerprint: host.key_fingerprint || '',
+          // Keep existing values for fields we're not updating
+          jump_via: host.jump_via,
+          disabled: host.disabled,
+        };
+
+        // Apply bulk changes only to fields that were specified
+        if (updateData.jump_via !== undefined) {
+          hostUpdate.jump_via = updateData.jump_via ?? undefined;
+        }
+        if (updateData.disabled !== undefined) {
+          hostUpdate.disabled = updateData.disabled;
+        }
+
+        try {
+          const result = await hostsService.updateHost(host.name, hostUpdate as Host);
+          results.push(result);
+        } catch (error) {
+          console.error(`Failed to update host ${host.name}:`, error);
+          results.push({ success: false, message: `Failed to update ${host.name}` });
+        }
+      }
+      const successCount = results.filter(r => r.success).length;
+      const failureCount = results.length - successCount;
+
+      if (successCount > 0) {
+        showSuccess(
+          'Bulk update completed', 
+          `Successfully updated ${successCount} host${successCount !== 1 ? 's' : ''}${
+            failureCount > 0 ? `. ${failureCount} update${failureCount !== 1 ? 's' : ''} failed.` : ''
+          }`
+        );
+        
+        // Refresh the hosts list
+        loadHosts();
+        
+        // Clear selection
+        setSelectedHosts([]);
+      } else {
+        showError('Bulk update failed', 'All updates failed. Please try again.');
+      }
+    } catch (error) {
+      console.error('Bulk update error:', error);
+      showError('Bulk update failed', 'Please try again later');
     }
   };
 
@@ -761,9 +828,34 @@ const HostsPage: React.FC = () => {
             Manage SSH hosts and their configurations
           </p>
         </div>
-        <Button onClick={() => setShowAddModal(true)} leftIcon={<Plus size={16} />}>
-          Add Host
-        </Button>
+        <div className="flex items-center space-x-3">
+          {/* Bulk actions - show when hosts are selected */}
+          {selectedHosts.length > 0 && (
+            <div className="flex items-center space-x-2">
+              <span className="text-sm text-gray-600 dark:text-gray-400">
+                {selectedHosts.length} host{selectedHosts.length !== 1 ? 's' : ''} selected
+              </span>
+              <Button 
+                variant="secondary"
+                size="sm"
+                onClick={() => setShowBulkEditModal(true)}
+                leftIcon={<Edit2 size={16} />}
+              >
+                Bulk Edit
+              </Button>
+              <Button 
+                variant="ghost"
+                size="sm"
+                onClick={() => setSelectedHosts([])}
+              >
+                Clear
+              </Button>
+            </div>
+          )}
+          <Button onClick={() => setShowAddModal(true)} leftIcon={<Plus size={16} />}>
+            Add Host
+          </Button>
+        </div>
       </div>
 
       {/* Host List */}
@@ -801,6 +893,11 @@ const HostsPage: React.FC = () => {
               searchPlaceholder="Search hosts by name, address, or username..."
               initialSort={{ key: 'name', direction: 'asc' }}
               initialSearch={(location.state as { searchTerm?: string })?.searchTerm || ''}
+              // Selection props
+              selectable={true}
+              selectedItems={selectedHosts}
+              onSelectionChange={setSelectedHosts}
+              getItemId={(host) => host.id}
             />
           </div>
         </CardContent>
@@ -894,6 +991,15 @@ const HostsPage: React.FC = () => {
           </div>
         )}
       </Modal>
+
+      {/* Bulk Edit Modal */}
+      <BulkEditModal
+        isOpen={showBulkEditModal}
+        onClose={() => setShowBulkEditModal(false)}
+        selectedHosts={selectedHosts}
+        jumpHosts={jumpHosts}
+        onBulkUpdate={handleBulkUpdate}
+      />
     </div>
   );
 };

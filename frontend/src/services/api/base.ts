@@ -58,7 +58,8 @@ export async function apiRequest<T>(
     return response.data;
   } catch (error: unknown) {
     // Handle axios errors and API errors
-    const errorObj = error as { response?: { data?: ApiError }; request?: unknown; message?: string };
+    const errorObj = error as { response?: { data?: ApiError; status?: number }; request?: unknown; message?: string };
+    
     
     if (errorObj.response?.data) {
       const apiError: ApiError = errorObj.response.data;
