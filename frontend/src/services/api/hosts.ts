@@ -48,7 +48,7 @@ export const hostsService = {
     // Convert jump_via to string for backend compatibility
     const requestData = {
       ...host,
-      jump_via: host.jump_via !== undefined ? String(host.jump_via) : ''
+      jump_via: host.jump_via !== undefined ? (host.jump_via === null ? '' : String(host.jump_via)) : ''
     };
     return api.put<Host>(`/host/${encodeURIComponent(name)}`, requestData);
   },
