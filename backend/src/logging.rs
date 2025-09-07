@@ -36,7 +36,7 @@ impl<'a> RequestLogger<'a> {
             path.to_string()
         };
 
-        info!(
+        debug!(
             "API_REQUEST_START method={} path={} operation={} user_agent={}",
             method, sanitized_path, operation, user_agent
         );
@@ -70,7 +70,7 @@ impl<'a> RequestLogger<'a> {
                 "API_REQUEST_COMPLETE method={} path={} operation={} status={} duration_ms={}",
                 method, sanitized_path, operation, status, duration_ms
             ),
-            _ => info!(
+            _ => debug!(
                 "API_REQUEST_COMPLETE method={} path={} operation={} status={} duration_ms={}",
                 method, sanitized_path, operation, status, duration_ms
             ),
@@ -84,9 +84,15 @@ pub struct DatabaseLogger;
 impl DatabaseLogger {
     /// Log successful database operations
     pub fn log_operation_success(operation: &str, table: &str, record_count: Option<usize>) {
-        match record_count {
-            Some(count) => info!("DB_OPERATION_SUCCESS operation={} table={} records={}", operation, table, count),
-            None => debug!("DB_OPERATION_SUCCESS operation={} table={}", operation, table),
+        // Use warn! for operations that change data (write operations)
+        // Use debug! for read operations
+        let is_write_operation = matches!(operation, "insert" | "update" | "delete" | "add_host" | "authorize_user" | "delete_host" | "delete_authorization");
+
+        match (is_write_operation, record_count) {
+            (true, Some(count)) => warn!("DB_OPERATION_SUCCESS operation={} table={} records={}", operation, table, count),
+            (true, None) => warn!("DB_OPERATION_SUCCESS operation={} table={}", operation, table),
+            (false, Some(count)) => debug!("DB_OPERATION_SUCCESS operation={} table={} records={}", operation, table, count),
+            (false, None) => debug!("DB_OPERATION_SUCCESS operation={} table={}", operation, table),
         }
     }
 
@@ -99,7 +105,7 @@ impl DatabaseLogger {
     pub fn log_connection_event(event: &str, pool_size: usize) {
         match event {
             "exhausted" => warn!("DB_CONNECTION_EXHAUSTED pool_size={}", pool_size),
-            "restored" => info!("DB_CONNECTION_RESTORED pool_size={}", pool_size),
+            "restored" => debug!("DB_CONNECTION_RESTORED pool_size={}", pool_size),
             _ => debug!("DB_CONNECTION_EVENT event={} pool_size={}", event, pool_size),
         }
     }
@@ -111,7 +117,7 @@ pub struct AuthLogger;
 impl AuthLogger {
     /// Log successful authentication
     pub fn log_auth_success(username: &str, method: &str) {
-        info!("AUTH_SUCCESS username={} method={}", username, method);
+        warn!("AUTH_SUCCESS username={} method={}", username, method);
     }
 
     /// Log authentication failure (avoid logging passwords)
@@ -125,7 +131,7 @@ impl AuthLogger {
         match event {
             "created" => debug!("SESSION_CREATED id={}", session_id),
             "destroyed" => debug!("SESSION_DESTROYED id={}", session_id),
-            "expired" => info!("SESSION_EXPIRED id={}", session_id),
+            "expired" => debug!("SESSION_EXPIRED id={}", session_id),
             _ => debug!("SESSION_EVENT event={} id={}", event, session_id),
         }
     }
@@ -137,12 +143,12 @@ pub struct SshLogger;
 impl SshLogger {
     /// Log SSH connection attempts
     pub fn log_connection_attempt(host: &str, username: &str) {
-        info!("SSH_CONNECTION_ATTEMPT host={} username={}", host, username);
+        debug!("SSH_CONNECTION_ATTEMPT host={} username={}", host, username);
     }
 
     /// Log SSH connection success
     pub fn log_connection_success(host: &str, username: &str) {
-        info!("SSH_CONNECTION_SUCCESS host={} username={}", host, username);
+        debug!("SSH_CONNECTION_SUCCESS host={} username={}", host, username);
     }
 
     /// Log SSH connection failure
@@ -152,10 +158,18 @@ impl SshLogger {
 
     /// Log SSH key synchronization
     pub fn log_key_sync(host: &str, username: &str, keys_added: usize, keys_removed: usize) {
-        info!(
-            "SSH_KEY_SYNC_COMPLETED host={} username={} added={} removed={}",
-            host, username, keys_added, keys_removed
-        );
+        // SSH key synchronization changes the state of remote hosts - use warn!
+        if keys_added > 0 || keys_removed > 0 {
+            warn!(
+                "SSH_KEY_SYNC_COMPLETED host={} username={} added={} removed={}",
+                host, username, keys_added, keys_removed
+            );
+        } else {
+            debug!(
+                "SSH_KEY_SYNC_COMPLETED host={} username={} added={} removed={}",
+                host, username, keys_added, keys_removed
+            );
+        }
     }
 }
 
