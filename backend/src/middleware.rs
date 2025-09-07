@@ -10,6 +10,8 @@ use log::{info, debug, warn};
 use std::future::{Ready, ready};
 use std::rc::Rc;
 
+use crate::logging::SecurityLogger;
+
 
 
 /// Helper function to validate CSRF tokens
@@ -105,6 +107,20 @@ where
                 }
                 Err(msg) => {
                     info!("CSRF validation failed for {} {}: {}", method, path, msg);
+                    SecurityLogger::log_security_event(
+                        "csrf_violation",
+                        &format!("CSRF validation failed for {} {}: {}", method, path, msg),
+                        "high"
+                    );
+
+                    // Log suspicious activity for CSRF violations
+                    let peer_addr = req.connection_info().peer_addr().unwrap_or("unknown").to_string();
+                    SecurityLogger::log_suspicious_activity(
+                        "csrf_attack_attempt",
+                        &peer_addr,
+                        &format!("CSRF token validation failed for {} {} from IP {}", method, path, peer_addr)
+                    );
+
                     let response = HttpResponse::Forbidden()
                         .json(crate::api_types::ApiError::new(msg))
                         .map_into_boxed_body()

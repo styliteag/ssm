@@ -6,6 +6,7 @@ use crate::ssh::ConnectionDetails;
 use crate::ssh::SshClient;
 use crate::ssh::SshClientError;
 use crate::{
+    logging::DatabaseLogger,
     models::{Host, NewHost, PublicUserKey},
     DbConnection,
 };
@@ -40,20 +41,27 @@ impl Host {
 
     /// Adds a new host to the database
     pub fn add_host(conn: &mut DbConnection, host: &NewHost) -> Result<i32, String> {
-        
+
         // Insert the host
         insert_into(host::table)
             .values(host.clone())
             .execute(conn)
-            .map_err(|e| format!("Failed to insert host: {}", e))?;
-        
+            .map_err(|e| {
+                DatabaseLogger::log_operation_error("insert", "hosts", &format!("Failed to insert host '{}': {}", host.name, e));
+                format!("Failed to insert host: {}", e)
+            })?;
+
         // Get the inserted host by name to get its ID
         let inserted_host = host::table
             .filter(host::name.eq(&host.name))
             .select(host::id)
             .first::<i32>(conn)
-            .map_err(|e| format!("Failed to get inserted host ID: {}", e))?;
-        
+            .map_err(|e| {
+                DatabaseLogger::log_operation_error("select", "hosts", &format!("Failed to get inserted host ID for '{}': {}", host.name, e));
+                format!("Failed to get inserted host ID: {}", e)
+            })?;
+
+        DatabaseLogger::log_operation_success("add_host", "hosts", Some(1));
         Ok(inserted_host)
     }
 
@@ -76,7 +84,13 @@ impl Host {
                     authorization::options.eq(options),
                 ))
                 .execute(conn),
-        )
+        ).map_err(|e| {
+            DatabaseLogger::log_operation_error("insert", "authorization", &format!("Failed to authorize user {} on host {}: {}", user_id, host_id, e));
+            format!("Failed to authorize user: {}", e)
+        })?;
+
+        DatabaseLogger::log_operation_success("authorize_user", "authorization", Some(1));
+        Ok(())
     }
 
     /// Get authorized Users and associated options
@@ -158,7 +172,12 @@ impl Host {
         )
     }
     pub fn get_all_hosts(conn: &mut DbConnection) -> Result<Vec<Self>, String> {
-        query(host::table.load::<Self>(conn))
+        let result = query(host::table.load::<Self>(conn));
+        match &result {
+            Ok(hosts) => DatabaseLogger::log_operation_success("get_all_hosts", "hosts", Some(hosts.len())),
+            Err(e) => DatabaseLogger::log_operation_error("select", "hosts", &format!("Failed to get all hosts: {}", e)),
+        }
+        result
     }
 
     /// Gets all allowed users allowed on this host, sorted by login
@@ -223,14 +242,25 @@ impl Host {
     }
 
     pub fn delete(self, conn: &mut DbConnection) -> Result<usize, String> {
-        query(diesel::delete(host::table.filter(host::id.eq(self.id))).execute(conn))
+        let result = query(diesel::delete(host::table.filter(host::id.eq(self.id))).execute(conn));
+        match &result {
+            Ok(rows_affected) => DatabaseLogger::log_operation_success("delete_host", "hosts", Some(*rows_affected)),
+            Err(e) => DatabaseLogger::log_operation_error("delete", "hosts", &format!("Failed to delete host {}: {}", self.id, e)),
+        }
+        result
     }
 
     pub fn delete_authorization(conn: &mut DbConnection, authorization: i32) -> Result<(), String> {
         query_drop(
             diesel::delete(authorization::table.filter(authorization::id.eq(authorization)))
                 .execute(conn),
-        )
+        ).map_err(|e| {
+            DatabaseLogger::log_operation_error("delete", "authorization", &format!("Failed to delete authorization {}: {}", authorization, e));
+            format!("Failed to delete authorization: {}", e)
+        })?;
+
+        DatabaseLogger::log_operation_success("delete_authorization", "authorization", Some(1));
+        Ok(())
     }
 
     pub fn update_fingerprint(

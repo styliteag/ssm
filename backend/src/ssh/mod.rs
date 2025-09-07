@@ -85,19 +85,7 @@ impl ConnectionDetails {
     }
 
     pub fn log_connection(&self) {
-        let &Self {
-            ref host_name,
-            ref address,
-            ref login,
-            ref jump_via,
-            key_fingerprint: _,
-        } = self;
-        match jump_via {
-            Some(jumphost) => {
-                debug!("{host_name}: Connection attempt to {address} via {jumphost} as {login}");
-            }
-            None => debug!("{host_name}: Connection attempt to {address} as {login}"),
-        }
+        crate::logging::SshLogger::log_connection_attempt(&self.host_name, &self.login);
     }
 
     pub fn log_channel_open(&self, target: &SocketAddr) {

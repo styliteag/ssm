@@ -17,7 +17,7 @@ use tokio::io::AsyncRead;
 
 use crate::ssh::SshKeyfiles;
 use crate::SshConfig;
-use crate::{models::Host, ConnectionPool};
+use crate::{models::Host, ConnectionPool, logging::SshLogger};
 
 use super::ConnectionDetails;
 use super::KeyDiffItem;
@@ -183,7 +183,10 @@ impl SshClient {
                     ),
                 )
                 .await
-                .map_err(|_| SshClientError::Timeout)?,
+                .map_err(|_| {
+                    SshLogger::log_connection_failure(&connection_details.host_name, &connection_details.login, "connection timeout");
+                    SshClientError::Timeout
+                })?,
             }?;
 
             let hash_alg = handle.best_supported_rsa_hash().await?;
@@ -196,9 +199,11 @@ impl SshClient {
                 .await?
                 .success()
             {
+                SshLogger::log_connection_failure(&connection_details.host_name, &connection_details.login, "authentication failed");
                 return Err(SshClientError::NotAuthenticated);
             };
 
+            SshLogger::log_connection_success(&connection_details.host_name, &connection_details.login);
             Ok(handle)
         }
         .boxed()
@@ -241,16 +246,17 @@ impl SshClient {
             }
         }
         
-        let host = Host::get_from_name(self.conn.get().unwrap(), host_name)
+        let host = Host::get_from_name(self.conn.get().unwrap(), host_name.clone())
             .await?
             .ok_or(SshClientError::NoSuchHost)?;
         let handle = self.clone().connect(host.to_connection().await?).await?;
         self.execute_bash(
             &handle,
-            BashCommand::SetAuthorizedKeyfile(login, authorized_keys),
+            BashCommand::SetAuthorizedKeyfile(login.clone(), authorized_keys),
         )
         .await??;
 
+        SshLogger::log_key_sync(&host_name, &login, 0, 0); // We don't track individual key changes here
         Ok(())
     }
 
