@@ -247,174 +247,7 @@ docker/data/
 
 ## 🔧 API Documentation
 
-**🔐 Authentication Required**: All API endpoints except authentication require session-based authentication via `.htpasswd` credentials.
-
-### Quick Start with curl
-
-```bash
-# 1. Login to establish session
-curl -X POST http://localhost:8000/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"your_password"}' \
-  -c cookies.txt
-
-# 2. Use session cookie for authenticated requests
-curl -b cookies.txt http://localhost:8000/api/host
-
-# 3. Logout when done
-curl -X POST http://localhost:8000/api/auth/logout -b cookies.txt
-```
-
-### Authentication Endpoints
-
-#### Login (Establishes Session)
-```http
-POST /api/auth/login
-Content-Type: application/json
-
-{
-  "username": "admin",
-  "password": "password"
-}
-```
-
-**curl example:**
-```bash
-curl -X POST http://localhost:8000/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"your_password"}' \
-  -c cookies.txt
-```
-
-#### Logout
-```http
-POST /api/auth/logout
-DELETE /api/auth/session
-```
-
-**curl example:**
-```bash
-curl -X POST http://localhost:8000/api/auth/logout -b cookies.txt
-```
-
-### Host Management (🔐 Authentication Required)
-
-```http
-# List all hosts
-GET /api/host
-```
-
-**curl example:**
-```bash
-curl -b cookies.txt http://localhost:8000/api/host
-```
-
-```http
-# Get specific host
-GET /api/host/{name}
-
-# Create host
-POST /api/host
-Content-Type: application/json
-
-{
-  "name": "web-server-01",
-  "address": "192.168.1.100",
-  "port": 22,
-  "username": "deploy"
-}
-
-# Update host
-PUT /api/host/{name}
-
-# Delete host
-DELETE /api/host/{name}
-```
-
-### User Management (🔐 Authentication Required)
-
-```http
-# List all users
-GET /api/user
-```
-
-**curl example:**
-```bash
-curl -b cookies.txt http://localhost:8000/api/user
-```
-
-```http
-# Get specific user
-GET /api/user/{username}
-
-# Create user
-POST /api/user
-Content-Type: application/json
-
-{
-  "username": "john.doe",
-  "enabled": true
-}
-```
-
-### SSH Key Management (🔐 Authentication Required)
-
-```http
-# List all keys
-GET /api/key
-```
-
-**curl example:**
-```bash
-curl -b cookies.txt http://localhost:8000/api/key
-```
-
-```http
-# Delete key
-DELETE /api/key/{id}
-
-# Update key comment
-PUT /api/key/{id}/comment
-Content-Type: application/json
-
-{
-  "comment": "Updated comment"
-}
-```
-
-### Authorization Management (🔐 Authentication Required)
-
-```http
-# Get authorization dialog data
-GET /api/authorization
-
-# Update authorization options
-PUT /api/authorization
-Content-Type: application/json
-
-{
-  "authorization_id": 1,
-  "options": "no-port-forwarding,command=\"rsync --server\""
-}
-```
-
-### Diff Analysis (🔐 Authentication Required)
-
-```http
-# Get hosts available for diff analysis
-GET /api/diff
-
-# Get differences for specific host
-GET /api/diff/{host_name}
-
-# Get detailed diff information
-GET /api/diff/{host_name}/{login}
-```
-
-**curl example:**
-```bash
-curl -b cookies.txt http://localhost:8000/api/diff
-```
+For detailed API documentation including all endpoints, authentication, and examples, see [API_DOCUMENTATION.md](backend/API_DOCUMENTATION.md).
 
 ## 📁 Project Structure
 
@@ -468,6 +301,12 @@ ssm/
 
 ## 🚫 SSH Key Management Controls
 
+### Host Disabling
+- **Disabled Hosts**: Mark hosts as `disabled` to prevent all SSH operations
+- **Use Cases**: Maintenance windows, decommissioned servers, temporary disconnection
+- **Effects**: No SSH connections, no polling, no diff operations, no syncing
+
+### Readonly Controls
 Prevent SSM from modifying keyfiles by creating control files:
 
 - **`.ssh/system_readonly`**: Disables updates for all keyfiles on the host
