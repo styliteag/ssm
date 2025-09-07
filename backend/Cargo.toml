@@ -2,7 +2,7 @@
 authors = ["Jeidnx <jeidnx@domainhier.de>"]
 edition = "2021"
 name = "ssm"
-version = "0.2.7"
+version = "0.2.8"
 description = "Secure API for managing SSH keys across multiple hosts"
 keywords = ["ssh"]
 repository = "https://github.com/styliteag/ssm"
