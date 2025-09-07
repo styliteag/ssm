@@ -13,7 +13,7 @@ use std::fs;
 use base64::{engine::general_purpose::STANDARD, Engine};
 use rand::Rng;
 
-use crate::{Configuration, api_types::*};
+use crate::{Configuration, api_types::*, logging::{AuthLogger, SecurityLogger}};
 
 #[derive(Deserialize, ToSchema)]
 pub struct LoginRequest {
@@ -119,12 +119,15 @@ async fn login(
     if is_valid {
         Identity::login(&req.extensions(), json.username.clone())
             .map_err(actix_web::error::ErrorInternalServerError)?;
-        
+
         // Generate and store CSRF token in session
         let csrf_token = generate_csrf_token();
         session.insert("csrf_token", &csrf_token)
             .map_err(actix_web::error::ErrorInternalServerError)?;
-        
+
+        AuthLogger::log_auth_success(&json.username, "password");
+        AuthLogger::log_session_event("created", "session_id_placeholder");
+
         Ok(HttpResponse::Ok().json(ApiResponse::success(LoginResponse {
             success: true,
             username: json.username.clone(),
@@ -132,6 +135,24 @@ async fn login(
             csrf_token,
         })))
     } else {
+        AuthLogger::log_auth_failure(Some(&json.username), "password", "invalid_credentials");
+
+        // Log suspicious activity for potential brute force attempts
+        SecurityLogger::log_security_event(
+            "authentication_failure",
+            &format!("Failed login attempt for user: {}", json.username),
+            "medium"
+        );
+
+        // Log suspicious activity with IP address for monitoring
+        let connection_info = req.connection_info();
+        let client_ip = connection_info.peer_addr().unwrap_or("unknown").to_string();
+        SecurityLogger::log_suspicious_activity(
+            "failed_login_attempt",
+            &client_ip,
+            &format!("Failed authentication attempt for user '{}' from IP {}", json.username, client_ip)
+        );
+
         Ok(HttpResponse::Unauthorized().json(ApiError::new(
             "Invalid username or password".to_string(),
         )))

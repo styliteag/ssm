@@ -1,9 +1,10 @@
 use std::sync::Arc;
+use std::time::Instant;
 
 use actix_web::{
     delete, get, post, put,
     web::{self, Data, Json, Path, Query},
-    HttpResponse, Responder, Result,
+    HttpRequest, HttpResponse, Responder, Result,
 };
 
 use actix_identity::Identity;
@@ -14,6 +15,7 @@ use utoipa::ToSchema;
 use crate::{
     api_types::*,
     db::UserAndOptions,
+    logging::RequestLogger,
     routes::ForceUpdateQuery,
     ssh::{CachingSshClient, SshClient, SshFirstConnectionHandler},
     ConnectionPool,
@@ -86,9 +88,13 @@ impl From<Host> for HostResponse {
 )]
 #[get("")]
 async fn get_all_hosts(
+    req: HttpRequest,
     conn: Data<ConnectionPool>,
     _pagination: Query<PaginationQuery>,
 ) -> Result<impl Responder> {
+    let logger = RequestLogger::new(&req);
+    let start_time = Instant::now();
+    logger.log_request_start("get_all_hosts");
     let conn_clone = conn.clone();
     let hosts = web::block(move || Host::get_all_hosts(&mut conn_clone.get().unwrap())).await?;
     
@@ -131,9 +137,15 @@ async fn get_all_hosts(
                 host_responses.push(host_response);
             }
             
+            let duration = start_time.elapsed().as_millis() as u64;
+            logger.log_request_complete("get_all_hosts", duration, 200);
             Ok(HttpResponse::Ok().json(ApiResponse::success(host_responses)))
         }
-        Err(error) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error))),
+        Err(error) => {
+            let duration = start_time.elapsed().as_millis() as u64;
+            logger.log_request_complete("get_all_hosts", duration, 500);
+            Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error)))
+        }
     }
 }
 

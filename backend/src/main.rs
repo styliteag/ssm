@@ -22,6 +22,7 @@ use russh::keys::load_secret_key;
 
 mod api_types;
 mod db;
+mod logging;
 mod middleware;
 mod models;
 mod openapi;
@@ -203,11 +204,13 @@ fn get_configuration() -> (Configuration, String) {
             .build()
             .unwrap_or_else(|e| {
                 eprintln!("Error while reading configuration source: {e}");
+                logging::AppLogger::log_config_error(&format!("Error while reading configuration source: {e}"), true);
                 std::process::exit(3);
             })
             .try_deserialize()
             .unwrap_or_else(|e| {
                 eprintln!("Error while parsing configuration: {e}");
+                logging::AppLogger::log_config_error(&format!("Error while parsing configuration: {e}"), true);
                 std::process::exit(3);
             }),
         config_source,
@@ -229,7 +232,7 @@ async fn main() -> Result<(), std::io::Error> {
         env::set_var("RUST_LOG", loglevel);
     }
     pretty_env_logger::init();
-    info!("{}", config_source);
+    logging::AppLogger::log_config_loaded(&config_source, 0); // We don't count keys loaded easily, so using 0
 
     if !configuration.htpasswd_path.exists() {
         error!(
@@ -249,10 +252,7 @@ async fn main() -> Result<(), std::io::Error> {
     {
         use diesel::{sql_query, RunQueryDsl};
 
-        info!(
-            "Trying to connect to database '{}'",
-            configuration.database_url
-        );
+        logging::DatabaseLogger::log_connection_event("connecting", 0);
         let mut conn = pool.get().expect("Couldn't connect to database");
 
         sql_query("PRAGMA foreign_keys = on")
@@ -276,7 +276,7 @@ async fn main() -> Result<(), std::io::Error> {
 
     let caching_ssh_client = Data::new(CachingSshClient::new(pool.clone(), ssh_client.clone()));
 
-    info!("Starting Secure SSH Manager");
+    logging::AppLogger::log_startup("ssm", env!("CARGO_PKG_VERSION"));
     let secret_key = cookie::Key::derive_from(configuration.session_key.as_bytes());
 
     if let Some(scheduler_task) = scheduler::init_scheduler(
@@ -289,7 +289,7 @@ async fn main() -> Result<(), std::io::Error> {
         tokio::spawn(scheduler_task);
     };
 
-    HttpServer::new(move || {
+    let server = HttpServer::new(move || {
         // Configure CORS for frontend
         let cors = Cors::default()
             .allowed_origin("http://localhost:3000") // React dev server
@@ -328,6 +328,21 @@ async fn main() -> Result<(), std::io::Error> {
             .configure(routes::route_config)
     })
     .bind((configuration.listen, configuration.port))?
-    .run()
-    .await
+    .run();
+
+    info!("Server started successfully on {}:{}", configuration.listen, configuration.port);
+
+    let result = server.await;
+
+    // Log shutdown based on the result
+    match &result {
+        Ok(()) => {
+            logging::AppLogger::log_shutdown("ssm", "server completed normally");
+        }
+        Err(e) => {
+            logging::AppLogger::log_shutdown("ssm", &format!("server error: {}", e));
+        }
+    }
+
+    result
 }

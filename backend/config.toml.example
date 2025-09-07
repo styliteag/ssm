@@ -48,8 +48,6 @@ timeout = 30
 # In production, restrict this to your actual frontend domain
 cors_origins = ["http://localhost:3000", "http://localhost:8080"]
 
-# Rate limiting (requests per minute per IP)
-rate_limit = 100
 
 # Optional: Enable HTTPS redirect
 # https_redirect = false
