@@ -10,3 +10,4 @@ export { default as Form } from './Form';
 export type { FormField, FormProps, FormErrors } from './Form';
 export { default as SearchableSelect } from './SearchableSelect';
 export type { SearchableSelectProps, SelectOption } from './SearchableSelect';
+export { default as Tooltip } from './Tooltip';
