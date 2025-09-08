@@ -129,12 +129,6 @@ impl<T: Serialize> ToApiResponse<T> for Result<T, String> {
     }
 }
 
-/// JWT token response for authentication
-#[derive(Serialize, Deserialize, ToSchema)]
-pub struct TokenResponse {
-    pub token: String,
-    pub expires_in: u64,
-}
 
 /// Login request structure
 #[derive(Deserialize, ToSchema)]

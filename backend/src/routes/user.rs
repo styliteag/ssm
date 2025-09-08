@@ -29,10 +29,6 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(add_key_dialog);
 }
 
-#[derive(Serialize, Deserialize, Debug, ToSchema)]
-pub struct DeleteUserResponse {
-    pub message: String,
-}
 
 #[derive(Serialize, Deserialize, Debug, ToSchema)]
 pub struct UserResponse {
