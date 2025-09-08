@@ -292,12 +292,18 @@ async fn main() -> Result<(), std::io::Error> {
     let server = HttpServer::new(move || {
         // Configure CORS for frontend
         let cors = Cors::default()
-            .allowed_origin("http://localhost:3000") // React dev server
-            .allowed_origin("http://localhost:5173") // Vite dev server
-            .allowed_origin("http://localhost:5174") // Vite dev server (alternate port)
-            .allowed_origin("http://127.0.0.1:3000")
-            .allowed_origin("http://127.0.0.1:5173")
-            .allowed_origin("http://127.0.0.1:5174")
+            .allowed_origin_fn(|origin, _req_head| {
+                // Allow localhost development origins - return the specific origin, not "*"
+                // This fixes login functionality when credentials are included
+                if let Some(origin_str) = origin.to_str().ok() {
+                    origin_str.starts_with("http://localhost:")
+                        || origin_str.starts_with("https://localhost:")
+                        || origin_str.starts_with("http://127.0.0.1:")
+                        || origin_str.starts_with("https://127.0.0.1:")
+                } else {
+                    false
+                }
+            })
             .allowed_methods(vec!["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
             .allowed_headers(vec![
                 header::AUTHORIZATION,
