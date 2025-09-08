@@ -164,14 +164,92 @@ const DiffPage: React.FC = () => {
   };
 
   // Handle host updated callback from modal
-  const handleHostUpdated = (updatedHost: Host) => {
+  const handleHostUpdated = async (updatedHost: Host) => {
     setEditingHost(null);
+
+    try {
+      // Invalidate cache for the updated host to ensure fresh data
+      await hostsService.invalidateCache(updatedHost.name);
+      showSuccess('Host updated', 'Cache has been invalidated for fresh data');
+    } catch (cacheError) {
+      console.warn('Failed to invalidate cache for host:', updatedHost.name, cacheError);
+      // Don't fail the update if cache invalidation fails
+    }
+
     // Update the host in the list
-    setHosts(prev => prev.map(h => 
-      h.id === updatedHost.id 
+    setHosts(prev => prev.map(h =>
+      h.id === updatedHost.id
         ? { ...h, name: updatedHost.name, address: updatedHost.address }
         : h
     ));
+  };
+
+  // Refresh all hosts data
+  const refreshAllHosts = async () => {
+    if (hosts.length === 0) return;
+
+    try {
+      setLoading(true);
+      showSuccess('Refreshing hosts', 'Updating data for all hosts...');
+
+      // Refresh each host individually with force update
+      const refreshPromises = hosts
+        .filter(host => !host.disabled) // Skip disabled hosts
+        .map(async (host) => {
+          try {
+            // Set loading state for this host
+            setHosts(prev => prev.map(h =>
+              h.id === host.id ? { ...h, loading: true, error: undefined } : h
+            ));
+
+            const diffResponse = await diffApi.getHostDiff(host.name, true); // Force update
+            // Return the merged host data
+            const mergedHost = {
+              ...diffResponse.host,
+              diff_summary: diffResponse.diff_summary,
+              is_empty: diffResponse.is_empty,
+              total_items: diffResponse.total_items,
+              loading: false,
+              error: undefined
+            };
+            return { success: true, host: mergedHost };
+          } catch (error) {
+            console.error(`Error refreshing host ${host.name}:`, error);
+            return { success: false, hostId: host.id, error };
+          }
+        });
+
+      const results = await Promise.allSettled(refreshPromises);
+
+      // Update hosts with new data
+      results.forEach((result) => {
+        if (result.status === 'fulfilled') {
+          const value = result.value;
+          if (value.success && value.host && value.host.id) {
+            setHosts(prev => prev.map(h =>
+              h.id === value.host.id ? value.host : h
+            ));
+          } else if (!value.success && value.hostId) {
+            // Mark failed hosts with error
+            setHosts(prev => prev.map(h =>
+              h.id === value.hostId ? { ...h, loading: false, error: 'Refresh failed' } : h
+            ));
+          }
+        }
+      });
+
+      const successCount = results.filter(r =>
+        r.status === 'fulfilled' && r.value.success
+      ).length;
+
+      showSuccess('Refresh complete', `Successfully refreshed ${successCount} out of ${hosts.length} hosts`);
+
+    } catch (error) {
+      console.error('Error refreshing all hosts:', error);
+      showError('Failed to refresh hosts', 'Please try again');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleHostClick = async (host: DiffHost) => {
@@ -580,36 +658,10 @@ const DiffPage: React.FC = () => {
       key: 'name',
       header: 'Name',
       sortable: true,
-      render: (value, host) => (
-        <div className="flex items-center space-x-2">
-          <span className="font-medium text-gray-900 dark:text-gray-100">
-            {value as string}
-          </span>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={async (e) => {
-              e.stopPropagation();
-              try {
-                // Fetch full host details
-                const response = await hostsService.getHostByName(host.name);
-                if (response.success && response.data) {
-                  setEditingHost(response.data);
-                  setShowEditModal(true);
-                } else {
-                  showError('Failed to load host details', 'Please try again');
-                }
-              } catch (error) {
-                console.error('Error fetching host details:', error);
-                showError('Failed to load host details', 'Please try again');
-              }
-            }}
-            title="Edit host"
-            className="p-1 h-auto hover:bg-gray-100 dark:hover:bg-gray-700"
-          >
-            <Edit2 size={14} className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300" />
-          </Button>
-        </div>
+      render: (value) => (
+        <span className="font-medium text-gray-900 dark:text-gray-100">
+          {value as string}
+        </span>
       )
     },
     {
@@ -725,6 +777,76 @@ const DiffPage: React.FC = () => {
         }
         return '-';
       }
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      render: (_, host) => (
+        <div className="flex items-center space-x-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={async (e) => {
+              e.stopPropagation();
+              try {
+                // Refresh this host's diff data
+                setHosts(prev => prev.map(h =>
+                  h.id === host.id ? { ...h, loading: true, error: undefined } : h
+                ));
+
+                const diffResponse = await diffApi.getHostDiff(host.name, true); // Force update
+                // Merge the diff data with the host data
+                const updatedHost = {
+                  ...diffResponse.host,
+                  diff_summary: diffResponse.diff_summary,
+                  is_empty: diffResponse.is_empty,
+                  total_items: diffResponse.total_items,
+                  loading: false,
+                  error: undefined
+                };
+                setHosts(prev => prev.map(h =>
+                  h.id === host.id ? updatedHost : h
+                ));
+
+                showSuccess('Host refreshed', `Refreshed data for ${host.name}`);
+              } catch (error) {
+                console.error('Error refreshing host:', error);
+                setHosts(prev => prev.map(h =>
+                  h.id === host.id ? { ...h, loading: false, error: 'Refresh failed' } : h
+                ));
+                showError('Failed to refresh host', 'Please try again');
+              }
+            }}
+            title="Refresh host data"
+            disabled={host.loading || host.disabled}
+          >
+            <RefreshCw size={16} className={`${host.loading ? 'animate-spin' : ''}`} />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={async (e) => {
+              e.stopPropagation();
+              try {
+                // Fetch full host details
+                const response = await hostsService.getHostByName(host.name);
+                if (response.success && response.data) {
+                  setEditingHost(response.data);
+                  setShowEditModal(true);
+                } else {
+                  showError('Failed to load host details', 'Please try again');
+                }
+              } catch (error) {
+                console.error('Error fetching host details:', error);
+                showError('Failed to load host details', 'Please try again');
+              }
+            }}
+            title="Edit host"
+          >
+            <Edit2 size={16} />
+          </Button>
+        </div>
+      )
     }
   ];
 
@@ -776,7 +898,17 @@ const DiffPage: React.FC = () => {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>SSH Hosts Diff Status ({filteredHosts.length}{statusFilter !== 'all' ? ` of ${hosts.length}` : ''})</CardTitle>
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-3">
+              <Button
+                onClick={refreshAllHosts}
+                loading={loading}
+                variant="secondary"
+                size="sm"
+                leftIcon={<RefreshCw size={16} />}
+                className="whitespace-nowrap"
+              >
+                Refresh All
+              </Button>
               <Filter size={16} className="text-gray-500 dark:text-gray-400" />
               <select
                 value={statusFilter}
