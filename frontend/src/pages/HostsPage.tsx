@@ -67,20 +67,35 @@ const HostsPage: React.FC = () => {
   const [testing, setTesting] = useState<Record<number, boolean>>({});
 
 
-  // Poll individual host statuses in parallel batches
-  const pollHostStatuses = useCallback(async (hostsList: ExtendedHost[]) => {
+  // Poll individual host statuses in parallel batches - only poll hosts that need updating
+  const pollHostStatuses = useCallback(async (hostsList: ExtendedHost[], forceAll: boolean = false) => {
     const batchSize = 10;
-    
+    const now = new Date();
+    const maxAge = 5 * 60 * 1000; // 5 minutes
+
+    // Filter hosts that need polling
+    const hostsToPoll = hostsList.filter(host => {
+      if (host.disabled) return false; // Skip disabled hosts
+      if (forceAll) return true; // Force polling all if requested
+      if (!host.lastTested) return true; // Never tested
+      if (host.connection_status === 'unknown') return true; // Unknown status
+      const age = now.getTime() - host.lastTested.getTime();
+      return age > maxAge; // Older than 5 minutes
+    });
+
+    if (hostsToPoll.length === 0) {
+      console.log('No hosts need polling');
+      return;
+    }
+
+    console.log(`Polling ${hostsToPoll.length} out of ${hostsList.length} hosts`);
+
     // Process hosts in batches of 10
-    for (let i = 0; i < hostsList.length; i += batchSize) {
-      const batch = hostsList.slice(i, i + batchSize);
-      
+    for (let i = 0; i < hostsToPoll.length; i += batchSize) {
+      const batch = hostsToPoll.slice(i, i + batchSize);
+
       // Poll this batch in parallel
       const promises = batch.map(async (host) => {
-        // Skip polling for disabled hosts - they already have correct status from backend
-        if (host.disabled) {
-          return;
-        }
         try {
           const response = await hostsService.getHostByName(host.name);
           if (response.success && response.data) {
@@ -130,12 +145,12 @@ const HostsPage: React.FC = () => {
           ));
         }
       });
-      
+
       // Wait for this batch to complete before starting the next batch
       await Promise.allSettled(promises);
-      
+
       // Small delay between batches to prevent overwhelming the backend
-      if (i + batchSize < hostsList.length) {
+      if (i + batchSize < hostsToPoll.length) {
         await new Promise(resolve => setTimeout(resolve, 200));
       }
     }
@@ -155,7 +170,7 @@ const HostsPage: React.FC = () => {
         setHosts(hostsWithUnknownStatus);
         
         // Start polling individual host statuses in background
-        pollHostStatuses(hostsWithUnknownStatus);
+        pollHostStatuses(hostsWithUnknownStatus, true); // Force polling for initial load
       }
     } catch {
       showError('Failed to load hosts', 'Please try again later');
@@ -185,6 +200,18 @@ const HostsPage: React.FC = () => {
   useEffect(() => {
     loadHosts();
   }, [loadHosts]);
+
+  // Periodic background refresh of host statuses
+  useEffect(() => {
+    if (hosts.length === 0) return;
+
+    const interval = setInterval(() => {
+      // Only poll hosts that haven't been tested recently
+      pollHostStatuses(hosts, false);
+    }, 2 * 60 * 1000); // Every 2 minutes
+
+    return () => clearInterval(interval);
+  }, [hosts, pollHostStatuses]);
 
   // Load jump hosts after hosts are loaded to reuse data
   useEffect(() => {
@@ -414,10 +441,30 @@ const HostsPage: React.FC = () => {
   const handleHostUpdated = () => {
     setSelectedHost(null);
     setShowEditModal(false);
-    // Refresh the hosts list to get updated data
-    loadHosts();
-    // Jump hosts will be updated automatically via useEffect when hosts change
+    // Instead of reloading all hosts, just refresh the specific host that was edited
+    if (selectedHost) {
+      refreshSingleHost(selectedHost.name);
+    }
   };
+
+  // Refresh a single host without reloading the entire list
+  const refreshSingleHost = useCallback(async (hostName: string) => {
+    try {
+      const response = await hostsService.getHostByName(hostName);
+      if (response.success && response.data) {
+        const updatedHost = { ...response.data!, lastTested: new Date() };
+        setHosts(prev => prev.map(h =>
+          h.id === updatedHost.id ? updatedHost : h
+        ));
+        // Update jump hosts if this host is used as a jump host
+        setJumpHosts(prev => prev.map(h =>
+          h.id === updatedHost.id ? updatedHost : h
+        ));
+      }
+    } catch (error) {
+      console.error('Failed to refresh host:', hostName, error);
+    }
+  }, []);
 
   const handleDeleteHost = async () => {
     if (!selectedHost) return;
@@ -497,8 +544,10 @@ const HostsPage: React.FC = () => {
           }`
         );
         
-        // Refresh the hosts list
-        loadHosts();
+        // Refresh only the updated hosts instead of reloading everything
+        selectedHosts.forEach(host => {
+          refreshSingleHost(host.name);
+        });
         
         // Clear selection
         setSelectedHosts([]);
