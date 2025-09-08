@@ -117,6 +117,11 @@ export const hostsService = {
     throw new Error('getAllowedUsers endpoint not available in backend');
   },
 
+  // Invalidate cache for a specific host
+  invalidateCache: async (hostName: string): Promise<ApiResponse<{ message: string }>> => {
+    return api.post<{ message: string }>(`/host/${encodeURIComponent(hostName)}/cache/invalidate`);
+  },
+
   // Test connection by attempting to get logins (requires SSH connectivity)
   testConnection: async (hostName: string): Promise<ApiResponse<{ success: boolean; message: string }>> => {
     try {

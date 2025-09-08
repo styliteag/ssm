@@ -35,7 +35,8 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(set_authorized_keys)
         .service(add_host_key)
         .service(delete_authorization)
-        .service(list_host_authorizations);
+        .service(list_host_authorizations)
+        .service(invalidate_host_cache);
 }
 
 #[derive(Serialize, ToSchema)]
@@ -787,6 +788,48 @@ async fn delete_authorization(
 }
 
 
+/// Invalidate cache for a specific host
+#[utoipa::path(
+    post,
+    path = "/api/host/{name}/cache/invalidate",
+    security(
+        ("session_auth" = [])
+    ),
+    params(
+        ("name" = String, Path, description = "Host name")
+    ),
+    responses(
+        (status = 200, description = "Cache invalidated successfully"),
+        (status = 404, description = "Host not found", body = ApiError),
+        (status = 401, description = "Unauthorized - authentication required", body = ApiError)
+    )
+)]
+#[post("/{name}/cache/invalidate")]
+async fn invalidate_host_cache(
+    conn: Data<ConnectionPool>,
+    caching_ssh_client: Data<CachingSshClient>,
+    host_name: Path<String>,
+    _identity: Option<Identity>,
+) -> Result<impl Responder> {
+    // Check if host exists
+    let host = match Host::get_from_name(conn.get().unwrap(), host_name.to_string()).await {
+        Ok(Some(_host)) => _host,
+        Ok(None) => {
+            return Ok(HttpResponse::NotFound().json(ApiError::not_found("Host not found".to_string())));
+        }
+        Err(error) => {
+            return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error)));
+        }
+    };
+
+    // Invalidate the cache for this host
+    caching_ssh_client.invalidate_cache(&host.name).await;
+    
+    Ok(HttpResponse::Ok().json(ApiResponse::success_message(
+        format!("Cache invalidated for host '{}'", host.name)
+    )))
+}
+
 // Custom deserialization to treat empty strings as None
 fn empty_string_as_none<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
 where
@@ -842,6 +885,7 @@ pub struct UpdateHostRequest {
 #[put("/{name}")]
 async fn update_host(
     conn: Data<crate::ConnectionPool>,
+    caching_ssh_client: Data<CachingSshClient>,
     host_name: Path<String>,
     json: Json<UpdateHostRequest>,
     _identity: Option<Identity>,
@@ -858,7 +902,14 @@ async fn update_host(
         json.jump_via,
         json.disabled,
     ) {
-        Ok(()) => Ok(HttpResponse::Ok().json(ApiResponse::success_message("Host updated successfully".to_string()))),
+        Ok(()) => {
+            // Invalidate cache for both old and new host names (in case of rename)
+            caching_ssh_client.invalidate_cache(&host_name).await;
+            if json.name != host_name.to_string() {
+                caching_ssh_client.invalidate_cache(&json.name).await;
+            }
+            Ok(HttpResponse::Ok().json(ApiResponse::success_message("Host updated successfully".to_string())))
+        },
         Err(e) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e.to_string()))),
     }
 }

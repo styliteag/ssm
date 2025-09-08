@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import { 
   Server, 
@@ -23,6 +23,7 @@ import {
   DataTable,
   Modal,
   Form,
+  Tooltip,
   type Column,
   type FormField
 } from '../components/ui';
@@ -65,21 +66,6 @@ const HostsPage: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [testing, setTesting] = useState<Record<number, boolean>>({});
 
-  // Refresh host status by fetching updated host details
-  const refreshHostStatus = useCallback(async (host: ExtendedHost) => {
-    try {
-      const response = await hostsService.getHostByName(host.name);
-      if (response.success && response.data) {
-        setHosts(prev => prev.map(h => 
-          h.id === host.id 
-            ? { ...response.data!, lastTested: new Date() }
-            : h
-        ));
-      }
-    } catch (error) {
-      console.error('Failed to refresh host status for', host.name, error);
-    }
-  }, []);
 
   // Poll individual host statuses in parallel batches
   const pollHostStatuses = useCallback(async (hostsList: ExtendedHost[]) => {
@@ -98,37 +84,48 @@ const HostsPage: React.FC = () => {
         try {
           const response = await hostsService.getHostByName(host.name);
           if (response.success && response.data) {
-            setHosts(prev => prev.map(h => 
-              h.id === host.id 
-                ? { ...response.data!, lastTested: new Date() }
+            const updatedHost = { ...response.data!, lastTested: new Date() };
+            // Only update if status actually changed
+            setHosts(prev => prev.map(h =>
+              h.id === host.id
+                ? (h.connection_status !== updatedHost.connection_status ||
+                   h.connection_error !== updatedHost.connection_error ||
+                   !h.lastTested)
+                  ? updatedHost
+                  : h
                 : h
             ));
           } else {
             // API returned error - update host with error status
             console.error('API error for host', host.name, response.message);
-            setHosts(prev => prev.map(h => 
-              h.id === host.id 
-                ? { 
-                    ...h, 
-                    connection_status: 'error',
-                    connection_error: response.message || 'API request failed',
-                    lastTested: new Date() 
-                  }
+            const errorMessage = response.message || 'API request failed';
+            setHosts(prev => prev.map(h =>
+              h.id === host.id
+                ? (h.connection_status !== 'error' || h.connection_error !== errorMessage)
+                  ? {
+                      ...h,
+                      connection_status: 'error',
+                      connection_error: errorMessage,
+                      lastTested: new Date()
+                    }
+                  : h
                 : h
             ));
           }
         } catch (error) {
           console.error('Failed to poll status for host', host.name, error);
           // Update host with network/request error
-          const errorMessage = error instanceof Error ? error.message : 'Network error';
-          setHosts(prev => prev.map(h => 
-            h.id === host.id 
-              ? { 
-                  ...h, 
-                  connection_status: 'error',
-                  connection_error: `Polling failed: ${errorMessage}`,
-                  lastTested: new Date() 
-                }
+          const errorMessage = `Polling failed: ${error instanceof Error ? error.message : 'Network error'}`;
+          setHosts(prev => prev.map(h =>
+            h.id === host.id
+              ? (h.connection_status !== 'error' || h.connection_error !== errorMessage)
+                ? {
+                    ...h,
+                    connection_status: 'error',
+                    connection_error: errorMessage,
+                    lastTested: new Date()
+                  }
+                : h
               : h
           ));
         }
@@ -203,31 +200,61 @@ const HostsPage: React.FC = () => {
       showError('Host is disabled', `Cannot test connection to disabled host ${host.name}`);
       return;
     }
-    
+
     try {
       setTesting(prev => ({ ...prev, [host.id]: true }));
-      
-      // Refresh host data which includes updated connection status
-      await refreshHostStatus(host);
-      
-      // Get the updated host to check its status
-      const updatedResponse = await hostsService.getHostByName(host.name);
-      if (updatedResponse.success && updatedResponse.data) {
-        const updatedHost = updatedResponse.data;
-        if (updatedHost.connection_status === 'online') {
-          showSuccess('Connection successful', `Successfully connected to ${host.name}`);
-        } else {
-          const errorMsg = updatedHost.connection_error || 'Unable to connect to host';
-          showError('Connection failed', errorMsg);
-        }
+
+      // Force update by testing SSH connection directly (bypasses cache)
+      const testResponse = await hostsService.getHostLogins(host.name, true);
+
+      if (testResponse.success && testResponse.data) {
+        // Connection successful - update host status
+        const updatedHost = {
+          ...host,
+          connection_status: 'online' as const,
+          connection_error: undefined,
+          lastTested: new Date()
+        };
+
+        setHosts(prev => prev.map(h =>
+          h.id === host.id ? updatedHost : h
+        ));
+
+        showSuccess('Connection successful', `Successfully connected to ${host.name}. Found ${testResponse.data.length} available logins.`);
+      } else {
+        // Connection failed - update host status
+        const errorMsg = testResponse.message || 'Unable to connect to host';
+        const updatedHost = {
+          ...host,
+          connection_status: 'error' as const,
+          connection_error: errorMsg,
+          lastTested: new Date()
+        };
+
+        setHosts(prev => prev.map(h =>
+          h.id === host.id ? updatedHost : h
+        ));
+
+        showError('Connection failed', errorMsg);
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Connection failed';
+      const updatedHost = {
+        ...host,
+        connection_status: 'error' as const,
+        connection_error: errorMessage,
+        lastTested: new Date()
+      };
+
+      setHosts(prev => prev.map(h =>
+        h.id === host.id ? updatedHost : h
+      ));
+
       showError('Connection test failed', errorMessage);
     } finally {
       setTesting(prev => ({ ...prev, [host.id]: false }));
     }
-  }, [showSuccess, showError, refreshHostStatus]);
+  }, [showSuccess, showError]);
 
   // Form field definitions for add host modal
   const getFormFields = (): FormField[] => [
@@ -444,6 +471,16 @@ const HostsPage: React.FC = () => {
         try {
           const result = await hostsService.updateHost(host.name, hostUpdate as Host);
           results.push(result);
+          
+          // Invalidate cache for the updated host
+          if (result.success) {
+            try {
+              await hostsService.invalidateCache(host.name);
+            } catch (cacheError) {
+              console.warn(`Failed to invalidate cache for ${host.name}:`, cacheError);
+              // Don't fail the operation if cache invalidation fails
+            }
+          }
         } catch (error) {
           console.error(`Failed to update host ${host.name}:`, error);
           results.push({ success: false, message: `Failed to update ${host.name}` });
@@ -504,175 +541,113 @@ const HostsPage: React.FC = () => {
     { value: 'disabled', label: 'Disabled', count: hosts.filter(h => getHostStatus(h) === 'disabled').length },
   ], [hosts]);
 
-  // Host Status Tooltip Component
-  const HostStatusTooltip: React.FC<{ host: ExtendedHost; children: React.ReactNode }> = ({ host, children }) => {
-    const [isVisible, setIsVisible] = useState(false);
-    const [position, setPosition] = useState({ x: 0, y: 0 });
-    const triggerRef = useRef<HTMLDivElement>(null);
-    const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // Create tooltip content for each host - using memoized function to prevent re-renders
+  const getTooltipContent = useCallback((host: ExtendedHost) => (
+    <div className="space-y-3 max-w-md">
+      {/* Host Info */}
+      <div className="border-b border-gray-600 pb-2">
+        <h4 className="font-semibold text-white flex items-center gap-2">
+          <Server size={16} className="flex-shrink-0" />
+          <span style={{ wordBreak: 'break-word' }}>{host.name}</span>
+        </h4>
+        <p className="text-gray-300 text-xs flex items-center gap-1">
+          <Globe size={12} className="flex-shrink-0" />
+          <span style={{ wordBreak: 'break-word' }}>{host.address}:{host.port}</span>
+        </p>
+      </div>
 
-    const handleMouseEnter = useCallback(() => {
-      if (triggerRef.current) {
-        const rect = triggerRef.current.getBoundingClientRect();
-        setPosition({
-          x: rect.left + rect.width / 2,
-          y: rect.top - 8
-        });
-      }
-      timeoutRef.current = setTimeout(() => setIsVisible(true), 100) as NodeJS.Timeout;
-    }, []);
+      {/* Connection Status */}
+      <div>
+        <div className="flex items-center gap-2 mb-1">
+          {host.connection_status === 'online' && <CheckCircle size={14} className="text-green-400" />}
+          {host.connection_status === 'offline' && <AlertCircle size={14} className="text-red-400" />}
+          {host.connection_status === 'error' && <AlertCircle size={14} className="text-orange-400" />}
+          {(!host.connection_status || host.connection_status === 'unknown') && <Activity size={14} className="text-gray-400" />}
 
-    const handleMouseLeave = useCallback(() => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-      setIsVisible(false);
-    }, []);
-
-    useEffect(() => {
-      return () => {
-        if (timeoutRef.current) {
-          clearTimeout(timeoutRef.current);
-        }
-      };
-    }, []);
-
-    return (
-      <>
-        <div 
-          ref={triggerRef}
-          onMouseEnter={handleMouseEnter}
-          onMouseLeave={handleMouseLeave}
-          className="p-1 -m-1"
-        >
-          {children}
+          <span className="font-medium">
+            {host.connection_status === 'online' && 'Online'}
+            {host.connection_status === 'offline' && 'Offline'}
+            {host.connection_status === 'error' && 'Error'}
+            {(!host.connection_status || host.connection_status === 'unknown') && 'Unknown'}
+          </span>
         </div>
-        
-        {/* Portal tooltip rendered at document body level */}
-        {isVisible && (
-          <div 
-            className="fixed bg-gray-900 dark:bg-gray-800 text-white text-sm rounded-lg shadow-xl border border-gray-700 p-4 pointer-events-none transition-opacity duration-200"
-            style={{
-              left: `${position.x}px`,
-              top: `${position.y}px`,
-              transform: 'translateX(-50%) translateY(-100%)',
-              zIndex: 99999,
-              width: '480px',
-              maxWidth: '480px'
-            }}
-          >
-            {/* Arrow */}
-            <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900 dark:border-t-gray-800"></div>
-            
-            {/* Host Info */}
-            <div className="space-y-3">
-              <div className="border-b border-gray-700 pb-2">
-                <h4 className="font-semibold text-white flex items-center gap-2">
-                  <Server size={16} className="flex-shrink-0" />
-                  <span style={{ wordBreak: 'break-word' }}>{host.name}</span>
-                </h4>
-                <p className="text-gray-300 text-xs flex items-center gap-1">
-                  <Globe size={12} className="flex-shrink-0" />
-                  <span style={{ wordBreak: 'break-word' }}>{host.address}:{host.port}</span>
-                </p>
-              </div>
-              
-              {/* Connection Status */}
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  {host.connection_status === 'online' && <CheckCircle size={14} className="text-green-400" />}
-                  {host.connection_status === 'offline' && <AlertCircle size={14} className="text-red-400" />}
-                  {host.connection_status === 'error' && <AlertCircle size={14} className="text-orange-400" />}
-                  {(!host.connection_status || host.connection_status === 'unknown') && <Activity size={14} className="text-gray-400" />}
-                  
-                  <span className="font-medium">
-                    {host.connection_status === 'online' && 'Online'}
-                    {host.connection_status === 'offline' && 'Offline'}
-                    {host.connection_status === 'error' && 'Error'}
-                    {(!host.connection_status || host.connection_status === 'unknown') && 'Unknown'}
-                  </span>
-                </div>
-                
-                {host.lastTested && (
-                  <p className="text-gray-400 text-xs">
-                    Last tested: {host.lastTested.toLocaleString()}
-                  </p>
-                )}
-                
-                {host.connection_error && (
-                  <div className="text-red-400 text-xs mt-1">
-                    <div className="flex items-start gap-1" style={{ maxWidth: '100%' }}>
-                      <span className="flex-shrink-0">❌</span>
-                      <span 
-                        className="flex-1" 
-                        style={{ 
-                          wordBreak: 'break-word',
-                          overflowWrap: 'anywhere',
-                          minWidth: 0,
-                          maxWidth: '100%'
-                        }}
-                      >
-                        {host.connection_error}
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </div>
-              
-              {/* SSH Info */}
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <Key size={14} />
-                  <span className="font-medium">SSH Details</span>
-                </div>
-                <div className="text-xs text-gray-300 space-y-1" style={{ maxWidth: '100%' }}>
-                  <div style={{ wordBreak: 'break-word' }}>User: <code className="bg-gray-800 px-1 rounded">{host.username}</code></div>
-                  {host.key_fingerprint && (
-                    <div style={{ wordBreak: 'break-word' }}>
-                      Fingerprint: <code className="bg-gray-800 px-1 rounded text-xs" style={{ wordBreak: 'break-all' }}>
-                        {host.key_fingerprint.slice(0, 20)}...
-                      </code>
-                    </div>
-                  )}
-                  {host.jumphost_name && (
-                    <div style={{ wordBreak: 'break-word' }}>Jump host: {host.jumphost_name}</div>
-                  )}
-                </div>
-              </div>
-              
-              {/* Authorized Users */}
-              {host.authorizations && host.authorizations.length > 0 && (
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <Users size={14} />
-                    <span className="font-medium">Authorized Users ({host.authorizations.length})</span>
-                  </div>
-                  <div className="text-xs text-gray-300 space-y-1 max-h-20 overflow-y-auto">
-                    {host.authorizations.map((auth, index) => (
-                      <div key={auth.id || index} className="flex justify-between gap-2" style={{ alignItems: 'flex-start' }}>
-                        <span style={{ wordBreak: 'break-word', flex: 1 }}>{auth.username}</span>
-                        <code className="bg-gray-800 px-1 rounded flex-shrink-0" style={{ fontSize: '10px' }}>{auth.login}</code>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              
-              {host.authorizations && host.authorizations.length === 0 && (
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <Users size={14} />
-                    <span className="font-medium">Authorized Users</span>
-                  </div>
-                  <p className="text-gray-400 text-xs">No authorized users</p>
-                </div>
-              )}
+
+        {host.lastTested && (
+          <p className="text-gray-400 text-xs">
+            Last tested: {host.lastTested.toLocaleString()}
+          </p>
+        )}
+
+        {host.connection_error && (
+          <div className="text-red-400 text-xs mt-1">
+            <div className="flex items-start gap-1" style={{ maxWidth: '100%' }}>
+              <span className="flex-shrink-0">❌</span>
+              <span
+                className="flex-1"
+                style={{
+                  wordBreak: 'break-word',
+                  overflowWrap: 'anywhere',
+                  minWidth: 0,
+                  maxWidth: '100%'
+                }}
+              >
+                {host.connection_error}
+              </span>
             </div>
           </div>
         )}
-      </>
-    );
-  };
+      </div>
+
+      {/* SSH Info */}
+      <div>
+        <div className="flex items-center gap-2 mb-1">
+          <Key size={14} />
+          <span className="font-medium">SSH Details</span>
+        </div>
+        <div className="text-xs text-gray-300 space-y-1" style={{ maxWidth: '100%' }}>
+          <div style={{ wordBreak: 'break-word' }}>User: <code className="bg-gray-700 px-1 rounded">{host.username}</code></div>
+          {host.key_fingerprint && (
+            <div style={{ wordBreak: 'break-word' }}>
+              Fingerprint: <code className="bg-gray-700 px-1 rounded text-xs" style={{ wordBreak: 'break-all' }}>
+                {host.key_fingerprint.slice(0, 20)}...
+              </code>
+            </div>
+          )}
+          {host.jumphost_name && (
+            <div style={{ wordBreak: 'break-word' }}>Jump host: {host.jumphost_name}</div>
+          )}
+        </div>
+      </div>
+
+      {/* Authorized Users */}
+      {host.authorizations && host.authorizations.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <Users size={14} />
+            <span className="font-medium">Authorized Users ({host.authorizations.length})</span>
+          </div>
+          <div className="text-xs text-gray-300 space-y-1 max-h-20 overflow-y-auto">
+            {host.authorizations.map((auth, index) => (
+              <div key={auth.id || index} className="flex justify-between gap-2" style={{ alignItems: 'flex-start' }}>
+                <span style={{ wordBreak: 'break-word', flex: 1 }}>{auth.username}</span>
+                <code className="bg-gray-700 px-1 rounded flex-shrink-0" style={{ fontSize: '10px' }}>{auth.login}</code>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {host.authorizations && host.authorizations.length === 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <Users size={14} />
+            <span className="font-medium">Authorized Users</span>
+          </div>
+          <p className="text-gray-400 text-xs">No authorized users</p>
+        </div>
+      )}
+    </div>
+  ), []);
 
   // Table column definitions
   const columns: Column<ExtendedHost>[] = [
@@ -746,12 +721,17 @@ const HostsPage: React.FC = () => {
         // Use the helper function to get status, considering disabled state first
         const currentStatus = getHostStatus(host);
         return (
-          <HostStatusTooltip host={host}>
+          <Tooltip
+            content={getTooltipContent(host)}
+            position="top"
+            delay={300}
+            className="max-w-md"
+          >
             <div className={`inline-flex items-center space-x-1 px-2 py-1 rounded-full text-xs font-medium cursor-pointer ${colors[currentStatus]}`}>
               {icons[currentStatus]}
               <span>{labels[currentStatus]}</span>
             </div>
-          </HostStatusTooltip>
+          </Tooltip>
         );
       }
     },

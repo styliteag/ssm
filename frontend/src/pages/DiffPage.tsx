@@ -8,6 +8,7 @@ import {
   Button,
   DataTable,
   Modal,
+  Tooltip,
   type Column
 } from '../components/ui';
 import { diffApi, DiffHost, DetailedDiffResponse, DiffItemResponse } from '../services/api/diff';
@@ -627,43 +628,79 @@ const DiffPage: React.FC = () => {
       render: (_, host) => {
         if (host.disabled) {
           return (
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-800/50 text-gray-600 dark:text-gray-400">
-              <Ban className="w-3 h-3 mr-1" />
-              Disabled
-            </span>
+            <Tooltip
+              content="This host is disabled and will not be checked for SSH key synchronization"
+              position="top"
+            >
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-800/50 text-gray-600 dark:text-gray-400 cursor-help">
+                <Ban className="w-3 h-3 mr-1" />
+                Disabled
+              </span>
+            </Tooltip>
           );
         }
 
         if (host.loading) {
           return (
-            <div className="flex items-center space-x-2">
-              <RefreshCw className="w-4 h-4 animate-spin text-blue-500" />
-              <span className="text-gray-500 dark:text-gray-400">Loading...</span>
-            </div>
+            <Tooltip
+              content="Checking SSH connection and fetching authorized keys from the host"
+              position="top"
+            >
+              <div className="flex items-center space-x-2 cursor-help">
+                <RefreshCw className="w-4 h-4 animate-spin text-blue-500" />
+                <span className="text-gray-500 dark:text-gray-400">Loading...</span>
+              </div>
+            </Tooltip>
           );
         }
         
         if (host.error) {
           return (
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300">
-              Error
-            </span>
+            <Tooltip 
+              content={
+                <div className="space-y-1">
+                  <div className="font-semibold">Connection Error</div>
+                  <div className="text-xs">{host.error}</div>
+                </div>
+              }
+              position="top"
+            >
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 cursor-help">
+                Error
+              </span>
+            </Tooltip>
           );
         }
         
         if (host.is_empty === false) {
           return (
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300">
-              Needs Sync
-            </span>
+            <Tooltip
+              content={
+                <div className="space-y-1">
+                  <div className="font-semibold">Keys Out of Sync</div>
+                  <div className="text-xs">{host.total_items || 0} difference{(host.total_items || 0) !== 1 ? 's' : ''} found</div>
+                  <div className="text-xs">Click to view details and sync</div>
+                </div>
+              }
+              position="top"
+            >
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 cursor-help">
+                Needs Sync
+              </span>
+            </Tooltip>
           );
         }
         
         if (host.is_empty === true) {
           return (
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">
-              Synchronized
-            </span>
+            <Tooltip
+              content="All expected SSH keys are correctly configured on this host"
+              position="top"
+            >
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 cursor-help">
+                Synchronized
+              </span>
+            </Tooltip>
           );
         }
         
