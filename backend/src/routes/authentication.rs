@@ -1,7 +1,7 @@
 use actix_identity::Identity;
 use actix_session::Session;
 use actix_web::{
-    get, post,
+    get, options, post,
     web::{self, Data, Json},
     HttpMessage, HttpRequest, HttpResponse, Responder, Result,
 };
@@ -226,9 +226,28 @@ async fn get_csrf_token(identity: Option<Identity>, session: Session) -> Result<
     })))
 }
 
+/// Handle OPTIONS requests for CORS preflight
+#[options("/{path:.*}")]
+async fn handle_options(req: HttpRequest) -> impl Responder {
+    // Get the origin from the request headers
+    let origin = req.headers()
+        .get("origin")
+        .and_then(|h| h.to_str().ok())
+        .unwrap_or("http://localhost:5173");
+
+    HttpResponse::Ok()
+        .insert_header(("Access-Control-Allow-Origin", origin))
+        .insert_header(("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS"))
+        .insert_header(("Access-Control-Allow-Headers", "Content-Type, Authorization, X-CSRF-Token"))
+        .insert_header(("Access-Control-Allow-Credentials", "true"))
+        .insert_header(("Access-Control-Max-Age", "3600"))
+        .finish()
+}
+
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(login)
         .service(logout)
         .service(auth_status)
-        .service(get_csrf_token);
+        .service(get_csrf_token)
+        .service(handle_options);
 }
