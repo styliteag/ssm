@@ -1,0 +1,33 @@
+#!/bin/bash
+
+# Secure git wrapper that prevents unsigned commits
+# Place this in your PATH or use as ./git-secure commit ...
+
+if [ "$1" = "commit" ]; then
+    echo "🔐 Secure commit mode enabled"
+
+    # Check for --no-gpg-sign flag
+    for arg in "$@"; do
+        if [ "$arg" = "--no-gpg-sign" ]; then
+            echo "❌ ERROR: --no-gpg-sign is not allowed in this repository!"
+            echo "   This repository requires all commits to be signed."
+            echo "   Remove --no-gpg-sign and ensure your SSH agent is available."
+            echo ""
+            echo "   To check SSH agent status: ssh-add -l"
+            exit 1
+        fi
+    done
+
+    # Check if SSH agent has the signing key
+    if ! ssh-add -l | grep -q "SHA256:12SdTkUOAuNoODh+WM0bUrnxkWxRpBj3j3Vqxs6tKlk"; then
+        echo "❌ ERROR: SSH signing key not available!"
+        echo "   Please ensure 1Password is running and SSH keys are loaded."
+        echo "   Run: ssh-add -l"
+        exit 1
+    fi
+
+    echo "✅ SSH key verified, proceeding with signed commit..."
+fi
+
+# Execute the actual git command
+exec git "$@"
