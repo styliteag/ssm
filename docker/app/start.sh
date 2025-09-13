@@ -4,9 +4,9 @@ set -e
 echo "Starting SSH Key Manager"
 echo "Version: $(cat /app/VERSION 2>/dev/null || echo unknown)"
 
-# Initialize database directory
-mkdir -p /app/db
-export DATABASE_URL="${DATABASE_URL:-sqlite:///app/db/ssm.db}"
+# # Initialize database directory
+# mkdir -p /app/db
+# export DATABASE_URL="${DATABASE_URL:-sqlite:///app/db/ssm.db}"
 
 # Function to handle shutdown gracefully
 cleanup() {
