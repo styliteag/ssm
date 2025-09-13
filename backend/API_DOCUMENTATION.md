@@ -66,7 +66,7 @@ The auto-generated documentation covers all API endpoints:
 - `extra_comment`: Additional notes about the key
 
 ### Authorization Management (`/api/authorization/*`)
-- `POST /api/authorization/dialog_data` - Get authorization dialog data
+- `POST /api/authorization/dialog_data` - Get authorization dialog data (includes `comment` field)
 - `POST /api/authorization/change_options` - Change authorization options (TODO)
 
 ### Diff Analysis (`/api/diff/*`)
@@ -389,6 +389,18 @@ curl -X GET http://localhost:8000/api/host/web-server-01 \
 # Get available logins on host
 curl -X GET "http://localhost:8000/api/host/web-server-01/logins?force_update=true" \
   -b cookies.txt
+
+# Authorize user access to host
+curl -X POST http://localhost:8000/api/host/user/authorize \
+  -H "Content-Type: application/json" \
+  -b cookies.txt \
+  -d '{
+    "host_id": 1,
+    "user_id": 2,
+    "login": "ubuntu",
+    "options": "no-pty",
+    "comment": "Developer access for web application deployment"
+  }'
 ```
 
 ### User and Key Management

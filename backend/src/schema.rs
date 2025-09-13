@@ -51,6 +51,8 @@ diesel::table! {
         login -> Text,
         /// ssh key options
         options -> Nullable<Text>,
+        /// optional comment for this authorization
+        comment -> Nullable<Text>,
     }
 }
 

@@ -51,6 +51,7 @@ pub struct AuthorizationDialogResponse {
     user_id: i32,
     login: String,
     options: Option<String>,
+    comment: Option<String>,
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -63,6 +64,8 @@ pub struct AuthorizeUserRequest {
     login: String,
     /// The key options which are already set
     options: Option<String>,
+    /// Optional comment for this authorization
+    comment: Option<String>,
 }
 
 /// Get authorization dialog data for user and host
@@ -87,6 +90,7 @@ async fn get_authorization_dialog_data(
 ) -> Result<impl Responder> {
     let options = json.options.clone();
     let login = json.login.clone();
+    let comment = json.comment.clone();
     let (user, host) = web::block(move || {
         let mut connection = conn.get().unwrap();
 
@@ -119,5 +123,6 @@ async fn get_authorization_dialog_data(
         user_id: user.1,
         login,
         options,
+        comment,
     })))
 }

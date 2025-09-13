@@ -81,6 +81,14 @@ export const AddAuthorizationModal: React.FC<AddAuthorizationModalProps> = ({
       helperText: 'Optional SSH key options (advanced users only)',
       rows: 2,
     },
+    {
+      name: 'comment',
+      label: 'Comment',
+      type: 'text',
+      required: false,
+      placeholder: 'Optional comment for this authorization',
+      helperText: 'Add a note about why this user needs access to this host',
+    },
   ];
 
   const handleSubmit = async (values: Record<string, unknown>) => {
@@ -91,6 +99,7 @@ export const AddAuthorizationModal: React.FC<AddAuthorizationModalProps> = ({
         host_id: parseInt(values.host_id as string),
         login: (values.login as string).trim(),
         options: (values.options as string)?.trim() || undefined,
+        comment: (values.comment as string)?.trim() || undefined,
       });
       onClose();
     } catch (error) {
@@ -203,16 +212,25 @@ export const EditAuthorizationModal: React.FC<EditAuthorizationModalProps> = ({
       helperText: 'Optional SSH key options (advanced users only)',
       rows: 2,
     },
+    {
+      name: 'comment',
+      label: 'Comment',
+      type: 'text',
+      required: false,
+      placeholder: 'Optional comment for this authorization',
+      helperText: 'Add a note about why this user needs access to this host',
+    },
   ];
 
   const handleSubmit = async (values: Record<string, unknown>) => {
     if (!authorization) return;
-    
+
     setLoading(true);
     try {
       await onSubmit(authorization.id, {
         login: (values.login as string).trim(),
         options: (values.options as string)?.trim() || undefined,
+        comment: (values.comment as string)?.trim() || undefined,
       });
       onClose();
     } catch (error) {

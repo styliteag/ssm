@@ -139,16 +139,88 @@ export const authorizationsService = {
     }
   },
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  getAuthorization: async (_id: number): Promise<ApiResponse<Authorization>> => {
-    throw new Error('getAuthorization endpoint not available in backend');
-  },
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  updateAuthorization: async (_id: number, _authorization: Partial<AuthorizationFormData>): Promise<ApiResponse<Authorization>> => {
-    // Update not directly supported, but we can delete and recreate
-    // For now, return an error to indicate this needs special handling
-    throw new Error('Update not supported - delete and recreate authorization instead');
+  updateAuthorization: async (id: number, authorization: Partial<AuthorizationFormData>, existingAuth?: Authorization): Promise<ApiResponse<Authorization>> => {
+    try {
+      // If no existing auth data provided, we need to get it first
+      if (!existingAuth) {
+        return {
+          success: false,
+          message: 'Existing authorization data required for update operation'
+        };
+      }
+
+      // Delete the existing authorization (call API directly to avoid circular reference)
+      const deleteResponse = await api.delete<null>(`/host/authorization/${id}`);
+      if (!deleteResponse.success) {
+        return {
+          success: false,
+          message: `Failed to delete authorization: ${deleteResponse.message || 'Unknown error'}`
+        };
+      }
+
+      // Create a new authorization with updated data (call API directly)
+      const newAuthData = {
+        host_id: authorization.host_id ?? existingAuth.host_id,
+        user_id: authorization.user_id ?? existingAuth.user_id,
+        login: authorization.login ?? existingAuth.login,
+        options: authorization.options !== undefined ? authorization.options : existingAuth.options,
+        comment: authorization.comment !== undefined ? authorization.comment : existingAuth.comment,
+      };
+
+      const createResponse = await api.post('/host/user/authorize', newAuthData);
+      if (!createResponse.success) {
+        return {
+          success: false,
+          message: `Failed to create updated authorization: ${createResponse.message || 'Unknown error'}`
+        };
+      }
+
+      // Since the backend only returns a success message, we need to fetch the updated authorization
+      // Try to find the newly created authorization by fetching authorizations for this user/host combination
+      try {
+        const userAuthsResponse = await api.get<{ authorizations: Authorization[] }>(`/user/${existingAuth.user_id}/authorizations`);
+        if (userAuthsResponse.success && userAuthsResponse.data) {
+          // Find the authorization that matches our criteria (same host and login)
+          const updatedAuth = userAuthsResponse.data.authorizations.find(
+            (auth: Authorization) =>
+              auth.host_id === newAuthData.host_id &&
+              auth.login === newAuthData.login &&
+              auth.user_id === newAuthData.user_id
+          );
+
+          if (updatedAuth) {
+            return {
+              success: true,
+              data: updatedAuth,
+              message: 'Authorization updated successfully'
+            };
+          }
+        }
+      } catch (fetchError) {
+        // If we can't fetch the updated authorization, return a generic success
+        console.warn('Could not fetch updated authorization data:', fetchError);
+      }
+
+      // Fallback: return success without data if we can't find the authorization
+      return {
+        success: true,
+        data: {
+          id: 0, // Placeholder ID
+          host_id: newAuthData.host_id,
+          user_id: newAuthData.user_id,
+          login: newAuthData.login,
+          options: newAuthData.options,
+          comment: newAuthData.comment
+        } as Authorization,
+        message: 'Authorization updated successfully'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: `Update failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      };
+    }
   },
 
   createBulkAuthorizations: async (authorizations: AuthorizationFormData[]): Promise<ApiResponse<{ created: number; failed: number; errors?: string[] }>> => {
@@ -182,19 +254,6 @@ export const authorizationsService = {
     };
   },
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  checkAuthorization: async (_userId: number, _hostId: number): Promise<ApiResponse<{ authorized: boolean; authorization?: Authorization }>> => {
-    throw new Error('checkAuthorization endpoint not available in backend');
-  },
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  copyAuthorizations: async (_fromHostId: number, _toHostId: number): Promise<ApiResponse<{ copied: number }>> => {
-    throw new Error('copyAuthorizations endpoint not available in backend');
-  },
-
-  getAuthorizationStats: async (): Promise<ApiResponse<{ total: number; by_host: Record<string, number>; by_user: Record<string, number> }>> => {
-    throw new Error('getAuthorizationStats endpoint not available in backend');
-  },
 };
 
 export default authorizationsService;

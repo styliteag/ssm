@@ -12,6 +12,7 @@ import {
 import { authorizationsService } from '../services/api/authorizations';
 import { usersService } from '../services/api/users';
 import { hostsService } from '../services/api/hosts';
+import { useNotifications } from '../contexts/NotificationContext';
 import AuthorizationMatrix from '../components/AuthorizationMatrix';
 import AuthorizationList from '../components/AuthorizationList';
 import AuthorizationStats from '../components/AuthorizationStats';
@@ -41,7 +42,10 @@ const AuthorizationsPage: React.FC = () => {
   const [authorizationsWithDetails, setAuthorizationsWithDetails] = useState<AuthorizationWithDetails[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [hosts, setHosts] = useState<Host[]>([]);
-  
+
+  // Notifications
+  const { showSuccess, showError } = useNotifications();
+
   // Modal state
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -229,13 +233,22 @@ const AuthorizationsPage: React.FC = () => {
 
   // Handle edit authorization
   const handleEditAuthorization = useCallback(async (id: number, data: Partial<AuthorizationFormData>) => {
-    const response = await authorizationsService.updateAuthorization(id, data);
+    const existingAuth = authorizations.find(auth => auth.id === id);
+    if (!existingAuth) {
+      showError('Authorization not found', 'Unable to update authorization');
+      return;
+    }
+
+    const response = await authorizationsService.updateAuthorization(id, data, existingAuth);
     if (response.success && response.data) {
-      setAuthorizations(prev => 
+      setAuthorizations(prev =>
         prev.map(auth => auth.id === id ? response.data! : auth)
       );
+      showSuccess('Authorization updated successfully');
+    } else {
+      showError('Failed to update authorization', response.message);
     }
-  }, []);
+  }, [authorizations, showError, showSuccess]);
 
   // Handle delete authorization
   const handleDeleteAuthorization = useCallback(async (authorization: Authorization) => {

@@ -103,6 +103,7 @@ export interface Authorization {
   user_id: number;
   login: string;
   options?: string;
+  comment?: string;
 }
 
 export interface NewAuthorization {
@@ -110,6 +111,7 @@ export interface NewAuthorization {
   user_id: number;
   login: string;
   options?: string;
+  comment?: string;
 }
 
 // Extended types for UI
@@ -164,6 +166,7 @@ export interface AuthorizationFormData {
   user_id: number;
   login: string;
   options?: string;
+  comment?: string;
 }
 
 // Filter and search types

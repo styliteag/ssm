@@ -23,15 +23,18 @@ pub struct UserAndOptions {
     pub login: String,
     /// SSH key options
     pub options: Option<String>,
+    /// Optional comment for this authorization
+    pub comment: Option<String>,
 }
 
-impl From<(i32, String, String, Option<String>)> for UserAndOptions {
-    fn from(value: (i32, String, String, Option<String>)) -> Self {
+impl From<(i32, String, String, Option<String>, Option<String>)> for UserAndOptions {
+    fn from(value: (i32, String, String, Option<String>, Option<String>)) -> Self {
         Self {
             id: value.0,
             username: value.1,
             login: value.2,
             options: value.3,
+            comment: value.4,
         }
     }
 }
