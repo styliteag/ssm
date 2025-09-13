@@ -41,6 +41,8 @@ export interface DataTableProps<T> {
   selectedItems?: T[];
   onSelectionChange?: (selectedItems: T[]) => void;
   getItemId?: (item: T) => string | number;
+  // Custom row styling
+  getRowClassName?: (item: T, index: number) => string;
 }
 
 function DataTable<T extends Record<string, unknown>>({
@@ -64,6 +66,8 @@ function DataTable<T extends Record<string, unknown>>({
   selectedItems = [],
   onSelectionChange,
   getItemId = (item: T) => item.id as string | number,
+  // Custom row styling
+  getRowClassName,
 }: DataTableProps<T>) {
   const [search, setSearch] = useState(initialSearch);
   const [sortConfig, setSortConfig] = useState<SortConfig<T> | null>(initialSort || null);
@@ -76,15 +80,21 @@ function DataTable<T extends Record<string, unknown>>({
     if (!searchable || !search.trim()) return data;
 
     const searchLower = search.toLowerCase();
-    const searchableColumns = columns.filter(col => col.searchable !== false);
 
-    return data.filter(item =>
-      searchableColumns.some(column => {
+    return data.filter(item => {
+      // If item has a combined_search field, use it for comprehensive search
+      if (item.combined_search && typeof item.combined_search === 'string') {
+        return item.combined_search.includes(searchLower);
+      }
+
+      // Otherwise, search through individual searchable columns
+      const searchableColumns = columns.filter(col => col.searchable !== false);
+      return searchableColumns.some(column => {
         if (column.key === 'actions') return false;
         const value = item[column.key];
         return value && value.toString().toLowerCase().includes(searchLower);
-      })
-    );
+      });
+    });
   }, [data, search, searchable, columns]);
 
   // Sort data
@@ -344,7 +354,8 @@ function DataTable<T extends Record<string, unknown>>({
                     className={cn(
                       'transition-colors',
                       onRowClick && 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800',
-                      selectable && isItemSelected(item) && 'bg-blue-50 dark:bg-blue-900/20'
+                      selectable && isItemSelected(item) && 'bg-blue-50 dark:bg-blue-900/20',
+                      getRowClassName?.(item, index)
                     )}
                     onClick={(e) => {
                       // Don't trigger row click if clicking on checkbox

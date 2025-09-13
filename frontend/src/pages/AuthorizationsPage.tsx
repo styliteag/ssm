@@ -278,12 +278,6 @@ const AuthorizationsPage: React.FC = () => {
     setShowEditModal(true);
   }, []);
 
-  // Handle test access (placeholder)
-  const handleTestAccess = useCallback(async (authorization: Authorization) => {
-    console.log('Testing access for:', authorization);
-    // TODO: Implement SSH connection test
-  }, []);
-
   // Export functionality
   const handleExport = useCallback(() => {
     const csvContent = [
@@ -429,7 +423,6 @@ const AuthorizationsPage: React.FC = () => {
           hosts={hosts}
           onEdit={handleEditClick}
           onDelete={handleDeleteAuthorization}
-          onTestAccess={handleTestAccess}
           loading={refreshing}
         />
       )}
