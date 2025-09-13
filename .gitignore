@@ -13,3 +13,4 @@ __pycache__/
 docker/data/
 cookies.txt
 .DS_Store
+*.bak
