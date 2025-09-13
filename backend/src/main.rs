@@ -13,6 +13,8 @@ use config::Config;
 use croner::Cron;
 use log::{error, info};
 use serde::Deserialize;
+use rand::{Rng, thread_rng};
+use rand::distributions::Alphanumeric;
 use ssh::{CachingSshClient, SshClient};
 
 use diesel::r2d2::{ConnectionManager, CustomizeConnection, Pool};
@@ -161,11 +163,22 @@ fn default_htpasswd_path() -> PathBuf {
 }
 
 fn default_private_key_file() -> PathBuf {
-    PathBuf::from("/app/id")
+    PathBuf::from("keys/id_ssm")
+}
+
+fn default_ssh_config() -> SshConfig {
+    SshConfig {
+        check_schedule: None,
+        update_schedule: None,
+        private_key_file: default_private_key_file(),
+        private_key_passphrase: None,
+        timeout: default_timeout(),
+    }
 }
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct Configuration {
+    #[serde(default = "default_ssh_config")]
     ssh: SshConfig,
     #[serde(default = "default_database_url")]
     database_url: String,
@@ -198,23 +211,40 @@ fn get_configuration() -> (Configuration, String) {
         )
     };
 
-    (
-        config_builder
-            .add_source(config::Environment::default())
-            .build()
-            .unwrap_or_else(|e| {
-                eprintln!("Error while reading configuration source: {e}");
-                logging::AppLogger::log_config_error(&format!("Error while reading configuration source: {e}"), true);
-                std::process::exit(3);
-            })
-            .try_deserialize()
-            .unwrap_or_else(|e| {
-                eprintln!("Error while parsing configuration: {e}");
-                logging::AppLogger::log_config_error(&format!("Error while parsing configuration: {e}"), true);
-                std::process::exit(3);
-            }),
-        config_source,
-    )
+    // config:Environment::default() is used to override the configuration file with environment variables
+    // Environment variables take precedence over config file settings
+    // This is useful for Docker Compose, where we can set environment variables to override the configuration file
+    // For example, we can set the DATABASE_URL, HTPASSWD, SSH_KEY, and SESSION_KEY environment variables to override the configuration file
+    // This is also useful for development, where we can set the environment variables to override the configuration file
+    // This is also useful for production, where we can set the environment variables to override the configuration file
+    // This is also useful for testing, where we can set the environment variables to override the configuration file
+    let mut config: Configuration = config_builder
+        .add_source(config::Environment::default())
+        .build()
+        .unwrap_or_else(|e| {
+            eprintln!("Error while reading configuration source: {e}");
+            logging::AppLogger::log_config_error(&format!("Error while reading configuration source: {e}"), true);
+            std::process::exit(3);
+        })
+        .try_deserialize()
+        .unwrap_or_else(|e| {
+            eprintln!("Error while parsing configuration: {e}");
+            logging::AppLogger::log_config_error(&format!("Error while parsing configuration: {e}"), true);
+            std::process::exit(3);
+        });
+
+    // Override with specific environment variables that don't follow config crate naming conventions
+    if let Ok(htpasswd_path) = std::env::var("HTPASSWD") {
+        config.htpasswd_path = std::path::PathBuf::from(htpasswd_path);
+    }
+    if let Ok(ssh_key_path) = std::env::var("SSH_KEY") {
+        config.ssh.private_key_file = std::path::PathBuf::from(ssh_key_path);
+    }
+    if let Ok(session_key) = std::env::var("SESSION_KEY") {
+        config.session_key = session_key;
+    }
+
+    (config, config_source)
 }
 
 #[tokio::main]
@@ -234,12 +264,55 @@ async fn main() -> Result<(), std::io::Error> {
     pretty_env_logger::init();
     logging::AppLogger::log_config_loaded(&config_source, 0); // We don't count keys loaded easily, so using 0
 
+    // Log the resolved configuration paths
+    info!("Using database: {}", configuration.database_url);
+    info!("Using htpasswd file: {}", configuration.htpasswd_path.display());
+    info!("Using SSH key file: {}", configuration.ssh.private_key_file.display());
+    info!("Using log level: {}", configuration.loglevel);
+
     if !configuration.htpasswd_path.exists() {
-        error!(
-            "htpasswd file does not exist: {:?}",
-            configuration.htpasswd_path
-        );
-        std::process::exit(3);
+        info!("htpasswd file not found, creating default admin user...");
+
+        // Create directory if it doesn't exist
+        if let Some(parent) = configuration.htpasswd_path.parent() {
+            if let Err(e) = std::fs::create_dir_all(parent) {
+                error!("Failed to create directory for htpasswd file: {}", e);
+                std::process::exit(3);
+            }
+        }
+
+        // Generate a random password
+        let password: String = thread_rng()
+            .sample_iter(&Alphanumeric)
+            .take(16)
+            .map(char::from)
+            .collect();
+
+        // Hash the password with bcrypt
+        let hashed_password = bcrypt::hash(&password, bcrypt::DEFAULT_COST)
+            .expect("Failed to hash password");
+
+        // Write to htpasswd file in Apache format
+        let htpasswd_content = format!("admin:{}\n", hashed_password);
+        if let Err(e) = std::fs::write(&configuration.htpasswd_path, htpasswd_content) {
+            error!("Failed to create htpasswd file: {}", e);
+            std::process::exit(3);
+        }
+
+        println!("╔═══════════════════════════════════════════════════════════════╗");
+        println!("║                          🚀 SSM SERVER STARTUP                ║");
+        println!("╠═══════════════════════════════════════════════════════════════╣");
+        println!("║ Default admin user created!                                   ║");
+        println!("║                                                               ║");
+        println!("║ Username: admin                                               ║");
+        println!("║ Password: {:<51} ║", password);
+        println!("║                                                               ║");
+        println!("║ Save this password securely!                                  ║");
+        println!("║ You can change it later using: htpasswd -B .htpasswd admin    ║");
+        println!("╚═══════════════════════════════════════════════════════════════╝");
+        println!();
+
+        info!("Created default admin user in htpasswd file: {:?}", configuration.htpasswd_path);
     }
 
     let database_url = configuration.database_url.clone();
@@ -264,6 +337,29 @@ async fn main() -> Result<(), std::io::Error> {
     }
 
     let key_path = &configuration.ssh.private_key_file;
+
+    if !key_path.exists() {
+        eprintln!("╔══════════════════════════════════════════════════════════════════════════════╗");
+        eprintln!("║                          🔑 SSH KEY REQUIRED                                 ║");
+        eprintln!("╠══════════════════════════════════════════════════════════════════════════════╣");
+        eprintln!("║ SSH private key file not found: {:<44} ║", key_path.display());
+        eprintln!("║                                                                              ║");
+        eprintln!("║ Please generate an SSH key pair and ensure the private key file exists,      ║");
+        eprintln!("║ or set the SSH_KEY environment variable to point to your private key.        ║");
+        eprintln!("║                                                                              ║");
+        eprintln!("║ To generate an ed25519 SSH key pair:                                         ║");
+        eprintln!("");
+        eprintln!("mkdir -p {}", key_path.parent().unwrap().display());
+        eprintln!("ssh-keygen -t ed25519 -f {} -C 'ssm-server'", key_path.display());
+        eprintln!("chmod 600 {}", key_path.display());
+        eprintln!("chmod 644 {}.pub", key_path.display());
+        eprintln!("");
+        eprintln!("║                                                                              ║");
+        eprintln!("║ Or set the SSH_KEY environment variable:                                     ║");
+        eprintln!("║   SSH_KEY=/path/to/your/private/key cargo run                                ║");
+        eprintln!("╚══════════════════════════════════════════════════════════════════════════════╝");
+        std::process::exit(1);
+    }
 
     let key = load_secret_key(
         key_path,

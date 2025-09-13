@@ -194,9 +194,10 @@ The API uses singular resource names in the URL paths:
 - All tests use mock SSH client - no real SSH connections during testing
 
 ### Configuration
-- Main config: `config.toml` (database URL, SSH private key, server settings)
-- Authentication: `.htpasswd` file for user credentials (bcrypt encrypted)
-- Environment variables: `DATABASE_URL`, `RUST_LOG`, `CONFIG`, `VITE_API_URL`, `SESSION_KEY`
+- Main config: `config.toml` (optional - database URL, SSH private key, server settings)
+- Authentication: `.htpasswd` file for user credentials (bcrypt encrypted, auto-created if missing)
+- Environment variables: `DATABASE_URL`, `HTPASSWD`, `SSH_KEY`, `SESSION_KEY` (take precedence over config file), `RUST_LOG`, `CONFIG`, `VITE_API_URL`
+- SSH key requirement: Server requires valid SSH private key file (provides generation instructions if missing, or use `SSH_KEY` env var)
 - Security: All API endpoints require authentication except `/api/auth/login` and `/api/auth/logout`
 
 ## Critical Frontend/Backend Data Type Compatibility Issues

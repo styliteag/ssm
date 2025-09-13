@@ -196,11 +196,13 @@ The multi-stage build process:
 
 ## ⚙️ Configuration
 
-### Main Configuration (`config.toml`)
+### Main Configuration (`config.toml`) - Optional
+
+The `config.toml` file is optional. If it doesn't exist, the server will use environment variables and built-in defaults.
 
 ```toml
-# Database URL (SQLite default)
-database_url = "sqlite://ssm.db"
+# Database URL (SQLite default) - can be overridden by DATABASE_URL env var
+# database_url = "sqlite://ssm.db"
 
 # API server configuration
 listen = "127.0.0.1"
@@ -209,25 +211,61 @@ port = 8000
 # Logging level
 loglevel = "info"
 
+# htpasswd path - can be overridden by HTPASSWD env var
+# htpasswd_path = ".htpasswd"
+
 [ssh]
-# Path to private key for SSH connections
-private_key_file = "/path/to/ssh/private/key"
+# Path to private key for SSH connections - can be overridden by SSH_KEY env var
+# private_key_file = "/path/to/your/ssh/private/key"
 
 # Optional passphrase
-private_key_passphrase = "optional_passphrase"
+# private_key_passphrase = "your_passphrase_here"
 ```
 
 ### Environment Variables
 
-- `CONFIG` - Path to config file (default: `./config.toml`)
-- `DATABASE_URL` - Database connection string
+- `CONFIG` - Path to config file (default: `./config/config.toml`)
+- `DATABASE_URL`, `HTPASSWD`, `SSH_KEY`, `SESSION_KEY` - Take precedence over config file settings
 - `RUST_LOG` - Logging level (overrides config)
 - `VITE_API_URL` - Frontend API URL (for production builds)
-- `SESSION_KEY` - Secure session signing key (production required)
+
+### SSH Key Setup
+
+**🔑 IMPORTANT**: The server requires a valid SSH private key file to function. The default path is `keys/id_ssm`. If no `config.toml` exists, set the `SSH_KEY` environment variable:
+
+```bash
+SSH_KEY=/path/to/your/private/key cargo run
+```
+
+The server will provide detailed instructions for generating an SSH key pair if the file is missing.
+
+**Generating SSH Keys:**
+
+For ed25519 keys (recommended):
+```bash
+# Generate key pair in the default location
+ssh-keygen -t ed25519 -f keys/id_ssm -C 'ssm-server'
+
+# Set proper permissions
+chmod 600 keys/id_ssm
+chmod 644 keys/id_ssm.pub
+```
+
+For RSA keys (alternative):
+```bash
+ssh-keygen -t rsa -b 4096 -f keys/id_ssm -C 'ssm-server'
+```
+
+**Docker Setup:**
+In Docker, the SSH key should be placed at `/app/keys/id_ssm` (mounted from `docker/data/keys/id_ssm`).
 
 ### Authentication Setup
 
 **🔐 IMPORTANT**: Authentication is required for all API endpoints except login/logout.
+
+**Auto-creation**: If no htpasswd file exists when the server starts, it will automatically create one with a default `admin` user and a randomly generated password (displayed on console).
+
+**Manual creation**: You can also create the htpasswd file manually:
 
 ```bash
 # Create htpasswd file with bcrypt encryption

@@ -12,17 +12,24 @@ services:
     volumes:      
       # Database persistence
       - ./data/db:/app/db
-      # Configuration files
-      - ./data/config.toml:/app/config.toml:ro
-      - ./data/.htpasswd:/app/.htpasswd:ro
-      # SSH keys (read-only for security)
-      - ./data/keys:/app/keys:ro
+      # Configuration files config.toml and .htpasswd
+      - ./data/config:/app/config
+      - ./data/keys:/app/keys
       # Logs (optional)
       - ./data/logs:/app/logs
     environment:
-      - CONFIG=/app/config.toml
-      - DATABASE_URL=sqlite:///app/db/ssm.db
-      - RUST_LOG=info
+      # Configuration file path (optional - server works without it)
+      #- CONFIG=config/config.toml
+      # Database connection string (takes precedence over config file default is sqlite://ssm.db)
+      - DATABASE_URL=sqlite://./db/ssm.db
+      # SSH private key file path (shows generation instructions if missing)
+      # - SSH_KEY=keys/id_ssm
+      # htpasswd file path (auto-created if missing with admin/random password)
+      #- HTPASSWD=config/.htpasswd
+      # Session key (leave unset for auto-generation)
+      # - SESSION_KEY=your-secure-session-key-here
+      # Logging level (overrides config file)
+      #- RUST_LOG=info
     networks:
       - ssm-network
     restart: unless-stopped

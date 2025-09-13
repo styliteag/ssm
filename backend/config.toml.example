@@ -1,11 +1,20 @@
 # SSH Key Manager Configuration Example
 # Copy this file to config.toml and update with your actual values
+#
+# NOTE: All settings below are optional. Environment variables take precedence:
+# - DATABASE_URL (overrides database_url)
+# - HTPASSWD (overrides htpasswd_path)
+# - SSH_KEY (overrides private_key_file)
+# - SESSION_KEY (overrides session_key)
+#
+# If no config.toml exists, the server will use environment variables and defaults.
 
 # Database configuration
 # SQLite database connection string
 # For development, use a local SQLite file
 # For production, consider using PostgreSQL or MySQL
-database_url = "sqlite://ssm.db"
+# Default: sqlite://ssm.db (if DATABASE_URL not set)
+# database_url = "sqlite://ssm.db"
 
 # Port for the web server to listen on
 port = 8000
@@ -13,14 +22,16 @@ port = 8000
 # Session configuration
 # Generate a new session key for production using: openssl rand -hex 32
 # This key is used to encrypt session cookies
-session_key = "YOUR_SESSION_KEY_HERE_32_CHARACTERS_LONG"
+# Default: randomly generated (if SESSION_KEY not set)
+# session_key = "YOUR_SESSION_KEY_HERE_32_CHARACTERS_LONG"
 
 # Log level: debug, info, warn, error
 loglevel = "info"
 
 # Path to htpasswd file for user authentication
-# Create this file using: htpasswd -c .htpasswd username
-htpasswd_path = ".htpasswd"
+# If this file doesn't exist, the server will auto-create it with admin/random password
+# Default: config/.htpasswd (if HTPASSWD not set)
+# htpasswd_path = ".htpasswd"
 
 # Number of worker threads (NOTE: This is not currently used by the application)
 # For development: 4
@@ -29,9 +40,9 @@ htpasswd_path = ".htpasswd"
 
 [ssh]
 # Path to your SSH private key for authenticating with managed hosts
-# This should be an absolute path to your SSH private key
-# Example: "/home/user/.ssh/id_rsa" or "C:\Users\user\.ssh\id_rsa"
-private_key_file = "/path/to/your/ssh/private/key"
+# If this file doesn't exist, the server will show generation instructions
+# Default: keys/id_ssm (if SSH_KEY not set)
+# private_key_file = "/path/to/your/ssh/private/key"
 
 # Optional: private key passphrase if your key is encrypted
 # Uncomment and set if your SSH key requires a passphrase
@@ -42,15 +53,3 @@ timeout = 30
 
 # NOTE: The sections below are not currently used by the application
 # They are kept for documentation purposes
-
-[security]
-# CORS settings for web frontend
-# In production, restrict this to your actual frontend domain
-cors_origins = ["http://localhost:3000", "http://localhost:8080"]
-
-
-# Optional: Enable HTTPS redirect
-# https_redirect = false
-
-# Optional: Trusted proxy headers (if behind a reverse proxy)
-# trusted_proxies = ["127.0.0.1", "::1"]
