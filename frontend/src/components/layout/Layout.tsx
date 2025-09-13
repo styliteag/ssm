@@ -136,19 +136,6 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
             </button>
           </div>
-
-          {/* Logout button under user info */}
-          <div className="mt-3">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleLogout}
-              className="w-full justify-start text-gray-600 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 px-3 py-2 text-sm font-medium rounded-md transition-colors"
-              leftIcon={<LogOut size={16} />}
-            >
-              Logout
-            </Button>
-          </div>
         </div>
 
         <nav className="flex-1 mt-4 px-4">
@@ -176,6 +163,18 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                 </li>
               );
             })}
+            {/* Logout button moved up after Users */}
+            <li>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleLogout}
+                className="w-full justify-start text-gray-600 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 px-4 py-2 text-sm font-medium rounded-md transition-colors"
+                leftIcon={<LogOut size={18} />}
+              >
+                Logout
+              </Button>
+            </li>
           </ul>
         </nav>
       </div>
