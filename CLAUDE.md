@@ -43,6 +43,12 @@ docker-compose -f docker/compose.prod.yml up --build
 
 ## Release Process
 
+#### CHANGELOG Maintenance
+⚠️ **IMPORTANT**: Always update `CHANGELOG.md` when making commits!
+- Add new changes under `[Unreleased]` section before committing
+- Move to new version section when releasing
+- Use semantic versioning format
+
 ### Creating a New Release
 Use the automated release script to create new versions:
 
