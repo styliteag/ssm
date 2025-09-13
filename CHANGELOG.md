@@ -10,7 +10,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Comprehensive CHANGELOG.md file for tracking all changes
 - Automatic CHANGELOG.md updates in release.sh script
-- Note to self: Always document changes in CHANGELOG.md when making commits
 
 ## [0.2.17] - 2025-09-13
 
