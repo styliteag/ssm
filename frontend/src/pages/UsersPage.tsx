@@ -37,6 +37,7 @@ import type {
   User,
   PublicUserKey,
   Authorization,
+  RawAuthorizationResponse,
   Host
 } from '../types';
 
@@ -134,7 +135,7 @@ const UsersPage: React.FC = () => {
       const hostNameToId = new Map(hosts.map(h => [h.name, h.id]));
 
       // Map raw authorizations to proper Authorization objects with host_id
-      const mappedAuthorizations = (authResponse.success ? authResponse.data || [] : []).map((auth: any) => ({
+      const mappedAuthorizations = (authResponse.success ? authResponse.data || [] : []).map((auth: RawAuthorizationResponse) => ({
         id: auth.id,
         user_id: user.id, // Current user's ID
         host_id: hostNameToId.get(auth.username) || 0, // auth.username is actually hostname

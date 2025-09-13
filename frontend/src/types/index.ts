@@ -106,6 +106,15 @@ export interface Authorization {
   comment?: string;
 }
 
+// Raw authorization response from API (before mapping to proper Authorization format)
+export interface RawAuthorizationResponse {
+  id: number;
+  username: string; // This is actually the hostname
+  login: string;
+  options?: string;
+  comment?: string;
+}
+
 export interface NewAuthorization {
   host_id: number;
   user_id: number;
