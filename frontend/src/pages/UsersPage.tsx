@@ -135,7 +135,8 @@ const UsersPage: React.FC = () => {
       const hostNameToId = new Map(hosts.map(h => [h.name, h.id]));
 
       // Map raw authorizations to proper Authorization objects with host_id
-      const mappedAuthorizations = (authResponse.success ? authResponse.data || [] : []).map((auth: RawAuthorizationResponse) => ({
+      const rawAuths = (authResponse.success ? authResponse.data || [] : []) as unknown as RawAuthorizationResponse[];
+      const mappedAuthorizations = rawAuths.map((auth) => ({
         id: auth.id,
         user_id: user.id, // Current user's ID
         host_id: hostNameToId.get(auth.username) || 0, // auth.username is actually hostname
