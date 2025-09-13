@@ -20,10 +20,11 @@ show_usage() {
     echo "Usage: $0 [major|minor|patch]"
     echo ""
     echo "This script will:"
-    echo "  1. Increment the version in ./VERSION file"
-    echo "  2. Commit the version change on current branch"
-    echo "  3. Create a git tag"
-    echo "  4. Push the branch and tag to origin"
+    echo "  1. Update CHANGELOG.md (move [Unreleased] to new version)"
+    echo "  2. Increment the version in ./VERSION file"
+    echo "  3. Commit the version change on current branch"
+    echo "  4. Create a git tag"
+    echo "  5. Push the branch and tag to origin"
     echo ""
     echo "Version increment types (patch is default):"
     echo "  major: X.0.0 (breaking changes)"
@@ -99,6 +100,52 @@ check_git_status() {
     fi
     
     print_success "Git status is clean"
+}
+
+# Function to update changelog
+update_changelog() {
+    local new_version="$1"
+    local current_date=$(date +%Y-%m-%d)
+
+    print_info "Updating CHANGELOG.md..."
+
+    if [ ! -f "CHANGELOG.md" ]; then
+        print_warning "CHANGELOG.md not found, skipping changelog update"
+        return 0
+    fi
+
+    # Check if there's content in [Unreleased] section
+    if ! grep -q "## \[Unreleased\]" CHANGELOG.md; then
+        print_warning "No [Unreleased] section found in CHANGELOG.md, skipping"
+        return 0
+    fi
+
+    # Use sed to replace the [Unreleased] header with the new version
+    sed -i.bak "s/## \[Unreleased\]/## [$new_version] - $current_date/" CHANGELOG.md
+    rm -f CHANGELOG.md.bak
+
+    # Add a new [Unreleased] section at the top
+    local temp_changelog=$(mktemp)
+    echo "# Changelog" > "$temp_changelog"
+    echo "" >> "$temp_changelog"
+    echo "All notable changes to SSM (Secure SSH Manager) will be documented in this file." >> "$temp_changelog"
+    echo "" >> "$temp_changelog"
+    echo "The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)," >> "$temp_changelog"
+    echo "and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)." >> "$temp_changelog"
+    echo "" >> "$temp_changelog"
+    echo "## [Unreleased]" >> "$temp_changelog"
+    echo "" >> "$temp_changelog"
+    echo "### Added" >> "$temp_changelog"
+    echo "- " >> "$temp_changelog"
+    echo "" >> "$temp_changelog"
+
+    # Copy the rest of the changelog starting from the version we just updated
+    sed -n '/## \['"$new_version"'\]/,$p' CHANGELOG.md >> "$temp_changelog"
+
+    # Replace the original changelog
+    mv "$temp_changelog" CHANGELOG.md
+
+    print_success "CHANGELOG.md updated for version $new_version"
 }
 
 # Function to run build tests
@@ -196,9 +243,10 @@ main() {
     fi
     
     print_info "New version: $new_version"
-    
 
-    
+    # Update CHANGELOG.md
+    update_changelog "$new_version"
+
     # Update VERSION file on current branch
     local current_branch=$(git branch --show-current)
     print_info "Updating VERSION file to $new_version on $current_branch"
@@ -216,6 +264,7 @@ main() {
     # Confirm with user
     echo
     print_warning "This will:"
+    echo "  • Update CHANGELOG.md ([Unreleased] → [$new_version])"
     echo "  • Push VERSION from $current_version to $new_version on $current_branch"
     echo "  • Commit and push $current_branch with version update"
     echo "  • Create git tag: v$new_version"
@@ -231,7 +280,7 @@ main() {
    
     # Commit version changes to current branch
     print_info "Committing version changes to $current_branch"
-    git add VERSION backend/Cargo.toml backend/Cargo.lock
+    git add VERSION backend/Cargo.toml backend/Cargo.lock CHANGELOG.md
     git commit -m "chore: bump version to $new_version"
 
     # Create tag on current branch
