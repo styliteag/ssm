@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Edit, Trash2, TestTube, UserCheck, Shield, AlertTriangle } from 'lucide-react';
+import { Edit, Trash2, UserCheck, Shield, AlertTriangle } from 'lucide-react';
 import { cn } from '../utils/cn';
 import { Authorization, AuthorizationWithDetails, User, Host } from '../types';
 import DataTable, { Column } from './ui/DataTable';
@@ -23,7 +23,6 @@ interface AuthorizationListProps {
   hosts: Host[];
   onEdit: (authorization: Authorization) => void;
   onDelete: (authorization: Authorization) => void;
-  onTestAccess?: (authorization: Authorization) => void;
   loading?: boolean;
   className?: string;
 }
@@ -32,7 +31,6 @@ const AuthorizationList: React.FC<AuthorizationListProps> = ({
   authorizations,
   onEdit,
   onDelete,
-  onTestAccess,
   loading = false,
   className,
 }) => {
@@ -130,7 +128,7 @@ const AuthorizationList: React.FC<AuthorizationListProps> = ({
       ),
     },
     {
-      key: 'id',
+      key: 'status_text',
       header: 'Status',
       sortable: true,
       searchable: true,
@@ -138,7 +136,7 @@ const AuthorizationList: React.FC<AuthorizationListProps> = ({
         const userEnabled = auth.user?.enabled ?? true;
         const hasValidUser = !!auth.user;
         const hasValidHost = !!auth.host;
-        
+
         if (!hasValidUser || !hasValidHost) {
           return (
             <div className="flex items-center space-x-2">
@@ -147,7 +145,7 @@ const AuthorizationList: React.FC<AuthorizationListProps> = ({
             </div>
           );
         }
-        
+
         if (!userEnabled) {
           return (
             <div className="flex items-center space-x-2">
@@ -156,7 +154,7 @@ const AuthorizationList: React.FC<AuthorizationListProps> = ({
             </div>
           );
         }
-        
+
         return (
           <div className="flex items-center space-x-2">
             <UserCheck size={16} className="text-green-500" />
@@ -169,7 +167,7 @@ const AuthorizationList: React.FC<AuthorizationListProps> = ({
       key: 'actions',
       header: 'Actions',
       sortable: false,
-      width: '140px',
+      width: '120px',
       render: (_, auth) => (
         <div className="flex items-center space-x-1">
           <Button
@@ -180,16 +178,6 @@ const AuthorizationList: React.FC<AuthorizationListProps> = ({
             className="h-8 w-8 p-0"
             title="Edit authorization"
           />
-          {onTestAccess && (
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => onTestAccess(auth)}
-              leftIcon={<TestTube size={14} />}
-              className="h-8 w-8 p-0"
-              title="Test SSH access"
-            />
-          )}
           <Button
             size="sm"
             variant="ghost"
@@ -201,7 +189,7 @@ const AuthorizationList: React.FC<AuthorizationListProps> = ({
         </div>
       ),
     },
-  ], [onEdit, onDelete, onTestAccess]);
+  ], [onEdit, onDelete]);
 
   // Handle row selection
   const handleRowClick = (auth: EnhancedAuthorizationWithDetails) => {
@@ -310,6 +298,13 @@ const AuthorizationList: React.FC<AuthorizationListProps> = ({
         </div>
       )}
 
+      {/* Selection hint */}
+      {authorizations.length > 0 && (
+        <div className="text-xs text-gray-500 dark:text-gray-400 text-center">
+          Click rows to select multiple authorizations for bulk actions
+        </div>
+      )}
+
       {/* Data Table */}
       <DataTable
         data={enhancedData}
@@ -321,10 +316,12 @@ const AuthorizationList: React.FC<AuthorizationListProps> = ({
         pageSize={20}
         onRowClick={handleRowClick}
         emptyMessage="No authorizations found. Create some authorizations to get started."
-        searchPlaceholder="Search users, hosts, or login accounts..."
+        searchPlaceholder="Search authorizations by user, host, login, or comments..."
         className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700"
         stickyHeader={true}
         initialSort={{ key: 'user_name', direction: 'asc' }}
+        getItemId={(item) => item.id}
+        getRowClassName={(item) => selectedAuthorizations.has(item.id) ? 'bg-blue-50 dark:bg-blue-900/20' : ''}
       />
     </div>
   );
