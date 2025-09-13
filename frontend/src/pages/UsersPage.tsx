@@ -11,7 +11,8 @@ import {
   CheckCircle,
   XCircle,
   UserPlus,
-  UserMinus
+  UserMinus,
+  Split
 } from 'lucide-react';
 import {
   Card,
@@ -31,6 +32,7 @@ import { keysService } from '../services/api/keys';
 import { authorizationsService } from '../services/api/authorizations';
 import { hostsService } from '../services/api/hosts';
 import UserEditModal from '../components/UserEditModal';
+import SplitKeysModal from '../components/SplitKeysModal';
 import type {
   User,
   PublicUserKey,
@@ -68,6 +70,7 @@ const UsersPage: React.FC = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showKeysModal, setShowKeysModal] = useState(false);
   const [showAuthorizationsModal, setShowAuthorizationsModal] = useState(false);
+  const [showSplitKeysModal, setShowSplitKeysModal] = useState(false);
   
   // Form loading states
   const [submitting, setSubmitting] = useState(false);
@@ -125,11 +128,25 @@ const UsersPage: React.FC = () => {
         authorizationsService.getUserAuthorizations(user.username),
         hostsService.getAllHosts()
       ]);
-      
+
+      // Create host name to ID mapping
+      const hosts = hostsResponse.success ? hostsResponse.data || [] : [];
+      const hostNameToId = new Map(hosts.map(h => [h.name, h.id]));
+
+      // Map raw authorizations to proper Authorization objects with host_id
+      const mappedAuthorizations = (authResponse.success ? authResponse.data || [] : []).map((auth: { id: number; username: string; login: string; options?: string; comment?: string }) => ({
+        id: auth.id,
+        user_id: user.id, // Current user's ID
+        host_id: hostNameToId.get(auth.username) || 0, // auth.username is actually hostname
+        login: auth.login,
+        options: auth.options,
+        comment: auth.comment
+      }));
+
       setUserDetails({
         keys: keysResponse.success ? keysResponse.data || [] : [],
-        authorizations: authResponse.success ? authResponse.data || [] : [],
-        hosts: hostsResponse.success ? hostsResponse.data || [] : []
+        authorizations: mappedAuthorizations,
+        hosts: hosts
       });
     } catch {
       showError('Failed to load user details', 'Please try again later');
@@ -287,8 +304,8 @@ const UsersPage: React.FC = () => {
       key: 'comment',
       header: 'Comment',
       render: (comment) => (
-        <div className="text-sm text-gray-600 dark:text-gray-400 max-w-48 truncate" title={comment || ''}>
-          {comment || '—'}
+        <div className="text-sm text-gray-600 dark:text-gray-400 max-w-48 truncate" title={(comment as string) || ''}>
+          {(comment as string) || '—'}
         </div>
       )
     },
@@ -417,6 +434,21 @@ const UsersPage: React.FC = () => {
           >
             <Trash2 size={16} />
           </Button>
+          {(user as ExtendedUser).keyCount! > 1 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={async (e) => {
+                e.stopPropagation();
+                setSelectedUser(user);
+                await loadUserDetails(user);
+                setShowSplitKeysModal(true);
+              }}
+              title="Split keys to new user"
+            >
+              <Split size={16} />
+            </Button>
+          )}
         </div>
       )
     }
@@ -671,16 +703,14 @@ const UsersPage: React.FC = () => {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {userDetails?.authorizations.map((auth) => {
-                  // In the backend response, auth.username is actually the hostname
-                  const hostName = (auth as Authorization & { username: string }).username;
-                  const host = userDetails?.hosts.find(h => h.name === hostName);
+                  const host = userDetails?.hosts.find(h => h.id === auth.host_id);
                   return (
                     <div key={auth.id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-3">
                       <div className="flex items-center space-x-2 mb-2">
                         <Shield size={14} className="text-green-500" />
                         <div className="flex-1 min-w-0">
                           <div className="font-medium text-gray-900 dark:text-gray-100 text-sm truncate">
-                            {hostName || 'Unknown Host'}
+                            {host?.name || 'Unknown Host'}
                           </div>
                           {host && (
                             <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
@@ -722,6 +752,21 @@ const UsersPage: React.FC = () => {
           </div>
         )}
       </Modal>
+
+      {/* Split Keys Modal */}
+      <SplitKeysModal
+        isOpen={showSplitKeysModal}
+        onClose={() => {
+          setShowSplitKeysModal(false);
+          setSelectedUser(null);
+          setUserDetails(null);
+        }}
+        user={selectedUser}
+        userKeys={userDetails?.keys || []}
+        userAuthorizations={userDetails?.authorizations || []}
+        allHosts={userDetails?.hosts || []}
+        onUserUpdated={handleUserUpdated}
+      />
     </div>
   );
 };
