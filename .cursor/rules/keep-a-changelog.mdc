@@ -1,0 +1,9 @@
+---
+description: Keep a Changelog
+alwaysApply: true
+---
+
+- Always update the CHANGELOG.md when making significant changes.
+- The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+- The file is called CHANGELOG.md and is located in the root of the project.
+- Add new changes under `[Unreleased]` section before committing
