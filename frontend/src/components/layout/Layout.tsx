@@ -136,14 +136,27 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
             </button>
           </div>
+
+          {/* Logout button under user info */}
+          <div className="mt-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleLogout}
+              className="w-full justify-start text-gray-600 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 px-3 py-2 text-sm font-medium rounded-md transition-colors"
+              leftIcon={<LogOut size={16} />}
+            >
+              Logout
+            </Button>
+          </div>
         </div>
 
-        <nav className="flex-1 mt-4 px-4 pb-20">
+        <nav className="flex-1 mt-4 px-4">
           <ul className="space-y-2">
             {navigationItems.map((item) => {
               const IconComponent = iconComponents[item.icon as keyof typeof iconComponents];
               const isActive = location.pathname === item.path;
-              
+
               return (
                 <li key={item.path}>
                   <Link
@@ -165,19 +178,6 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             })}
           </ul>
         </nav>
-
-        {/* Logout at bottom */}
-        <div className="absolute bottom-0 left-0 right-0 p-4">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleLogout}
-            className="w-full justify-start text-gray-600 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400"
-            leftIcon={<LogOut size={16} />}
-          >
-            Logout
-          </Button>
-        </div>
       </div>
 
       {/* Main content */}
