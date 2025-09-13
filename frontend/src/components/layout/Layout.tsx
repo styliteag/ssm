@@ -163,6 +163,10 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                 </li>
               );
             })}
+            {/* Separator and spacing before logout */}
+            <li className="pt-4 pb-2">
+              <div className="border-t border-gray-200 dark:border-gray-700"></div>
+            </li>
             {/* Logout button moved up after Users */}
             <li>
               <Button
