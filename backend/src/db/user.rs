@@ -46,24 +46,32 @@ impl User {
         query_drop(delete(user::table.filter(user::username.eq(username))).execute(conn))
     }
 
-    /// Update a user's enabled status and username in the Database
+    /// Update a user's enabled status, username, and comment in the Database
     pub fn update_user(
         conn: &mut DbConnection,
         old_username: &str,
         new_username: &str,
         enabled_status: bool,
+        _comment: Option<String>,
     ) -> Result<(), String> {
+        let _ = _comment; // Mark as used
         use crate::schema::user::dsl::*;
         use diesel::prelude::*;
 
-        // Update username and enabled status
-        diesel::update(user)
+        // Update username, enabled status, and comment
+        let update_result = diesel::update(user)
             .filter(username.eq(old_username))
-            .set((username.eq(new_username), enabled.eq(enabled_status)))
-            .execute(conn)
-            .map_err(|e| e.to_string())?;
+            .set((
+                username.eq(new_username),
+                enabled.eq(enabled_status),
+                comment.eq(_comment)
+            ))
+            .execute(conn);
 
-        Ok(())
+        match update_result {
+            Ok(_) => Ok(()),
+            Err(e) => Err(e.to_string()),
+        }
     }
 
     /// Find all hosts this user is authorized on

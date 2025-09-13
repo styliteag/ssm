@@ -41,7 +41,7 @@ The auto-generated documentation covers all API endpoints:
 - `POST /api/host/{id}/add_hostkey` - Add host SSH key
 - `POST /api/host/{name}/set_authorized_keys` - Set authorized keys
 
-**Note**: Setting `disabled: true` on a host prevents all SSH connections, polling, and sync operations.
+**Note**: Setting `disabled: true` on a host prevents all SSH connections, polling, and sync operations. The `comment` field allows adding optional notes to hosts.
 
 ### User Management (`/api/user/*`)
 - `GET /api/user` - List all users
@@ -54,10 +54,16 @@ The auto-generated documentation covers all API endpoints:
 - `POST /api/user/assign_key` - Assign SSH key to user
 - `POST /api/user/add_key` - Preview SSH key before assignment
 
+**Note**: The `comment` field allows adding optional notes to users. Usernames can now include "@" characters for email-style usernames.
+
 ### SSH Key Management (`/api/key/*`)
 - `GET /api/key` - List all SSH keys
 - `DELETE /api/key/{id}` - Delete SSH key
-- `PUT /api/key/{id}/comment` - Update key comment
+- `PUT /api/key/{id}/comment` - Update key name and/or extra comment
+
+**Note**: SSH keys now have two comment fields:
+- `key_name`: The primary name/identifier for the key (formerly "comment")
+- `extra_comment`: Additional notes about the key
 
 ### Authorization Management (`/api/authorization/*`)
 - `POST /api/authorization/dialog_data` - Get authorization dialog data
@@ -243,7 +249,8 @@ Content-Type: application/json
   "address": "192.168.1.100",
   "port": 22,
   "username": "deploy",
-  "disabled": false  # Optional: Set to true to disable SSH connections
+  "disabled": false,  # Optional: Set to true to disable SSH connections
+  "comment": "Production web server"  # Optional: Add notes about the host
 }
 
 # Update host
@@ -255,7 +262,8 @@ Content-Type: application/json
   "address": "192.168.1.100",
   "port": 22,
   "username": "deploy",
-  "disabled": true  # Disable host to prevent SSH connections
+  "disabled": true,  # Disable host to prevent SSH connections
+  "comment": "Production web server - Under maintenance"  # Update host notes
 }
 
 # Delete host
@@ -290,8 +298,9 @@ POST /api/user
 Content-Type: application/json
 
 {
-  "username": "john.doe",
-  "enabled": true
+  "username": "john.doe@example.com",
+  "enabled": true,
+  "comment": "Developer account"
 }
 ```
 
@@ -311,12 +320,13 @@ curl -b cookies.txt http://localhost:8000/api/key
 # Delete key
 DELETE /api/key/{id}
 
-# Update key comment
+# Update key name and/or extra comment
 PUT /api/key/{id}/comment
 Content-Type: application/json
 
 {
-  "comment": "Updated comment"
+  "name": "Updated key name",
+  "extra_comment": "Additional notes about this key"
 }
 ```
 
@@ -368,7 +378,8 @@ curl -X POST http://localhost:8000/api/host \
     "address": "192.168.1.100",
     "port": 22,
     "username": "ubuntu",
-    "disabled": false
+    "disabled": false,
+    "comment": "Production web server"
   }'
 
 # Get host details
@@ -387,7 +398,7 @@ curl -X GET "http://localhost:8000/api/host/web-server-01/logins?force_update=tr
 curl -X POST http://localhost:8000/api/user \
   -H "Content-Type: application/json" \
   -b cookies.txt \
-  -d '{"username": "john.doe"}'
+  -d '{"username": "john.doe@example.com", "comment": "Developer account"}'
 
 # Assign SSH key to user
 curl -X POST http://localhost:8000/api/user/assign_key \
@@ -397,11 +408,12 @@ curl -X POST http://localhost:8000/api/user/assign_key \
     "user_id": 1,
     "key_type": "ssh-rsa",
     "key_base64": "AAAAB3NzaC1yc2EAAAADAQABAAABAQ...",
-    "key_comment": "john@laptop"
+    "key_name": "john@laptop",
+    "extra_comment": "Primary laptop key"
   }'
 
 # Get user's SSH keys
-curl -X GET http://localhost:8000/api/user/john.doe/keys \
+curl -X GET "http://localhost:8000/api/user/john.doe@example.com/keys" \
   -b cookies.txt
 ```
 

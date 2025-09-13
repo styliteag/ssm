@@ -54,6 +54,7 @@ export interface Host {
   connection_error?: string;
   authorizations: Array<{ id: number; username: string; login: string; options?: string }>;
   disabled: boolean;
+  comment?: string;
 }
 
 export interface NewHost {
@@ -64,30 +65,35 @@ export interface NewHost {
   key_fingerprint: string;
   jump_via?: number;
   disabled?: boolean;
+  comment?: string;
 }
 
 export interface User {
   id: number;
   username: string;
   enabled: boolean;
+  comment?: string;
 }
 
 export interface NewUser {
   username: string;
+  comment?: string;
 }
 
 export interface PublicUserKey {
   id: number;
   key_type: string;
   key_base64: string;
-  comment?: string;
+  key_name?: string;
+  extra_comment?: string;
   user_id: number;
 }
 
 export interface NewPublicUserKey {
   key_type: string;
   key_base64: string;
-  comment?: string;
+  key_name?: string;
+  extra_comment?: string;
   user_id: number;
 }
 
@@ -137,17 +143,20 @@ export interface HostFormData {
   key_fingerprint?: string;
   jump_via?: string | number;
   disabled?: boolean;
+  comment?: string;
 }
 
 export interface UserFormData {
   username: string;
   enabled?: boolean;
+  comment?: string;
 }
 
 export interface KeyFormData {
   key_type: string;
   key_base64: string;
-  comment?: string;
+  key_name?: string;
+  extra_comment?: string;
 }
 
 export interface AuthorizationFormData {

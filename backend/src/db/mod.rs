@@ -9,7 +9,7 @@ use utoipa::ToSchema;
 use crate::{models::PublicUserKey, ssh::AuthorizedKey};
 
 mod host;
-mod key;
+pub mod key;
 mod user;
 
 /// User authorization information with SSH options
@@ -60,7 +60,7 @@ impl From<AllowedUserOnHost> for AuthorizedKey {
             algorithm: Algorithm::from_str(value.key.key_type.as_str())
                 .expect("Key algorithm in database is invalid"),
             base64: value.key.key_base64,
-            comment: value.key.comment,
+            comment: value.key.name,
         }
     }
 }

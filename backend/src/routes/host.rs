@@ -53,6 +53,7 @@ pub struct HostResponse {
     connection_error: Option<String>,
     authorizations: Vec<UserAndOptions>,
     disabled: bool,
+    comment: Option<String>,
 }
 
 impl From<Host> for HostResponse {
@@ -70,6 +71,7 @@ impl From<Host> for HostResponse {
             connection_error: None,
             authorizations: Vec::new(),
             disabled: host.disabled,
+            comment: host.comment,
         }
     }
 }
@@ -296,6 +298,7 @@ pub struct CreateHostRequest {
     jump_via: Option<i32>,
     #[serde(default)]
     disabled: bool,
+    comment: Option<String>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -481,12 +484,13 @@ async fn create_host(
         key_fingerprint: Some(key_fingerprint.clone()),
         jump_via: jumphost,
         disabled: json.disabled,
+        comment: json.comment.clone(),
     };
     let res = web::block(move || Host::add_host(&mut conn.get().unwrap(), &new_host)).await?;
 
     match res {
         Ok(id) => match ssh_client.install_script_on_host(id).await {
-            Ok(()) => Ok(HttpResponse::Created().json(ApiResponse::success_with_message(
+            Ok(()) =>             Ok(HttpResponse::Created().json(ApiResponse::success_with_message(
                 HostResponse::from(Host {
                     id,
                     name: json.name.clone(),
@@ -496,6 +500,7 @@ async fn create_host(
                     key_fingerprint: Some(key_fingerprint.clone()),
                     jump_via: jumphost,
                     disabled: json.disabled,
+                    comment: json.comment.clone(),
                 }),
                 "Host created successfully".to_string(),
             ))),
@@ -867,6 +872,8 @@ pub struct UpdateHostRequest {
     jump_via: Option<i32>,
     #[serde(default)]
     disabled: bool,
+    #[serde(deserialize_with = "empty_string_as_none")]
+    comment: Option<String>,
 }
 
 /// Update a host
@@ -901,6 +908,7 @@ async fn update_host(
         json.key_fingerprint.clone(),
         json.jump_via,
         json.disabled,
+        json.comment.clone(),
     ) {
         Ok(()) => {
             // Invalidate cache for both old and new host names (in case of rename)

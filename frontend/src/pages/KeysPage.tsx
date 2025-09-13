@@ -84,9 +84,15 @@ const KeysPage: React.FC = () => {
   const [showImportModal, setShowImportModal] = useState(false);
   const [showUserEditModal, setShowUserEditModal] = useState(false);
   
-  // Edit state for inline comment editing
-  const [editingComment, setEditingComment] = useState(false);
-  const [commentValue, setCommentValue] = useState('');
+  // Edit state for inline key name and comment editing
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [editingKeyName, setEditingKeyName] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [editingExtraComment, setEditingExtraComment] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [keyNameValue, setKeyNameValue] = useState('');
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [extraCommentValue, setExtraCommentValue] = useState('');
   
   // Form loading states
   const [submitting, setSubmitting] = useState(false);
@@ -210,7 +216,8 @@ const KeysPage: React.FC = () => {
     return {
       key_type: parts[0],
       key_base64: parts[1],
-      comment: parts.slice(2).join(' ') || undefined
+      key_name: parts.slice(2).join(' ') || undefined,
+      extra_comment: undefined
     };
   };
 
@@ -226,7 +233,7 @@ const KeysPage: React.FC = () => {
 
   // Get full SSH key text
   const getFullKeyText = (key: ExtendedKey) => {
-    return `${key.key_type} ${key.key_base64}${key.comment ? ' ' + key.comment : ''}`;
+    return `${key.key_type} ${key.key_base64}${key.key_name ? ' ' + key.key_name : ''}`;
   };
 
   // Handle key creation
@@ -247,12 +254,14 @@ const KeysPage: React.FC = () => {
       }
 
       const formDataTyped = formData as Record<string, unknown>;
-      const comment = (formDataTyped.comment as string) || keyData.comment;
+      const keyName = (formDataTyped.key_name as string) || keyData.key_name;
+      const extraComment = (formDataTyped.extra_comment as string) || '';
       const keyPayload = {
         user_id: Number(formDataTyped.userId),
         key_type: keyData.key_type,
         key_base64: keyData.key_base64,
-        key_comment: comment && comment.trim() !== '' ? comment : null
+        key_name: keyName && keyName.trim() !== '' ? keyName : null,
+        extra_comment: extraComment && extraComment.trim() !== '' ? extraComment : null
       };
       
       console.log('Sending key data:', keyPayload);
@@ -492,13 +501,20 @@ const KeysPage: React.FC = () => {
       ),
     },
     {
-      key: 'comment',
-      header: 'Comment',
+      key: 'key_name',
+      header: 'Key Name',
       searchable: true,
-      render: (value: unknown) => (
-        <span className="text-gray-600 dark:text-gray-400 max-w-xs truncate">
-          {(value as string) || 'No comment'}
-        </span>
+      render: (value: unknown, key: ExtendedKey) => (
+        <div className="text-gray-600 dark:text-gray-400 max-w-xs">
+          <div className="truncate">
+            <span className="font-medium">Name:</span> {(value as string) || '—'}
+          </div>
+          {key.extra_comment && (
+            <div className="truncate text-xs mt-1">
+              <span className="font-medium">Comment:</span> {key.extra_comment}
+            </div>
+          )}
+        </div>
       ),
     },
     {
@@ -612,11 +628,18 @@ const KeysPage: React.FC = () => {
       }
     },
     {
-      name: 'comment',
-      label: 'Comment (Optional)',
+      name: 'key_name',
+      label: 'Key Name (Optional)',
       type: 'text',
-      placeholder: 'Optional description for this key',
-      helperText: 'Leave empty to use the comment from the key itself',
+      placeholder: 'Optional name for this key',
+      helperText: 'Leave empty to use the name from the key itself',
+    },
+    {
+      name: 'extra_comment',
+      label: 'Extra Comment (Optional)',
+      type: 'text',
+      placeholder: 'Additional notes about this key',
+      helperText: 'Additional comments or notes about this SSH key',
     },
   ];
 
@@ -879,12 +902,14 @@ const KeysPage: React.FC = () => {
             data={filteredKeys}
             columns={columns}
             loading={loading}
-            searchPlaceholder="Search keys by user, comment, or type..."
+            searchPlaceholder="Search keys by user, name, comment, or type..."
             emptyMessage="No SSH keys found"
             onRowClick={(key) => {
               setSelectedKey(key);
-              setCommentValue(key.comment || '');
-              setEditingComment(false);
+              setKeyNameValue(key.key_name || '');
+              setExtraCommentValue(key.extra_comment || '');
+              setEditingKeyName(false);
+              setEditingExtraComment(false);
               loadKeyDetails(key.id);
               setShowViewModal(true);
             }}
@@ -941,9 +966,15 @@ const KeysPage: React.FC = () => {
                   <span className="text-sm text-gray-900 dark:text-gray-100">{selectedKey.username || 'Unassigned'}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Comment:</span>
-                  <span className="text-sm text-gray-900 dark:text-gray-100">{selectedKey.comment || 'No comment'}</span>
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Key Name:</span>
+                  <span className="text-sm text-gray-900 dark:text-gray-100">{selectedKey.key_name || '—'}</span>
                 </div>
+                {selectedKey.extra_comment && (
+                  <div className="flex justify-between">
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Extra Comment:</span>
+                    <span className="text-sm text-gray-900 dark:text-gray-100">{selectedKey.extra_comment}</span>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Host Access:</span>
                   <span className="text-sm text-gray-900 dark:text-gray-100">{selectedKey.hostCount || 0} hosts</span>

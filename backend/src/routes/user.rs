@@ -35,6 +35,7 @@ pub struct UserResponse {
     pub id: i32,
     pub username: String,
     pub enabled: bool,
+    pub comment: Option<String>,
 }
 
 impl From<User> for UserResponse {
@@ -43,6 +44,7 @@ impl From<User> for UserResponse {
             id: user.id,
             username: user.username,
             enabled: user.enabled,
+            comment: user.comment,
         }
     }
 }
@@ -179,7 +181,8 @@ pub struct UserKeyResponse {
     pub id: i32,
     pub key_type: String,
     pub key_base64: String,
-    pub key_comment: Option<String>,
+    pub key_name: Option<String>,
+    pub extra_comment: Option<String>,
     pub fingerprint: Option<String>,
 }
 
@@ -230,7 +233,8 @@ async fn get_user_keys(
                         id: key.id,
                         key_type: key.key_type,
                         key_base64: key.key_base64,
-                        key_comment: key.comment,
+                        key_name: key.name,
+                        extra_comment: key.extra_comment,
                         fingerprint,
                     }
                 })
@@ -286,7 +290,8 @@ pub struct AssignKeyRequest {
     user_id: i32,
     key_type: String,
     key_base64: String,
-    key_comment: Option<String>,
+    key_name: Option<String>,
+    extra_comment: Option<String>,
 }
 
 /// Assign an SSH key to a user
@@ -322,7 +327,8 @@ async fn assign_key_to_user(
     let new_key = NewPublicUserKey::new(
         algorithm,
         json.key_base64.clone(),
-        json.key_comment.clone(),
+        json.key_name.clone(),
+        json.extra_comment.clone(),
         json.user_id,
     );
 
@@ -338,6 +344,8 @@ async fn assign_key_to_user(
 pub struct UpdateUserRequest {
     username: String,
     enabled: bool,
+    #[serde(deserialize_with = "empty_string_as_none")]
+    comment: Option<String>,
 }
 
 /// Update a user's information
@@ -370,6 +378,7 @@ async fn update_user(
         &old_username,
         &json.username,
         json.enabled,
+        json.comment.clone(),
     ) {
         Ok(_) => Ok(HttpResponse::Ok().json(ApiResponse::success_message("User updated successfully".to_string()))),
         Err(error) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error))),
@@ -397,4 +406,17 @@ async fn add_key_dialog(json: Json<SshPublicKey>) -> Result<impl Responder> {
         key: json.into_inner(),
         suggested_action: "Assign this key to a user".to_string(),
     })))
+}
+
+// Custom deserialization to treat empty strings as None
+fn empty_string_as_none<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    if s.trim().is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(s))
+    }
 }

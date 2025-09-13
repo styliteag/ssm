@@ -34,7 +34,7 @@ export const UserEditModal: React.FC<UserEditModalProps> = ({
       validation: {
         minLength: 2,
         maxLength: 50,
-        pattern: /^[a-zA-Z0-9\-_.]+$/,
+        pattern: /^[a-zA-Z0-9\-_.@]+$/,
         custom: (value: unknown) => {
           // Only check for duplicates if username is being changed
           if (user && (value as string) === user.username) return null;
@@ -54,6 +54,13 @@ export const UserEditModal: React.FC<UserEditModalProps> = ({
         { value: 'true', label: 'Enabled (Active)' },
         { value: 'false', label: 'Disabled (Inactive)' }
       ]
+    },
+    {
+      name: 'comment',
+      label: 'Comment',
+      type: 'text',
+      placeholder: 'Optional comment about this user',
+      helperText: 'Add any notes or comments about this user'
     }
   ];
 
@@ -65,7 +72,8 @@ export const UserEditModal: React.FC<UserEditModalProps> = ({
       setSubmitting(true);
       const userData = {
         username: values.username as string,
-        enabled: values.enabled === 'true'
+        enabled: values.enabled === 'true',
+        comment: values.comment && (values.comment as string).trim() !== '' ? (values.comment as string).trim() : undefined
       };
       
       const response = await usersService.updateUser(user.username, userData);
@@ -79,7 +87,8 @@ export const UserEditModal: React.FC<UserEditModalProps> = ({
           onUserUpdated({
             ...user,
             username: userData.username,
-            enabled: userData.enabled
+            enabled: userData.enabled,
+            comment: userData.comment
           });
         }
       } else {
@@ -111,7 +120,8 @@ export const UserEditModal: React.FC<UserEditModalProps> = ({
         loading={submitting}
         initialValues={{
           username: user.username,
-          enabled: user.enabled.toString()
+          enabled: user.enabled.toString(),
+          comment: user.comment || ''
         }}
       />
     </Modal>

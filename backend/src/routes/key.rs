@@ -21,7 +21,8 @@ pub struct KeyResponse {
     id: i32,
     key_type: String,
     key_base64: String,
-    key_comment: Option<String>,
+    key_name: Option<String>,
+    extra_comment: Option<String>,
     username: String,
 }
 
@@ -32,7 +33,8 @@ impl From<UsernameAndKey> for KeyResponse {
             id: public_key.id,
             key_type: public_key.key_type,
             key_base64: public_key.key_base64,
-            key_comment: public_key.comment,
+            key_name: public_key.name,
+            extra_comment: public_key.extra_comment,
             username,
         }
     }
@@ -107,7 +109,8 @@ pub async fn delete_key(
 
 #[derive(Deserialize, ToSchema)]
 pub struct UpdateKeyCommentRequest {
-    comment: String,
+    name: Option<String>,
+    extra_comment: Option<String>,
 }
 
 /// Update SSH key comment
@@ -137,12 +140,25 @@ pub async fn update_key_comment(
     let key_id = key_id.into_inner();
     let result = web::block(move || {
         let mut conn = conn.get().unwrap();
-        PublicUserKey::update_comment(&mut conn, key_id, &json.comment)
+
+        // Update name if provided
+        if let Some(name) = &json.name {
+            use crate::db::key::update_key_name;
+            update_key_name(&mut conn, key_id, name)?;
+        }
+
+        // Update extra_comment if provided
+        if let Some(extra_comment) = &json.extra_comment {
+            use crate::db::key::update_key_extra_comment;
+            update_key_extra_comment(&mut conn, key_id, extra_comment)?;
+        }
+
+        Ok(())
     })
     .await?;
 
     match result {
-        Ok(()) => Ok(HttpResponse::Ok().json(ApiResponse::success_message("Comment updated successfully".to_string()))),
+        Ok(()) => Ok(HttpResponse::Ok().json(ApiResponse::success_message("Key information updated successfully".to_string()))),
         Err(e) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e))),
     }
 }
