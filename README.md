@@ -9,6 +9,20 @@ A modern web application for managing SSH keys across multiple hosts with a **Re
 
 ### Development Environment
 
+### Prerequisites
+
+- **Rust** (1.75+) with Cargo
+- **Node.js** (24+) with npm
+- **Docker** (optional, for deployment)
+- **htpasswd** utility (for authentication)
+- **SSH** private key (for SSH connections)
+- **just**
+   - install just: `cargo install just`
+- **watch**
+   - install watch: `cargo install cargo-watch`
+
+### Initial Setup
+
 Start both frontend and backend development servers:
 
 ```bash
