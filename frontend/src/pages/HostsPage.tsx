@@ -358,6 +358,13 @@ const HostsPage: React.FC = () => {
       label: 'Disabled',
       type: 'checkbox',
       helperText: 'When disabled, no SSH connections will be made to this host'
+    },
+    {
+      name: 'comment',
+      label: 'Comment',
+      type: 'text',
+      placeholder: 'Optional comment about this host',
+      helperText: 'Add any notes or comments about this host'
     }
   ];
 
@@ -372,7 +379,8 @@ const HostsPage: React.FC = () => {
         username: values.username,
         jump_via: values.jump_via && String(values.jump_via) !== '' ? Number(values.jump_via) : null,
         key_fingerprint: values.key_fingerprint && values.key_fingerprint.trim() !== '' ? values.key_fingerprint : null,
-        disabled: values.disabled || false
+        disabled: values.disabled || false,
+        comment: values.comment && values.comment.trim() !== '' ? values.comment.trim() : null
       };
 
       console.log('Creating host with data:', hostData);
@@ -380,7 +388,8 @@ const HostsPage: React.FC = () => {
         ...hostData,
         jump_via: hostData.jump_via ?? undefined,
         key_fingerprint: hostData.key_fingerprint ?? undefined,
-        disabled: hostData.disabled
+        disabled: hostData.disabled,
+        comment: hostData.comment ?? undefined
       });
       console.log('Host creation response:', response);
       
@@ -603,6 +612,11 @@ const HostsPage: React.FC = () => {
           <Globe size={12} className="flex-shrink-0" />
           <span style={{ wordBreak: 'break-word' }}>{host.address}:{host.port}</span>
         </p>
+        {host.comment && (
+          <p className="text-gray-300 text-xs mt-1" style={{ wordBreak: 'break-word' }}>
+            <span className="font-medium">Comment:</span> {host.comment}
+          </p>
+        )}
       </div>
 
       {/* Connection Status */}

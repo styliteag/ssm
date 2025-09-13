@@ -17,6 +17,8 @@ diesel::table! {
         jump_via -> Nullable<Integer>,
         /// whether this host is disabled
         disabled -> Bool,
+        /// optional comment for this host
+        comment -> Nullable<Text>,
     }
 }
 
@@ -29,6 +31,8 @@ diesel::table! {
         username -> Text,
         /// whether this user is active
         enabled -> Bool,
+        /// optional comment for this user
+        comment -> Nullable<Text>,
     }
 }
 
@@ -60,8 +64,10 @@ diesel::table! {
         key_type -> Text,
         /// base64 encoded public key
         key_base64 -> Text,
-        /// optional comment
-        comment -> Nullable<Text>,
+        /// key name (renamed from comment)
+        name -> Nullable<Text>,
+        /// additional comment for the key
+        extra_comment -> Nullable<Text>,
         /// user this key belongs to
         user_id -> Integer,
     }

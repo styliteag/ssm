@@ -48,7 +48,8 @@ export const usersService = {
   updateUser: async (oldUsername: string, user: UserFormData): Promise<ApiResponse<User>> => {
     return api.put<User>(`/user/${encodeURIComponent(oldUsername)}`, {
       username: user.username,
-      enabled: user.enabled
+      enabled: user.enabled,
+      comment: user.comment
     });
   },
 
@@ -80,7 +81,8 @@ export const usersService = {
     user_id: number;
     key_type: string;
     key_base64: string;
-    key_comment: string | null;
+    key_name: string | null;
+    extra_comment: string | null;
   }): Promise<ApiResponse<null>> => {
     console.log('assignKeyToUser called with:', keyData);
     return api.post<null>('/user/assign_key', keyData);
@@ -90,7 +92,8 @@ export const usersService = {
   previewKey: async (keyData: {
     key_type: string;
     key_base64: string;
-    key_comment?: string;
+    key_name?: string;
+    extra_comment?: string;
   }): Promise<ApiResponse<unknown>> => {
     return api.post<unknown>('/user/add_key', keyData);
   },

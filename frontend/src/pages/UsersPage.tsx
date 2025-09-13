@@ -150,7 +150,7 @@ const UsersPage: React.FC = () => {
       validation: {
         minLength: 2,
         maxLength: 50,
-        pattern: /^[a-zA-Z0-9\-_.]+$/,
+        pattern: /^[a-zA-Z0-9\-_.@]+$/,
         custom: (value: unknown) => {
           const exists = users.some(u => u.username.toLowerCase() === (value as string).toLowerCase());
           return exists ? 'Username already exists' : null;
@@ -168,6 +168,13 @@ const UsersPage: React.FC = () => {
         { value: 'true', label: 'Enabled (Active)' },
         { value: 'false', label: 'Disabled (Inactive)' }
       ]
+    },
+    {
+      name: 'comment',
+      label: 'Comment',
+      type: 'text',
+      placeholder: 'Optional comment about this user',
+      helperText: 'Add any notes or comments about this user'
     }
   ];
 
@@ -178,7 +185,8 @@ const UsersPage: React.FC = () => {
       const valuesTyped = values as Record<string, unknown>;
       const userData = {
         username: valuesTyped.username as string,
-        enabled: valuesTyped.enabled === 'true'
+        enabled: valuesTyped.enabled === 'true',
+        comment: valuesTyped.comment && (valuesTyped.comment as string).trim() !== '' ? (valuesTyped.comment as string).trim() : undefined
       };
 
       const response = await usersService.createUser(userData);
@@ -276,6 +284,15 @@ const UsersPage: React.FC = () => {
       )
     },
     {
+      key: 'comment',
+      header: 'Comment',
+      render: (comment) => (
+        <div className="text-sm text-gray-600 dark:text-gray-400 max-w-48 truncate" title={comment || ''}>
+          {comment || '—'}
+        </div>
+      )
+    },
+    {
       key: 'enabled',
       header: 'Status',
       sortable: true,
@@ -289,7 +306,7 @@ const UsersPage: React.FC = () => {
           enabled: <CheckCircle size={14} />,
           disabled: <XCircle size={14} />
         };
-        
+
         return (
           <div className={`inline-flex items-center space-x-1 px-2 py-1 rounded-full text-xs font-medium ${colors[status]}`}>
             {icons[status]}
@@ -586,14 +603,19 @@ const UsersPage: React.FC = () => {
                           <span className="bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 text-xs font-medium px-2 py-1 rounded">
                             {key.key_type}
                           </span>
-                          {key.comment && (
+                          {key.key_name && (
                             <span className="text-sm text-gray-600 dark:text-gray-400">
-                              {key.comment}
+                              Name: {key.key_name}
+                            </span>
+                          )}
+                          {key.extra_comment && (
+                            <span className="text-sm text-gray-600 dark:text-gray-400 ml-2">
+                              Comment: {key.extra_comment}
                             </span>
                           )}
                         </div>
                         <code className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 p-2 rounded block overflow-x-auto">
-                          {key.key_type} {key.key_base64.substring(0, 60)}...{key.comment ? ` ${key.comment}` : ''}
+                          {key.key_type} {key.key_base64.substring(0, 60)}...{key.key_name ? ` ${key.key_name}` : ''}
                         </code>
                       </div>
                     </div>

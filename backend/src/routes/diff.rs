@@ -447,7 +447,7 @@ async fn get_diff_details(
                     login: k.login,
                     key_base64: k.key.key_base64,
                     key_type: k.key.key_type,
-                    comment: k.key.comment,
+                    comment: k.key.name,
                     options: k.options,
                 }).collect(),
                 logins,
