@@ -85,13 +85,9 @@ const KeysPage: React.FC = () => {
   const [showUserEditModal, setShowUserEditModal] = useState(false);
   
   // Edit state for inline key name and comment editing
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [editingKeyName, setEditingKeyName] = useState(false);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [editingExtraComment, setEditingExtraComment] = useState(false);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [keyNameValue, setKeyNameValue] = useState('');
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [extraCommentValue, setExtraCommentValue] = useState('');
   
   // Form loading states
@@ -287,18 +283,36 @@ const KeysPage: React.FC = () => {
 
     try {
       setSubmitting(true);
-      const comment = (formData as Record<string, unknown>).comment as string;
-      const response = await keysService.updateKeyComment(selectedKey.id, comment);
+      const name = (formData as Record<string, unknown>).name as string;
+      const extraComment = (formData as Record<string, unknown>).extra_comment as string;
 
-      if (response.success) {
-        showSuccess('SSH key comment updated successfully');
-        setEditingComment(false);
-        // Update the selected key with new comment
-        setSelectedKey({ ...selectedKey, comment });
-        loadKeys();
-      } else {
-        showError('Failed to update SSH key', response.message);
+      // Update both name and extra_comment if provided
+      if (name !== undefined) {
+        const response = await keysService.updateKeyName(selectedKey.id, name);
+        if (!response.success) {
+          showError('Failed to update SSH key name', response.message);
+          return;
+        }
       }
+
+      if (extraComment !== undefined) {
+        const response = await keysService.updateKeyExtraComment(selectedKey.id, extraComment);
+        if (!response.success) {
+          showError('Failed to update SSH key extra comment', response.message);
+          return;
+        }
+      }
+
+      showSuccess('SSH key updated successfully');
+      setEditingKeyName(false);
+      setEditingExtraComment(false);
+      // Update the selected key with new values
+      setSelectedKey({
+        ...selectedKey,
+        key_name: name !== undefined ? name : selectedKey.key_name,
+        extra_comment: extraComment !== undefined ? extraComment : selectedKey.extra_comment
+      });
+      loadKeys();
     } catch {
       showError('Failed to update SSH key', 'Please try again');
     } finally {
@@ -385,7 +399,8 @@ const KeysPage: React.FC = () => {
             user_id: Number(userId),
             key_type: keyData.key_type,
             key_base64: keyData.key_base64,
-            key_comment: keyData.comment && keyData.comment.trim() !== '' ? keyData.comment : null
+            key_name: keyData.key_name && keyData.key_name.trim() !== '' ? keyData.key_name : null,
+            extra_comment: keyData.extra_comment && keyData.extra_comment.trim() !== '' ? keyData.extra_comment : null
           };
           
           const response = await usersService.assignKeyToUser(keyPayload);
@@ -556,8 +571,10 @@ const KeysPage: React.FC = () => {
             onClick={(e) => {
               e.stopPropagation();
               setSelectedKey(item);
-              setCommentValue(item.comment || '');
-              setEditingComment(false);
+              setKeyNameValue(item.key_name || '');
+              setExtraCommentValue(item.extra_comment || '');
+              setEditingKeyName(false);
+              setEditingExtraComment(false);
               setShowViewModal(true);
             }}
             title="View/Edit key"
@@ -1009,8 +1026,10 @@ const KeysPage: React.FC = () => {
         isOpen={showViewModal}
         onClose={() => {
           setShowViewModal(false);
-          setEditingComment(false);
-          setCommentValue('');
+          setEditingKeyName(false);
+          setEditingExtraComment(false);
+          setKeyNameValue('');
+          setExtraCommentValue('');
         }}
         title="SSH Key Details"
         size="xl"
@@ -1040,53 +1059,110 @@ const KeysPage: React.FC = () => {
                   <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Host Access</label>
                   <p className="mt-1 text-gray-900 dark:text-gray-100">{selectedKey.hostCount || 0} hosts</p>
                 </div>
-                <div className="col-span-2">
-                  <div className="flex items-center justify-between">
-                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Comment</label>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        if (editingComment) {
-                          handleUpdateKey({ comment: commentValue });
-                        } else {
-                          setEditingComment(true);
-                        }
-                      }}
-                      leftIcon={editingComment ? <CheckCircle size={16} /> : <Edit2 size={16} />}
-                      disabled={submitting}
-                    >
-                      {editingComment ? 'Save' : 'Edit'}
-                    </Button>
-                  </div>
-                  {editingComment ? (
-                    <div className="mt-2 space-y-2">
-                      <input
-                        type="text"
-                        value={commentValue}
-                        onChange={(e) => setCommentValue(e.target.value)}
-                        placeholder="Enter comment for this key"
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                <div className="col-span-2 space-y-4">
+                  {/* Key Name */}
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Key Name</label>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          if (editingKeyName) {
+                            handleUpdateKey({ name: keyNameValue });
+                            setEditingKeyName(false);
+                          } else {
+                            setKeyNameValue(selectedKey.key_name || '');
+                            setEditingKeyName(true);
+                          }
+                        }}
+                        leftIcon={editingKeyName ? <CheckCircle size={16} /> : <Edit2 size={16} />}
                         disabled={submitting}
-                        autoFocus
-                      />
-                      <div className="flex items-center space-x-2">
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => {
-                            setEditingComment(false);
-                            setCommentValue(selectedKey.comment || '');
-                          }}
-                          disabled={submitting}
-                        >
-                          Cancel
-                        </Button>
-                      </div>
+                      >
+                        {editingKeyName ? 'Save' : 'Edit'}
+                      </Button>
                     </div>
-                  ) : (
-                    <p className="mt-1 text-gray-900 dark:text-gray-100">{selectedKey.comment || 'No comment'}</p>
-                  )}
+                    {editingKeyName ? (
+                      <div className="mt-2 space-y-2">
+                        <input
+                          type="text"
+                          value={keyNameValue}
+                          onChange={(e) => setKeyNameValue(e.target.value)}
+                          placeholder="Enter key name"
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          disabled={submitting}
+                          autoFocus
+                        />
+                        <div className="flex items-center space-x-2">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => {
+                              setEditingKeyName(false);
+                              setKeyNameValue(selectedKey.key_name || '');
+                            }}
+                            disabled={submitting}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="mt-1 text-gray-900 dark:text-gray-100">{selectedKey.key_name || 'No name'}</p>
+                    )}
+                  </div>
+
+                  {/* Extra Comment */}
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Extra Comment</label>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          if (editingExtraComment) {
+                            handleUpdateKey({ extra_comment: extraCommentValue });
+                            setEditingExtraComment(false);
+                          } else {
+                            setExtraCommentValue(selectedKey.extra_comment || '');
+                            setEditingExtraComment(true);
+                          }
+                        }}
+                        leftIcon={editingExtraComment ? <CheckCircle size={16} /> : <Edit2 size={16} />}
+                        disabled={submitting}
+                      >
+                        {editingExtraComment ? 'Save' : 'Edit'}
+                      </Button>
+                    </div>
+                    {editingExtraComment ? (
+                      <div className="mt-2 space-y-2">
+                        <input
+                          type="text"
+                          value={extraCommentValue}
+                          onChange={(e) => setExtraCommentValue(e.target.value)}
+                          placeholder="Enter additional comment"
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          disabled={submitting}
+                          autoFocus
+                        />
+                        <div className="flex items-center space-x-2">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => {
+                              setEditingExtraComment(false);
+                              setExtraCommentValue(selectedKey.extra_comment || '');
+                            }}
+                            disabled={submitting}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="mt-1 text-gray-900 dark:text-gray-100">{selectedKey.extra_comment || 'No extra comment'}</p>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

@@ -11,12 +11,19 @@ export const keysService = {
   // Get paginated list of all keys
   getKeys: async (params?: PaginationQuery & { search?: string; user_id?: number }): Promise<ApiResponse<PaginatedResponse<PublicUserKey>>> => {
     // Backend returns wrapped response with keys array
-    interface BackendKey extends Omit<PublicUserKey, 'comment'> { key_comment?: string; comment?: string; }
+    interface BackendKey extends Omit<PublicUserKey, 'key_name' | 'extra_comment'> {
+      key_comment?: string;
+      comment?: string;
+      key_name?: string;
+      extra_comment?: string;
+    }
     const response = await api.get<{ keys: BackendKey[] }>('/key', { params });
-    // Convert to paginated response format expected by frontend and map key_comment to comment
+    // Convert to paginated response format expected by frontend and handle field mapping
     const keys = (response.data?.keys || []).map((key: BackendKey) => ({
       ...key,
-      comment: key.key_comment || key.comment, // Map key_comment from backend to comment field
+      // Handle backward compatibility: if backend still sends old format, map to new format
+      key_name: key.key_name || key.key_comment || key.comment,
+      extra_comment: key.extra_comment || undefined,
     }));
     return {
       ...response,
@@ -35,19 +42,36 @@ export const keysService = {
     return api.delete<null>(`/key/${id}`);
   },
 
-  // Update key comment
+  // Update key name
+  updateKeyName: async (id: number, name: string): Promise<ApiResponse<null>> => {
+    return api.put<null>(`/key/${id}/comment`, { name });
+  },
+
+  // Update key extra comment
+  updateKeyExtraComment: async (id: number, extraComment: string): Promise<ApiResponse<null>> => {
+    return api.put<null>(`/key/${id}/comment`, { extra_comment: extraComment });
+  },
+
+  // Update key comment (legacy method for backward compatibility)
   updateKeyComment: async (id: number, comment: string): Promise<ApiResponse<null>> => {
     return api.put<null>(`/key/${id}/comment`, { comment });
   },
 
   // Get all keys for a user (use the user service method instead)
   getKeysForUser: async (username: string): Promise<ApiResponse<PublicUserKey[]>> => {
-    interface BackendKey extends Omit<PublicUserKey, 'comment'> { key_comment?: string; comment?: string; }
+    interface BackendKey extends Omit<PublicUserKey, 'key_name' | 'extra_comment'> {
+      key_comment?: string;
+      comment?: string;
+      key_name?: string;
+      extra_comment?: string;
+    }
     const response = await api.get<{ keys: BackendKey[] }>(`/user/${encodeURIComponent(username)}/keys`);
-    // Map key_comment from backend to comment field
+    // Handle field mapping for backward compatibility
     const keys = (response.data?.keys || []).map((key: BackendKey) => ({
       ...key,
-      comment: key.key_comment || key.comment,
+      // Handle backward compatibility: if backend still sends old format, map to new format
+      key_name: key.key_name || key.key_comment || key.comment,
+      extra_comment: key.extra_comment || undefined,
     }));
     return {
       ...response,
