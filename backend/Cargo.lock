@@ -3018,7 +3018,7 @@ dependencies = [
 
 [[package]]
 name = "ssm"
-version = "0.2.15"
+version = "0.2.16"
 dependencies = [
  "actix-cors",
  "actix-identity",
