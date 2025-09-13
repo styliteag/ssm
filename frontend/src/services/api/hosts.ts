@@ -69,7 +69,8 @@ export const hostsService = {
       host_id: hostId,
       user_id: authorization.user_id,
       login: authorization.login,
-      options: authorization.options
+      options: authorization.options,
+      comment: authorization.comment
     });
   },
 

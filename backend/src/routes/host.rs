@@ -517,6 +517,7 @@ pub struct AuthorizeUserRequest {
     user_id: i32,
     login: String,
     options: Option<String>,
+    comment: Option<String>,
 }
 
 /// Authorize a user to access a host
@@ -542,6 +543,7 @@ async fn authorize_user(
             json.user_id,
             json.login.clone(),
             json.options.clone(),
+            json.comment.clone(),
         )
     })
     .await?;

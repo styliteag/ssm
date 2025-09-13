@@ -260,7 +260,6 @@ const KeysPage: React.FC = () => {
         extra_comment: extraComment && extraComment.trim() !== '' ? extraComment : null
       };
       
-      console.log('Sending key data:', keyPayload);
       const response = await usersService.assignKeyToUser(keyPayload);
 
       if (response.success) {

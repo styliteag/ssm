@@ -110,6 +110,26 @@ const AuthorizationList: React.FC<AuthorizationListProps> = ({
       ),
     },
     {
+      key: 'comment',
+      header: 'Comment',
+      sortable: true,
+      searchable: true,
+      render: (value) => (
+        <div className="max-w-xs">
+          {(value as string) ? (
+            <div
+              className="text-sm bg-gray-100 dark:bg-gray-800 p-2 rounded truncate"
+              title={value as string}
+            >
+              {value as string}
+            </div>
+          ) : (
+            <span className="text-gray-400 italic">No comment</span>
+          )}
+        </div>
+      ),
+    },
+    {
       key: 'id',
       header: 'Status',
       sortable: true,
@@ -208,7 +228,7 @@ const AuthorizationList: React.FC<AuthorizationListProps> = ({
       // Make login searchable as a string
       login_search: auth.login || '',
       // Combined search field for comprehensive searching
-      combined_search: `${auth.user?.username || ''} ${auth.host?.name || ''} ${auth.host?.address || ''} ${auth.login || ''} ${auth.user?.enabled ? 'Active' : 'Disabled'}`.toLowerCase(),
+      combined_search: `${auth.user?.username || ''} ${auth.host?.name || ''} ${auth.host?.address || ''} ${auth.login || ''} ${auth.comment || ''} ${auth.user?.enabled ? 'Active' : 'Disabled'}`.toLowerCase(),
     }));
   }, [authorizations]);
 

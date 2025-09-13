@@ -71,10 +71,17 @@ impl Host {
         user_id: i32,
         login: String,
         mut options: Option<String>,
+        comment: Option<String>,
     ) -> Result<(), String> {
         if options.as_ref().is_some_and(String::is_empty) {
             options = None;
         }
+        let comment = if comment.as_ref().is_some_and(String::is_empty) {
+            None
+        } else {
+            comment
+        };
+
         query_drop(
             insert_into(authorization::table)
                 .values((
@@ -82,6 +89,7 @@ impl Host {
                     authorization::user_id.eq(user_id),
                     authorization::login.eq(login),
                     authorization::options.eq(options),
+                    authorization::comment.eq(comment),
                 ))
                 .execute(conn),
         ).map_err(|e| {
@@ -100,7 +108,7 @@ impl Host {
     ) -> Result<Vec<UserAndOptions>, String> {
         // let user_ids = self.get_authorized_user_ids(conn)?;
 
-        let tuples: Result<Vec<(i32, String, String, Option<String>)>, String> = query(
+        let tuples: Result<Vec<(i32, String, String, Option<String>, Option<String>)>, String> = query(
             authorization::table
                 .inner_join(user::table)
                 .filter(authorization::host_id.eq(self.id))
@@ -109,8 +117,9 @@ impl Host {
                     user::username,
                     authorization::login,
                     authorization::options,
+                    authorization::comment,
                 ))
-                .load::<(i32, String, String, Option<String>)>(conn),
+                .load::<(i32, String, String, Option<String>, Option<String>)>(conn),
         );
         tuples.map(|vec| vec.into_iter().map(UserAndOptions::from).collect())
     }
