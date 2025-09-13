@@ -399,7 +399,7 @@ const KeysPage: React.FC = () => {
             key_type: keyData.key_type,
             key_base64: keyData.key_base64,
             key_name: keyData.key_name && keyData.key_name.trim() !== '' ? keyData.key_name : null,
-            extra_comment: keyData.extra_comment && keyData.extra_comment.trim() !== '' ? keyData.extra_comment : null
+            extra_comment: null
           };
           
           const response = await usersService.assignKeyToUser(keyPayload);

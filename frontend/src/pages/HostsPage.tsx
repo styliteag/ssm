@@ -380,7 +380,7 @@ const HostsPage: React.FC = () => {
         jump_via: values.jump_via && String(values.jump_via) !== '' ? Number(values.jump_via) : null,
         key_fingerprint: values.key_fingerprint && values.key_fingerprint.trim() !== '' ? values.key_fingerprint : null,
         disabled: values.disabled || false,
-        comment: values.comment && values.comment.trim() !== '' ? values.comment.trim() : null
+        comment: values.comment && values.comment.trim() !== '' ? values.comment.trim() : undefined
       };
 
       console.log('Creating host with data:', hostData);

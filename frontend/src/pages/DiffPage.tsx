@@ -399,7 +399,8 @@ const DiffPage: React.FC = () => {
         user_id: userId,
         key_type: unknownKeyIssue.details.key.key_type,
         key_base64: unknownKeyIssue.details.key.base64,
-        key_comment: unknownKeyIssue.details.key.comment || null
+        key_name: unknownKeyIssue.details.key.comment || null,
+        extra_comment: null
       };
 
       // Try to assign the key to the user
@@ -589,7 +590,8 @@ const DiffPage: React.FC = () => {
         user_id: newUser.id, // Use the proper numeric ID
         key_type: unknownKeyIssue.details.key.key_type,
         key_base64: unknownKeyIssue.details.key.base64,
-        key_comment: unknownKeyIssue.details.key.comment || null
+        key_name: unknownKeyIssue.details.key.comment || null,
+        extra_comment: null
       };
       console.log('Key data being sent:', keyData);
       console.log('user_id type:', typeof keyData.user_id, 'value:', keyData.user_id);

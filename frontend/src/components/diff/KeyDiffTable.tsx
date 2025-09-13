@@ -171,7 +171,7 @@ const KeyDiffTable: React.FC<KeyDiffTableProps> = ({
           <div>
             <span className="text-gray-500 dark:text-gray-400">Public Key:</span>
             <div className="font-mono text-sm bg-gray-100 dark:bg-gray-800 p-2 rounded mt-1 break-all">
-              {allowedUser.key.key_type} {allowedUser.key.key_base64} {allowedUser.key.comment || ''}
+              {allowedUser.key.key_type} {allowedUser.key.key_base64} {allowedUser.key.key_name || ''}
             </div>
           </div>
           
@@ -247,7 +247,7 @@ const KeyDiffTable: React.FC<KeyDiffTableProps> = ({
       header: 'Comment',
       render: (_: unknown, item: KeyDiffRow) => (
         <span className="text-sm text-gray-600 dark:text-gray-400">
-          {item.key.key.comment || <em>No comment</em>}
+          {item.key.key.key_name || <em>No comment</em>}
         </span>
       ),
     },
@@ -293,8 +293,8 @@ const KeyDiffTable: React.FC<KeyDiffTableProps> = ({
                 What will change:
               </h5>
               <ul className="text-sm text-yellow-700 dark:text-yellow-300 space-y-1">
-                {difference.key.key.comment !== difference.existing_key.key.comment && (
-                  <li>• Comment: "{difference.existing_key.key.comment || 'none'}" → "{difference.key.key.comment || 'none'}"</li>
+                {difference.key.key.key_name !== difference.existing_key.key.key_name && (
+                  <li>• Comment: "{difference.existing_key.key.key_name || 'none'}" → "{difference.key.key.key_name || 'none'}"</li>
                 )}
                 {difference.key.options !== difference.existing_key.options && (
                   <li>• Options: "{difference.existing_key.options || 'none'}" → "{difference.key.options || 'none'}"</li>
