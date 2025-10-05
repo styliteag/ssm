@@ -1,25 +1,51 @@
-name: GHCR Cleanup
+name: Cleanup container packages for all repositories contain container images (packages)
 
 on:
   schedule:
     - cron: '17 3 * * 0'
+  workflow_dispatch:
 
-permissions:
-  contents: read
-  packages: read
+concurrency:
+  group: ${{ github.workflow }}
+
+env:
+  GITHUB_REPOSITORY: ${{ github.repository }}
 
 jobs:
-  cleanup:
-    name: Prune old GHCR versions
+  delete-untagged-versions:
+    name: Delete old unused container images
+    strategy:
+      matrix:
+        package:
+          - ssm
+          - sss/cache
+
     runs-on: ubuntu-latest
     steps:
-      - name: Prune
-        uses: vlaurin/action-ghcr-prune@v0.6.0
+      - name: Delete all untagged versions except latest x
+        uses: actions/delete-package-versions@v5
         with:
+          package-name: ${{ matrix.package }}
+          package-type: 'container'
+          min-versions-to-keep: 10
+          delete-only-untagged-versions: 'true'
+
+      - name: Delete all except latest x versions while ignoring particular package versions
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: ${{ matrix.package }}
+          package-type: 'container'
+          min-versions-to-keep: 10
+          ignore-versions: '^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$'
+
+      - name: Delete old released images
+        uses: snok/container-retention-policy@v2.2.1
+        with:
+          image-names: ${{ matrix.package }}
+          cut-off: One month ago UTC
+          keep-at-least: 20
+          skip-tags: '*.*.*'
+          org-name: proliance-ai
+          account-type: org
           token: ${{ secrets.GITHUB_TOKEN }}
-          organization: styliteag
-          container: ssm
-          dry-run: true # Dry-run first, then change to `false`
-          keep-younger-than: 7 # days
-          keep-last: 2
-          prune-untagged: true
+          token-type: github-token
