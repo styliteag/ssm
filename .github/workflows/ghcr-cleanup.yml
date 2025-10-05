@@ -6,7 +6,7 @@ on:
       keep:
         description: "Number of most recent versions to keep"
         required: true
-        default: "30"
+        default: "5"
       age_days:
         description: "Only delete versions older than this many days (0 = ignore age)"
         required: true
@@ -39,30 +39,13 @@ jobs:
       PRESERVE_TAGS: ${{ github.event.inputs.preserve_tags }}
       DRY_RUN: ${{ github.event.inputs.dry_run }}
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-
-      - name: Prepare
-        run: |
-          echo "Cleanup target: \"$ORG/$PACKAGE_NAME\""
-          echo "Keep: $KEEP | Age days: $AGE_DAYS | Preserve: $PRESERVE_TAGS | Dry-run: $DRY_RUN"
-
-      - name: Run gh-based prune script
-        env:
-          GHCR_CLEANUP_TOKEN: ${{ secrets.GHCR_CLEANUP_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ORG: ${{ env.ORG }}
-          PKG: ${{ env.PACKAGE_NAME }}
-          KEEP: ${{ env.KEEP }}
-          AGE_DAYS: ${{ env.AGE_DAYS }}
-          PRESERVE_TAGS: ${{ env.PRESERVE_TAGS }}
-          DRY_RUN: ${{ env.DRY_RUN }}
-        run: |
-          # Prefer PAT if provided, otherwise fall back to GITHUB_TOKEN (likely preview-only)
-          export GH_TOKEN="${GHCR_CLEANUP_TOKEN:-$GITHUB_TOKEN}"
-          chmod +x scripts/ghcr-prune.sh
-          if [ "${DRY_RUN}" = "true" ]; then
-            ./scripts/ghcr-prune.sh -k "${KEEP}" -a "${AGE_DAYS}" -t "${PRESERVE_TAGS}"
-          else
-            ./scripts/ghcr-prune.sh -k "${KEEP}" -a "${AGE_DAYS}" -t "${PRESERVE_TAGS}" -x
-          fi
+      - name: Prune
+        uses: vlaurin/action-ghcr-prune@v0.6.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          organization: ssm
+          container: ssm
+          dry-run: true # Dry-run first, then change to `false`
+          keep-younger-than: 7 # days
+          keep-last: 2
+          prune-untagged: true
