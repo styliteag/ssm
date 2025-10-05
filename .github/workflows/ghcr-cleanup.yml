@@ -1,24 +1,6 @@
 name: GHCR Cleanup
 
 on:
-  workflow_dispatch:
-    inputs:
-      keep:
-        description: "Number of most recent versions to keep"
-        required: true
-        default: "5"
-      age_days:
-        description: "Only delete versions older than this many days (0 = ignore age)"
-        required: true
-        default: "0"
-      preserve_tags:
-        description: "Comma-separated tags or globs to preserve (e.g. latest,v*.*.*)"
-        required: false
-        default: "latest"
-      dry_run:
-        description: "If true, just log what would be deleted"
-        required: true
-        default: "true"
   schedule:
     - cron: '17 3 * * 0'
 
@@ -30,20 +12,12 @@ jobs:
   cleanup:
     name: Prune old GHCR versions
     runs-on: ubuntu-latest
-    env:
-      # Adjust these defaults as needed
-      ORG: styliteag
-      PACKAGE_NAME: ssm/ssm
-      KEEP: ${{ github.event.inputs.keep }}
-      AGE_DAYS: ${{ github.event.inputs.age_days }}
-      PRESERVE_TAGS: ${{ github.event.inputs.preserve_tags }}
-      DRY_RUN: ${{ github.event.inputs.dry_run }}
     steps:
       - name: Prune
         uses: vlaurin/action-ghcr-prune@v0.6.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          organization: ssm
+          organization: styliteag
           container: ssm
           dry-run: true # Dry-run first, then change to `false`
           keep-younger-than: 7 # days
