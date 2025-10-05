@@ -17,8 +17,8 @@ jobs:
     strategy:
       matrix:
         package:
-          - ssm
-          - sss/cache
+          - ssm/ssm
+          - sss/buildcache
 
     runs-on: ubuntu-latest
     steps:
