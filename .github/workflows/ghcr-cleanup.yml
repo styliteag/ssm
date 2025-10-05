@@ -18,7 +18,7 @@ jobs:
       matrix:
         package:
           - ssm/ssm
-          - sss/buildcache
+          - ssm/buildcache
 
     runs-on: ubuntu-latest
     steps:
@@ -45,7 +45,7 @@ jobs:
           cut-off: One month ago UTC
           keep-at-least: 20
           skip-tags: '*.*.*'
-          org-name: proliance-ai
+          org-name: styliteag
           account-type: org
           token: ${{ secrets.GITHUB_TOKEN }}
           token-type: github-token
