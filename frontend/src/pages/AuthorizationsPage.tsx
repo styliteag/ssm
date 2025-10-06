@@ -157,33 +157,32 @@ const AuthorizationsPage: React.FC = () => {
   }, [loadData]);
 
   // Handle authorization toggle (for matrix view)
-  const handleToggleAuthorization = useCallback(async (userId: number, hostId: number, isAuthorized: boolean) => {
+  const handleToggleAuthorization = useCallback(async (userId: number, hostId: number, isAuthorized: boolean, loginAccount?: string) => {
     try {
       if (isAuthorized) {
-        // Revoke access - find and delete ALL authorizations for this user-host pair
-        const userAuthorizations = authorizations.filter(auth => 
-          auth.user_id === userId && auth.host_id === hostId
+        // Revoke access - find and delete authorization for this user-host-login combination
+        const user = users.find(u => u.id === userId);
+        const host = hosts.find(h => h.id === hostId);
+        const targetLogin = loginAccount || host?.username || 'root';
+
+        const authorizationToDelete = authorizations.find(auth =>
+          auth.user_id === userId && auth.host_id === hostId && auth.login === targetLogin
         );
-        
-        // If there are multiple authorizations, we should delete all of them when "unchecking"
-        // This provides a clear toggle behavior in the matrix
-        for (const authorization of userAuthorizations) {
-          await authorizationsService.deleteAuthorization(authorization.id);
+
+        if (authorizationToDelete) {
+          await authorizationsService.deleteAuthorization(authorizationToDelete.id);
+          setAuthorizations(prev => prev.filter(auth => auth.id !== authorizationToDelete.id));
         }
-        
-        setAuthorizations(prev => prev.filter(auth => 
-          !(auth.user_id === userId && auth.host_id === hostId)
-        ));
       } else {
         // Grant access - create new authorization
         const user = users.find(u => u.id === userId);
         const host = hosts.find(h => h.id === hostId);
-        
+
         if (user && host) {
           const authData: AuthorizationFormData = {
             user_id: userId,
             host_id: hostId,
-            login: host.username, // Default to host username
+            login: loginAccount || host.username, // Use specified login account or default to host username
           };
           
           const response = await authorizationsService.createAuthorization(authData);
