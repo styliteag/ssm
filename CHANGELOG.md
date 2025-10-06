@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- 
+
+## [0.2.18] - 2025-10-06
+
+### Added
 - Comprehensive CHANGELOG.md file for tracking all changes
 - Automatic CHANGELOG.md updates in release.sh script
 
