@@ -1232,7 +1232,7 @@ const DiffPage: React.FC = () => {
                       if (!unknownKeyIssue.details?.key?.comment) return true;
                       const username = unknownKeyIssue.details.key.comment.trim();
                       const existingUser = allUsers.find(u => u.username.toLowerCase() === username.toLowerCase());
-                      const isValid = username.length >= 2 && /^[a-zA-Z0-9._-]+$/.test(username);
+                      const isValid = username.length >= 2 && /^[a-zA-Z0-9._\-\s@]+$/.test(username);
                       return !!existingUser || !isValid;
                     })()}
                     size="sm"
