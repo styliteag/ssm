@@ -12,7 +12,7 @@ interface AuthorizationMatrixProps {
   hosts: Host[];
   authorizations: Authorization[];
   onToggleAuthorization: (userId: number, hostId: number, isAuthorized: boolean, loginAccount?: string) => Promise<void>;
-  onManageAuthorizations?: (userId: number, hostId: number, authorizations: Authorization[]) => void; // eslint-disable-line @typescript-eslint/no-unused-vars
+  onManageAuthorizations?: (userId: number, hostId: number, authorizations: Authorization[]) => void;
   loading?: boolean;
   className?: string;
   onViewModeChange?: (mode: string) => void; // Callback to change view mode in parent
@@ -31,7 +31,7 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
   hosts,
   authorizations,
   onToggleAuthorization,
-  onManageAuthorizations,
+  onManageAuthorizations, // eslint-disable-line @typescript-eslint/no-unused-vars
   loading = false,
   className,
   onViewModeChange,
@@ -163,7 +163,7 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
   }, [users, hosts, authorizations, showOnlyAuthorized, userSearchTerm, hostSearchTerm, selectedLoginAccount]);
 
   // Handle cell click to toggle authorization for the selected login account
-  const handleCellClick = async (userId: number, hostId: number, isAuthorized: boolean, _authorizations: Authorization[]) => { // eslint-disable-line @typescript-eslint/no-unused-vars
+  const handleCellClick = async (userId: number, hostId: number, isAuthorized: boolean) => {
     const key = `${userId}-${hostId}`;
 
     // Set loading state
@@ -402,7 +402,7 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
                       <div
                         key={`${user.id}-${host.id}`}
                         className={getCellClassName(cell, rowIndex)}
-                        onClick={() => !cell.loading && handleCellClick(cell.userId, cell.hostId, cell.isAuthorized, cell.authorizations)}
+                        onClick={() => !cell.loading && handleCellClick(cell.userId, cell.hostId, cell.isAuthorized)}
                         onMouseEnter={() => setHoveredCell({ userId: cell.userId, hostId: cell.hostId })}
                         onMouseLeave={() => setHoveredCell(null)}
                         title={
