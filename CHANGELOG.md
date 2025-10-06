@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- 
+- Expanded username validation to allow spaces, @ symbols, and # symbols
 
 ## [0.2.19] - 2025-10-06
 

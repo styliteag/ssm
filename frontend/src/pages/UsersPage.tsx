@@ -169,7 +169,7 @@ const UsersPage: React.FC = () => {
       validation: {
         minLength: 2,
         maxLength: 50,
-        pattern: /^[a-zA-Z0-9\-_.\s@]+$/,
+        pattern: /^[a-zA-Z0-9\-_.\s@#]+$/,
         custom: (value: unknown) => {
           const exists = users.some(u => u.username.toLowerCase() === (value as string).toLowerCase());
           return exists ? 'Username already exists' : null;
