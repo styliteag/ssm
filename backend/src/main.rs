@@ -67,7 +67,7 @@ impl CustomizeConnection<DbConnection, diesel::r2d2::Error> for SqliteConnection
             DbConnection::Sqlite(_) => {
                 sql_query("PRAGMA foreign_keys = ON")
                     .execute(conn)
-                    .map_err(|e| diesel::r2d2::Error::QueryError(e))?;
+                    .map_err(diesel::r2d2::Error::QueryError)?;
             }
         }
         Ok(())
@@ -348,12 +348,12 @@ async fn main() -> Result<(), std::io::Error> {
         eprintln!("║ or set the SSH_KEY environment variable to point to your private key.        ║");
         eprintln!("║                                                                              ║");
         eprintln!("║ To generate an ed25519 SSH key pair:                                         ║");
-        eprintln!("");
+        eprintln!();
         eprintln!("mkdir -p {}", key_path.parent().unwrap().display());
         eprintln!("ssh-keygen -t ed25519 -f {} -C 'ssm-server'", key_path.display());
         eprintln!("chmod 600 {}", key_path.display());
         eprintln!("chmod 644 {}.pub", key_path.display());
-        eprintln!("");
+        eprintln!();
         eprintln!("║                                                                              ║");
         eprintln!("║ Or set the SSH_KEY environment variable:                                     ║");
         eprintln!("║   SSH_KEY=/path/to/your/private/key cargo run                                ║");
@@ -391,7 +391,7 @@ async fn main() -> Result<(), std::io::Error> {
             .allowed_origin_fn(|origin, _req_head| {
                 // Allow localhost development origins - return the specific origin, not "*"
                 // This fixes login functionality when credentials are included
-                if let Some(origin_str) = origin.to_str().ok() {
+                if let Ok(origin_str) = origin.to_str() {
                     origin_str.starts_with("http://localhost:")
                         || origin_str.starts_with("https://localhost:")
                         || origin_str.starts_with("http://127.0.0.1:")

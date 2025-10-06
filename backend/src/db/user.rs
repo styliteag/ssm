@@ -10,6 +10,9 @@ use crate::{
 
 use super::{query, query_drop, UserAndOptions};
 
+// Type alias for authorization query results
+type AuthorizationTuple = (i32, String, String, Option<String>, Option<String>);
+
 impl User {
     pub fn get_all_users(conn: &mut DbConnection) -> Result<Vec<Self>, String> {
         query(user::table.load::<Self>(conn))
@@ -79,7 +82,7 @@ impl User {
         &self,
         conn: &mut DbConnection,
     ) -> Result<Vec<UserAndOptions>, String> {
-        let tuples: Result<Vec<(i32, String, String, Option<String>, Option<String>)>, String> = query(
+        let tuples: Result<Vec<AuthorizationTuple>, String> = query(
             authorization::table
                 .inner_join(user::table)
                 .inner_join(host::table)
@@ -91,7 +94,7 @@ impl User {
                     authorization::options,
                     authorization::comment,
                 ))
-                .load::<(i32, String, String, Option<String>, Option<String>)>(conn),
+                .load::<AuthorizationTuple>(conn),
         );
         tuples.map(|vec| vec.into_iter().map(UserAndOptions::from).collect())
     }
