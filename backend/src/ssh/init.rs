@@ -175,7 +175,7 @@ impl SshFirstConnectionHandler {
         let handle = super::SshClient::connect(ssh_client.to_owned(), self.data).await?;
         let (exit_code, out) = super::SshClient::execute(ssh_client, &handle, "whoami").await?;
 
-        return match exit_code {
+        match exit_code {
             0 if !login.eq(&out.trim()) => {
                 warn!("Logged in as another user?");
 
@@ -189,6 +189,6 @@ impl SshFirstConnectionHandler {
                 warn!("Failed to execute: {out}");
                 Err(SshClientError::ExecutionError(out))
             }
-        };
+        }
     }
 }

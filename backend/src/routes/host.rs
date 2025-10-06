@@ -864,18 +864,18 @@ where
 
 #[derive(Deserialize, ToSchema)]
 pub struct UpdateHostRequest {
-    name: String,
-    address: String,
-    username: String,
-    port: i32,
+    pub name: String,
+    pub address: String,
+    pub username: String,
+    pub port: i32,
     #[serde(deserialize_with = "empty_string_as_none")]
-    key_fingerprint: Option<String>,
+    pub key_fingerprint: Option<String>,
     #[serde(deserialize_with = "empty_string_as_none_int")]
-    jump_via: Option<i32>,
+    pub jump_via: Option<i32>,
     #[serde(default)]
-    disabled: bool,
+    pub disabled: bool,
     #[serde(deserialize_with = "empty_string_as_none")]
-    comment: Option<String>,
+    pub comment: Option<String>,
 }
 
 /// Update a host
@@ -900,23 +900,18 @@ async fn update_host(
     _identity: Option<Identity>,
 ) -> Result<impl Responder> {
     let mut db_conn = conn.get().unwrap();
+    let request = json.into_inner();
+    let new_name = request.name.clone();
     match Host::update_host(
         &mut db_conn,
         host_name.to_string(),
-        json.name.clone(),
-        json.address.clone(),
-        json.username.clone(),
-        json.port,
-        json.key_fingerprint.clone(),
-        json.jump_via,
-        json.disabled,
-        json.comment.clone(),
+        request,
     ) {
         Ok(()) => {
             // Invalidate cache for both old and new host names (in case of rename)
             caching_ssh_client.invalidate_cache(&host_name).await;
-            if json.name != host_name.to_string() {
-                caching_ssh_client.invalidate_cache(&json.name).await;
+            if new_name != host_name.to_string() {
+                caching_ssh_client.invalidate_cache(&new_name).await;
             }
             Ok(HttpResponse::Ok().json(ApiResponse::success_message("Host updated successfully".to_string())))
         },

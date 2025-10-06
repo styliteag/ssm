@@ -10,6 +10,9 @@ use crate::{
     models::{Host, NewHost, PublicUserKey},
     DbConnection,
 };
+
+// Type alias for authorization query results
+type AuthorizationTuple = (i32, String, String, Option<String>, Option<String>);
 use diesel::dsl::insert_into;
 use diesel::prelude::*;
 use diesel::r2d2::ConnectionManager;
@@ -108,7 +111,7 @@ impl Host {
     ) -> Result<Vec<UserAndOptions>, String> {
         // let user_ids = self.get_authorized_user_ids(conn)?;
 
-        let tuples: Result<Vec<(i32, String, String, Option<String>, Option<String>)>, String> = query(
+        let tuples: Result<Vec<AuthorizationTuple>, String> = query(
             authorization::table
                 .inner_join(user::table)
                 .filter(authorization::host_id.eq(self.id))
@@ -119,7 +122,7 @@ impl Host {
                     authorization::options,
                     authorization::comment,
                 ))
-                .load::<(i32, String, String, Option<String>, Option<String>)>(conn),
+                .load::<AuthorizationTuple>(conn),
         );
         tuples.map(|vec| vec.into_iter().map(UserAndOptions::from).collect())
     }

@@ -5,7 +5,6 @@
 /// - Include structured context information
 /// - Avoid logging sensitive data
 /// - Follow consistent formatting
-
 use log::{debug, error, info, warn};
 use actix_web::HttpRequest;
 

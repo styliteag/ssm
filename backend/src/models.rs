@@ -2,6 +2,9 @@ use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
+// Import UpdateHostRequest for the update_host function
+use crate::routes::host::UpdateHostRequest;
+
 #[derive(Queryable, Selectable, Associations, Clone, Debug, Serialize, ToSchema)]
 #[diesel(table_name = crate::schema::host)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
@@ -27,39 +30,32 @@ impl Host {
     pub fn update_host(
         conn: &mut crate::DbConnection,
         old_name: String,
-        new_name: String,
-        new_address: String,
-        new_username: String,
-        new_port: i32,
-        new_key_fingerprint: Option<String>,
-        new_jump_via: Option<i32>,
-        new_disabled: bool,
-        new_comment: Option<String>,
+        request: UpdateHostRequest,
     ) -> Result<(), actix_web::Error> {
         use crate::schema::host::dsl::*;
         log::warn!(
             "ssm::models::Host: Host update details for '{}':\n  Name -> {}\n  Address -> {}\n  Username -> {}\n  Port -> {}\n  Key Fingerprint -> {:?}\n  Jump Via -> {:?}\n  Disabled -> {}\n  Comment -> {:?}",
             old_name,
-            new_name,
-            new_address,
-            new_username,
-            new_port,
-            new_key_fingerprint,
-            new_jump_via,
-            new_disabled,
-            new_comment
+            request.name,
+            request.address,
+            request.username,
+            request.port,
+            request.key_fingerprint,
+            request.jump_via,
+            request.disabled,
+            request.comment
         );
 
         diesel::update(host.filter(name.eq(&old_name)))
             .set((
-                name.eq(new_name),
-                address.eq(new_address),
-                username.eq(new_username),
-                port.eq(new_port),
-                key_fingerprint.eq(new_key_fingerprint),
-                jump_via.eq(new_jump_via),
-                disabled.eq(new_disabled),
-                comment.eq(new_comment),
+                name.eq(&request.name),
+                address.eq(&request.address),
+                username.eq(&request.username),
+                port.eq(request.port),
+                key_fingerprint.eq(&request.key_fingerprint),
+                jump_via.eq(request.jump_via),
+                disabled.eq(request.disabled),
+                comment.eq(&request.comment),
             ))
             .execute(conn)
             .map_err(actix_web::error::ErrorInternalServerError)?;

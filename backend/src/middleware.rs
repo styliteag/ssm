@@ -85,7 +85,7 @@ where
                 || path.starts_with("/api-docs/")
                 || path == "/"
                 || path == "/health"
-                || method == &actix_web::http::Method::OPTIONS
+                || method == actix_web::http::Method::OPTIONS
             {
                 debug!("Skipping CSRF check for {} {}", method, path);
                 let res = service.call(req).await?;
@@ -198,7 +198,7 @@ where
             });
 
             // Skip authentication for public paths or OPTIONS requests (CORS preflight)
-            if is_public || method == &actix_web::http::Method::OPTIONS {
+            if is_public || method == actix_web::http::Method::OPTIONS {
                 debug!("Skipping auth enforcement for public path: {} {}", method, path);
                 let res = service.call(req).await?;
                 return Ok(res.map_into_left_body());

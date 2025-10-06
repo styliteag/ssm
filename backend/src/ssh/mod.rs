@@ -78,7 +78,7 @@ impl ConnectionDetails {
                 })
             }
             Err(e) => {
-                debug!("{host_name}: Lookup failed: {}", e.to_string());
+                debug!("{host_name}: Lookup failed: {}", e);
                 Err(SshClientError::LookupFailure)
             }
         }
@@ -89,8 +89,8 @@ impl ConnectionDetails {
     }
 
     pub fn log_channel_open(&self, target: &SocketAddr) {
-        let &Self {
-            ref host_name,
+        let Self {
+            host_name,
             address: _,
             login: _,
             jump_via: _,

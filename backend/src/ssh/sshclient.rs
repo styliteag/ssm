@@ -332,8 +332,7 @@ impl SshClient {
         let handle = self.clone().connect(host.to_connection().await?).await?;
         let keyfiles_response = self
             .execute_bash(&handle, BashCommand::GetSshKeyfiles)
-            .await?
-            .map_err(|e| SshClientError::ExecutionError(e))?;
+            .await??;
 
         let parsed = serde_json::from_str::<SshKeyfiles>(&keyfiles_response)
             .map_err(|e| SshClientError::ExecutionError(e.to_string()))?;
