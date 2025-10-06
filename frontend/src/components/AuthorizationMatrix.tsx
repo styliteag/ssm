@@ -31,6 +31,7 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
   hosts,
   authorizations,
   onToggleAuthorization,
+  // @ts-expect-error - unused parameter for future extensibility
   onManageAuthorizations, // eslint-disable-line @typescript-eslint/no-unused-vars
   loading = false,
   className,

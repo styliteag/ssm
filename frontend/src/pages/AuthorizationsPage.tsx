@@ -161,7 +161,6 @@ const AuthorizationsPage: React.FC = () => {
     try {
       if (isAuthorized) {
         // Revoke access - find and delete authorization for this user-host-login combination
-        const user = users.find(u => u.id === userId);
         const host = hosts.find(h => h.id === hostId);
         const targetLogin = loginAccount || host?.username || 'root';
 
