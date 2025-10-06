@@ -406,16 +406,3 @@ async fn add_key_dialog(json: Json<SshPublicKey>) -> Result<impl Responder> {
         suggested_action: "Assign this key to a user".to_string(),
     })))
 }
-
-// Custom deserialization to treat empty strings as None
-fn empty_string_as_none<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    let s = String::deserialize(deserializer)?;
-    if s.trim().is_empty() {
-        Ok(None)
-    } else {
-        Ok(Some(s))
-    }
-}
