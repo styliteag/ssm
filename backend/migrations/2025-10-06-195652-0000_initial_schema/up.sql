@@ -1,7 +1,8 @@
 -- Initial schema for SSM 1.0.0
 -- This migration creates all tables with their final schema
+-- Safe for existing databases: checks if tables exist before creating
 
-CREATE TABLE host (
+CREATE TABLE IF NOT EXISTS host (
     id INTEGER NOT NULL PRIMARY KEY,
     name TEXT UNIQUE NOT NULL,
     username TEXT NOT NULL,
@@ -15,14 +16,14 @@ CREATE TABLE host (
     FOREIGN KEY (jump_via) REFERENCES host(id) ON DELETE CASCADE
 );
 
-CREATE TABLE user (
+CREATE TABLE IF NOT EXISTS user (
     id INTEGER NOT NULL PRIMARY KEY,
     username TEXT UNIQUE NOT NULL,
     enabled BOOLEAN NOT NULL CHECK (enabled IN (0, 1)) DEFAULT 1,
     comment TEXT
 );
 
-CREATE TABLE authorization (
+CREATE TABLE IF NOT EXISTS authorization (
     id INTEGER NOT NULL PRIMARY KEY,
     host_id INTEGER NOT NULL,
     user_id INTEGER NOT NULL,
@@ -34,7 +35,7 @@ CREATE TABLE authorization (
     FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE
 );
 
-CREATE TABLE user_key (
+CREATE TABLE IF NOT EXISTS user_key (
     id INTEGER NOT NULL PRIMARY KEY,
     key_type TEXT NOT NULL,
     key_base64 TEXT UNIQUE NOT NULL,
