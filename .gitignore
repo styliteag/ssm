@@ -8,6 +8,7 @@ backend/*.db
 backend/config.toml
 backend/.htpasswd
 backend/server.log
+backend/data*
 logs/
 __pycache__/
 docker/data/

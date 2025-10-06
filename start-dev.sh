@@ -3,7 +3,13 @@
 # SSH Key Manager Development Startup Script
 # This script starts both the backend and frontend in development mode
 
+CONFDIR=${1:-}
+
 set -e
+
+if [ -n "$CONFDIR" ]; then
+    echo "CONFIG: $CONFDIR/config/config.toml"
+fi
 
 echo "🚀 Starting SSH Key Manager Development Environment"
 echo
@@ -37,7 +43,11 @@ fi
 echo "🦀 Starting Rust backend server..."
 cd backend
 #RUST_LOG=debug cargo run &
-just dev &
+if [ -n "$CONFDIR" ]; then      
+     CONFIG=$CONFDIR/config/config.toml just dev &
+else
+     just dev &
+fi
 BACKEND_PID=$!
 cd ..
 
