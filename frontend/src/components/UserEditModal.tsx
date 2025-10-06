@@ -34,7 +34,7 @@ export const UserEditModal: React.FC<UserEditModalProps> = ({
       validation: {
         minLength: 2,
         maxLength: 50,
-        pattern: /^[a-zA-Z0-9\-_.@]+$/,
+        pattern: /^[a-zA-Z0-9\-_.\s@]+$/,
         custom: (value: unknown) => {
           // Only check for duplicates if username is being changed
           if (user && (value as string) === user.username) return null;

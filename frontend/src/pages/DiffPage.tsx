@@ -537,8 +537,8 @@ const DiffPage: React.FC = () => {
         return;
       }
       
-      if (!/^[a-zA-Z0-9._-]+$/.test(cleanUsername)) {
-        showError('Invalid username', 'Username can only contain letters, numbers, dots, underscores, and hyphens.');
+      if (!/^[a-zA-Z0-9._\-\s@]+$/.test(cleanUsername)) {
+        showError('Invalid username', 'Username can only contain letters, numbers, dots, underscores, hyphens, spaces, and @ symbols.');
         return;
       }
       
@@ -1210,7 +1210,7 @@ const DiffPage: React.FC = () => {
                         {(() => {
                           const username = unknownKeyIssue.details.key.comment.trim();
                           const existingUser = allUsers.find(u => u.username.toLowerCase() === username.toLowerCase());
-                          const isValid = username.length >= 2 && /^[a-zA-Z0-9._-]+$/.test(username);
+                          const isValid = username.length >= 2 && /^[a-zA-Z0-9._\-\s@]+$/.test(username);
                           
                           if (existingUser) {
                             return <p className="text-xs text-amber-500">⚠ User already exists</p>;
