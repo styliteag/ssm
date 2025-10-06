@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Expanded username validation to allow spaces, @ symbols, and # symbols
+- Allow empty comments in user edit modal
 
 ## [0.2.19] - 2025-10-06
 

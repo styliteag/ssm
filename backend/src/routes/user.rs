@@ -344,7 +344,6 @@ async fn assign_key_to_user(
 pub struct UpdateUserRequest {
     username: String,
     enabled: bool,
-    #[serde(deserialize_with = "empty_string_as_none")]
     comment: Option<String>,
 }
 

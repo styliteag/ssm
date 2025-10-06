@@ -73,7 +73,7 @@ export const UserEditModal: React.FC<UserEditModalProps> = ({
       const userData = {
         username: values.username as string,
         enabled: values.enabled === 'true',
-        comment: values.comment && (values.comment as string).trim() !== '' ? (values.comment as string).trim() : undefined
+        comment: values.comment ? (values.comment as string).trim() : ''
       };
       
       const response = await usersService.updateUser(user.username, userData);
