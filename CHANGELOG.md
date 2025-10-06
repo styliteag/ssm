@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- 
+
+## [0.2.22] - 2025-10-06
+
+### Added
 - **Authorization Matrix Enhancement**: Added login account selector to filter matrix by specific SSH accounts (root, oracle, etc.)
 - **Smart Host Filtering**: Matrix automatically shows only hosts that have authorizations for the selected login account
 - **Alphabetical Sorting**: Users and hosts are now sorted alphabetically for better overview
