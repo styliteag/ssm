@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Check, X, Loader2, AlertCircle, Eye, EyeOff, Search } from 'lucide-react';
 import { cn } from '../utils/cn';
 import { User, Host, Authorization } from '../types';
-import { Card, CardContent, CardHeader, CardTitle } from './ui';
+import { Card, CardContent, CardHeader, CardTitle, SearchableSelect } from './ui';
 import Button from './ui/Button';
 import Input from './ui/Input';
 
@@ -11,8 +11,8 @@ interface AuthorizationMatrixProps {
   users: User[];
   hosts: Host[];
   authorizations: Authorization[];
-  onToggleAuthorization: (userId: number, hostId: number, isAuthorized: boolean) => Promise<void>;
-  onManageAuthorizations?: (userId: number, hostId: number, authorizations: Authorization[]) => void;
+  onToggleAuthorization: (userId: number, hostId: number, isAuthorized: boolean, loginAccount?: string) => Promise<void>;
+  onManageAuthorizations?: (userId: number, hostId: number, authorizations: Authorization[]) => void; // eslint-disable-line @typescript-eslint/no-unused-vars
   loading?: boolean;
   className?: string;
   onViewModeChange?: (mode: string) => void; // Callback to change view mode in parent
@@ -42,6 +42,7 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
   const [showOnlyAuthorized, setShowOnlyAuthorized] = useState(false);
   const [userSearchTerm, setUserSearchTerm] = useState('');
   const [hostSearchTerm, setHostSearchTerm] = useState('');
+  const [selectedLoginAccount, setSelectedLoginAccount] = useState<string>('root');
 
   // Restore state from localStorage if returning from navigation
   useEffect(() => {
@@ -52,12 +53,13 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
         setUserSearchTerm(state.userSearchTerm || '');
         setHostSearchTerm(state.hostSearchTerm || '');
         setShowOnlyAuthorized(state.showOnlyAuthorized || false);
-        
+        setSelectedLoginAccount(state.selectedLoginAccount || 'root');
+
         // Switch to matrix view if needed
         if (state.viewMode === 'matrix' && onViewModeChange) {
           onViewModeChange('matrix');
         }
-        
+
         // Clear the saved state after restoring
         localStorage.removeItem('matrixNavigationState');
       } catch (error) {
@@ -66,6 +68,15 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
       }
     }
   }, [onViewModeChange]);
+
+  // Collect all unique login accounts from authorizations
+  const availableLoginAccounts = useMemo(() => {
+    const loginAccounts = new Set<string>();
+    authorizations.forEach(auth => {
+      loginAccounts.add(auth.login);
+    });
+    return Array.from(loginAccounts).sort();
+  }, [authorizations]);
 
   // Create authorization lookup map - now supports multiple login accounts per user-host
   const authMap = useMemo(() => {
@@ -87,6 +98,7 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
       userSearchTerm,
       hostSearchTerm,
       showOnlyAuthorized,
+      selectedLoginAccount,
     };
     localStorage.setItem('matrixNavigationState', JSON.stringify(matrixState));
     navigate('/users', { state: { searchTerm: username } });
@@ -98,6 +110,7 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
       userSearchTerm,
       hostSearchTerm,
       showOnlyAuthorized,
+      selectedLoginAccount,
     };
     localStorage.setItem('matrixNavigationState', JSON.stringify(matrixState));
     navigate('/hosts', { state: { searchTerm: hostname } });
@@ -107,57 +120,53 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
   const { filteredUsers, filteredHosts } = useMemo(() => {
     let filteredUsers = users;
     let filteredHosts = hosts;
-    
+
     // Filter users by search term
     if (userSearchTerm.trim()) {
       const searchLower = userSearchTerm.toLowerCase();
-      filteredUsers = filteredUsers.filter(user => 
+      filteredUsers = filteredUsers.filter(user =>
         user.username.toLowerCase().includes(searchLower)
       );
     }
-    
+
     // Filter hosts by search term
     if (hostSearchTerm.trim()) {
       const searchLower = hostSearchTerm.toLowerCase();
-      filteredHosts = filteredHosts.filter(host => 
-        host.name.toLowerCase().includes(searchLower) || 
+      filteredHosts = filteredHosts.filter(host =>
+        host.name.toLowerCase().includes(searchLower) ||
         host.address.toLowerCase().includes(searchLower)
       );
     }
-    
-    // Filter by authorized only
-    if (showOnlyAuthorized) {
-      filteredUsers = filteredUsers.filter(user => 
-        filteredHosts.some(host => 
-          authorizations.some(auth => auth.user_id === user.id && auth.host_id === host.id)
-        )
-      );
-      
-      filteredHosts = filteredHosts.filter(host =>
-        filteredUsers.some(user =>
-          authorizations.some(auth => auth.user_id === user.id && auth.host_id === host.id)
-        )
-      );
-    }
-    
-    return { filteredUsers, filteredHosts };
-  }, [users, hosts, authorizations, showOnlyAuthorized, userSearchTerm, hostSearchTerm]);
 
-  // Handle cell click to toggle authorization or manage multiple accounts
-  const handleCellClick = async (userId: number, hostId: number, isAuthorized: boolean, authorizations: Authorization[]) => {
-    const key = `${userId}-${hostId}`;
-    
-    // If there are multiple authorizations and we have a manage callback, open management interface
-    if (isAuthorized && authorizations.length > 1 && onManageAuthorizations) {
-      onManageAuthorizations(userId, hostId, authorizations);
-      return;
+    // Filter hosts to only show those with authorizations for the selected login account
+    // This ensures the matrix only shows relevant hosts for the selected account
+    filteredHosts = filteredHosts.filter(host =>
+      authorizations.some(auth => auth.host_id === host.id && auth.login === selectedLoginAccount)
+    );
+
+    // Apply "show only authorized" filter if enabled
+    if (showOnlyAuthorized) {
+      // Filter users to only show those with authorizations for the selected login account on the filtered hosts
+      filteredUsers = filteredUsers.filter(user =>
+        filteredHosts.some(host =>
+          authorizations.some(auth => auth.user_id === user.id && auth.host_id === host.id && auth.login === selectedLoginAccount)
+        )
+      );
     }
-    
+    // Otherwise keep all users - this allows seeing which users have access to which relevant hosts
+
+    return { filteredUsers, filteredHosts };
+  }, [users, hosts, authorizations, showOnlyAuthorized, userSearchTerm, hostSearchTerm, selectedLoginAccount]);
+
+  // Handle cell click to toggle authorization for the selected login account
+  const handleCellClick = async (userId: number, hostId: number, isAuthorized: boolean, _authorizations: Authorization[]) => { // eslint-disable-line @typescript-eslint/no-unused-vars
+    const key = `${userId}-${hostId}`;
+
     // Set loading state
     setCellStates(prev => new Map(prev).set(key, true));
-    
+
     try {
-      await onToggleAuthorization(userId, hostId, isAuthorized);
+      await onToggleAuthorization(userId, hostId, isAuthorized, selectedLoginAccount);
     } catch (error) {
       console.error('Failed to toggle authorization:', error);
     } finally {
@@ -176,22 +185,12 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
     if (cell.loading) {
       return <Loader2 size={16} className="animate-spin text-blue-500" />;
     }
-    
+
     if (cell.isAuthorized) {
-      if (cell.authorizations.length > 1) {
-        // Multiple login accounts - show count
-        return (
-          <div className="flex items-center space-x-1">
-            <Check size={12} className="text-green-500" />
-            <span className="text-xs font-bold text-green-600">{cell.authorizations.length}</span>
-          </div>
-        );
-      } else {
-        // Single authorization
-        return <Check size={16} className="text-green-500" />;
-      }
+      // Now we only show one authorization per cell (filtered by login account)
+      return <Check size={16} className="text-green-500" />;
     }
-    
+
     return <X size={16} className="text-gray-400" />;
   };
 
@@ -245,6 +244,7 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
               size="sm"
               onClick={() => setShowOnlyAuthorized(!showOnlyAuthorized)}
               leftIcon={showOnlyAuthorized ? <EyeOff size={16} /> : <Eye size={16} />}
+              title={showOnlyAuthorized ? 'Show all users and hosts' : 'Show only users and hosts with authorizations'}
             >
               {showOnlyAuthorized ? 'Show All' : 'Show Authorized Only'}
             </Button>
@@ -253,8 +253,8 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
         
         {/* Search Inputs */}
         <div className="mt-4 space-y-4">
-          <div className="flex flex-col sm:flex-row gap-4 max-w-3xl">
-            <div className="w-full sm:w-80">
+          <div className="flex flex-col sm:flex-row gap-4 max-w-4xl">
+            <div className="w-full sm:w-64">
               <Input
                 type="text"
                 placeholder="Search users by username..."
@@ -264,7 +264,7 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
                 className="w-full"
               />
             </div>
-            <div className="w-full sm:w-80">
+            <div className="w-full sm:w-64">
               <Input
                 type="text"
                 placeholder="Search hosts by name or IP..."
@@ -274,18 +274,32 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
                 className="w-full"
               />
             </div>
+            <div className="w-full sm:w-48">
+              <SearchableSelect
+                placeholder="Select login account..."
+                value={selectedLoginAccount}
+                options={availableLoginAccounts.map(account => ({
+                  value: account,
+                  label: account
+                }))}
+                onValueChange={(value) => setSelectedLoginAccount(value.toString())}
+                className="w-full"
+              />
+            </div>
           </div>
           
           {/* Active Filters Indicator */}
-          {(userSearchTerm || hostSearchTerm) && (
+          {(userSearchTerm || hostSearchTerm || showOnlyAuthorized) && (
             <div className="flex items-center justify-between p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-sm">
               <div className="flex items-center space-x-2 text-blue-800 dark:text-blue-200">
                 <Search size={14} />
                 <span>
-                  Active filters: 
+                  Active filters:
                   {userSearchTerm && ` Users: "${userSearchTerm}"`}
-                  {userSearchTerm && hostSearchTerm && ', '}
+                  {userSearchTerm && (hostSearchTerm || showOnlyAuthorized) && ', '}
                   {hostSearchTerm && ` Hosts: "${hostSearchTerm}"`}
+                  {(userSearchTerm || hostSearchTerm) && showOnlyAuthorized && ', '}
+                  {showOnlyAuthorized && ' Authorized users only'}
                 </span>
               </div>
               <Button
@@ -294,6 +308,7 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
                 onClick={() => {
                   setUserSearchTerm('');
                   setHostSearchTerm('');
+                  setShowOnlyAuthorized(false);
                 }}
                 className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200"
               >
@@ -313,13 +328,13 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
               No Data Available
             </h3>
             <p className="text-gray-500 dark:text-gray-400 text-center">
-              {filteredUsers.length === 0 && filteredHosts.length === 0 
-                ? 'No users or hosts match your search criteria.' 
-                : filteredUsers.length === 0 
-                  ? 'No users found matching your search.' 
-                  : 'No hosts found matching your search.'}
-              {showOnlyAuthorized && ' Try showing all users and hosts.'}
+              {filteredHosts.length === 0
+                ? 'No hosts found with the selected login account.'
+                : filteredUsers.length === 0
+                  ? 'No users found matching your criteria.'
+                  : 'No data available.'}
               {(userSearchTerm || hostSearchTerm) && ' Try clearing your search filters.'}
+              {showOnlyAuthorized && ' Try showing all users.'}
             </p>
           </div>
         ) : (
@@ -366,13 +381,15 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
                   {filteredHosts.map((host) => {
                     const key = `${user.id}-${host.id}`;
                     const userAuthorizations = authMap.get(key) || [];
-                    const isAuthorized = userAuthorizations.length > 0;
+                    // Filter authorizations by selected login account
+                    const relevantAuthorizations = userAuthorizations.filter(auth => auth.login === selectedLoginAccount);
+                    const isAuthorized = relevantAuthorizations.length > 0;
                     const isLoading = cellStates.get(key) || false;
-                    
+
                     const cell: MatrixCell = {
                       userId: user.id,
                       hostId: host.id,
-                      authorizations: userAuthorizations,
+                      authorizations: relevantAuthorizations, // Only show authorizations for selected login account
                       isAuthorized,
                       loading: isLoading,
                     };
@@ -385,11 +402,11 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
                         onMouseEnter={() => setHoveredCell({ userId: cell.userId, hostId: cell.hostId })}
                         onMouseLeave={() => setHoveredCell(null)}
                         title={
-                          cell.loading 
-                            ? 'Updating...' 
+                          cell.loading
+                            ? 'Updating...'
                             : cell.isAuthorized
-                              ? `${user.username} on ${host.name}: Authorized${cell.authorizations.length > 1 ? ` (${cell.authorizations.length} accounts)` : ''}\n${cell.authorizations.map(auth => `• ${auth.login}${auth.options ? ` (${auth.options})` : ''}`).join('\n')}`
-                              : `${user.username} on ${host.name}: Not Authorized`
+                              ? `${user.username} on ${host.name} as ${selectedLoginAccount}: Authorized${cell.authorizations[0]?.options ? ` (${cell.authorizations[0].options})` : ''}`
+                              : `${user.username} on ${host.name} as ${selectedLoginAccount}: Not Authorized`
                         }
                       >
                         {getCellContent(cell)}
@@ -408,16 +425,7 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
             <div className="w-4 h-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded flex items-center justify-center">
               <Check size={12} className="text-green-500" />
             </div>
-            <span className="text-gray-900 dark:text-white">Authorized</span>
-          </div>
-          <div className="flex items-center space-x-2">
-            <div className="w-4 h-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded flex items-center justify-center">
-              <div className="flex items-center space-x-1">
-                <Check size={8} className="text-green-500" />
-                <span className="text-xs font-bold text-green-600">2</span>
-              </div>
-            </div>
-            <span className="text-gray-900 dark:text-white">Multiple Login Accounts</span>
+            <span className="text-gray-900 dark:text-white">Authorized as {selectedLoginAccount}</span>
           </div>
           <div className="flex items-center space-x-2">
             <div className="w-4 h-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded flex items-center justify-center">
