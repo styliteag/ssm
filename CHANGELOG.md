@@ -8,7 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- 
+- **Authorization Matrix Enhancement**: Added login account selector to filter matrix by specific SSH accounts (root, oracle, etc.)
+- **Smart Host Filtering**: Matrix automatically shows only hosts that have authorizations for the selected login account
+- **Alphabetical Sorting**: Users and hosts are now sorted alphabetically for better overview
+- **Show Authorized Only Toggle**: Added button to show only users with actual authorizations, hiding empty rows
+- **Code Quality Improvements**: Fixed multiple Clippy and ESLint warnings across frontend and backend
+
+### Changed
+- **Matrix Behavior**: Matrix now defaults to showing all users but only relevant hosts for selected login account
+- **User Experience**: Cleaner matrix interface with better filtering and sorting
 
 ## [0.2.21] - 2025-10-06
 
