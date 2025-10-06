@@ -8,7 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- 
+-
+
+## [1.0.0] - 2025-10-06
+
+### Changed
+- **Database Schema Consolidation**: Removed all incremental migrations and created single initial migration with final schema
+- **Breaking Change**: Existing databases must be recreated - migration history removed for clean 1.0.0 baseline
+
+### Added
+- **Initial Migration**: Single migration file containing complete database schema for version 1.0.0
 
 ## [0.2.22] - 2025-10-06
 
