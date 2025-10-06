@@ -155,6 +155,10 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
     }
     // Otherwise keep all users - this allows seeing which users have access to which relevant hosts
 
+    // Sort filtered data alphabetically
+    filteredUsers.sort((a, b) => a.username.localeCompare(b.username));
+    filteredHosts.sort((a, b) => a.name.localeCompare(b.name));
+
     return { filteredUsers, filteredHosts };
   }, [users, hosts, authorizations, showOnlyAuthorized, userSearchTerm, hostSearchTerm, selectedLoginAccount]);
 
