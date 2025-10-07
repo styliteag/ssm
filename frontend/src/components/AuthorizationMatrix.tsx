@@ -43,7 +43,7 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
   const [showOnlyAuthorized, setShowOnlyAuthorized] = useState(false);
   const [userSearchTerm, setUserSearchTerm] = useState('');
   const [hostSearchTerm, setHostSearchTerm] = useState('');
-  const [selectedLoginAccount, setSelectedLoginAccount] = useState<string>('root');
+  const [selectedLoginAccount, setSelectedLoginAccount] = useState<string>('');
 
   // Restore state from localStorage if returning from navigation
   useEffect(() => {
@@ -54,7 +54,7 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
         setUserSearchTerm(state.userSearchTerm || '');
         setHostSearchTerm(state.hostSearchTerm || '');
         setShowOnlyAuthorized(state.showOnlyAuthorized || false);
-        setSelectedLoginAccount(state.selectedLoginAccount || 'root');
+        setSelectedLoginAccount(state.selectedLoginAccount || '');
 
         // Switch to matrix view if needed
         if (state.viewMode === 'matrix' && onViewModeChange) {
@@ -70,14 +70,41 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
     }
   }, [onViewModeChange]);
 
-  // Collect all unique login accounts from authorizations
+  // Collect all unique login accounts from authorizations with counts
   const availableLoginAccounts = useMemo(() => {
-    const loginAccounts = new Set<string>();
+    // Count occurrences of each login account
+    const loginCounts = new Map<string, number>();
     authorizations.forEach(auth => {
-      loginAccounts.add(auth.login);
+      loginCounts.set(auth.login, (loginCounts.get(auth.login) || 0) + 1);
     });
-    return Array.from(loginAccounts).sort();
+    
+    // Convert to array and sort by count (descending)
+    const sortedAccounts = Array.from(loginCounts.entries())
+      .sort((a, b) => b[1] - a[1]) // Sort by count descending
+      .map(([account]) => account);
+    
+    // Add "all" at the beginning
+    return ['all', ...sortedAccounts];
   }, [authorizations]);
+
+  // Get count for a specific login account
+  const getLoginAccountCount = useMemo(() => {
+    const counts = new Map<string, number>();
+    authorizations.forEach(auth => {
+      counts.set(auth.login, (counts.get(auth.login) || 0) + 1);
+    });
+    return counts;
+  }, [authorizations]);
+
+  // Set default login account intelligently
+  useEffect(() => {
+    if (!selectedLoginAccount && availableLoginAccounts.length > 0) {
+      // Try to default to 'root' if it exists, otherwise use first available (most used)
+      const hasRoot = availableLoginAccounts.includes('root');
+      const defaultAccount = hasRoot ? 'root' : (availableLoginAccounts[1] || availableLoginAccounts[0]); // Skip 'all' at index 0
+      setSelectedLoginAccount(defaultAccount);
+    }
+  }, [selectedLoginAccount, availableLoginAccounts]);
 
   // Create authorization lookup map - now supports multiple login accounts per user-host
   const authMap = useMemo(() => {
@@ -139,20 +166,36 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
       );
     }
 
-    // Filter hosts to only show those with authorizations for the selected login account
-    // This ensures the matrix only shows relevant hosts for the selected account
-    filteredHosts = filteredHosts.filter(host =>
-      authorizations.some(auth => auth.host_id === host.id && auth.login === selectedLoginAccount)
-    );
+    // Filter hosts based on selected login account
+    if (selectedLoginAccount !== 'all') {
+      // Filter hosts to only show those with authorizations for the selected login account
+      filteredHosts = filteredHosts.filter(host =>
+        authorizations.some(auth => auth.host_id === host.id && auth.login === selectedLoginAccount)
+      );
+    } else {
+      // When "all" is selected, show hosts that have any authorizations
+      filteredHosts = filteredHosts.filter(host =>
+        authorizations.some(auth => auth.host_id === host.id)
+      );
+    }
 
     // Apply "show only authorized" filter if enabled
     if (showOnlyAuthorized) {
-      // Filter users to only show those with authorizations for the selected login account on the filtered hosts
-      filteredUsers = filteredUsers.filter(user =>
-        filteredHosts.some(host =>
-          authorizations.some(auth => auth.user_id === user.id && auth.host_id === host.id && auth.login === selectedLoginAccount)
-        )
-      );
+      if (selectedLoginAccount !== 'all') {
+        // Filter users to only show those with authorizations for the selected login account on the filtered hosts
+        filteredUsers = filteredUsers.filter(user =>
+          filteredHosts.some(host =>
+            authorizations.some(auth => auth.user_id === user.id && auth.host_id === host.id && auth.login === selectedLoginAccount)
+          )
+        );
+      } else {
+        // When "all" is selected, show users with any authorizations on the filtered hosts
+        filteredUsers = filteredUsers.filter(user =>
+          filteredHosts.some(host =>
+            authorizations.some(auth => auth.user_id === user.id && auth.host_id === host.id)
+          )
+        );
+      }
     }
     // Otherwise keep all users - this allows seeing which users have access to which relevant hosts
 
@@ -165,6 +208,11 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
 
   // Handle cell click to toggle authorization for the selected login account
   const handleCellClick = async (userId: number, hostId: number, isAuthorized: boolean) => {
+    // Don't allow clicking when "all" is selected (view-only mode)
+    if (selectedLoginAccount === 'all') {
+      return;
+    }
+
     const key = `${userId}-${hostId}`;
 
     // Set loading state
@@ -191,8 +239,17 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
       return <Loader2 size={16} className="animate-spin text-blue-500" />;
     }
 
+    if (selectedLoginAccount === 'all') {
+      // In "all" mode, show the count of authorizations
+      const count = cell.authorizations.length;
+      if (count > 0) {
+        return <span className="text-sm font-semibold text-green-600 dark:text-green-400">{count}</span>;
+      }
+      return <span className="text-xs text-gray-400">-</span>;
+    }
+
     if (cell.isAuthorized) {
-      // Now we only show one authorization per cell (filtered by login account)
+      // Show checkmark for specific login account
       return <Check size={16} className="text-green-500" />;
     }
 
@@ -202,17 +259,25 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
   // Get cell background color
   const getCellClassName = (cell: MatrixCell, rowIndex: number) => {
     const isHovered = hoveredCell?.userId === cell.userId && hoveredCell?.hostId === cell.hostId;
+    const isAllMode = selectedLoginAccount === 'all';
+    const hasAuthorizations = cell.authorizations.length > 0;
     
     return cn(
-      'w-12 h-8 flex items-center justify-center cursor-pointer transition-all duration-150 border border-gray-200 dark:border-gray-700',
+      'w-12 h-8 flex items-center justify-center transition-all duration-150 border border-gray-200 dark:border-gray-700',
       {
+        // Cursor style - pointer only when not in "all" mode
+        'cursor-pointer': !isAllMode,
+        'cursor-default': isAllMode,
+        
         // Authorization states
-        'bg-green-50 dark:bg-green-900/20 hover:bg-green-100 dark:hover:bg-green-900/30': cell.isAuthorized && !cell.loading,
-        'bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700': !cell.isAuthorized && !cell.loading,
+        'bg-green-50 dark:bg-green-900/20': (cell.isAuthorized || (isAllMode && hasAuthorizations)) && !cell.loading,
+        'hover:bg-green-100 dark:hover:bg-green-900/30': cell.isAuthorized && !cell.loading && !isAllMode,
+        'bg-gray-50 dark:bg-gray-800': (!cell.isAuthorized && !isAllMode) || (isAllMode && !hasAuthorizations) && !cell.loading,
+        'hover:bg-gray-100 dark:hover:bg-gray-700': !cell.isAuthorized && !cell.loading && !isAllMode,
         'bg-blue-50 dark:bg-blue-900/20': cell.loading,
         
         // Hover states
-        'ring-2 ring-blue-500 ring-opacity-50': isHovered,
+        'ring-2 ring-blue-500 ring-opacity-50': isHovered && !isAllMode,
         
         // Zebra striping
         'bg-opacity-80': rowIndex % 2 === 0,
@@ -241,24 +306,11 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
   return (
     <Card className={className}>
       <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle>Authorization Matrix</CardTitle>
-          <div className="flex items-center space-x-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowOnlyAuthorized(!showOnlyAuthorized)}
-              leftIcon={showOnlyAuthorized ? <EyeOff size={16} /> : <Eye size={16} />}
-              title={showOnlyAuthorized ? 'Show all users and hosts' : 'Show only users and hosts with authorizations'}
-            >
-              {showOnlyAuthorized ? 'Show All' : 'Show Authorized Only'}
-            </Button>
-          </div>
-        </div>
+        <CardTitle>Authorization Matrix</CardTitle>
         
         {/* Search Inputs */}
         <div className="mt-4 space-y-4">
-          <div className="flex flex-col sm:flex-row gap-4 max-w-4xl">
+          <div className="flex flex-col sm:flex-row gap-4 max-w-6xl items-end">
             <div className="w-full sm:w-64">
               <Input
                 type="text"
@@ -283,13 +335,27 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
               <SearchableSelect
                 placeholder="Select login account..."
                 value={selectedLoginAccount}
-                options={availableLoginAccounts.map(account => ({
-                  value: account,
-                  label: account
-                }))}
+                options={availableLoginAccounts.map(account => {
+                  if (account === 'all') {
+                    return { value: 'all', label: 'all (view only)' };
+                  }
+                  const count = getLoginAccountCount.get(account) || 0;
+                  return { value: account, label: `${account} (${count})` };
+                })}
                 onValueChange={(value) => setSelectedLoginAccount(value.toString())}
                 className="w-full"
               />
+            </div>
+            <div className="flex-shrink-0">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowOnlyAuthorized(!showOnlyAuthorized)}
+                leftIcon={showOnlyAuthorized ? <EyeOff size={16} /> : <Eye size={16} />}
+                title={showOnlyAuthorized ? 'Show all users and hosts' : 'Show only users and hosts with authorizations'}
+              >
+                {showOnlyAuthorized ? 'Show All' : 'Show Authorized Only'}
+              </Button>
             </div>
           </div>
           
@@ -334,7 +400,9 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
             </h3>
             <p className="text-gray-500 dark:text-gray-400 text-center">
               {filteredHosts.length === 0
-                ? 'No hosts found with the selected login account.'
+                ? selectedLoginAccount === 'all'
+                  ? 'No hosts found with any authorizations.'
+                  : 'No hosts found with the selected login account.'
                 : filteredUsers.length === 0
                   ? 'No users found matching your criteria.'
                   : 'No data available.'}
@@ -343,7 +411,7 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
             </p>
           </div>
         ) : (
-          <div className="overflow-auto max-h-[600px] border border-gray-200 dark:border-gray-700 rounded-lg">
+          <div className="overflow-hidden border border-gray-200 dark:border-gray-700 rounded-lg">
             <div className="min-w-max">
               {/* Header with host names */}
               <div className="flex bg-gray-50 dark:bg-gray-800 sticky top-0 z-10">
@@ -386,33 +454,48 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
                   {filteredHosts.map((host) => {
                     const key = `${user.id}-${host.id}`;
                     const userAuthorizations = authMap.get(key) || [];
-                    // Filter authorizations by selected login account
-                    const relevantAuthorizations = userAuthorizations.filter(auth => auth.login === selectedLoginAccount);
+                    
+                    // Filter authorizations based on selected mode
+                    const relevantAuthorizations = selectedLoginAccount === 'all' 
+                      ? userAuthorizations // Show all authorizations in "all" mode
+                      : userAuthorizations.filter(auth => auth.login === selectedLoginAccount);
+                    
                     const isAuthorized = relevantAuthorizations.length > 0;
                     const isLoading = cellStates.get(key) || false;
 
                     const cell: MatrixCell = {
                       userId: user.id,
                       hostId: host.id,
-                      authorizations: relevantAuthorizations, // Only show authorizations for selected login account
+                      authorizations: relevantAuthorizations,
                       isAuthorized,
                       loading: isLoading,
                     };
+
+                    // Build tooltip text
+                    let tooltipText = '';
+                    if (cell.loading) {
+                      tooltipText = 'Updating...';
+                    } else if (selectedLoginAccount === 'all') {
+                      if (cell.authorizations.length > 0) {
+                        const logins = cell.authorizations.map(auth => auth.login).join(', ');
+                        tooltipText = `${user.username} on ${host.name}: ${cell.authorizations.length} authorization${cell.authorizations.length > 1 ? 's' : ''} (${logins})`;
+                      } else {
+                        tooltipText = `${user.username} on ${host.name}: No authorizations`;
+                      }
+                    } else {
+                      tooltipText = cell.isAuthorized
+                        ? `${user.username} on ${host.name} as ${selectedLoginAccount}: Authorized${cell.authorizations[0]?.options ? ` (${cell.authorizations[0].options})` : ''}`
+                        : `${user.username} on ${host.name} as ${selectedLoginAccount}: Not Authorized`;
+                    }
 
                     return (
                       <div
                         key={`${user.id}-${host.id}`}
                         className={getCellClassName(cell, rowIndex)}
                         onClick={() => !cell.loading && handleCellClick(cell.userId, cell.hostId, cell.isAuthorized)}
-                        onMouseEnter={() => setHoveredCell({ userId: cell.userId, hostId: cell.hostId })}
+                        onMouseEnter={() => selectedLoginAccount !== 'all' && setHoveredCell({ userId: cell.userId, hostId: cell.hostId })}
                         onMouseLeave={() => setHoveredCell(null)}
-                        title={
-                          cell.loading
-                            ? 'Updating...'
-                            : cell.isAuthorized
-                              ? `${user.username} on ${host.name} as ${selectedLoginAccount}: Authorized${cell.authorizations[0]?.options ? ` (${cell.authorizations[0].options})` : ''}`
-                              : `${user.username} on ${host.name} as ${selectedLoginAccount}: Not Authorized`
-                        }
+                        title={tooltipText}
                       >
                         {getCellContent(cell)}
                       </div>
@@ -426,24 +509,43 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
 
         {/* Legend */}
         <div className="flex items-center justify-center space-x-6 mt-4 text-sm">
-          <div className="flex items-center space-x-2">
-            <div className="w-4 h-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded flex items-center justify-center">
-              <Check size={12} className="text-green-500" />
-            </div>
-            <span className="text-gray-900 dark:text-white">Authorized as {selectedLoginAccount}</span>
-          </div>
-          <div className="flex items-center space-x-2">
-            <div className="w-4 h-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded flex items-center justify-center">
-              <X size={12} className="text-gray-400" />
-            </div>
-            <span className="text-gray-900 dark:text-white">Not Authorized</span>
-          </div>
-          <div className="flex items-center space-x-2">
-            <div className="w-4 h-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded flex items-center justify-center">
-              <Loader2 size={12} className="text-blue-500" />
-            </div>
-            <span className="text-gray-900 dark:text-white">Updating</span>
-          </div>
+          {selectedLoginAccount === 'all' ? (
+            <>
+              <div className="flex items-center space-x-2">
+                <div className="w-6 h-6 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded flex items-center justify-center">
+                  <span className="text-xs font-semibold text-green-600 dark:text-green-400">N</span>
+                </div>
+                <span className="text-gray-900 dark:text-white">Number of authorizations (view only)</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <div className="w-6 h-6 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded flex items-center justify-center">
+                  <span className="text-xs text-gray-400">-</span>
+                </div>
+                <span className="text-gray-900 dark:text-white">No authorizations</span>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center space-x-2">
+                <div className="w-4 h-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded flex items-center justify-center">
+                  <Check size={12} className="text-green-500" />
+                </div>
+                <span className="text-gray-900 dark:text-white">Authorized as {selectedLoginAccount}</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <div className="w-4 h-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded flex items-center justify-center">
+                  <X size={12} className="text-gray-400" />
+                </div>
+                <span className="text-gray-900 dark:text-white">Not Authorized</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <div className="w-4 h-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded flex items-center justify-center">
+                  <Loader2 size={12} className="text-blue-500" />
+                </div>
+                <span className="text-gray-900 dark:text-white">Updating</span>
+              </div>
+            </>
+          )}
         </div>
       </CardContent>
     </Card>
