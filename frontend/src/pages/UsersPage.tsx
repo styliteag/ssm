@@ -12,7 +12,9 @@ import {
   XCircle,
   UserPlus,
   UserMinus,
-  Split
+  Split,
+  Link2,
+  Trash
 } from 'lucide-react';
 import {
   Card,
@@ -33,6 +35,8 @@ import { authorizationsService } from '../services/api/authorizations';
 import { hostsService } from '../services/api/hosts';
 import UserEditModal from '../components/UserEditModal';
 import SplitKeysModal from '../components/SplitKeysModal';
+import MergeUsersModal from '../components/MergeUsersModal';
+import BulkDeleteUsersModal from '../components/BulkDeleteUsersModal';
 import type {
   User,
   PublicUserKey,
@@ -72,10 +76,13 @@ const UsersPage: React.FC = () => {
   const [showKeysModal, setShowKeysModal] = useState(false);
   const [showAuthorizationsModal, setShowAuthorizationsModal] = useState(false);
   const [showSplitKeysModal, setShowSplitKeysModal] = useState(false);
-  
+  const [showMergeModal, setShowMergeModal] = useState(false);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+
   // Form loading states
   const [submitting, setSubmitting] = useState(false);
   const [loadingDetails, setLoadingDetails] = useState(false);
+  const [selectedUsersForMerge, setSelectedUsersForMerge] = useState<ExtendedUser[]>([]);
 
   // Load users with extended information
   const loadUsers = useCallback(async () => {
@@ -108,6 +115,7 @@ const UsersPage: React.FC = () => {
         );
         
         setUsers(usersWithDetails);
+        setSelectedUsersForMerge([]);
       }
     } catch {
       showError('Failed to load users', 'Please try again later');
@@ -237,6 +245,7 @@ const UsersPage: React.FC = () => {
       const response = await usersService.deleteUser(selectedUser.username);
       if (response.success) {
         setUsers(prev => prev.filter(u => u.id !== selectedUser.id));
+        setSelectedUsersForMerge(prev => prev.filter(u => u.id !== selectedUser.id));
         setShowDeleteModal(false);
         setSelectedUser(null);
         showSuccess('User deleted', `${selectedUser.username} has been deleted successfully`);
@@ -469,9 +478,29 @@ const UsersPage: React.FC = () => {
             Manage users and their SSH access permissions
           </p>
         </div>
-        <Button onClick={() => setShowAddModal(true)} leftIcon={<Plus size={16} />}>
-          Add User
-        </Button>
+        <div className="flex items-center space-x-3">
+          <Button
+            variant="danger"
+            onClick={() => setShowBulkDeleteModal(true)}
+            leftIcon={<Trash size={16} />}
+            disabled={selectedUsersForMerge.length === 0}
+            title={selectedUsersForMerge.length === 0 ? 'Select users to delete' : 'Delete selected users'}
+          >
+            Delete Selected
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={() => setShowMergeModal(true)}
+            leftIcon={<Link2 size={16} />}
+            disabled={selectedUsersForMerge.length < 2}
+            title={selectedUsersForMerge.length < 2 ? 'Select at least two users to merge' : 'Merge selected users into a single user'}
+          >
+            Merge Users
+          </Button>
+          <Button onClick={() => setShowAddModal(true)} leftIcon={<Plus size={16} />}>
+            Add User
+          </Button>
+        </div>
       </div>
 
       {/* User List */}
@@ -488,6 +517,10 @@ const UsersPage: React.FC = () => {
             searchPlaceholder="Search users by username..."
             initialSort={{ key: 'username', direction: 'asc' }}
             initialSearch={(location.state as { searchTerm?: string })?.searchTerm || ''}
+            selectable
+            selectedItems={selectedUsersForMerge}
+            onSelectionChange={(selected) => setSelectedUsersForMerge(selected as ExtendedUser[])}
+            getItemId={(user) => user.id}
           />
         </CardContent>
       </Card>
@@ -768,6 +801,31 @@ const UsersPage: React.FC = () => {
         userAuthorizations={userDetails?.authorizations || []}
         allHosts={userDetails?.hosts || []}
         onUserUpdated={handleUserUpdated}
+      />
+
+      <MergeUsersModal
+        isOpen={showMergeModal}
+        onClose={() => {
+          setShowMergeModal(false);
+        }}
+        selectedUsers={selectedUsersForMerge}
+        allUsers={users}
+        onMergeComplete={() => {
+          setShowMergeModal(false);
+          setSelectedUsersForMerge([]);
+          loadUsers();
+        }}
+      />
+
+      <BulkDeleteUsersModal
+        isOpen={showBulkDeleteModal}
+        onClose={() => setShowBulkDeleteModal(false)}
+        usersToDelete={selectedUsersForMerge}
+        onDeleteComplete={() => {
+          setShowBulkDeleteModal(false);
+          setSelectedUsersForMerge([]);
+          loadUsers();
+        }}
       />
     </div>
   );
