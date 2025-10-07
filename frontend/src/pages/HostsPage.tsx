@@ -963,7 +963,8 @@ const HostsPage: React.FC = () => {
           layout="grid"
           gridCols={2}
           initialValues={{
-            port: 22
+            port: 22,
+            username: 'root'
           }}
         />
       </Modal>

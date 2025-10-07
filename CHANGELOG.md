@@ -15,7 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Authorization Matrix UI**: Removed scroll bars from matrix view for cleaner, full-page display
 - **Authorization Matrix Layout**: Moved "Show Authorized Only" button to be positioned after the login account selector for better workflow
 - **Authorization Matrix Selector Order**: Login accounts sorted by usage count in descending order, with "all (view only)" shown first
-- **Authorization Matrix Default**: Smart default selection - prefers "root" if available, otherwise defaults to most-used login account 
+- **Authorization Matrix Default**: Smart default selection - prefers "root" if available, otherwise defaults to most-used login account
+- **Host Add Form**: SSH Username field now defaults to "root" for convenience 
 
 ## [1.0.1] - 2025-10-06
 
