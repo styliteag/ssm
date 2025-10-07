@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **Authorization Matrix "All" View**: Added "all (view only)" option to login account selector that displays the count of authorizations per user/host across all login accounts
 - **Authorization Matrix Usage Counts**: Login accounts in selector now show usage count (e.g., "oracle (4)")
+- **User Merge Workflow**: Users list now supports selecting multiple accounts and merging them into a single user, consolidating keys and host authorizations in one step
+- **Bulk User Deletion**: Select users in the list and delete them all at once with a confirmation dialog that summarizes impact
 
 ### Changed
 - **Authorization Matrix UI**: Removed scroll bars from matrix view for cleaner, full-page display
