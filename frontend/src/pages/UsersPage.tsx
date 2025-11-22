@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
   Users,
@@ -14,17 +14,20 @@ import {
   UserMinus,
   Split,
   Link2,
-  Trash
+  Trash,
+  LayoutGrid,
+  List,
+  Search
 } from 'lucide-react';
+import { cn } from '../utils/cn';
 import {
   Card,
   CardContent,
-  CardHeader,
-  CardTitle,
   Button,
   DataTable,
   Modal,
   Form,
+  Input,
   type Column,
   type FormField
 } from '../components/ui';
@@ -37,6 +40,7 @@ import UserEditModal from '../components/UserEditModal';
 import SplitKeysModal from '../components/SplitKeysModal';
 import MergeUsersModal from '../components/MergeUsersModal';
 import BulkDeleteUsersModal from '../components/BulkDeleteUsersModal';
+import { UserGrid } from '../components/users/UserGrid';
 import type {
   User,
   PublicUserKey,
@@ -61,14 +65,16 @@ interface UserDetailsData {
 const UsersPage: React.FC = () => {
   const location = useLocation();
   const { showSuccess, showError } = useNotifications();
-  
-  
+
+
   // State management
   const [users, setUsers] = useState<ExtendedUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedUser, setSelectedUser] = useState<ExtendedUser | null>(null);
   const [userDetails, setUserDetails] = useState<UserDetailsData | null>(null);
-  
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const [searchTerm, setSearchTerm] = useState((location.state as { searchTerm?: string })?.searchTerm || '');
+
   // Modal states
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -84,6 +90,21 @@ const UsersPage: React.FC = () => {
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [selectedUsersForMerge, setSelectedUsersForMerge] = useState<ExtendedUser[]>([]);
 
+  // Filter users based on search term
+  const filteredUsers = useMemo(() => {
+    let result = users;
+
+    if (searchTerm.trim()) {
+      const lowerSearch = searchTerm.toLowerCase();
+      result = result.filter(user =>
+        user.username.toLowerCase().includes(lowerSearch) ||
+        (user.comment && user.comment.toLowerCase().includes(lowerSearch))
+      );
+    }
+
+    return result;
+  }, [users, searchTerm]);
+
   // Load users with extended information
   const loadUsers = useCallback(async () => {
     try {
@@ -98,7 +119,7 @@ const UsersPage: React.FC = () => {
                 keysService.getKeysForUser(user.username),
                 authorizationsService.getUserAuthorizations(user.username)
               ]);
-              
+
               return {
                 ...user,
                 keyCount: keysResponse.success ? keysResponse.data?.length || 0 : 0,
@@ -113,7 +134,7 @@ const UsersPage: React.FC = () => {
             }
           })
         );
-        
+
         setUsers(usersWithDetails);
         setSelectedUsersForMerge([]);
       }
@@ -261,7 +282,7 @@ const UsersPage: React.FC = () => {
     try {
       const response = await usersService.toggleUser(user.id, !user.enabled);
       if (response.success && response.data) {
-        setUsers(prev => prev.map(u => 
+        setUsers(prev => prev.map(u =>
           u.id === user.id ? { ...u, enabled: response.data!.enabled } : u
         ));
         showSuccess(
@@ -466,64 +487,123 @@ const UsersPage: React.FC = () => {
   ];
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 animate-in fade-in duration-500">
+      {/* Header with Glassmorphism */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 rounded-2xl bg-card/30 backdrop-blur-xl border border-white/10 shadow-lg">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center space-x-2">
-            <Users size={24} />
-            <span>Users</span>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-3">
+            <div className="p-2 bg-primary/10 rounded-lg text-primary">
+              <Users size={24} />
+            </div>
+            Users
           </h1>
-          <p className="text-gray-600 dark:text-gray-400">
+          <p className="text-muted-foreground mt-1 ml-14">
             Manage users and their SSH access permissions
           </p>
         </div>
-        <div className="flex items-center space-x-3">
-          <Button
-            variant="danger"
-            onClick={() => setShowBulkDeleteModal(true)}
-            leftIcon={<Trash size={16} />}
-            disabled={selectedUsersForMerge.length === 0}
-            title={selectedUsersForMerge.length === 0 ? 'Select users to delete' : 'Delete selected users'}
-          >
-            Delete Selected
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={() => setShowMergeModal(true)}
-            leftIcon={<Link2 size={16} />}
-            disabled={selectedUsersForMerge.length < 2}
-            title={selectedUsersForMerge.length < 2 ? 'Select at least two users to merge' : 'Merge selected users into a single user'}
-          >
-            Merge Users
-          </Button>
-          <Button onClick={() => setShowAddModal(true)} leftIcon={<Plus size={16} />}>
+
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Search Input */}
+          <div className="w-full md:w-64">
+            <Input
+              placeholder="Search users..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              leftIcon={<Search size={16} />}
+              className="h-10 bg-background/50 border-border focus:bg-background transition-colors"
+            />
+          </div>
+
+          {/* View Toggle */}
+          <div className="flex items-center bg-secondary/50 p-1 rounded-lg border border-border">
+            <button
+              onClick={() => setViewMode('list')}
+              className={cn(
+                "p-2 rounded-md transition-all duration-200",
+                viewMode === 'list' ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+              )}
+              title="List View"
+            >
+              <List size={18} />
+            </button>
+            <button
+              onClick={() => setViewMode('grid')}
+              className={cn(
+                "p-2 rounded-md transition-all duration-200",
+                viewMode === 'grid' ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+              )}
+              title="Grid View"
+            >
+              <LayoutGrid size={18} />
+            </button>
+          </div>
+
+          {/* Bulk Actions */}
+          {selectedUsersForMerge.length > 0 && (
+            <div className="flex items-center space-x-2">
+              <Button
+                variant="danger"
+                onClick={() => setShowBulkDeleteModal(true)}
+                leftIcon={<Trash size={16} />}
+                className="h-10"
+              >
+                Delete ({selectedUsersForMerge.length})
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => setShowMergeModal(true)}
+                leftIcon={<Link2 size={16} />}
+                disabled={selectedUsersForMerge.length < 2}
+                className="h-10"
+              >
+                Merge
+              </Button>
+            </div>
+          )}
+
+          <Button onClick={() => setShowAddModal(true)} className="shadow-lg shadow-primary/20 h-10">
+            <Plus size={18} className="mr-2" />
             Add User
           </Button>
         </div>
       </div>
 
-      {/* User List */}
-      <Card>
-        <CardHeader>
-          <CardTitle>SSH Users ({users.length})</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <DataTable
-            data={users}
-            columns={columns}
-            loading={loading}
-            emptyMessage="No users found. Add your first user to get started."
-            searchPlaceholder="Search users by username..."
-            initialSort={{ key: 'username', direction: 'asc' }}
-            initialSearch={(location.state as { searchTerm?: string })?.searchTerm || ''}
-            selectable
-            selectedItems={selectedUsersForMerge}
-            onSelectionChange={(selected) => setSelectedUsersForMerge(selected as ExtendedUser[])}
-            getItemId={(user) => user.id}
-          />
-        </CardContent>
-      </Card>
+      {/* Content */}
+      {viewMode === 'grid' ? (
+        <UserGrid
+          users={filteredUsers}
+          onEdit={(user) => { setSelectedUser(user); setShowEditModal(true); }}
+          onDelete={(user) => { setSelectedUser(user); setShowDeleteModal(true); }}
+          onToggleStatus={handleToggleUser}
+          onViewKeys={handleViewKeys}
+          onViewAuths={handleViewAuthorizations}
+          onSplitKeys={async (user) => {
+            setSelectedUser(user);
+            await loadUserDetails(user);
+            setShowSplitKeysModal(true);
+          }}
+        />
+      ) : (
+        <Card className="border-border/50 bg-card/50 backdrop-blur-sm overflow-hidden shadow-xl">
+          <CardContent className="p-0">
+            <DataTable
+              data={filteredUsers}
+              columns={columns}
+              loading={loading}
+              searchable={false}
+              emptyMessage={
+                searchTerm ? `No users found matching "${searchTerm}"` :
+                  "No users found. Add your first user to get started."
+              }
+              initialSort={{ key: 'username', direction: 'asc' }}
+              selectable={true}
+              selectedItems={selectedUsersForMerge}
+              onSelectionChange={(selected) => setSelectedUsersForMerge(selected as ExtendedUser[])}
+              getItemId={(user) => user.id}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Add User Modal */}
       <Modal
@@ -570,19 +650,19 @@ const UsersPage: React.FC = () => {
         {selectedUser && (
           <div className="space-y-4">
             <div className="flex items-start space-x-3">
-              <AlertCircle className="text-red-500 mt-1" size={20} />
+              <AlertCircle className="text-destructive mt-1" size={20} />
               <div>
-                <p className="text-gray-900 dark:text-gray-100">
+                <p className="text-foreground">
                   Are you sure you want to delete user <strong>{selectedUser.username}</strong>?
                 </p>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                <p className="text-sm text-muted-foreground mt-1">
                   This action cannot be undone. All SSH keys and host authorizations for this user will be permanently removed.
                 </p>
               </div>
             </div>
-            
-            <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-md">
-              <div className="text-sm space-y-1">
+
+            <div className="bg-muted/50 p-3 rounded-md">
+              <div className="text-sm space-y-1 text-foreground">
                 <div><strong>Username:</strong> {selectedUser.username}</div>
                 <div><strong>Status:</strong> {selectedUser.enabled ? 'Enabled' : 'Disabled'}</div>
                 <div><strong>SSH Keys:</strong> {selectedUser.keyCount || 0}</div>
@@ -647,41 +727,41 @@ const UsersPage: React.FC = () => {
           <div className="space-y-4">
             {loadingDetails ? (
               <div className="text-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-                <p className="text-gray-600 dark:text-gray-400 mt-2">Loading SSH keys...</p>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+                <p className="text-muted-foreground mt-2">Loading SSH keys...</p>
               </div>
             ) : userDetails?.keys.length === 0 ? (
               <div className="text-center py-8">
-                <Key size={48} className="mx-auto text-gray-400 dark:text-gray-600" />
-                <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">
+                <Key size={48} className="mx-auto text-muted-foreground" />
+                <h3 className="mt-4 text-lg font-medium text-foreground">
                   No SSH Keys
                 </h3>
-                <p className="mt-2 text-gray-500 dark:text-gray-400">
+                <p className="mt-2 text-muted-foreground">
                   This user doesn't have any SSH keys configured.
                 </p>
               </div>
             ) : (
               <div className="space-y-3">
                 {userDetails?.keys.map((key) => (
-                  <div key={key.id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                  <div key={key.id} className="border border-border rounded-lg p-4 bg-card">
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <div className="flex items-center space-x-2 mb-2">
-                          <span className="bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 text-xs font-medium px-2 py-1 rounded">
+                          <span className="bg-primary/10 text-primary text-xs font-medium px-2 py-1 rounded">
                             {key.key_type}
                           </span>
                           {key.key_name && (
-                            <span className="text-sm text-gray-600 dark:text-gray-400">
+                            <span className="text-sm text-muted-foreground">
                               Name: {key.key_name}
                             </span>
                           )}
                           {key.extra_comment && (
-                            <span className="text-sm text-gray-600 dark:text-gray-400 ml-2">
+                            <span className="text-sm text-muted-foreground ml-2">
                               Comment: {key.extra_comment}
                             </span>
                           )}
                         </div>
-                        <code className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 p-2 rounded block overflow-x-auto">
+                        <code className="text-xs bg-muted text-foreground p-2 rounded block overflow-x-auto font-mono">
                           {key.key_type} {key.key_base64.substring(0, 60)}...{key.key_name ? ` ${key.key_name}` : ''}
                         </code>
                       </div>
@@ -690,8 +770,8 @@ const UsersPage: React.FC = () => {
                 ))}
               </div>
             )}
-            
-            <div className="flex items-center justify-end space-x-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+
+            <div className="flex items-center justify-end space-x-3 pt-4 border-t border-border">
               <Button
                 variant="secondary"
                 onClick={() => {
@@ -722,16 +802,16 @@ const UsersPage: React.FC = () => {
           <div className="space-y-4">
             {loadingDetails ? (
               <div className="text-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-                <p className="text-gray-600 dark:text-gray-400 mt-2">Loading authorizations...</p>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+                <p className="text-muted-foreground mt-2">Loading authorizations...</p>
               </div>
             ) : userDetails?.authorizations.length === 0 ? (
               <div className="text-center py-8">
-                <Shield size={48} className="mx-auto text-gray-400 dark:text-gray-600" />
-                <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">
+                <Shield size={48} className="mx-auto text-muted-foreground" />
+                <h3 className="mt-4 text-lg font-medium text-foreground">
                   No Host Access
                 </h3>
-                <p className="mt-2 text-gray-500 dark:text-gray-400">
+                <p className="mt-2 text-muted-foreground">
                   This user doesn't have access to any hosts.
                 </p>
               </div>
@@ -740,15 +820,15 @@ const UsersPage: React.FC = () => {
                 {userDetails?.authorizations.map((auth) => {
                   const host = userDetails?.hosts.find(h => h.id === auth.host_id);
                   return (
-                    <div key={auth.id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+                    <div key={auth.id} className="border border-border rounded-lg p-3 bg-card">
                       <div className="flex items-center space-x-2 mb-2">
                         <Shield size={14} className="text-green-500" />
                         <div className="flex-1 min-w-0">
-                          <div className="font-medium text-gray-900 dark:text-gray-100 text-sm truncate">
+                          <div className="font-medium text-foreground text-sm truncate">
                             {host?.name || 'Unknown Host'}
                           </div>
                           {host && (
-                            <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                            <div className="text-xs text-muted-foreground truncate">
                               {host.address}:{host.port}
                             </div>
                           )}
@@ -756,13 +836,13 @@ const UsersPage: React.FC = () => {
                       </div>
                       <div className="text-xs space-y-1">
                         <div className="flex items-center space-x-1">
-                          <span className="font-medium text-gray-600 dark:text-gray-400">Login as:</span> 
-                          <code className="bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 px-2 py-1 rounded font-medium">{auth.login}</code>
+                          <span className="font-medium text-muted-foreground">Login as:</span>
+                          <code className="bg-primary/10 text-primary px-2 py-1 rounded font-medium">{auth.login}</code>
                         </div>
                         {auth.options && (
                           <div className="flex items-start space-x-1">
-                            <span className="font-medium text-gray-600 dark:text-gray-400 mt-0.5">Options:</span> 
-                            <code className="bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-1 py-0.5 rounded text-xs break-all flex-1">{auth.options}</code>
+                            <span className="font-medium text-muted-foreground mt-0.5">Options:</span>
+                            <code className="bg-muted text-foreground px-1 py-0.5 rounded text-xs break-all flex-1">{auth.options}</code>
                           </div>
                         )}
                       </div>
@@ -771,8 +851,8 @@ const UsersPage: React.FC = () => {
                 })}
               </div>
             )}
-            
-            <div className="flex items-center justify-end space-x-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+
+            <div className="flex items-center justify-end space-x-3 pt-4 border-t border-border">
               <Button
                 variant="secondary"
                 onClick={() => {
@@ -800,31 +880,36 @@ const UsersPage: React.FC = () => {
         userKeys={userDetails?.keys || []}
         userAuthorizations={userDetails?.authorizations || []}
         allHosts={userDetails?.hosts || []}
-        onUserUpdated={handleUserUpdated}
+        onUserUpdated={async () => {
+          setShowSplitKeysModal(false);
+          setSelectedUser(null);
+          setUserDetails(null);
+          await loadUsers();
+        }}
       />
 
+      {/* Merge Users Modal */}
       <MergeUsersModal
         isOpen={showMergeModal}
-        onClose={() => {
-          setShowMergeModal(false);
-        }}
+        onClose={() => setShowMergeModal(false)}
         selectedUsers={selectedUsersForMerge}
         allUsers={users}
-        onMergeComplete={() => {
+        onMergeComplete={async () => {
           setShowMergeModal(false);
           setSelectedUsersForMerge([]);
-          loadUsers();
+          await loadUsers();
         }}
       />
 
+      {/* Bulk Delete Users Modal */}
       <BulkDeleteUsersModal
         isOpen={showBulkDeleteModal}
         onClose={() => setShowBulkDeleteModal(false)}
         usersToDelete={selectedUsersForMerge}
-        onDeleteComplete={() => {
+        onDeleteComplete={async () => {
           setShowBulkDeleteModal(false);
           setSelectedUsersForMerge([]);
-          loadUsers();
+          await loadUsers();
         }}
       />
     </div>
