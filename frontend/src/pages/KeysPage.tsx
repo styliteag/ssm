@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Key,
   Plus,
@@ -13,19 +13,21 @@ import {
   CheckCircle,
   XCircle,
   Clock,
-  Filter,
   Upload,
-  Users
+  Users,
+  LayoutGrid,
+  List,
+  Search
 } from 'lucide-react';
+import { cn } from '../utils/cn';
 import {
   Card,
   CardContent,
-  CardHeader,
-  CardTitle,
   Button,
   DataTable,
   Modal,
   Form,
+  Input,
   type Column,
   type FormField
 } from '../components/ui';
@@ -34,6 +36,7 @@ import { keysService } from '../services/api/keys';
 import { usersService } from '../services/api/users';
 import { authorizationsService } from '../services/api/authorizations';
 import UserEditModal from '../components/UserEditModal';
+import { KeyGrid } from '../components/keys/KeyGrid';
 import type {
   PublicUserKey,
   User,
@@ -64,17 +67,19 @@ interface KeyFilters {
 
 const KeysPage: React.FC = () => {
   const { showSuccess, showError } = useNotifications();
-  
+
   // State management
   const [keys, setKeys] = useState<ExtendedKey[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedKeys, setSelectedKeys] = useState<number[]>([]);
+  const [selectedKeys] = useState<number[]>([]);
   const [selectedKey, setSelectedKey] = useState<ExtendedKey | null>(null);
   const [keyDetails, setKeyDetails] = useState<KeyDetails | null>(null);
   const [filters, setFilters] = useState<KeyFilters>({});
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const [searchTerm, setSearchTerm] = useState('');
+
   // Modal states
   const [showAddModal, setShowAddModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -83,13 +88,13 @@ const KeysPage: React.FC = () => {
   const [showBulkAssignModal, setShowBulkAssignModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [showUserEditModal, setShowUserEditModal] = useState(false);
-  
+
   // Edit state for inline key name and comment editing
   const [editingKeyName, setEditingKeyName] = useState(false);
   const [editingExtraComment, setEditingExtraComment] = useState(false);
   const [keyNameValue, setKeyNameValue] = useState('');
   const [extraCommentValue, setExtraCommentValue] = useState('');
-  
+
   // Form loading states
   const [submitting, setSubmitting] = useState(false);
   const [loadingDetails, setLoadingDetails] = useState(false);
@@ -120,7 +125,7 @@ const KeysPage: React.FC = () => {
               const keyWithUsername = key as PublicUserKey & { username?: string };
               const user = keyWithUsername.username ? usernameMap.get(keyWithUsername.username) : userMap.get(key.user_id);
               const actualUsername = keyWithUsername.username || user?.username || 'Unknown';
-              
+
               // Get authorization count for this key
               const authResponse = await authorizationsService.getUserAuthorizations(actualUsername);
               const hostCount = authResponse.success ? authResponse.data?.length || 0 : 0;
@@ -138,7 +143,7 @@ const KeysPage: React.FC = () => {
               const keyWithUsername = key as PublicUserKey & { username?: string };
               const user = keyWithUsername.username ? usernameMap.get(keyWithUsername.username) : userMap.get(key.user_id);
               const actualUsername = keyWithUsername.username || user?.username || 'Unknown';
-              
+
               return {
                 ...key,
                 user_id: user?.id || 0,
@@ -165,6 +170,8 @@ const KeysPage: React.FC = () => {
   }, [loadKeys]);
 
   // Load key details (authorizations and hosts)
+  // @ts-ignore - Keeping this for future use
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const loadKeyDetails = useCallback(async (keyId: number) => {
     try {
       setLoadingDetails(true);
@@ -175,7 +182,7 @@ const KeysPage: React.FC = () => {
       if (authResponse.success && authResponse.data) {
         // Would need to fetch host details in a real implementation
         const hosts: Host[] = []; // Would need to fetch host details
-        
+
         setKeyDetails({
           authorizations: authResponse.data,
           hosts
@@ -195,9 +202,9 @@ const KeysPage: React.FC = () => {
     }
 
     if (!SSH_KEY_REGEX.test(keyText.trim())) {
-      return { 
-        valid: false, 
-        message: 'Invalid SSH key format. Expected format: ssh-rsa/ssh-ed25519/ecdsa-sha2-... [key] [comment]' 
+      return {
+        valid: false,
+        message: 'Invalid SSH key format. Expected format: ssh-rsa/ssh-ed25519/ecdsa-sha2-... [key] [comment]'
       };
     }
 
@@ -236,7 +243,7 @@ const KeysPage: React.FC = () => {
   const handleCreateKey = async (formData: Record<string, unknown>) => {
     try {
       setSubmitting(true);
-      
+
       const keyValidation = validateSSHKey((formData as Record<string, unknown>).keyText as string);
       if (!keyValidation.valid) {
         showError('Invalid SSH Key', keyValidation.message);
@@ -259,7 +266,7 @@ const KeysPage: React.FC = () => {
         key_name: keyName && keyName.trim() !== '' ? keyName : null,
         extra_comment: extraComment && extraComment.trim() !== '' ? extraComment : null
       };
-      
+
       const response = await usersService.assignKeyToUser(keyPayload);
 
       if (response.success) {
@@ -372,7 +379,7 @@ const KeysPage: React.FC = () => {
       const formDataTyped = formData as Record<string, unknown>;
       const keysText = formDataTyped.keysText as string;
       const userId = formDataTyped.userId as number;
-      
+
       const keyLines = keysText.split('\n').filter(line => line.trim());
       let imported = 0;
       let failed = 0;
@@ -401,7 +408,7 @@ const KeysPage: React.FC = () => {
             key_name: keyData.key_name && keyData.key_name.trim() !== '' ? keyData.key_name : null,
             extra_comment: null
           };
-          
+
           const response = await usersService.assignKeyToUser(keyPayload);
 
           if (response.success) {
@@ -422,7 +429,7 @@ const KeysPage: React.FC = () => {
       if (failed > 0) {
         showError(`${failed} keys failed to import`, errors.slice(0, 3).join(', ') + (errors.length > 3 ? '...' : ''));
       }
-      
+
       setShowImportModal(false);
       loadKeys();
     } catch {
@@ -432,14 +439,30 @@ const KeysPage: React.FC = () => {
     }
   };
 
-  // Filter keys based on current filters
-  const filteredKeys = keys.filter(key => {
-    if (filters.keyType && key.key_type !== filters.keyType) return false;
-    if (filters.userId && key.user_id !== filters.userId) return false;
-    if (filters.status === 'assigned' && (!key.user_id || key.user_id === 0)) return false;
-    if (filters.status === 'unassigned' && key.user_id && key.user_id !== 0) return false;
-    return true;
-  });
+  // Filter keys based on current filters and search
+  const filteredKeys = useMemo(() => {
+    return keys.filter(key => {
+      // Search filter
+      if (searchTerm.trim()) {
+        const lowerSearch = searchTerm.toLowerCase();
+        const matchesSearch =
+          (key.key_name && key.key_name.toLowerCase().includes(lowerSearch)) ||
+          (key.username && key.username.toLowerCase().includes(lowerSearch)) ||
+          (key.extra_comment && key.extra_comment.toLowerCase().includes(lowerSearch)) ||
+          key.key_type.toLowerCase().includes(lowerSearch);
+
+        if (!matchesSearch) return false;
+      }
+
+      // Existing filters
+      if (filters.keyType && key.key_type !== filters.keyType) return false;
+      if (filters.userId && key.user_id !== filters.userId) return false;
+      if (filters.status === 'assigned' && (!key.user_id || key.user_id === 0)) return false;
+      if (filters.status === 'unassigned' && key.user_id && key.user_id !== 0) return false;
+
+      return true;
+    });
+  }, [keys, filters, searchTerm]);
 
   // Unassigned keys (user_id is 0 or falsy)
   const unassignedKeys = keys.filter(key => !key.user_id || key.user_id === 0);
@@ -715,223 +738,199 @@ const KeysPage: React.FC = () => {
   ];
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 animate-in fade-in duration-500">
+      {/* Header with Glassmorphism */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 rounded-2xl bg-card/30 backdrop-blur-xl border border-white/10 shadow-lg">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center space-x-2">
-            <Key size={24} />
-            <span>SSH Keys</span>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-3">
+            <div className="p-2 bg-primary/10 rounded-lg text-primary">
+              <Key size={24} />
+            </div>
+            SSH Keys
           </h1>
-          <p className="text-gray-600 dark:text-gray-400">
+          <p className="text-muted-foreground mt-1 ml-14">
             Manage SSH public keys for users and assignments
           </p>
         </div>
-        
-        <div className="flex items-center space-x-3">
+
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Search Input */}
+          <div className="w-full md:w-64">
+            <Input
+              placeholder="Search keys..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              leftIcon={<Search size={16} />}
+              className="h-10 bg-background/50 border-border focus:bg-background transition-colors"
+            />
+          </div>
+
+          {/* View Toggle */}
+          <div className="flex items-center bg-secondary/50 p-1 rounded-lg border border-border">
+            <button
+              onClick={() => setViewMode('list')}
+              className={cn(
+                "p-2 rounded-md transition-all duration-200",
+                viewMode === 'list' ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+              )}
+              title="List View"
+            >
+              <List size={18} />
+            </button>
+            <button
+              onClick={() => setViewMode('grid')}
+              className={cn(
+                "p-2 rounded-md transition-all duration-200",
+                viewMode === 'grid' ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+              )}
+              title="Grid View"
+            >
+              <LayoutGrid size={18} />
+            </button>
+          </div>
+
           <Button
-            variant="ghost"
+            variant="secondary"
             onClick={() => setShowImportModal(true)}
             leftIcon={<Upload size={16} />}
+            className="h-10"
           >
-            Import Keys
+            Import
           </Button>
           <Button
             onClick={() => setShowAddModal(true)}
-            leftIcon={<Plus size={16} />}
+            className="shadow-lg shadow-primary/20 h-10"
           >
-            Add SSH Key
+            <Plus size={18} className="mr-2" />
+            Add Key
           </Button>
         </div>
       </div>
 
-      {/* Filters and Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Total Keys</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{keys.length}</p>
-              </div>
-              <Key size={24} className="text-blue-600" />
+      {/* Stats Bar */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="p-4 rounded-xl bg-gradient-to-br from-blue-500/10 to-blue-600/5 border border-blue-500/20">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground">Total Keys</p>
+              <p className="text-2xl font-bold text-foreground">{keys.length}</p>
             </div>
-          </CardContent>
-        </Card>
+            <Key size={24} className="text-blue-500" />
+          </div>
+        </div>
 
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Assigned</p>
-                <p className="text-2xl font-bold text-green-600">{keys.filter(k => k.user_id && k.user_id !== 0).length}</p>
-              </div>
-              <UserCheck size={24} className="text-green-600" />
+        <div className="p-4 rounded-xl bg-gradient-to-br from-green-500/10 to-green-600/5 border border-green-500/20">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground">Assigned</p>
+              <p className="text-2xl font-bold text-foreground">{keys.filter(k => k.user_id && k.user_id !== 0).length}</p>
             </div>
-          </CardContent>
-        </Card>
+            <UserCheck size={24} className="text-green-500" />
+          </div>
+        </div>
 
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Active Users</p>
-                <p className="text-2xl font-bold text-purple-600">{users.filter(u => u.enabled).length}</p>
-              </div>
-              <Users size={24} className="text-purple-600" />
+        <div className="p-4 rounded-xl bg-gradient-to-br from-purple-500/10 to-purple-600/5 border border-purple-500/20">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground">Active Users</p>
+              <p className="text-2xl font-bold text-foreground">{users.filter(u => u.enabled).length}</p>
             </div>
-          </CardContent>
-        </Card>
+            <Users size={24} className="text-purple-500" />
+          </div>
+        </div>
 
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Unassigned</p>
-                <p className="text-2xl font-bold text-yellow-600">{unassignedKeys.length}</p>
-              </div>
-              <UserX size={24} className="text-yellow-600" />
+        <div className="p-4 rounded-xl bg-gradient-to-br from-yellow-500/10 to-yellow-600/5 border border-yellow-500/20">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground">Unassigned</p>
+              <p className="text-2xl font-bold text-foreground">{unassignedKeys.length}</p>
             </div>
-          </CardContent>
-        </Card>
-
+            <UserX size={24} className="text-yellow-500" />
+          </div>
+        </div>
       </div>
 
       {/* Filters */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <Filter size={16} className="text-gray-400" />
-              <div className="flex items-center space-x-3">
-                <select
-                  value={filters.keyType || ''}
-                  onChange={(e) => setFilters(prev => ({ ...prev, keyType: e.target.value || undefined }))}
-                  className="h-9 px-3 py-1 text-sm border border-gray-300 rounded-md bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">All Key Types</option>
-                  <option value="ssh-rsa">RSA</option>
-                  <option value="ssh-ed25519">ED25519</option>
-                  <option value="ecdsa-sha2-nistp256">ECDSA P-256</option>
-                  <option value="ecdsa-sha2-nistp384">ECDSA P-384</option>
-                  <option value="ecdsa-sha2-nistp521">ECDSA P-521</option>
-                </select>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          variant={filters.keyType === undefined ? "primary" : "ghost"}
+          size="sm"
+          onClick={() => setFilters({ ...filters, keyType: undefined })}
+          className="rounded-full"
+        >
+          All Types
+        </Button>
+        {['ssh-rsa', 'ssh-ed25519', 'ecdsa-sha2-nistp256'].map(type => (
+          <Button
+            key={type}
+            variant={filters.keyType === type ? "primary" : "ghost"}
+            size="sm"
+            onClick={() => setFilters({ ...filters, keyType: type })}
+            className="rounded-full text-xs"
+          >
+            {type.replace('ssh-', '').toUpperCase()}
+          </Button>
+        ))}
+        <div className="ml-auto flex gap-2">
+          <Button
+            variant={filters.status === 'assigned' ? "primary" : "ghost"}
+            size="sm"
+            onClick={() => setFilters({ ...filters, status: filters.status === 'assigned' ? undefined : 'assigned' })}
+            className="rounded-full"
+          >
+            <UserCheck size={14} className="mr-1" />
+            Assigned
+          </Button>
+          <Button
+            variant={filters.status === 'unassigned' ? "primary" : "ghost"}
+            size="sm"
+            onClick={() => setFilters({ ...filters, status: filters.status === 'unassigned' ? undefined : 'unassigned' })}
+            className="rounded-full"
+          >
+            <UserX size={14} className="mr-1" />
+            Unassigned
+          </Button>
+        </div>
+      </div>
 
-                <select
-                  value={filters.userId || ''}
-                  onChange={(e) => setFilters(prev => ({ ...prev, userId: e.target.value ? Number(e.target.value) : undefined }))}
-                  className="h-9 px-3 py-1 text-sm border border-gray-300 rounded-md bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">All Users</option>
-                  {users.map(user => (
-                    <option key={user.id} value={user.id}>{user.username}</option>
-                  ))}
-                </select>
-
-                <select
-                  value={filters.status || 'all'}
-                  onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value as 'all' | 'assigned' | 'unassigned' }))}
-                  className="h-9 px-3 py-1 text-sm border border-gray-300 rounded-md bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="all">All Status</option>
-                  <option value="assigned">Assigned</option>
-                  <option value="unassigned">Unassigned</option>
-                </select>
-
-                {Object.keys(filters).length > 0 && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setFilters({})}
-                  >
-                    Clear Filters
-                  </Button>
-                )}
-              </div>
-            </div>
-
-            {selectedKeys.length > 0 && (
-              <div className="flex items-center space-x-2">
-                <span className="text-sm text-gray-600 dark:text-gray-400">
-                  {selectedKeys.length} selected
-                </span>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setShowBulkAssignModal(true)}
-                  leftIcon={<Users size={16} />}
-                >
-                  Bulk Assign
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setSelectedKeys([])}
-                >
-                  Clear Selection
-                </Button>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Unassigned Keys Alert */}
-      {unassignedKeys.length > 0 && (
-        <Card className="border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-900/20">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <AlertCircle className="text-yellow-600" size={20} />
-                <div>
-                  <h3 className="font-medium text-yellow-800 dark:text-yellow-200">
-                    {unassignedKeys.length} Unassigned Keys
-                  </h3>
-                  <p className="text-sm text-yellow-700 dark:text-yellow-300">
-                    These keys are not assigned to any user and will not be deployed to hosts.
-                  </p>
-                </div>
-              </div>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => {
-                  setSelectedKeys(unassignedKeys.map(k => k.id));
-                  setShowBulkAssignModal(true);
-                }}
-                leftIcon={<UserPlus size={16} />}
-              >
-                Assign All
-              </Button>
-            </div>
+      {/* Content */}
+      {viewMode === 'grid' ? (
+        <KeyGrid
+          keys={filteredKeys}
+          onEdit={(key) => {
+            setSelectedKey(key);
+            setKeyNameValue(key.key_name || '');
+            setExtraCommentValue(key.extra_comment || '');
+            setEditingKeyName(false);
+            setEditingExtraComment(false);
+            setShowViewModal(true);
+          }}
+          onDelete={(key) => {
+            setSelectedKey(key);
+            setShowDeleteModal(true);
+          }}
+          onAssign={(key) => {
+            setSelectedKey(key);
+            setShowAssignModal(true);
+          }}
+        />
+      ) : (
+        <Card className="border-border/50 bg-card/50 backdrop-blur-sm overflow-hidden shadow-xl">
+          <CardContent className="p-0">
+            <DataTable
+              data={filteredKeys}
+              columns={columns}
+              loading={loading}
+              searchable={false}
+              emptyMessage={
+                searchTerm ? `No keys found matching "${searchTerm}"` :
+                  "No SSH keys found. Add your first key to get started."
+              }
+              initialSort={{ key: 'username', direction: 'asc' }}
+            />
           </CardContent>
         </Card>
       )}
-
-      {/* Main Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>SSH Key Management</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <DataTable
-            data={filteredKeys}
-            columns={columns}
-            loading={loading}
-            searchPlaceholder="Search keys by user, name, comment, or type..."
-            emptyMessage="No SSH keys found"
-            onRowClick={(key) => {
-              setSelectedKey(key);
-              setKeyNameValue(key.key_name || '');
-              setExtraCommentValue(key.extra_comment || '');
-              setEditingKeyName(false);
-              setEditingExtraComment(false);
-              loadKeyDetails(key.id);
-              setShowViewModal(true);
-            }}
-          />
-        </CardContent>
-      </Card>
 
       {/* Add Key Modal */}
       <Modal
@@ -1296,7 +1295,7 @@ const KeysPage: React.FC = () => {
         onUserUpdated={handleUserUpdated}
         users={users}
       />
-    </div>
+    </div >
   );
 };
 
