@@ -1,29 +1,32 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
-import { 
-  Server, 
-  Plus, 
-  Edit2, 
-  Trash2, 
-  Activity, 
-  AlertCircle, 
-  CheckCircle, 
+import {
+  Server,
+  Plus,
+  Edit2,
+  Trash2,
+  Activity,
+  AlertCircle,
+  CheckCircle,
   Users,
   Key,
   Globe,
   Filter,
-  Ban
+  Ban,
+  LayoutGrid,
+  List,
+  Search
 } from 'lucide-react';
+import { cn } from '../utils/cn';
 import {
   Card,
   CardContent,
-  CardHeader,
-  CardTitle,
   Button,
   DataTable,
   Modal,
   Form,
   Tooltip,
+  Input,
   type Column,
   type FormField
 } from '../components/ui';
@@ -31,8 +34,9 @@ import { useNotifications } from '../contexts/NotificationContext';
 import { hostsService } from '../services/api/hosts';
 import HostEditModal from '../components/HostEditModal';
 import BulkEditModal, { type BulkUpdateData } from '../components/BulkEditModal';
-import type { 
-  Host, 
+import { HostGrid } from '../components/hosts/HostGrid';
+import type {
+  Host,
   HostFormData
 } from '../types';
 
@@ -44,24 +48,26 @@ interface ExtendedHost extends Host {
 const HostsPage: React.FC = () => {
   const location = useLocation();
   const { showSuccess, showError } = useNotifications();
-  
-  
+
+
   // State management
   const [hosts, setHosts] = useState<ExtendedHost[]>([]);
   const [jumpHosts, setJumpHosts] = useState<Host[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedHost, setSelectedHost] = useState<ExtendedHost | null>(null);
   const [statusFilter, setStatusFilter] = useState<'active' | 'all' | 'online' | 'offline' | 'error' | 'unknown' | 'disabled'>('active');
-  
+
   // Selection state for multiselect
   const [selectedHosts, setSelectedHosts] = useState<ExtendedHost[]>([]);
-  
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const [searchTerm, setSearchTerm] = useState((location.state as { searchTerm?: string })?.searchTerm || '');
+
   // Modal states
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showBulkEditModal, setShowBulkEditModal] = useState(false);
-  
+
   // Form loading states
   const [submitting, setSubmitting] = useState(false);
   const [testing, setTesting] = useState<Record<number, boolean>>({});
@@ -104,8 +110,8 @@ const HostsPage: React.FC = () => {
             setHosts(prev => prev.map(h =>
               h.id === host.id
                 ? (h.connection_status !== updatedHost.connection_status ||
-                   h.connection_error !== updatedHost.connection_error ||
-                   !h.lastTested)
+                  h.connection_error !== updatedHost.connection_error ||
+                  !h.lastTested)
                   ? updatedHost
                   : h
                 : h
@@ -118,11 +124,11 @@ const HostsPage: React.FC = () => {
               h.id === host.id
                 ? (h.connection_status !== 'error' || h.connection_error !== errorMessage)
                   ? {
-                      ...h,
-                      connection_status: 'error',
-                      connection_error: errorMessage,
-                      lastTested: new Date()
-                    }
+                    ...h,
+                    connection_status: 'error',
+                    connection_error: errorMessage,
+                    lastTested: new Date()
+                  }
                   : h
                 : h
             ));
@@ -135,11 +141,11 @@ const HostsPage: React.FC = () => {
             h.id === host.id
               ? (h.connection_status !== 'error' || h.connection_error !== errorMessage)
                 ? {
-                    ...h,
-                    connection_status: 'error',
-                    connection_error: errorMessage,
-                    lastTested: new Date()
-                  }
+                  ...h,
+                  connection_status: 'error',
+                  connection_error: errorMessage,
+                  lastTested: new Date()
+                }
                 : h
               : h
           ));
@@ -163,12 +169,12 @@ const HostsPage: React.FC = () => {
       const response = await hostsService.getHosts();
       if (response.success && response.data) {
         // Host data includes basic info with "unknown" status - will be updated individually
-        const hostsWithUnknownStatus = response.data.items.map(host => ({ 
-          ...host, 
-          lastTested: new Date() 
+        const hostsWithUnknownStatus = response.data.items.map(host => ({
+          ...host,
+          lastTested: new Date()
         }));
         setHosts(hostsWithUnknownStatus);
-        
+
         // Start polling individual host statuses in background
         pollHostStatuses(hostsWithUnknownStatus, true); // Force polling for initial load
       }
@@ -187,7 +193,7 @@ const HostsPage: React.FC = () => {
         setJumpHosts(hosts);
         return;
       }
-      
+
       const response = await hostsService.getAllHosts();
       if (response.success && response.data) {
         setJumpHosts(response.data);
@@ -297,7 +303,7 @@ const HostsPage: React.FC = () => {
         maxLength: 50,
         pattern: /^[a-zA-Z0-9\-_.]+$/,
         custom: (value: unknown) => {
-          const exists = hosts.some(h => 
+          const exists = hosts.some(h =>
             h.name.toLowerCase() === (value as string).toLowerCase()
           );
           return exists ? 'Host name already exists' : null;
@@ -392,18 +398,18 @@ const HostsPage: React.FC = () => {
         comment: hostData.comment ?? undefined
       });
       console.log('Host creation response:', response);
-      
+
       if (response.success && response.data) {
         // Check if this is a host key confirmation response (two-step process)
         if (response.data.requires_confirmation) {
           console.log('Host key confirmation required, sending with fingerprint');
-          
+
           // Second call with the received fingerprint
           const confirmedHostData = {
             ...hostData,
             key_fingerprint: response.data.key_fingerprint
           };
-          
+
           const finalResponse = await hostsService.createHost({
             ...confirmedHostData,
             jump_via: confirmedHostData.jump_via ?? undefined,
@@ -411,11 +417,11 @@ const HostsPage: React.FC = () => {
             disabled: confirmedHostData.disabled
           });
           console.log('Final host creation response:', finalResponse);
-          
+
           if (finalResponse.success && finalResponse.data) {
-            setHosts(prev => [...prev, { 
-              ...finalResponse.data!, 
-              connectionStatus: 'unknown' 
+            setHosts(prev => [...prev, {
+              ...finalResponse.data!,
+              connectionStatus: 'unknown'
             }]);
             setShowAddModal(false);
             showSuccess('Host added', `${finalResponse.data!.name} has been added successfully`);
@@ -426,9 +432,9 @@ const HostsPage: React.FC = () => {
           }
         } else {
           // Direct host creation (when fingerprint was provided)
-          setHosts(prev => [...prev, { 
-            ...response.data!, 
-            connectionStatus: 'unknown' 
+          setHosts(prev => [...prev, {
+            ...response.data!,
+            connectionStatus: 'unknown'
           }]);
           setShowAddModal(false);
           showSuccess('Host added', `${response.data!.name} has been added successfully`);
@@ -527,7 +533,7 @@ const HostsPage: React.FC = () => {
         try {
           const result = await hostsService.updateHost(host.name, hostUpdate as Host);
           results.push(result);
-          
+
           // Invalidate cache for the updated host
           if (result.success) {
             try {
@@ -547,17 +553,16 @@ const HostsPage: React.FC = () => {
 
       if (successCount > 0) {
         showSuccess(
-          'Bulk update completed', 
-          `Successfully updated ${successCount} host${successCount !== 1 ? 's' : ''}${
-            failureCount > 0 ? `. ${failureCount} update${failureCount !== 1 ? 's' : ''} failed.` : ''
+          'Bulk update completed',
+          `Successfully updated ${successCount} host${successCount !== 1 ? 's' : ''}${failureCount > 0 ? `. ${failureCount} update${failureCount !== 1 ? 's' : ''} failed.` : ''
           }`
         );
-        
+
         // Refresh only the updated hosts instead of reloading everything
         selectedHosts.forEach(host => {
           refreshSingleHost(host.name);
         });
-        
+
         // Clear selection
         setSelectedHosts([]);
       } else {
@@ -573,7 +578,7 @@ const HostsPage: React.FC = () => {
   const getHostStatus = (host: ExtendedHost): 'online' | 'offline' | 'error' | 'unknown' | 'disabled' => {
     // Disabled state takes precedence over connection status
     if (host.disabled) return 'disabled';
-    
+
     // Then check connection status
     if (host.connection_status === 'online') return 'online';
     if (host.connection_status === 'offline') return 'offline';
@@ -581,12 +586,32 @@ const HostsPage: React.FC = () => {
     return 'unknown';
   };
 
-  // Filter hosts based on status
+  // Filter hosts based on status and search term
   const filteredHosts = useMemo(() => {
-    if (statusFilter === 'all') return hosts;
-    if (statusFilter === 'active') return hosts.filter(host => !host.disabled);
-    return hosts.filter(host => getHostStatus(host) === statusFilter);
-  }, [hosts, statusFilter]);
+    let result = hosts;
+
+    // Apply status filter
+    if (statusFilter !== 'all') {
+      if (statusFilter === 'active') {
+        result = result.filter(host => !host.disabled);
+      } else {
+        result = result.filter(host => getHostStatus(host) === statusFilter);
+      }
+    }
+
+    // Apply search filter
+    if (searchTerm.trim()) {
+      const lowerSearch = searchTerm.toLowerCase();
+      result = result.filter(host =>
+        host.name.toLowerCase().includes(lowerSearch) ||
+        host.address.toLowerCase().includes(lowerSearch) ||
+        host.username.toLowerCase().includes(lowerSearch) ||
+        (host.comment && host.comment.toLowerCase().includes(lowerSearch))
+      );
+    }
+
+    return result;
+  }, [hosts, statusFilter, searchTerm]);
 
   // Status filter options with counts
   const statusFilterOptions = useMemo(() => [
@@ -859,92 +884,137 @@ const HostsPage: React.FC = () => {
   ];
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 animate-in fade-in duration-500">
+      {/* Header with Glassmorphism */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 rounded-2xl bg-card/30 backdrop-blur-xl border border-white/10 shadow-lg">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center space-x-2">
-            <Server size={24} />
-            <span>Hosts</span>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-3">
+            <div className="p-2 bg-primary/10 rounded-lg text-primary">
+              <Server size={24} />
+            </div>
+            Hosts
           </h1>
-          <p className="text-gray-600 dark:text-gray-400">
+          <p className="text-muted-foreground mt-1 ml-14">
             Manage SSH hosts and their configurations
           </p>
         </div>
-        <div className="flex items-center space-x-3">
-          {/* Bulk actions - show when hosts are selected */}
+
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Search Input */}
+          <div className="w-full md:w-64">
+            <Input
+              placeholder="Search hosts..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              leftIcon={<Search size={16} />}
+              className="h-10 bg-background/50 border-border focus:bg-background transition-colors"
+            />
+          </div>
+
+          {/* View Toggle */}
+          <div className="flex items-center bg-secondary/50 p-1 rounded-lg border border-border">
+            <button
+              onClick={() => setViewMode('list')}
+              className={cn(
+                "p-2 rounded-md transition-all duration-200",
+                viewMode === 'list' ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+              )}
+              title="List View"
+            >
+              <List size={18} />
+            </button>
+            <button
+              onClick={() => setViewMode('grid')}
+              className={cn(
+                "p-2 rounded-md transition-all duration-200",
+                viewMode === 'grid' ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+              )}
+              title="Grid View"
+            >
+              <LayoutGrid size={18} />
+            </button>
+          </div>
+
+          {/* Filter Dropdown */}
+          <div className="relative">
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+              className="h-10 pl-3 pr-8 text-sm border border-input rounded-lg bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-transparent appearance-none cursor-pointer hover:bg-accent transition-colors"
+            >
+              {statusFilterOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label} ({option.count})
+                </option>
+              ))}
+            </select>
+            <Filter size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+          </div>
+
+          {/* Bulk Actions */}
           {selectedHosts.length > 0 && (
-            <div className="flex items-center space-x-2">
-              <span className="text-sm text-gray-600 dark:text-gray-400">
-                {selectedHosts.length} host{selectedHosts.length !== 1 ? 's' : ''} selected
+            <div className="flex items-center space-x-2 bg-secondary/30 px-3 py-2 rounded-lg border border-border">
+              <span className="text-sm text-muted-foreground">
+                {selectedHosts.length} selected
               </span>
-              <Button 
+              <Button
                 variant="secondary"
                 size="sm"
                 onClick={() => setShowBulkEditModal(true)}
                 leftIcon={<Edit2 size={16} />}
+                className="h-8"
               >
                 Bulk Edit
               </Button>
-              <Button 
+              <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => setSelectedHosts([])}
+                className="h-8"
               >
                 Clear
               </Button>
             </div>
           )}
-          <Button onClick={() => setShowAddModal(true)} leftIcon={<Plus size={16} />}>
+
+          <Button onClick={() => setShowAddModal(true)} className="shadow-lg shadow-primary/20">
+            <Plus size={18} className="mr-2" />
             Add Host
           </Button>
         </div>
       </div>
 
-      {/* Host List */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>SSH Hosts ({filteredHosts.length}{statusFilter !== 'all' ? ` of ${hosts.length}` : ''})</CardTitle>
-            <div className="flex items-center space-x-2">
-              <Filter size={16} className="text-gray-500 dark:text-gray-400" />
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
-                className="h-8 px-3 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                {statusFilterOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label} ({option.count})
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="overflow-visible">
-          <div className="overflow-visible">
+      {/* Content */}
+      {viewMode === 'grid' ? (
+        <HostGrid
+          hosts={filteredHosts}
+          onEdit={(host) => { setSelectedHost(host as ExtendedHost); setShowEditModal(true); }}
+          onDelete={(host) => { setSelectedHost(host as ExtendedHost); setShowDeleteModal(true); }}
+          onConnect={(host) => testConnection(host as ExtendedHost)}
+        />
+      ) : (
+        <Card className="border-border/50 bg-card/50 backdrop-blur-sm overflow-hidden shadow-xl">
+          <CardContent className="p-0">
             <DataTable
               data={filteredHosts}
               columns={columns}
               loading={loading}
+              searchable={false}
               emptyMessage={
-                statusFilter === 'all' ? "No hosts found. Add your first SSH host to get started." :
-                statusFilter === 'active' ? "No active hosts found. Add your first SSH host or check the disabled hosts filter." :
-                `No hosts with status '${statusFilterOptions.find(o => o.value === statusFilter)?.label || statusFilter}'.`
+                searchTerm ? `No hosts found matching "${searchTerm}"` :
+                  statusFilter === 'all' ? "No hosts found. Add your first SSH host to get started." :
+                    statusFilter === 'active' ? "No active hosts found. Add your first SSH host or check the disabled hosts filter." :
+                      `No hosts with status '${statusFilterOptions.find(o => o.value === statusFilter)?.label || statusFilter}'.`
               }
-              searchPlaceholder="Search hosts by name, address, or username..."
               initialSort={{ key: 'name', direction: 'asc' }}
-              initialSearch={(location.state as { searchTerm?: string })?.searchTerm || ''}
-              // Selection props
               selectable={true}
               selectedItems={selectedHosts}
               onSelectionChange={setSelectedHosts}
               getItemId={(host) => host.id}
             />
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Add Host Modal */}
       <Modal
@@ -994,19 +1064,19 @@ const HostsPage: React.FC = () => {
         {selectedHost && (
           <div className="space-y-4">
             <div className="flex items-start space-x-3">
-              <AlertCircle className="text-red-500 mt-1" size={20} />
+              <AlertCircle className="text-destructive mt-1" size={20} />
               <div>
-                <p className="text-gray-900 dark:text-gray-100">
+                <p className="text-foreground">
                   Are you sure you want to delete <strong>{selectedHost.name}</strong>?
                 </p>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                <p className="text-sm text-muted-foreground mt-1">
                   This action cannot be undone. All authorizations and configurations for this host will be permanently removed.
                 </p>
               </div>
             </div>
-            
-            <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-md">
-              <div className="text-sm space-y-1 text-gray-900 dark:text-gray-100">
+
+            <div className="bg-muted/50 p-3 rounded-md">
+              <div className="text-sm space-y-1 text-foreground">
                 <div><strong>Name:</strong> {selectedHost.name}</div>
                 <div><strong>Address:</strong> {selectedHost.address}:{selectedHost.port}</div>
                 <div><strong>Username:</strong> {selectedHost.username}</div>

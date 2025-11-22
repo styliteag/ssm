@@ -2,7 +2,7 @@ import React, { HTMLAttributes } from 'react';
 import { cn } from '../../utils/cn';
 
 interface CardProps extends HTMLAttributes<HTMLDivElement> {
-  variant?: 'default' | 'bordered' | 'elevated';
+  variant?: 'default' | 'bordered' | 'elevated' | 'glass';
 }
 
 const Card = React.forwardRef<HTMLDivElement, CardProps>(({
@@ -11,16 +11,17 @@ const Card = React.forwardRef<HTMLDivElement, CardProps>(({
   ...props
 }, ref) => {
   const variants = {
-    default: 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm',
-    bordered: 'bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 shadow-sm',
-    elevated: 'bg-white dark:bg-gray-800 shadow-lg border border-gray-200 dark:border-gray-700',
+    default: 'bg-card text-card-foreground border border-border shadow-sm',
+    bordered: 'bg-card text-card-foreground border-2 border-border shadow-sm',
+    elevated: 'bg-card text-card-foreground shadow-lg border border-border',
+    glass: 'bg-white/70 dark:bg-gray-900/70 backdrop-blur-lg border border-white/20 dark:border-gray-700/30 shadow-xl',
   };
 
   return (
     <div
       ref={ref}
       className={cn(
-        'rounded-lg',
+        'rounded-xl transition-all duration-200',
         variants[variant],
         className
       )}
@@ -51,7 +52,7 @@ const CardTitle = React.forwardRef<HTMLParagraphElement, HTMLAttributes<HTMLHead
 }, ref) => (
   <h3
     ref={ref}
-    className={cn('text-lg font-semibold leading-none tracking-tight text-gray-900 dark:text-gray-100', className)}
+    className={cn('text-lg font-semibold leading-none tracking-tight text-foreground', className)}
     {...props}
   >
     {children}
@@ -66,7 +67,7 @@ const CardDescription = React.forwardRef<HTMLParagraphElement, HTMLAttributes<HT
 }, ref) => (
   <p
     ref={ref}
-    className={cn('text-sm text-gray-500 dark:text-gray-400', className)}
+    className={cn('text-sm text-muted-foreground', className)}
     {...props}
   />
 ));
