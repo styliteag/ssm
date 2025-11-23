@@ -91,21 +91,21 @@ export const KeyCard: React.FC<KeyCardProps> = ({
                         </div>
                     </div>
                 </div>
-                <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                <div className="flex space-x-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                     <Button
                         variant="ghost"
                         size="sm"
-                        className="h-8 w-8 p-0"
+                        className="h-10 w-10 p-0"
                         onClick={() => copyToClipboard(`${sshKey.key_type} ${sshKey.key_base64}`)}
                         title="Copy Public Key"
                     >
-                        <Copy size={14} />
+                        <Copy size={20} />
                     </Button>
-                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => onEdit(sshKey)}>
-                        <Edit2 size={14} />
+                    <Button variant="ghost" size="sm" className="h-10 w-10 p-0" onClick={() => onEdit(sshKey)}>
+                        <Edit2 size={20} />
                     </Button>
-                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-destructive hover:text-destructive" onClick={() => onDelete(sshKey)}>
-                        <Trash2 size={14} />
+                    <Button variant="ghost" size="sm" className="h-10 w-10 p-0 text-destructive hover:text-destructive" onClick={() => onDelete(sshKey)}>
+                        <Trash2 size={20} />
                     </Button>
                 </div>
             </CardHeader>
