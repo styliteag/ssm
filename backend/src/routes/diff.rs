@@ -512,6 +512,118 @@ async fn sync_host_keys(
         )));
     }
 
+    // Get the diff before syncing to log what will be changed
+    let (_, diff_before_sync) = caching_ssh_client.get_host_diff(host.clone(), false).await;
+    
+    let mut changes_summary = std::collections::HashMap::new();
+    let mut detailed_changes = Vec::new();
+    
+    if let Ok(diff_result) = diff_before_sync {
+        let mut missing_keys = 0;
+        let mut unknown_keys = 0;
+        let mut incorrect_options = 0;
+        let mut faulty_keys = 0;
+        let mut unauthorized_keys = 0;
+        let mut duplicate_keys = 0;
+        let mut logins_affected = std::collections::HashSet::new();
+        
+        for (login, _readonly, diffs) in diff_result {
+            if diffs.is_empty() {
+                continue;
+            }
+            
+            logins_affected.insert(login.clone());
+            let mut login_changes = serde_json::Map::new();
+            login_changes.insert("login".to_string(), serde_json::json!(login));
+            
+            let mut login_details = Vec::new();
+            
+            for diff_item in diffs {
+                let detail = match &diff_item {
+                    crate::ssh::DiffItem::KeyMissing(key, username) => {
+                        missing_keys += 1;
+                        serde_json::json!({
+                            "type": "missing",
+                            "username": username,
+                            "key_type": key.algorithm.to_string(),
+                            "key_preview": format!("...{}", &key.base64.chars().rev().take(12).collect::<String>().chars().rev().collect::<String>()),
+                            "comment": key.comment,
+                            "action": "added"
+                        })
+                    },
+                    crate::ssh::DiffItem::UnknownKey(key) => {
+                        unknown_keys += 1;
+                        serde_json::json!({
+                            "type": "unknown",
+                            "key_type": key.algorithm.to_string(),
+                            "key_preview": format!("...{}", &key.base64.chars().rev().take(12).collect::<String>().chars().rev().collect::<String>()),
+                            "comment": key.comment,
+                            "action": "removed"
+                        })
+                    },
+                    crate::ssh::DiffItem::IncorrectOptions(key, expected_opts) => {
+                        incorrect_options += 1;
+                        serde_json::json!({
+                            "type": "incorrect_options",
+                            "key_type": key.algorithm.to_string(),
+                            "key_preview": format!("...{}", &key.base64.chars().rev().take(12).collect::<String>().chars().rev().collect::<String>()),
+                            "comment": key.comment,
+                            "old_options": key.options.to_string(),
+                            "new_options": expected_opts.to_string(),
+                            "action": "modified"
+                        })
+                    },
+                    crate::ssh::DiffItem::FaultyKey(error, _line) => {
+                        faulty_keys += 1;
+                        serde_json::json!({
+                            "type": "faulty",
+                            "error": error,
+                            "action": "removed"
+                        })
+                    },
+                    crate::ssh::DiffItem::UnauthorizedKey(key, username) => {
+                        unauthorized_keys += 1;
+                        serde_json::json!({
+                            "type": "unauthorized",
+                            "username": username,
+                            "key_type": key.algorithm.to_string(),
+                            "key_preview": format!("...{}", &key.base64.chars().rev().take(12).collect::<String>().chars().rev().collect::<String>()),
+                            "comment": key.comment,
+                            "action": "removed"
+                        })
+                    },
+                    crate::ssh::DiffItem::DuplicateKey(key) => {
+                        duplicate_keys += 1;
+                        serde_json::json!({
+                            "type": "duplicate",
+                            "key_type": key.algorithm.to_string(),
+                            "key_preview": format!("...{}", &key.base64.chars().rev().take(12).collect::<String>().chars().rev().collect::<String>()),
+                            "comment": key.comment,
+                            "action": "removed"
+                        })
+                    },
+                    crate::ssh::DiffItem::PragmaMissing => {
+                        continue;
+                    },
+                };
+                login_details.push(detail);
+            }
+            
+            if !login_details.is_empty() {
+                login_changes.insert("changes".to_string(), serde_json::json!(login_details));
+                detailed_changes.push(serde_json::Value::Object(login_changes));
+            }
+        }
+        
+        changes_summary.insert("missing_keys", missing_keys);
+        changes_summary.insert("unknown_keys", unknown_keys);
+        changes_summary.insert("incorrect_options", incorrect_options);
+        changes_summary.insert("faulty_keys", faulty_keys);
+        changes_summary.insert("unauthorized_keys", unauthorized_keys);
+        changes_summary.insert("duplicate_keys", duplicate_keys);
+        changes_summary.insert("logins_affected", logins_affected.len());
+    }
+
     info!("Applying SSH key synchronization for host '{}'", host.name);
 
     // Apply the sync changes using the SSH client
@@ -522,13 +634,38 @@ async fn sync_host_keys(
             // Clear the cache for this host to force a fresh diff on next request
             caching_ssh_client.invalidate_cache(&host.name).await;
             
+            // Create detailed log message
+            let total_changes: usize = changes_summary.values().sum();
+            let action = if total_changes > 0 {
+                format!("Synced SSH keys ({} changes)", total_changes)
+            } else {
+                "Synced SSH keys (no changes)".to_string()
+            };
+            
+            let metadata = if !changes_summary.is_empty() {
+                let mut metadata_obj = serde_json::Map::new();
+                for (key, value) in changes_summary {
+                    metadata_obj.insert(key.to_string(), serde_json::json!(value));
+                }
+                if !detailed_changes.is_empty() {
+                    metadata_obj.insert("diff".to_string(), serde_json::json!(detailed_changes));
+                }
+                Some(serde_json::to_string(&serde_json::Value::Object(metadata_obj)).unwrap_or_default())
+            } else {
+                None
+            };
+            
             // Log the activity
-            activity_logger::log_host_event(
+            if let Err(e) = crate::routes::activity_log::log_activity(
                 &mut conn.get().unwrap(),
-                _identity.as_ref(),
-                "Synced SSH keys",
+                "host",
+                &action,
                 &host.name,
-            );
+                &crate::activity_logger::extract_username(_identity.as_ref()),
+                metadata,
+            ) {
+                log::error!("Failed to log sync activity: {}", e);
+            }
 
             Ok(HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
                 "message": format!("SSH keys synchronized successfully for host '{}'", host.name),
