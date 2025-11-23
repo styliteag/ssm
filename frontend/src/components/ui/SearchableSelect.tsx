@@ -206,12 +206,11 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
         id={id}
         name={name}
         className={cn(
-          'flex h-10 w-full items-center justify-between rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-left text-gray-900',
-          'focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent',
+          'flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm text-left text-foreground',
+          'focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent',
           'disabled:cursor-not-allowed disabled:opacity-50',
-          'dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100',
-          'hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors',
-          isOpen && 'ring-2 ring-blue-500 border-transparent'
+          'hover:opacity-90 transition-colors',
+          isOpen && 'ring-2 ring-ring border-transparent'
         )}
         onClick={handleTriggerClick}
         onKeyDown={handleKeyDown}
@@ -221,13 +220,13 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
         aria-label={placeholder}
       >
         <span className={cn(
-          displayValue ? 'text-gray-900 dark:text-gray-100' : 'text-gray-400 dark:text-gray-500'
+          displayValue ? 'text-foreground' : 'text-muted-foreground'
         )}>
           {displayValue || placeholder}
         </span>
         <svg
           className={cn(
-            'h-4 w-4 text-gray-400 dark:text-gray-500 transition-transform duration-200',
+            'h-4 w-4 text-muted-foreground transition-transform duration-200',
             isOpen && (dropdownPosition === 'top' ? '-rotate-180' : 'rotate-180')
           )}
           fill="none"
@@ -240,10 +239,10 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
 
       {/* Dropdown */}
       {isOpen && (
-        <div 
+        <div
           ref={dropdownRef}
           className={cn(
-            "absolute z-50 w-full bg-white border border-gray-300 rounded-md shadow-lg dark:bg-gray-800 dark:border-gray-600 dark:shadow-gray-900/25",
+            "absolute z-50 w-full bg-background border border-input rounded-md shadow-lg shadow-black/20",
             dropdownPosition === 'bottom' ? 'mt-1' : 'mb-1 bottom-full',
             // Responsive width constraints and overflow handling
             "min-w-full max-w-sm",
@@ -257,9 +256,8 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
               ref={searchInputRef}
               type="text"
               className={cn(
-                'w-full px-3 py-2 text-sm border border-gray-300 rounded-md bg-white text-gray-900 placeholder:text-gray-400',
-                'focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent',
-                'dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:placeholder:text-gray-500'
+                'w-full px-3 py-2 text-sm border border-input rounded-md bg-background text-foreground placeholder:text-muted-foreground',
+                'focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent'
               )}
               placeholder={searchPlaceholder}
               value={searchTerm}
@@ -286,11 +284,11 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
                 <li
                   key={option.value}
                   className={cn(
-                    'relative cursor-pointer select-none py-2 px-3 text-sm text-gray-900 dark:text-gray-100',
-                    'hover:bg-blue-50 hover:text-blue-900 dark:hover:bg-gray-700 dark:hover:text-gray-100',
-                    focusedIndex === index && 'bg-blue-50 text-blue-900 dark:bg-gray-700 dark:text-gray-100',
+                    'relative cursor-pointer select-none py-2 px-3 text-sm text-foreground',
+                    'hover:bg-accent hover:text-accent-foreground',
+                    focusedIndex === index && 'bg-accent text-accent-foreground',
                     option.disabled && 'cursor-not-allowed opacity-50',
-                    value === option.value && 'bg-blue-100 text-blue-900 dark:bg-blue-900 dark:text-blue-100 font-medium'
+                    value === option.value && 'bg-primary text-primary-foreground font-medium'
                   )}
                   onClick={() => handleOptionSelect(option)}
                   role="option"
@@ -298,7 +296,7 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
                 >
                   <span className="block truncate">{option.label}</span>
                   {value === option.value && (
-                    <span className="absolute inset-y-0 right-0 flex items-center pr-3 text-blue-600 dark:text-blue-300">
+                    <span className="absolute inset-y-0 right-0 flex items-center pr-3 text-primary-foreground">
                       <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
                         <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                       </svg>
@@ -307,7 +305,7 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
                 </li>
               ))
             ) : (
-              <li className="py-2 px-3 text-sm text-gray-500 dark:text-gray-400 italic">
+              <li className="py-2 px-3 text-sm text-muted-foreground italic">
                 {emptyMessage}
               </li>
             )}
