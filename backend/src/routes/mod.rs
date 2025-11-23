@@ -4,6 +4,7 @@ pub mod diff;
 pub mod host;
 pub mod key;
 pub mod user;
+pub mod activity_log;
 
 use actix_web::{
     get,
@@ -30,6 +31,7 @@ pub fn route_config(cfg: &mut web::ServiceConfig) {
                 .service(web::scope("/diff").configure(diff::config))
                 .service(web::scope("/auth").configure(authentication::config))
                 .service(web::scope("/authorization").configure(authorization::config))
+                .service(web::scope("/activity").configure(activity_log::configure))
         )
         .default_service(web::to(not_found));
 }
