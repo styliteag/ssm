@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/Card';
 import { Key, Server, User, Shield, Loader2, AlertCircle } from 'lucide-react';
 import { activitiesService, Activity } from '../../services/api/activities';
+import { Link } from 'react-router-dom';
 
 const iconMap = {
     key: Key,
@@ -48,8 +49,11 @@ export const ActivityFeed: React.FC = () => {
 
     return (
         <Card className="h-full">
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle className="text-base font-medium">Recent Activity</CardTitle>
+                <Link to="/activities" className="text-xs text-primary hover:underline">
+                    View All
+                </Link>
             </CardHeader>
             <CardContent>
                 {loading ? (
