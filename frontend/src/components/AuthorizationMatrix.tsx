@@ -77,12 +77,12 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
     authorizations.forEach(auth => {
       loginCounts.set(auth.login, (loginCounts.get(auth.login) || 0) + 1);
     });
-    
+
     // Convert to array and sort by count (descending)
     const sortedAccounts = Array.from(loginCounts.entries())
       .sort((a, b) => b[1] - a[1]) // Sort by count descending
       .map(([account]) => account);
-    
+
     // Add "all" at the beginning
     return ['all', ...sortedAccounts];
   }, [authorizations]);
@@ -146,8 +146,9 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
 
   // Filter data based on show only authorized and search terms
   const { filteredUsers, filteredHosts } = useMemo(() => {
-    let filteredUsers = users;
-    let filteredHosts = hosts;
+    // Only show enabled users and hosts
+    let filteredUsers = users.filter(user => user.enabled);
+    let filteredHosts = hosts.filter(host => !host.disabled);
 
     // Filter users by search term
     if (userSearchTerm.trim()) {
@@ -261,24 +262,24 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
     const isHovered = hoveredCell?.userId === cell.userId && hoveredCell?.hostId === cell.hostId;
     const isAllMode = selectedLoginAccount === 'all';
     const hasAuthorizations = cell.authorizations.length > 0;
-    
+
     return cn(
       'w-12 h-8 flex items-center justify-center transition-all duration-150 border border-gray-200 dark:border-gray-700',
       {
         // Cursor style - pointer only when not in "all" mode
         'cursor-pointer': !isAllMode,
         'cursor-default': isAllMode,
-        
+
         // Authorization states
         'bg-green-50 dark:bg-green-900/20': (cell.isAuthorized || (isAllMode && hasAuthorizations)) && !cell.loading,
         'hover:bg-green-100 dark:hover:bg-green-900/30': cell.isAuthorized && !cell.loading && !isAllMode,
         'bg-gray-50 dark:bg-gray-800': (!cell.isAuthorized && !isAllMode) || (isAllMode && !hasAuthorizations) && !cell.loading,
         'hover:bg-gray-100 dark:hover:bg-gray-700': !cell.isAuthorized && !cell.loading && !isAllMode,
         'bg-blue-50 dark:bg-blue-900/20': cell.loading,
-        
+
         // Hover states
         'ring-2 ring-blue-500 ring-opacity-50': isHovered && !isAllMode,
-        
+
         // Zebra striping
         'bg-opacity-80': rowIndex % 2 === 0,
       }
@@ -307,7 +308,7 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
     <Card className={className}>
       <CardHeader>
         <CardTitle>Authorization Matrix</CardTitle>
-        
+
         {/* Search Inputs */}
         <div className="mt-4 space-y-4">
           <div className="flex flex-col sm:flex-row gap-4 max-w-6xl items-end">
@@ -358,7 +359,7 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
               </Button>
             </div>
           </div>
-          
+
           {/* Active Filters Indicator */}
           {(userSearchTerm || hostSearchTerm || showOnlyAuthorized) && (
             <div className="flex items-center justify-between p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-sm">
@@ -388,9 +389,9 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
             </div>
           )}
         </div>
-        
+
       </CardHeader>
-      
+
       <CardContent>
         {filteredUsers.length === 0 || filteredHosts.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12">
@@ -454,12 +455,12 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
                   {filteredHosts.map((host) => {
                     const key = `${user.id}-${host.id}`;
                     const userAuthorizations = authMap.get(key) || [];
-                    
+
                     // Filter authorizations based on selected mode
-                    const relevantAuthorizations = selectedLoginAccount === 'all' 
+                    const relevantAuthorizations = selectedLoginAccount === 'all'
                       ? userAuthorizations // Show all authorizations in "all" mode
                       : userAuthorizations.filter(auth => auth.login === selectedLoginAccount);
-                    
+
                     const isAuthorized = relevantAuthorizations.length > 0;
                     const isLoading = cellStates.get(key) || false;
 

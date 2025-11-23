@@ -37,12 +37,12 @@ export const HostCard: React.FC<HostCardProps> = ({ host, onEdit, onDelete, onCo
                         </div>
                     </div>
                 </div>
-                <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => onEdit(host)}>
-                        <Edit2 size={14} />
+                <div className="flex space-x-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                    <Button variant="ghost" size="sm" className="h-10 w-10 p-0" onClick={() => onEdit(host)}>
+                        <Edit2 size={20} />
                     </Button>
-                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-destructive hover:text-destructive" onClick={() => onDelete(host)}>
-                        <Trash2 size={14} />
+                    <Button variant="ghost" size="sm" className="h-10 w-10 p-0 text-destructive hover:text-destructive" onClick={() => onDelete(host)}>
+                        <Trash2 size={20} />
                     </Button>
                 </div>
             </CardHeader>

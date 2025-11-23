@@ -50,21 +50,21 @@ export const UserCard: React.FC<UserCardProps> = ({
                         </div>
                     </div>
                 </div>
-                <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                <div className="flex space-x-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                     <Button
                         variant="ghost"
                         size="sm"
-                        className="h-8 w-8 p-0"
+                        className="h-10 w-10 p-0"
                         onClick={() => onToggleStatus(user)}
                         title={user.enabled ? "Disable User" : "Enable User"}
                     >
-                        {user.enabled ? <UserMinus size={14} /> : <UserPlus size={14} />}
+                        {user.enabled ? <UserMinus size={20} /> : <UserPlus size={20} />}
                     </Button>
-                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => onEdit(user)}>
-                        <Edit2 size={14} />
+                    <Button variant="ghost" size="sm" className="h-10 w-10 p-0" onClick={() => onEdit(user)}>
+                        <Edit2 size={20} />
                     </Button>
-                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-destructive hover:text-destructive" onClick={() => onDelete(user)}>
-                        <Trash2 size={14} />
+                    <Button variant="ghost" size="sm" className="h-10 w-10 p-0 text-destructive hover:text-destructive" onClick={() => onDelete(user)}>
+                        <Trash2 size={20} />
                     </Button>
                 </div>
             </CardHeader>
