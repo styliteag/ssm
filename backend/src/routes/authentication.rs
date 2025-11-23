@@ -130,13 +130,30 @@ async fn login(
         AuthLogger::log_auth_success(&json.username, "password");
         AuthLogger::log_session_event("created", "session_id_placeholder");
 
+        // Extract IP address, prioritizing X-Forwarded-For header
+        let ip = req.headers()
+            .get("X-Forwarded-For")
+            .and_then(|h| h.to_str().ok())
+            .and_then(|s| s.split(',').next()) // Get first IP from comma-separated list
+            .map(|s| s.trim().to_string())
+            .unwrap_or_else(|| {
+                req.connection_info().realip_remote_addr().unwrap_or("unknown").to_string()
+            });
+        let via = req.headers().get("Via").and_then(|h| h.to_str().ok());
+        
+        let metadata = serde_json::json!({
+            "ip": ip,
+            "via": via
+        }).to_string();
+
         // Log activity directly since we have the username and Identity isn't in request yet
         if let Err(e) = crate::routes::activity_log::log_activity(
             &mut conn.get().unwrap(),
             "auth",
             "User logged in",
             "via password",
-            &json.username
+            &json.username,
+            Some(metadata)
         ) {
             error!("Failed to log login activity: {}", e);
         }

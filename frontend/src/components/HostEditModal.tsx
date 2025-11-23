@@ -127,9 +127,9 @@ export const HostEditModal: React.FC<HostEditModalProps> = ({
         port: hostData.port,
         username: hostData.username,
         key_fingerprint: hostData.key_fingerprint,
-        jump_via: hostData.jump_via ? Number(hostData.jump_via) : undefined,
+        jump_via: hostData.jump_via,
         disabled: hostData.disabled,
-        comment: hostData.comment || undefined
+        comment: hostData.comment
       });
       
       if (response.success) {
@@ -160,7 +160,10 @@ export const HostEditModal: React.FC<HostEditModalProps> = ({
             key_fingerprint: hostData.key_fingerprint || undefined,
             jump_via: hostData.jump_via ? Number(hostData.jump_via) : undefined,
             disabled: hostData.disabled,
-            comment: hostData.comment || undefined
+            comment: hostData.comment || undefined,
+            authorizations: host.authorizations,
+            id: host.id,
+            connection_status: host.connection_status
           });
         }
       } else {

@@ -68,7 +68,7 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
         ...jumpHosts
           .filter(host => !selectedHosts.some(selected => selected.id === host.id))
           .map(host => ({
-            value: host.id,
+            value: String(host.id),
             label: `${host.name} (${host.address})`
           }))
       ]

@@ -404,6 +404,33 @@ async fn update_user(
     _identity: Option<Identity>,
 ) -> Result<impl Responder> {
     let mut conn = conn.get().unwrap();
+    
+    // Fetch the old user to track changes
+    let old_user = User::get_user(&mut conn, old_username.to_string())
+        .map_err(|_| actix_web::error::ErrorNotFound("User not found"))?;
+    
+    // Track changes for metadata
+    let mut changes = serde_json::Map::new();
+    
+    if old_user.username != json.username {
+        changes.insert("username".to_string(), serde_json::json!({
+            "old": old_user.username,
+            "new": json.username
+        }));
+    }
+    if old_user.enabled != json.enabled {
+        changes.insert("enabled".to_string(), serde_json::json!({
+            "old": old_user.enabled,
+            "new": json.enabled
+        }));
+    }
+    if old_user.comment != json.comment {
+        changes.insert("comment".to_string(), serde_json::json!({
+            "old": old_user.comment,
+            "new": json.comment
+        }));
+    }
+    
     match User::update_user(
         &mut conn,
         &old_username,
@@ -412,12 +439,24 @@ async fn update_user(
         json.comment.clone(),
     ) {
         Ok(_) => {
-            activity_logger::log_user_event(
+            // Log activity with changes metadata
+            let metadata = if !changes.is_empty() {
+                Some(serde_json::to_string(&changes).unwrap_or_default())
+            } else {
+                None
+            };
+            
+            if let Err(e) = crate::routes::activity_log::log_activity(
                 &mut conn,
-                _identity.as_ref(),
+                "user",
                 "Updated user",
                 &json.username,
-            );
+                &crate::activity_logger::extract_username(_identity.as_ref()),
+                metadata,
+            ) {
+                log::error!("Failed to log user update activity: {}", e);
+            }
+            
             Ok(HttpResponse::Ok().json(ApiResponse::success_message("User updated successfully".to_string())))
         },
         Err(error) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error))),

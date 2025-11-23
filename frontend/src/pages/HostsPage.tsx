@@ -520,11 +520,13 @@ const HostsPage: React.FC = () => {
           // Keep existing values for fields we're not updating
           jump_via: host.jump_via,
           disabled: host.disabled,
+          // Include comment as it's expected by the backend deserializer
+          comment: host.comment || '',
         };
 
         // Apply bulk changes only to fields that were specified
         if (updateData.jump_via !== undefined) {
-          hostUpdate.jump_via = updateData.jump_via ?? undefined;
+          hostUpdate.jump_via = updateData.jump_via;
         }
         if (updateData.disabled !== undefined) {
           hostUpdate.disabled = updateData.disabled;

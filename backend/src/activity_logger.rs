@@ -20,7 +20,7 @@ pub fn log_host_event(
     host_name: &str,
 ) {
     let username = extract_username(identity);
-    if let Err(e) = log_activity(conn, "host", action, host_name, &username) {
+    if let Err(e) = log_activity(conn, "host", action, host_name, &username, None) {
         error!("Failed to log host activity: {}", e);
     }
 }
@@ -33,7 +33,7 @@ pub fn log_user_event(
     target_username: &str,
 ) {
     let username = extract_username(identity);
-    if let Err(e) = log_activity(conn, "user", action, target_username, &username) {
+    if let Err(e) = log_activity(conn, "user", action, target_username, &username, None) {
         error!("Failed to log user activity: {}", e);
     }
 }
@@ -46,7 +46,7 @@ pub fn log_key_event(
     key_info: &str,
 ) {
     let username = extract_username(identity);
-    if let Err(e) = log_activity(conn, "key", action, key_info, &username) {
+    if let Err(e) = log_activity(conn, "key", action, key_info, &username, None) {
         error!("Failed to log key activity: {}", e);
     }
 }
@@ -59,7 +59,7 @@ pub fn log_auth_event(
     details: &str,
 ) {
     let username = extract_username(identity);
-    if let Err(e) = log_activity(conn, "auth", action, details, &username) {
+    if let Err(e) = log_activity(conn, "auth", action, details, &username, None) {
         error!("Failed to log auth activity: {}", e);
     }
 }
