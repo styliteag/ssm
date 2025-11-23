@@ -182,3 +182,57 @@ impl TryFrom<&PublicUserKey> for russh::keys::PublicKey {
         Self::from_openssh(&value.to_openssh()).map_err(|e| e.to_string())
     }
 }
+
+#[derive(Queryable, Selectable, Clone, Debug, Serialize, ToSchema)]
+#[diesel(table_name = crate::schema::activity_log)]
+#[diesel(check_for_backend(diesel::sqlite::Sqlite))]
+pub struct ActivityLog {
+    pub id: i32,
+    pub activity_type: String,
+    pub action: String,
+    pub target: String,
+    pub user_id: Option<i32>,
+    pub actor_username: String,
+    pub timestamp: i32,
+    pub metadata: Option<String>,
+}
+
+#[derive(Insertable, Clone, ToSchema)]
+#[diesel(table_name = crate::schema::activity_log)]
+#[diesel(check_for_backend(diesel::sqlite::Sqlite))]
+pub struct NewActivityLog {
+    pub activity_type: String,
+    pub action: String,
+    pub target: String,
+    pub user_id: Option<i32>,
+    pub actor_username: String,
+    pub metadata: Option<String>,
+}
+
+impl NewActivityLog {
+    pub fn new(
+        activity_type: String,
+        action: String,
+        target: String,
+        actor_username: String,
+    ) -> Self {
+        Self {
+            activity_type,
+            action,
+            target,
+            user_id: None,
+            actor_username,
+            metadata: None,
+        }
+    }
+
+    pub fn with_user_id(mut self, user_id: i32) -> Self {
+        self.user_id = Some(user_id);
+        self
+    }
+
+    pub fn with_metadata(mut self, metadata: String) -> Self {
+        self.metadata = Some(metadata);
+        self
+    }
+}

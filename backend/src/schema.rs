@@ -75,4 +75,28 @@ diesel::table! {
     }
 }
 
-diesel::allow_tables_to_appear_in_same_query!(host, user, authorization, user_key,);
+
+diesel::joinable!(activity_log -> user (user_id));
+diesel::table! {
+    /// Activity log for tracking system actions
+    activity_log (id) {
+        /// unique id
+        id -> Integer,
+        /// type of activity: 'key', 'host', 'user', or 'auth'
+        activity_type -> Text,
+        /// action performed
+        action -> Text,
+        /// target of the action
+        target -> Text,
+        /// user associated with the action (can be null)
+        user_id -> Nullable<Integer>,
+        /// username of the actor performing the action
+        actor_username -> Text,
+        /// unix timestamp of when the action occurred
+        timestamp -> Integer,
+        /// optional JSON metadata
+        metadata -> Nullable<Text>,
+    }
+}
+
+diesel::allow_tables_to_appear_in_same_query!(host, user, authorization, user_key, activity_log,);
