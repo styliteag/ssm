@@ -557,6 +557,9 @@ async fn authorize_user(
     let conn_clone = conn.clone();
     let login_for_log = json.login.clone();
     let host_id_for_log = json.host_id;
+    let user_id_for_log = json.user_id;
+    let options_for_log = json.options.clone();
+    let comment_for_log = json.comment.clone();
     
     let res = web::block(move || {
         Host::authorize_user(
@@ -572,12 +575,24 @@ async fn authorize_user(
 
     match res {
         Ok(()) => {
-            activity_logger::log_auth_event(
+            let metadata = serde_json::json!({
+                "user_id": user_id_for_log,
+                "host_id": host_id_for_log,
+                "login": login_for_log,
+                "options": options_for_log,
+                "comment": comment_for_log
+            });
+            
+            if let Err(e) = crate::routes::activity_log::log_activity(
                 &mut conn.get().unwrap(),
-                _identity.as_ref(),
-                &format!("Authorized {}", login_for_log),
+                "auth",
+                &format!("Authorized login '{}'", login_for_log),
                 &format!("on host ID {}", host_id_for_log),
-            );
+                &crate::activity_logger::extract_username(_identity.as_ref()),
+                Some(serde_json::to_string(&metadata).unwrap_or_default()),
+            ) {
+                log::error!("Failed to log authorization activity: {}", e);
+            }
             Ok(HttpResponse::Ok().json(ApiResponse::success_message("User authorized successfully".to_string())))
         },
         Err(e) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e.to_string()))),
@@ -967,6 +982,68 @@ async fn update_host(
     let mut db_conn = conn.get().unwrap();
     let request = json.into_inner();
     let new_name = request.name.clone();
+    
+    // Fetch the old host to track changes
+    let old_host = Host::get_from_name_sync(&mut db_conn, host_name.to_string())
+        .map_err(actix_web::error::ErrorInternalServerError)?;
+    
+    let old_host = match old_host {
+        Some(h) => h,
+        None => return Ok(HttpResponse::NotFound().json(ApiError::not_found("Host not found".to_string()))),
+    };
+    
+    // Track changes for metadata
+    let mut changes = serde_json::Map::new();
+    
+    if old_host.name != request.name {
+        changes.insert("name".to_string(), serde_json::json!({
+            "old": old_host.name,
+            "new": request.name
+        }));
+    }
+    if old_host.address != request.address {
+        changes.insert("address".to_string(), serde_json::json!({
+            "old": old_host.address,
+            "new": request.address
+        }));
+    }
+    if old_host.username != request.username {
+        changes.insert("username".to_string(), serde_json::json!({
+            "old": old_host.username,
+            "new": request.username
+        }));
+    }
+    if old_host.port != request.port {
+        changes.insert("port".to_string(), serde_json::json!({
+            "old": old_host.port,
+            "new": request.port
+        }));
+    }
+    if old_host.disabled != request.disabled {
+        changes.insert("disabled".to_string(), serde_json::json!({
+            "old": old_host.disabled,
+            "new": request.disabled
+        }));
+    }
+    if old_host.key_fingerprint != request.key_fingerprint {
+        changes.insert("key_fingerprint".to_string(), serde_json::json!({
+            "old": old_host.key_fingerprint,
+            "new": request.key_fingerprint
+        }));
+    }
+    if old_host.jump_via != request.jump_via {
+        changes.insert("jump_via".to_string(), serde_json::json!({
+            "old": old_host.jump_via,
+            "new": request.jump_via
+        }));
+    }
+    if old_host.comment != request.comment {
+        changes.insert("comment".to_string(), serde_json::json!({
+            "old": old_host.comment,
+            "new": request.comment
+        }));
+    }
+    
     match Host::update_host(
         &mut db_conn,
         host_name.to_string(),
@@ -978,12 +1055,25 @@ async fn update_host(
             if new_name != host_name.to_string() {
                 caching_ssh_client.invalidate_cache(&new_name).await;
             }
-            activity_logger::log_host_event(
+            
+            // Log activity with changes metadata
+            let metadata = if !changes.is_empty() {
+                Some(serde_json::to_string(&changes).unwrap_or_default())
+            } else {
+                None
+            };
+            
+            if let Err(e) = crate::routes::activity_log::log_activity(
                 &mut conn.get().unwrap(),
-                _identity.as_ref(),
+                "host",
                 "Updated host",
                 &new_name,
-            );
+                &crate::activity_logger::extract_username(_identity.as_ref()),
+                metadata,
+            ) {
+                log::error!("Failed to log host update activity: {}", e);
+            }
+            
             Ok(HttpResponse::Ok().json(ApiResponse::success_message("Host updated successfully".to_string())))
         },
         Err(e) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e.to_string()))),

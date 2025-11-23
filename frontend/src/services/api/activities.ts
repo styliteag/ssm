@@ -7,6 +7,7 @@ export interface Activity {
     target: string;
     user: string;
     timestamp: string;
+    metadata?: Record<string, any>;
 }
 
 export const activitiesService = {

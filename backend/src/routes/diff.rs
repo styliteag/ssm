@@ -19,6 +19,7 @@ use crate::{
 };
 
 use crate::models::Host;
+use crate::activity_logger;
 
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(get_hosts_for_diff)
@@ -521,6 +522,14 @@ async fn sync_host_keys(
             // Clear the cache for this host to force a fresh diff on next request
             caching_ssh_client.invalidate_cache(&host.name).await;
             
+            // Log the activity
+            activity_logger::log_host_event(
+                &mut conn.get().unwrap(),
+                _identity.as_ref(),
+                "Synced SSH keys",
+                &host.name,
+            );
+
             Ok(HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
                 "message": format!("SSH keys synchronized successfully for host '{}'", host.name),
                 "host": host.name

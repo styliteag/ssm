@@ -48,6 +48,31 @@ const ActivitiesPage: React.FC = () => {
         activity.user.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
+    // Helper to render metadata changes
+    const renderChanges = (metadata?: Record<string, any>) => {
+        if (!metadata) return null;
+
+        // Check if this is a changes metadata (has old/new structure)
+        const changes = Object.entries(metadata).filter(([_key, value]) =>
+            value && typeof value === 'object' && 'old' in value && 'new' in value
+        );
+
+        if (changes.length === 0) return null;
+
+        return (
+            <div className="flex flex-wrap gap-2 mt-1">
+                {changes.map(([field, change]: [string, any]) => (
+                    <span key={field} className="text-xs bg-muted px-2 py-0.5 rounded">
+                        <span className="text-muted-foreground">{field}:</span>{' '}
+                        <span className="text-destructive line-through">{String(change.old ?? 'null')}</span>
+                        {' → '}
+                        <span className="text-green-600 dark:text-green-400">{String(change.new ?? 'null')}</span>
+                    </span>
+                ))}
+            </div>
+        );
+    };
+
     return (
         <div className="space-y-6 animate-in fade-in duration-500">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -96,26 +121,34 @@ const ActivitiesPage: React.FC = () => {
                             {filteredActivities.map((activity) => {
                                 const Icon = iconMap[activity.type] || ActivityIcon;
                                 return (
-                                    <div key={activity.id} className="flex items-center gap-3 p-2 px-4 hover:bg-muted/50 transition-colors">
-                                        <div className={`p-1.5 rounded-full shrink-0 ${colorMap[activity.type] || 'text-gray-500 bg-gray-100'}`}>
+                                    <div key={activity.id} className="flex items-start gap-3 p-2 px-4 hover:bg-muted/50 transition-colors">
+                                        <div className={`p-1.5 rounded-full shrink-0 mt-0.5 ${colorMap[activity.type] || 'text-gray-500 bg-gray-100'}`}>
                                             <Icon size={16} />
                                         </div>
-                                        <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
-                                            <div className="flex items-center gap-2 min-w-0">
-                                                <span className="font-medium text-sm text-foreground truncate">
-                                                    {activity.action}
-                                                </span>
-                                                <span className="text-xs text-muted-foreground shrink-0">on</span>
-                                                <span className="font-medium text-sm text-foreground truncate">
-                                                    {activity.target}
-                                                </span>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                                                <div className="flex items-center gap-2 min-w-0">
+                                                    <span className="font-medium text-sm text-foreground truncate">
+                                                        {activity.action}
+                                                    </span>
+                                                    <span className="text-xs text-muted-foreground shrink-0">on</span>
+                                                    <span className="font-medium text-sm text-foreground truncate">
+                                                        {activity.target}
+                                                    </span>
+                                                </div>
                                             </div>
+                                            {renderChanges(activity.metadata)}
                                         </div>
                                         <div className="flex items-center gap-4 shrink-0 text-xs text-muted-foreground">
                                             <div className="hidden sm:flex items-center gap-1">
                                                 <User size={12} />
                                                 <span>{activity.user}</span>
                                             </div>
+                                            {activity.metadata?.ip && (
+                                                <div className="hidden md:flex items-center gap-1 text-xs bg-muted px-1.5 py-0.5 rounded" title={activity.metadata.via ? `Via: ${activity.metadata.via}` : undefined}>
+                                                    <span className="font-mono">{activity.metadata.ip}</span>
+                                                </div>
+                                            )}
                                             <span className="w-20 sm:w-24 text-right whitespace-nowrap">{activity.timestamp}</span>
                                         </div>
                                     </div>

@@ -14,8 +14,10 @@ pub struct ActivityResponse {
     activity_type: String,
     action: String,
     target: String,
+
     user: String,
     timestamp: String,
+    metadata: Option<serde_json::Value>,
 }
 
 impl From<ActivityLog> for ActivityResponse {
@@ -43,7 +45,9 @@ impl From<ActivityLog> for ActivityResponse {
             action: log.action,
             target: log.target,
             user: log.actor_username,
+
             timestamp,
+            metadata: log.metadata.and_then(|m| serde_json::from_str(&m).ok()),
         }
     }
 }
@@ -126,17 +130,23 @@ pub fn log_activity(
     activity_type_str: &str,
     action_str: &str,
     target_str: &str,
+
     actor: &str,
+    metadata: Option<String>,
 ) -> Result<(), diesel::result::Error> {
     use crate::models::NewActivityLog;
     use crate::schema::activity_log;
 
-    let new_log = NewActivityLog::new(
+    let mut new_log = NewActivityLog::new(
         activity_type_str.to_string(),
         action_str.to_string(),
         target_str.to_string(),
         actor.to_string(),
     );
+
+    if let Some(m) = metadata {
+        new_log = new_log.with_metadata(m);
+    }
 
     diesel::insert_into(activity_log::table)
         .values(&new_log)
