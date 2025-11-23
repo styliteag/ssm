@@ -11,40 +11,40 @@ interface DiffIssueProps {
 const getIssueIcon = (type: string) => {
   switch (type) {
     case 'pragma_missing':
-      return '⚠️';
+      return '➕';
     case 'faulty_key':
-      return '❌';
+      return '➖';
     case 'unknown_key':
       return '❓';
     case 'unauthorized_key':
-      return '🔒';
-    case 'duplicate_key':
-      return '📋';
-    case 'incorrect_options':
-      return '⚙️';
-    case 'key_missing':
       return '➖';
+    case 'duplicate_key':
+      return '➖';
+    case 'incorrect_options':
+      return '🔄';
+    case 'key_missing':
+      return '➕';
     default:
-      return '❓';
+      return '🔄';
   }
 };
 
 const getIssueSeverity = (type: string) => {
   switch (type) {
     case 'pragma_missing':
-      return 'warning';
+      return 'addition';
     case 'faulty_key':
-      return 'error';
+      return 'removal';
     case 'unknown_key':
       return 'warning';
     case 'unauthorized_key':
-      return 'error';
+      return 'removal';
     case 'duplicate_key':
-      return 'warning';
+      return 'removal';
     case 'incorrect_options':
-      return 'warning';
+      return 'modification';
     case 'key_missing':
-      return 'error';
+      return 'addition';
     default:
       return 'info';
   }
@@ -52,8 +52,12 @@ const getIssueSeverity = (type: string) => {
 
 const getSeverityClasses = (severity: string) => {
   switch (severity) {
-    case 'error':
+    case 'addition':
+      return 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-800 dark:text-green-200';
+    case 'removal':
       return 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-800 dark:text-red-200';
+    case 'modification':
+      return 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-200';
     case 'warning':
       return 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800 text-yellow-800 dark:text-yellow-200';
     case 'info':
@@ -63,22 +67,44 @@ const getSeverityClasses = (severity: string) => {
   }
 };
 
+const getActionDescription = (type: string, description: string) => {
+  switch (type) {
+    case 'key_missing':
+      // Transform "Missing key for user 'dev'" to "Will add key for user 'dev'"
+      return description.replace(/^Missing key/, 'Will add key');
+    case 'unauthorized_key':
+      // Transform "Unauthorized key..." to "Will remove unauthorized key..."
+      return description.replace(/^Unauthorized key/, 'Will remove key');
+    case 'faulty_key':
+      return description.replace(/^Faulty key/, 'Will remove faulty key');
+    case 'duplicate_key':
+      return description.replace(/^Duplicate key/, 'Will remove duplicate key');
+    case 'pragma_missing':
+      return description.replace(/^Missing/, 'Will add');
+    case 'incorrect_options':
+      return description.replace(/^Incorrect/, 'Will correct');
+    default:
+      return description;
+  }
+};
+
 export const DiffIssue: React.FC<DiffIssueProps> = ({ issue, onAllowKey, onAddUnknownKey }) => {
   const [expanded, setExpanded] = useState(false);
   const severity = getIssueSeverity(issue.type);
   const severityClasses = getSeverityClasses(severity);
+  const actionDescription = getActionDescription(issue.type, issue.description);
 
   return (
     <div className={`border rounded-lg p-3 ${severityClasses}`}>
-      <div 
+      <div
         className="flex items-center justify-between cursor-pointer"
         onClick={() => setExpanded(!expanded)}
       >
         <div className="flex items-center space-x-2">
           <span className="text-lg">{getIssueIcon(issue.type)}</span>
-          <span className="font-medium">{issue.description}</span>
+          <span className="font-medium">{actionDescription}</span>
           <span className="text-xs px-2 py-1 bg-white dark:bg-gray-700 bg-opacity-50 dark:bg-opacity-50 rounded">
-            {issue.type.replace('_', ' ')}
+            {severity === 'addition' ? 'add' : severity === 'removal' ? 'remove' : severity === 'modification' ? 'modify' : issue.type.replace('_', ' ')}
           </span>
         </div>
         <div className="flex items-center space-x-2">

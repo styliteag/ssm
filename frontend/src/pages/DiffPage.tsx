@@ -1125,7 +1125,8 @@ const DiffPage: React.FC = () => {
                     Refresh Data
                   </Button>
                   {hostDetails.logins.length > 0 && (
-                    <Button 
+                    <Button
+                      onClick={() => setShowSyncModal(true)}
                       variant="primary"
                       leftIcon={<Upload size={16} />}
                       className="bg-blue-600 hover:bg-blue-700 font-medium px-6"
