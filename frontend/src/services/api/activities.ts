@@ -15,7 +15,7 @@ export const activitiesService = {
      */
     async getActivities(limit: number = 10): Promise<{ success: boolean; data?: Activity[]; message?: string }> {
         try {
-            const response = await api.get<Activity[]>(`/activity/activities?limit=${limit}`);
+            const response = await api.get<Activity[]>(`/activities?limit=${limit}`);
             return {
                 success: response.success,
                 data: response.data,

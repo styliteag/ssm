@@ -5,6 +5,7 @@ use utoipa::{ToSchema, IntoParams};
 
 use crate::models::ActivityLog;
 use crate::ConnectionPool;
+use crate::api_types::ApiResponse;
 
 #[derive(Serialize, ToSchema)]
 pub struct ActivityResponse {
@@ -108,7 +109,7 @@ pub async fn get_activities(
     match results {
         Ok(logs) => {
             let activities: Vec<ActivityResponse> = logs.into_iter().map(|log| log.into()).collect();
-            HttpResponse::Ok().json(activities)
+            HttpResponse::Ok().json(ApiResponse::success(activities))
         }
         Err(e) => {
             log::error!("Failed to query activities: {}", e);

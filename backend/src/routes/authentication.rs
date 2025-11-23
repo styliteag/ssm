@@ -14,6 +14,7 @@ use base64::{engine::general_purpose::STANDARD, Engine};
 use rand::Rng;
 
 use crate::{Configuration, api_types::*, logging::{AuthLogger, SecurityLogger}};
+use crate::activity_logger;
 
 #[derive(Deserialize, ToSchema)]
 pub struct LoginRequest {
@@ -79,6 +80,7 @@ async fn login(
     session: Session,
     json: Json<LoginRequest>,
     config: Data<Configuration>,
+    conn: Data<crate::ConnectionPool>,
 ) -> Result<impl Responder> {
     let htpasswd_path = config.htpasswd_path.as_path();
 
@@ -128,6 +130,17 @@ async fn login(
         AuthLogger::log_auth_success(&json.username, "password");
         AuthLogger::log_session_event("created", "session_id_placeholder");
 
+        // Log activity directly since we have the username and Identity isn't in request yet
+        if let Err(e) = crate::routes::activity_log::log_activity(
+            &mut conn.get().unwrap(),
+            "auth",
+            "User logged in",
+            "via password",
+            &json.username
+        ) {
+            error!("Failed to log login activity: {}", e);
+        }
+
         Ok(HttpResponse::Ok().json(ApiResponse::success(LoginResponse {
             success: true,
             username: json.username.clone(),
@@ -168,8 +181,18 @@ async fn login(
     )
 )]
 #[post("/logout")]
-async fn logout(identity: Option<Identity>, session: Session) -> impl Responder {
+async fn logout(
+    identity: Option<Identity>,
+    session: Session,
+    conn: Data<crate::ConnectionPool>
+) -> impl Responder {
     if let Some(id) = identity {
+        activity_logger::log_auth_event(
+            &mut conn.get().unwrap(),
+            Some(&id),
+            "User logged out",
+            "manual logout",
+        );
         id.logout();
         // Clear CSRF token from session
         session.remove("csrf_token");

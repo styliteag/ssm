@@ -14,6 +14,8 @@ use crate::{
     ConnectionPool,
 };
 
+use crate::activity_logger;
+
 use crate::models::PublicUserKey;
 
 #[derive(Serialize, ToSchema)]
@@ -98,11 +100,21 @@ pub async fn delete_key(
     key_id: Path<i32>,
     _identity: Option<Identity>,
 ) -> Result<impl Responder> {
+    let conn_clone = conn.clone();
+    let key_id_val = *key_id;
     let res =
-        web::block(move || PublicUserKey::delete_key(&mut conn.get().unwrap(), *key_id)).await?;
+        web::block(move || PublicUserKey::delete_key(&mut conn_clone.get().unwrap(), key_id_val)).await?;
 
     match res {
-        Ok(()) => Ok(HttpResponse::Ok().json(ApiResponse::success_message("Key deleted successfully".to_string()))),
+        Ok(()) => {
+            activity_logger::log_key_event(
+                &mut conn.get().unwrap(),
+                _identity.as_ref(),
+                "Deleted SSH key",
+                &format!("ID {}", *key_id),
+            );
+            Ok(HttpResponse::Ok().json(ApiResponse::success_message("Key deleted successfully".to_string())))
+        },
         Err(e) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e))),
     }
 }
@@ -138,8 +150,9 @@ pub async fn update_key_comment(
     _identity: Option<Identity>,
 ) -> Result<impl Responder> {
     let key_id = key_id.into_inner();
+    let conn_clone = conn.clone();
     let result = web::block(move || {
-        let mut conn = conn.get().unwrap();
+        let mut conn = conn_clone.get().unwrap();
 
         // Update name if provided
         if let Some(name) = &json.name {
@@ -158,7 +171,15 @@ pub async fn update_key_comment(
     .await?;
 
     match result {
-        Ok(()) => Ok(HttpResponse::Ok().json(ApiResponse::success_message("Key information updated successfully".to_string()))),
+        Ok(()) => {
+            activity_logger::log_key_event(
+                &mut conn.get().unwrap(),
+                _identity.as_ref(),
+                "Updated SSH key",
+                &format!("ID {}", key_id),
+            );
+            Ok(HttpResponse::Ok().json(ApiResponse::success_message("Key information updated successfully".to_string())))
+        },
         Err(e) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e))),
     }
 }

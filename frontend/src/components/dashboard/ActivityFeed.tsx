@@ -23,14 +23,17 @@ export const ActivityFeed: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        const fetchActivities = async () => {
-            setLoading(true);
-            setError(null);
+        const fetchActivities = async (isBackground = false) => {
+            if (!isBackground) setLoading(true);
+            // Don't clear error on background refresh to avoid flickering if it fails transiently
+            if (!isBackground) setError(null);
+
             const response = await activitiesService.getActivities(10);
 
             if (response.success && response.data) {
                 setActivities(response.data);
-            } else {
+                setError(null); // Clear error on success
+            } else if (!isBackground) {
                 setError(response.message || 'Failed to load activities');
             }
             setLoading(false);
@@ -39,7 +42,7 @@ export const ActivityFeed: React.FC = () => {
         fetchActivities();
 
         // Refresh activities every 30 seconds
-        const interval = setInterval(fetchActivities, 30000);
+        const interval = setInterval(() => fetchActivities(true), 30000);
         return () => clearInterval(interval);
     }, []);
 

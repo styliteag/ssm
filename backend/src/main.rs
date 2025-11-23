@@ -22,6 +22,7 @@ use diesel::r2d2::{ConnectionManager, CustomizeConnection, Pool};
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use russh::keys::load_secret_key;
 
+mod activity_logger;
 mod api_types;
 mod db;
 mod logging;
