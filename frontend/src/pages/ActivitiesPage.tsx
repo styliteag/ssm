@@ -23,6 +23,7 @@ const ActivitiesPage: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
+    const [expandedDiff, setExpandedDiff] = useState<number | null>(null);
 
     useEffect(() => {
         const fetchActivities = async () => {
@@ -48,8 +49,52 @@ const ActivitiesPage: React.FC = () => {
         activity.user.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
+    // Helper to render detailed diff
+    const renderDetailedDiff = (diff: any[]) => {
+        return (
+            <div className="mt-2 border border-border rounded-md p-3 bg-muted/30 space-y-3">
+                {diff.map((loginDiff: any, idx: number) => (
+                    <div key={idx} className="space-y-1">
+                        <div className="text-xs font-semibold text-foreground">Login: {loginDiff.login}</div>
+                        <div className="space-y-1 pl-2">
+                            {loginDiff.changes.map((change: any, changeIdx: number) => {
+                                const actionColor = change.action === 'added' ? 'text-green-600 dark:text-green-400' :
+                                    change.action === 'removed' ? 'text-red-600 dark:text-red-400' :
+                                        'text-blue-600 dark:text-blue-400';
+                                const actionSymbol = change.action === 'added' ? '+' :
+                                    change.action === 'removed' ? '-' : '~';
+
+                                return (
+                                    <div key={changeIdx} className={`text-xs font-mono ${actionColor} flex gap-1`}>
+                                        <span className="shrink-0">{actionSymbol}</span>
+                                        <div className="flex-1">
+                                            {change.username && <span className="font-semibold">{change.username}: </span>}
+                                            <span>{change.key_type || 'key'}</span>
+                                            {change.key_preview && <span className="opacity-70"> {change.key_preview}</span>}
+                                            {change.comment && <span className="text-muted-foreground"> ({change.comment})</span>}
+                                            {change.type === 'incorrect_options' && (
+                                                <div className="text-xs mt-0.5 text-muted-foreground">
+                                                    Options: <span className="line-through">{change.old_options}</span> → {change.new_options}
+                                                </div>
+                                            )}
+                                            {change.error && (
+                                                <div className="text-xs mt-0.5 text-muted-foreground">
+                                                    Error: {change.error}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                ))}
+            </div>
+        );
+    };
+
     // Helper to render metadata changes
-    const renderChanges = (metadata?: Record<string, any>) => {
+    const renderChanges = (metadata?: Record<string, any>, activityId?: number) => {
         if (!metadata) return null;
 
         // Check if this is a changes metadata (has old/new structure)
@@ -57,18 +102,79 @@ const ActivitiesPage: React.FC = () => {
             value && typeof value === 'object' && 'old' in value && 'new' in value
         );
 
-        if (changes.length === 0) return null;
+        // Check if this is sync metadata (has counts like missing_keys, unknown_keys, etc.)
+        const syncFields = ['missing_keys', 'unknown_keys', 'incorrect_options', 'faulty_keys',
+            'unauthorized_keys', 'duplicate_keys', 'logins_affected'];
+        const isSyncMetadata = syncFields.some(field => field in metadata);
+        const hasDiff = metadata.diff && Array.isArray(metadata.diff) && metadata.diff.length > 0;
+
+        if (changes.length === 0 && !isSyncMetadata && !hasDiff) return null;
 
         return (
-            <div className="flex flex-wrap gap-2 mt-1">
-                {changes.map(([field, change]: [string, any]) => (
-                    <span key={field} className="text-xs bg-muted px-2 py-0.5 rounded">
-                        <span className="text-muted-foreground">{field}:</span>{' '}
-                        <span className="text-destructive line-through">{String(change.old ?? 'null')}</span>
-                        {' → '}
-                        <span className="text-green-600 dark:text-green-400">{String(change.new ?? 'null')}</span>
-                    </span>
-                ))}
+            <div className="space-y-2">
+                <div className="flex flex-wrap gap-2 mt-1">
+                    {/* Render old/new changes */}
+                    {changes.map(([field, change]: [string, any]) => (
+                        <span key={field} className="text-xs bg-muted px-2 py-0.5 rounded">
+                            <span className="text-muted-foreground">{field}:</span>{' '}
+                            <span className="text-destructive line-through">{String(change.old ?? 'null')}</span>
+                            {' → '}
+                            <span className="text-green-600 dark:text-green-400">{String(change.new ?? 'null')}</span>
+                        </span>
+                    ))}
+
+                    {/* Render sync summary */}
+                    {isSyncMetadata && (
+                        <>
+                            {metadata.missing_keys > 0 && (
+                                <span className="text-xs bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-400 px-2 py-0.5 rounded">
+                                    +{metadata.missing_keys} missing
+                                </span>
+                            )}
+                            {metadata.unknown_keys > 0 && (
+                                <span className="text-xs bg-amber-100 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 px-2 py-0.5 rounded">
+                                    -{metadata.unknown_keys} unknown
+                                </span>
+                            )}
+                            {metadata.incorrect_options > 0 && (
+                                <span className="text-xs bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 px-2 py-0.5 rounded">
+                                    ⚙️ {metadata.incorrect_options} options fixed
+                                </span>
+                            )}
+                            {metadata.unauthorized_keys > 0 && (
+                                <span className="text-xs bg-orange-100 dark:bg-orange-900/20 text-orange-700 dark:text-orange-400 px-2 py-0.5 rounded">
+                                    🚫 {metadata.unauthorized_keys} unauthorized
+                                </span>
+                            )}
+                            {metadata.duplicate_keys > 0 && (
+                                <span className="text-xs bg-purple-100 dark:bg-purple-900/20 text-purple-700 dark:text-purple-400 px-2 py-0.5 rounded">
+                                    2x {metadata.duplicate_keys} duplicates
+                                </span>
+                            )}
+                            {metadata.faulty_keys > 0 && (
+                                <span className="text-xs bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-400 px-2 py-0.5 rounded">
+                                    ⚠️ {metadata.faulty_keys} faulty
+                                </span>
+                            )}
+                            {metadata.logins_affected > 0 && (
+                                <span className="text-xs bg-muted px-2 py-0.5 rounded text-muted-foreground">
+                                    {metadata.logins_affected} login{metadata.logins_affected !== 1 ? 's' : ''} affected
+                                </span>
+                            )}
+                        </>
+                    )}
+                    {hasDiff && activityId !== undefined && (
+                        <button
+                            onClick={() => setExpandedDiff(expandedDiff === activityId ? null : activityId)}
+                            className="text-xs bg-primary/10 text-primary hover:bg-primary/20 px-2 py-0.5 rounded transition-colors"
+                        >
+                            {expandedDiff === activityId ? 'Hide Details' : 'View Details'}
+                        </button>
+                    )}
+                </div>
+
+                {/* Render detailed diff if expanded */}
+                {hasDiff && expandedDiff === activityId && renderDetailedDiff(metadata.diff)}
             </div>
         );
     };
@@ -137,7 +243,7 @@ const ActivitiesPage: React.FC = () => {
                                                     </span>
                                                 </div>
                                             </div>
-                                            {renderChanges(activity.metadata)}
+                                            {renderChanges(activity.metadata, activity.id)}
                                         </div>
                                         <div className="flex items-center gap-4 shrink-0 text-xs text-muted-foreground">
                                             <div className="hidden sm:flex items-center gap-1">
