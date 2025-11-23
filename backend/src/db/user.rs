@@ -26,6 +26,14 @@ impl User {
         )
     }
 
+    pub fn get_user_by_id(conn: &mut DbConnection, user_id: i32) -> Result<Self, String> {
+        query(
+            user::table
+                .filter(user::id.eq(user_id))
+                .first::<Self>(conn),
+        )
+    }
+
     pub fn get_keys(&self, conn: &mut DbConnection) -> Result<Vec<PublicUserKey>, String> {
         query(
             user_key::table
