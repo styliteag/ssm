@@ -21,6 +21,8 @@ use crate::{
     ConnectionPool,
 };
 
+use crate::activity_logger;
+
 use crate::models::{Host, NewHost};
 
 pub fn config(cfg: &mut web::ServiceConfig) {
@@ -397,7 +399,15 @@ async fn add_host_key(
     }
 
     match host.update_fingerprint(&mut conn.get().unwrap(), key_fingerprint.to_owned()) {
-        Ok(()) => Ok(HttpResponse::Ok().json(ApiResponse::success_message("Host key updated successfully".to_string()))),
+        Ok(()) => {
+            activity_logger::log_host_event(
+                &mut conn.get().unwrap(),
+                _identity.as_ref(),
+                "Added SSH host key",
+                &host.name,
+            );
+            Ok(HttpResponse::Ok().json(ApiResponse::success_message("Host key updated successfully".to_string())))
+        },
         Err(e) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e.to_string()))),
     }
 }
@@ -486,11 +496,19 @@ async fn create_host(
         disabled: json.disabled,
         comment: json.comment.clone(),
     };
-    let res = web::block(move || Host::add_host(&mut conn.get().unwrap(), &new_host)).await?;
+    let conn_clone = conn.clone();
+    let res = web::block(move || Host::add_host(&mut conn_clone.get().unwrap(), &new_host)).await?;
 
     match res {
         Ok(id) => match ssh_client.install_script_on_host(id).await {
-            Ok(()) =>             Ok(HttpResponse::Created().json(ApiResponse::success_with_message(
+            Ok(()) => {
+                activity_logger::log_host_event(
+                    &mut conn.get().unwrap(),
+                    _identity.as_ref(),
+                    "Created host",
+                    &json.name,
+                );
+                Ok(HttpResponse::Created().json(ApiResponse::success_with_message(
                 HostResponse::from(Host {
                     id,
                     name: json.name.clone(),
@@ -503,7 +521,7 @@ async fn create_host(
                     comment: json.comment.clone(),
                 }),
                 "Host created successfully".to_string(),
-            ))),
+            )))},
             Err(error) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(format!("Failed to install script: {error}")))),
         },
         Err(e) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e.to_string()))),
@@ -536,9 +554,13 @@ async fn authorize_user(
     json: Json<AuthorizeUserRequest>,
     _identity: Option<Identity>,
 ) -> Result<impl Responder> {
+    let conn_clone = conn.clone();
+    let login_for_log = json.login.clone();
+    let host_id_for_log = json.host_id;
+    
     let res = web::block(move || {
         Host::authorize_user(
-            &mut conn.get().unwrap(),
+            &mut conn_clone.get().unwrap(),
             json.host_id,
             json.user_id,
             json.login.clone(),
@@ -549,7 +571,15 @@ async fn authorize_user(
     .await?;
 
     match res {
-        Ok(()) => Ok(HttpResponse::Ok().json(ApiResponse::success_message("User authorized successfully".to_string()))),
+        Ok(()) => {
+            activity_logger::log_auth_event(
+                &mut conn.get().unwrap(),
+                _identity.as_ref(),
+                &format!("Authorized {}", login_for_log),
+                &format!("on host ID {}", host_id_for_log),
+            );
+            Ok(HttpResponse::Ok().json(ApiResponse::success_message("User authorized successfully".to_string())))
+        },
         Err(e) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e.to_string()))),
     }
 }
@@ -622,11 +652,20 @@ async fn gen_authorized_keys(
         }
     };
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(AuthorizedKeysResponse {
+    let response = AuthorizedKeysResponse {
         login: login.to_owned(),
         diff_summary: format!("Found {} differences", key_diff.len()),
         authorized_keys,
-    })))
+    };
+
+    activity_logger::log_host_event(
+        &mut conn.get().unwrap(),
+        _identity.as_ref(),
+        "Generated authorized_keys",
+        host_name,
+    );
+
+    Ok(HttpResponse::Ok().json(ApiResponse::success(response)))
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -654,6 +693,7 @@ async fn set_authorized_keys(
     host_name: Path<String>,
     ssh_client: Data<SshClient>,
     conn: Data<ConnectionPool>,
+    _identity: Option<Identity>,
 ) -> Result<impl Responder> {
     // Check if host exists and is not disabled
     let host = match Host::get_from_name(conn.get().unwrap(), host_name.to_string()).await {
@@ -680,7 +720,15 @@ async fn set_authorized_keys(
         .await;
 
     match res {
-        Ok(()) => Ok(HttpResponse::Ok().json(ApiResponse::success_message("Authorized keys applied successfully".to_string()))),
+        Ok(()) => {
+            activity_logger::log_host_event(
+                &mut conn.get().unwrap(),
+                _identity.as_ref(),
+                "Deployed authorized_keys",
+                &host_name,
+            );
+            Ok(HttpResponse::Ok().json(ApiResponse::success_message("Authorized keys applied successfully".to_string())))
+        },
         Err(error) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error.to_string()))),
     }
 }
@@ -719,6 +767,12 @@ async fn delete_host(
     match host.delete(&mut conn.get().unwrap()) {
         Ok(amt) => {
             caching_ssh_client.remove(host_name.as_str()).await;
+            activity_logger::log_host_event(
+                &mut conn.get().unwrap(),
+                _identity.as_ref(),
+                "Deleted host",
+                &host_name,
+            );
             Ok(HttpResponse::Ok().json(ApiResponse::success_message(format!("Deleted {amt} record(s)"))))
         }
         Err(e) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(format!("Failed to delete host: {e}")))),
@@ -782,14 +836,25 @@ async fn delete_authorization(
     conn: Data<ConnectionPool>,
     _identity: Option<Identity>,
 ) -> Result<impl Responder> {
+    let conn_clone = conn.clone();
+    let auth_id_val = *authorization_id;
+    
     let res = web::block(move || {
-        let mut connection = conn.get().unwrap();
-        Host::delete_authorization(&mut connection, *authorization_id)
+        let mut connection = conn_clone.get().unwrap();
+        Host::delete_authorization(&mut connection, auth_id_val)
     })
     .await?;
 
     match res {
-        Ok(()) => Ok(HttpResponse::Ok().json(ApiResponse::success_message("Authorization deleted successfully".to_string()))),
+        Ok(()) => {
+            activity_logger::log_auth_event(
+                &mut conn.get().unwrap(),
+                _identity.as_ref(),
+                "Deleted authorization",
+                &format!("ID {}", *authorization_id),
+            );
+            Ok(HttpResponse::Ok().json(ApiResponse::success_message("Authorization deleted successfully".to_string())))
+        },
         Err(e) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e.to_string()))),
     }
 }
@@ -913,6 +978,12 @@ async fn update_host(
             if new_name != host_name.to_string() {
                 caching_ssh_client.invalidate_cache(&new_name).await;
             }
+            activity_logger::log_host_event(
+                &mut conn.get().unwrap(),
+                _identity.as_ref(),
+                "Updated host",
+                &new_name,
+            );
             Ok(HttpResponse::Ok().json(ApiResponse::success_message("Host updated successfully".to_string())))
         },
         Err(e) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e.to_string()))),

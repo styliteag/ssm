@@ -119,7 +119,7 @@ This plan outlines a comprehensive improvement strategy for the SSM project, foc
   - Animated counters
   - Hover effects with scale
   
-- [ ] **Activity Feed** (NEW)
+- [x] **Activity Feed** (NEW)
   - Recent SSH key changes
   - Host status changes
   - User actions
@@ -445,7 +445,7 @@ This plan outlines a comprehensive improvement strategy for the SSM project, foc
 
 ### 3.3 Audit Logging
 
-- [ ] **Backend: Audit Trail**
+- [x] **Backend: Audit Trail**
   ```sql
   CREATE TABLE audit_logs (
     id INTEGER PRIMARY KEY,

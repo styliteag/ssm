@@ -43,7 +43,7 @@ export const DashboardChart: React.FC<ChartProps> = ({
                 <CardTitle className="text-base font-medium">{title}</CardTitle>
             </CardHeader>
             <CardContent>
-                <div style={{ height: `${height}px` }} className="w-full">
+                <div style={{ height: `${height}px` }} className="w-full min-w-0">
                     <ResponsiveContainer width="100%" height="100%">
                         {type === 'bar' ? (
                             <BarChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>

@@ -15,6 +15,8 @@ use crate::{
     ConnectionPool,
 };
 
+use crate::activity_logger;
+
 use crate::models::{NewPublicUserKey, NewUser, PublicUserKey, User};
 
 pub fn config(cfg: &mut web::ServiceConfig) {
@@ -134,9 +136,18 @@ async fn create_user(
 ) -> Result<impl Responder> {
     let new_user = json.into_inner();
 
-    let res = web::block(move || User::add_user(&mut conn.get().unwrap(), new_user)).await?;
+    let conn_clone = conn.clone();
+    let username_for_log = new_user.username.clone();
+    
+    let res = web::block(move || User::add_user(&mut conn_clone.get().unwrap(), new_user)).await?;
     match res {
         Ok(user_id) => {
+            activity_logger::log_user_event(
+                &mut conn.get().unwrap(),
+                _identity.as_ref(),
+                "Created user",
+                &username_for_log,
+            );
             Ok(HttpResponse::Created().json(ApiResponse::success_with_message(
                 serde_json::json!({"id": user_id}),
                 "User created successfully".to_string(),
@@ -169,9 +180,21 @@ async fn delete_user(
     username: Path<String>,
     _identity: Option<Identity>,
 ) -> Result<impl Responder> {
-    let res = web::block(move || User::delete_user(&mut conn.get().unwrap(), username.as_str())).await?;
+    let conn_clone = conn.clone();
+    let username_str = username.to_string();
+    let username_for_log = username_str.clone();
+    
+    let res = web::block(move || User::delete_user(&mut conn_clone.get().unwrap(), &username_str)).await?;
     match res {
-        Ok(()) => Ok(HttpResponse::Ok().json(ApiResponse::success_message("User deleted successfully".to_string()))),
+        Ok(()) => {
+            activity_logger::log_user_event(
+                &mut conn.get().unwrap(),
+                _identity.as_ref(),
+                "Deleted user",
+                &username_for_log,
+            );
+            Ok(HttpResponse::Ok().json(ApiResponse::success_message("User deleted successfully".to_string())))
+        },
         Err(e) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e))),
     }
 }
@@ -332,10 +355,19 @@ async fn assign_key_to_user(
         json.user_id,
     );
 
-    let res = web::block(move || PublicUserKey::add_key(&mut conn.get().unwrap(), new_key)).await?;
+    let conn_clone = conn.clone();
+    let res = web::block(move || PublicUserKey::add_key(&mut conn_clone.get().unwrap(), new_key)).await?;
 
     match res {
-        Ok(()) => Ok(HttpResponse::Created().json(ApiResponse::success_message("Key assigned successfully".to_string()))),
+        Ok(()) => {
+            activity_logger::log_key_event(
+                &mut conn.get().unwrap(),
+                _identity.as_ref(),
+                "Assigned key to user",
+                &format!("User ID {}", json.user_id),
+            );
+            Ok(HttpResponse::Created().json(ApiResponse::success_message("Key assigned successfully".to_string())))
+        },
         Err(e) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e))),
     }
 }
@@ -379,7 +411,15 @@ async fn update_user(
         json.enabled,
         json.comment.clone(),
     ) {
-        Ok(_) => Ok(HttpResponse::Ok().json(ApiResponse::success_message("User updated successfully".to_string()))),
+        Ok(_) => {
+            activity_logger::log_user_event(
+                &mut conn,
+                _identity.as_ref(),
+                "Updated user",
+                &json.username,
+            );
+            Ok(HttpResponse::Ok().json(ApiResponse::success_message("User updated successfully".to_string())))
+        },
         Err(error) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error))),
     }
 }
