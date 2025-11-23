@@ -290,7 +290,7 @@ const MergeUsersModal: React.FC<MergeUsersModalProps> = ({
                 <select
                   value={targetUserId ?? ''}
                   onChange={(event) => setTargetUserId(Number(event.target.value) || null)}
-                  className="w-full rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full rounded-md border border-input bg-background text-foreground text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ring"
                 >
                   <option value="" disabled>Select user…</option>
                   {allUsers.map(user => (
@@ -335,7 +335,7 @@ const MergeUsersModal: React.FC<MergeUsersModalProps> = ({
                   <select
                     value={newUserEnabled ? 'true' : 'false'}
                     onChange={(event) => setNewUserEnabled(event.target.value === 'true')}
-                    className="w-full rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full rounded-md border border-input bg-background text-foreground text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ring"
                   >
                     <option value="true">Enabled (Active)</option>
                     <option value="false">Disabled (Inactive)</option>
@@ -347,7 +347,7 @@ const MergeUsersModal: React.FC<MergeUsersModalProps> = ({
                     id="merge-new-comment"
                     value={newUserComment}
                     onChange={(event) => setNewUserComment(event.target.value)}
-                    className="w-full rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full rounded-md border border-input bg-background text-foreground text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ring"
                     rows={2}
                     placeholder="Optional comment for merged user"
                   />
