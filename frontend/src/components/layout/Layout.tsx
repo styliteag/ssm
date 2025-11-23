@@ -1,17 +1,18 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { 
-  Server, 
-  Users, 
-  Key, 
-  Shield, 
-  LayoutDashboard, 
-  Menu, 
-  X, 
+import {
+  Server,
+  Users,
+  Key,
+  Shield,
+  LayoutDashboard,
+  Menu,
+  X,
   LogOut,
   Sun,
   Moon,
-  GitCompare
+  GitCompare,
+  Activity
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -59,6 +60,12 @@ const navigationItems: NavigationItem[] = [
     icon: 'GitCompare',
     requiresAuth: true,
   },
+  {
+    label: 'Activities',
+    path: '/activities',
+    icon: 'Activity',
+    requiresAuth: true,
+  },
 ];
 
 const iconComponents = {
@@ -68,6 +75,7 @@ const iconComponents = {
   Key,
   Shield,
   GitCompare,
+  Activity,
 };
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {

@@ -12,6 +12,7 @@ import UsersPage from './pages/UsersPage';
 import KeysPage from './pages/KeysPage';
 import AuthorizationsPage from './pages/AuthorizationsPage';
 import DiffPage from './pages/DiffPage';
+import ActivitiesPage from './pages/ActivitiesPage';
 
 // Components
 import Layout from './components/layout/Layout';
@@ -40,7 +41,7 @@ const AppRouter: React.FC = () => {
       <Routes>
         {/* Public routes */}
         <Route path="/login" element={<LoginPage />} />
-        
+
         {/* Protected routes */}
         <Route path="/" element={
           <ProtectedRoute>
@@ -49,7 +50,7 @@ const AppRouter: React.FC = () => {
             </Layout>
           </ProtectedRoute>
         } />
-        
+
         <Route path="/dashboard" element={
           <ProtectedRoute>
             <Layout>
@@ -57,7 +58,7 @@ const AppRouter: React.FC = () => {
             </Layout>
           </ProtectedRoute>
         } />
-        
+
         <Route path="/hosts" element={
           <ProtectedRoute>
             <Layout>
@@ -65,7 +66,7 @@ const AppRouter: React.FC = () => {
             </Layout>
           </ProtectedRoute>
         } />
-        
+
         <Route path="/users" element={
           <ProtectedRoute>
             <Layout>
@@ -73,7 +74,7 @@ const AppRouter: React.FC = () => {
             </Layout>
           </ProtectedRoute>
         } />
-        
+
         <Route path="/keys" element={
           <ProtectedRoute>
             <Layout>
@@ -81,7 +82,7 @@ const AppRouter: React.FC = () => {
             </Layout>
           </ProtectedRoute>
         } />
-        
+
         <Route path="/authorizations" element={
           <ProtectedRoute>
             <Layout>
@@ -89,11 +90,19 @@ const AppRouter: React.FC = () => {
             </Layout>
           </ProtectedRoute>
         } />
-        
+
         <Route path="/diff" element={
           <ProtectedRoute>
             <Layout>
               <DiffPage />
+            </Layout>
+          </ProtectedRoute>
+        } />
+
+        <Route path="/activities" element={
+          <ProtectedRoute>
+            <Layout>
+              <ActivitiesPage />
             </Layout>
           </ProtectedRoute>
         } />
