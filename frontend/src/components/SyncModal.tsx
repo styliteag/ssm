@@ -66,13 +66,13 @@ const SyncModal: React.FC<SyncModalProps> = ({ isOpen, onClose, hostDetails, onS
         ) : (
           <>
             {/* Warning Header */}
-            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
               <div className="flex items-start space-x-3">
-                <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 mt-0.5" />
+                <Upload className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5" />
                 <div>
-                  <h3 className="text-amber-800 dark:text-amber-200 font-medium">Review Changes Before Sync</h3>
-                  <p className="text-amber-700 dark:text-amber-300 text-sm mt-1">
-                    The following changes will be applied to the authorized_keys files on <strong>{hostDetails.host.name}</strong>:
+                  <h3 className="text-blue-800 dark:text-blue-200 font-medium">Synchronization Preview</h3>
+                  <p className="text-blue-700 dark:text-blue-300 text-sm mt-1">
+                    The following actions will be performed on <strong>{hostDetails.host.name}</strong>:
                   </p>
                 </div>
               </div>
@@ -103,7 +103,7 @@ const SyncModal: React.FC<SyncModalProps> = ({ isOpen, onClose, hostDetails, onS
                             <code className="bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200 px-2 py-1 rounded text-xs font-bold">{loginDiff.login}</code>
                           </h5>
                           <span className="text-xs text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-700 px-2 py-1 rounded font-medium">
-                            {loginDiff.issues.length} issue{loginDiff.issues.length !== 1 ? 's' : ''}
+                            {loginDiff.issues.length} action{loginDiff.issues.length !== 1 ? 's' : ''}
                           </span>
                         </div>
                         {loginDiff.readonly_condition && (
