@@ -561,6 +561,19 @@ async fn authorize_user(
     let options_for_log = json.options.clone();
     let comment_for_log = json.comment.clone();
     
+    // Fetch host and user names for better logging
+    let mut db_conn = conn.get().unwrap();
+    let host_name = Host::get_from_id_sync(&mut db_conn, host_id_for_log)
+        .ok()
+        .flatten()
+        .map(|h| h.name)
+        .unwrap_or_else(|| format!("ID {}", host_id_for_log));
+    
+    let user_name = crate::models::User::get_user_by_id(&mut db_conn, user_id_for_log)
+        .ok()
+        .map(|u| u.username)
+        .unwrap_or_else(|| format!("ID {}", user_id_for_log));
+    
     let res = web::block(move || {
         Host::authorize_user(
             &mut conn_clone.get().unwrap(),
@@ -577,7 +590,9 @@ async fn authorize_user(
         Ok(()) => {
             let metadata = serde_json::json!({
                 "user_id": user_id_for_log,
+                "user_name": user_name,
                 "host_id": host_id_for_log,
+                "host_name": host_name,
                 "login": login_for_log,
                 "options": options_for_log,
                 "comment": comment_for_log
@@ -586,8 +601,8 @@ async fn authorize_user(
             if let Err(e) = crate::routes::activity_log::log_activity(
                 &mut conn.get().unwrap(),
                 "auth",
-                &format!("Authorized login '{}'", login_for_log),
-                &format!("on host ID {}", host_id_for_log),
+                &format!("Authorized user '{}' to login as '{}'", user_name, login_for_log),
+                &format!("on host '{}'", host_name),
                 &crate::activity_logger::extract_username(_identity.as_ref()),
                 Some(serde_json::to_string(&metadata).unwrap_or_default()),
             ) {
@@ -854,6 +869,29 @@ async fn delete_authorization(
     let conn_clone = conn.clone();
     let auth_id_val = *authorization_id;
     
+    // Fetch authorization details before deleting for better logging
+    let auth_details = web::block({
+        let conn_for_fetch = conn.clone();
+        move || {
+            use crate::schema::{authorization, host, user};
+            use diesel::prelude::*;
+            let mut connection = conn_for_fetch.get().unwrap();
+            
+            authorization::table
+                .inner_join(user::table)
+                .inner_join(host::table)
+                .filter(authorization::id.eq(auth_id_val))
+                .select((
+                    user::username,
+                    authorization::login,
+                    host::name,
+                ))
+                .first::<(String, String, String)>(&mut connection)
+                .optional()
+        }
+    })
+    .await?;
+    
     let res = web::block(move || {
         let mut connection = conn_clone.get().unwrap();
         Host::delete_authorization(&mut connection, auth_id_val)
@@ -862,12 +900,39 @@ async fn delete_authorization(
 
     match res {
         Ok(()) => {
-            activity_logger::log_auth_event(
+            // Create detailed log message
+            let (action, target, metadata) = if let Ok(Some((username, login, hostname))) = auth_details {
+                let metadata = serde_json::json!({
+                    "authorization_id": auth_id_val,
+                    "username": username,
+                    "login": login,
+                    "hostname": hostname
+                });
+                
+                (
+                    format!("Removed authorization for user '{}' (login: '{}')", username, login),
+                    format!("from host '{}'", hostname),
+                    Some(serde_json::to_string(&metadata).unwrap_or_default())
+                )
+            } else {
+                (
+                    "Deleted authorization".to_string(),
+                    format!("ID {}", auth_id_val),
+                    None
+                )
+            };
+            
+            if let Err(e) = crate::routes::activity_log::log_activity(
                 &mut conn.get().unwrap(),
-                _identity.as_ref(),
-                "Deleted authorization",
-                &format!("ID {}", *authorization_id),
-            );
+                "auth",
+                &action,
+                &target,
+                &crate::activity_logger::extract_username(_identity.as_ref()),
+                metadata,
+            ) {
+                log::error!("Failed to log authorization deletion: {}", e);
+            }
+            
             Ok(HttpResponse::Ok().json(ApiResponse::success_message("Authorization deleted successfully".to_string())))
         },
         Err(e) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e.to_string()))),
