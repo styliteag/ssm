@@ -5,6 +5,7 @@ backend/result-lib
 .direnv
 backend/ssm.db
 backend/*.db
+backend/**/*.db
 backend/config.toml
 backend/.htpasswd
 backend/server.log
@@ -15,3 +16,4 @@ docker/data/
 cookies.txt
 .DS_Store
 *.bak
+*.db
