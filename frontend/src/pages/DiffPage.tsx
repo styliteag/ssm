@@ -19,6 +19,7 @@ import type { Host, User, UserFormData } from '../types';
 import DiffIssue from '../components/DiffIssue';
 import HostEditModal from '../components/HostEditModal';
 import SyncModal from '../components/SyncModal';
+import SyncAllModal, { type HostSyncInfo, type SyncProgress } from '../components/SyncAllModal';
 import { useNotifications } from '../contexts/NotificationContext';
 
 const DiffPage: React.FC = () => {
@@ -31,30 +32,35 @@ const DiffPage: React.FC = () => {
   const [showModal, setShowModal] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<'active' | 'all' | 'synchronized' | 'needs-sync' | 'error' | 'loading' | 'disabled'>('active');
-  
+
   // Edit modal state
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingHost, setEditingHost] = useState<Host | null>(null);
   const [jumpHosts, setJumpHosts] = useState<Host[]>([]);
-  
+
   // Unknown key assignment modal state
   const [showUnknownKeyModal, setShowUnknownKeyModal] = useState(false);
   const [unknownKeyIssue, setUnknownKeyIssue] = useState<DiffItemResponse | null>(null);
   const [allUsers, setAllUsers] = useState<User[]>([]);
-  
+
   // Sync modal state
   const [showSyncModal, setShowSyncModal] = useState(false);
 
+  // Sync all modal state
+  const [showSyncAllModal, setShowSyncAllModal] = useState(false);
+
+  // Selected hosts for syncing
+  const [selectedHostIds, setSelectedHostIds] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     const fetchHosts = async () => {
       try {
         setLoading(true);
         const hostData = await diffApi.getAllHosts();
-        
+
         // Mark only enabled hosts as loading diff data initially
-        const hostsWithLoading = hostData.map(host => ({ 
-          ...host, 
+        const hostsWithLoading = hostData.map(host => ({
+          ...host,
           loading: !host.disabled,
           // Set disabled hosts with final state immediately and clear any error state
           ...(host.disabled && {
@@ -79,44 +85,44 @@ const DiffPage: React.FC = () => {
     const fetchDiffDataForHosts = async (hosts: DiffHost[]) => {
       // Filter out disabled hosts - they're already handled with final state
       const enabledHosts = hosts.filter(host => !host.disabled);
-      
+
       if (enabledHosts.length === 0) return;
-      
+
       // Process enabled hosts in batches to avoid overwhelming the server
       const batchSize = 5;
-      
+
       for (let i = 0; i < enabledHosts.length; i += batchSize) {
         const batch = enabledHosts.slice(i, i + batchSize);
-        
+
         // Process batch in parallel
         const promises = batch.map(async (host) => {
           try {
             const diffData = await diffApi.getHostDiff(host.name);
-            
+
             // Update the specific host with diff data
-            setHosts(prevHosts => 
-              prevHosts.map(h => 
-                h.id === host.id 
-                  ? { 
-                      ...h, 
-                      diff_summary: diffData.diff_summary,
-                      is_empty: diffData.is_empty,
-                      total_items: diffData.total_items,
-                      loading: false 
-                    }
+            setHosts(prevHosts =>
+              prevHosts.map(h =>
+                h.id === host.id
+                  ? {
+                    ...h,
+                    diff_summary: diffData.diff_summary,
+                    is_empty: diffData.is_empty,
+                    total_items: diffData.total_items,
+                    loading: false
+                  }
                   : h
               )
             );
           } catch (err) {
             console.error(`Error fetching diff for ${host.name}:`, err);
-            
+
             // Extract error message from backend
             const errorMessage = err instanceof Error ? err.message : 'Failed to load diff';
-            
+
             // Update host with error state
-            setHosts(prevHosts => 
-              prevHosts.map(h => 
-                h.id === host.id 
+            setHosts(prevHosts =>
+              prevHosts.map(h =>
+                h.id === host.id
                   ? { ...h, loading: false, error: errorMessage }
                   : h
               )
@@ -125,7 +131,7 @@ const DiffPage: React.FC = () => {
         });
 
         await Promise.all(promises);
-        
+
         // Small delay between batches to be nice to the server
         if (i + batchSize < enabledHosts.length) {
           await new Promise(resolve => setTimeout(resolve, 100));
@@ -136,7 +142,7 @@ const DiffPage: React.FC = () => {
     fetchHosts();
     loadJumpHosts();
     loadAllUsers();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Load jump hosts for dropdown
@@ -252,12 +258,89 @@ const DiffPage: React.FC = () => {
     }
   };
 
+  // Sync all hosts that need syncing
+  const handleSyncAll = async (onProgress: (progress: SyncProgress) => void) => {
+    const hostsToSync = hosts.filter(host => !host.disabled && !host.is_empty);
+
+    let shouldContinue = true;
+
+    for (const host of hostsToSync) {
+      if (!shouldContinue) break;
+
+      try {
+        // Update progress to syncing
+        onProgress({ hostName: host.name, status: 'syncing' });
+
+        // Sync the host
+        await diffApi.syncKeys(host.name);
+
+        // Update progress to success
+        onProgress({ hostName: host.name, status: 'success' });
+
+        // Invalidate cache and refresh host status
+        try {
+          await hostsService.invalidateCache(host.name);
+          const diffResponse = await diffApi.getHostDiff(host.name, true);
+          setHosts(prev => prev.map(h =>
+            h.id === host.id ? {
+              ...h,
+              diff_summary: diffResponse.diff_summary,
+              is_empty: diffResponse.is_empty,
+              total_items: diffResponse.total_items,
+            } : h
+          ));
+        } catch (refreshError) {
+          console.error(`Failed to refresh host ${host.name} after sync:`, refreshError);
+        }
+      } catch (error) {
+        console.error(`Error syncing host ${host.name}:`, error);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+        // Update progress to error
+        onProgress({ hostName: host.name, status: 'error', error: errorMessage });
+
+        // This will cause the modal to show error and wait for user decision
+        // The modal will either call handleSyncAll again (continue) or close (stop)
+        shouldContinue = false;
+        throw error; // Re-throw to stop the loop
+      }
+    }
+
+    // Show success notification if all completed
+    if (shouldContinue) {
+      showSuccess('Sync completed', `Successfully synchronized all hosts`);
+    }
+  };
+
+  // Get hosts that need syncing for Sync All modal
+  const syncableHostsInfo: HostSyncInfo[] = useMemo(() => {
+    return hosts.map(host => ({
+      id: host.id,
+      name: host.name,
+      address: host.address,
+      totalIssues: host.total_items || 0,
+      disabled: host.disabled || false,
+      error: host.error,
+    }));
+  }, [hosts]);
+
+  // Fetch detailed diff for a specific host (for Sync All modal)
+  const fetchHostDetails = async (hostName: string): Promise<DetailedDiffResponse | null> => {
+    try {
+      const details = await diffApi.getHostDiffDetails(hostName);
+      return details;
+    } catch (error) {
+      console.error(`Failed to fetch details for ${hostName}:`, error);
+      return null;
+    }
+  };
+
   const handleHostClick = async (host: DiffHost) => {
     setSelectedHost(host);
     setShowModal(true);
     setDetailsLoading(true);
     setModalError(null);
-    
+
     // Skip diff operations for disabled hosts
     if (host.disabled) {
       setHostDetails({
@@ -270,7 +353,7 @@ const DiffPage: React.FC = () => {
       setDetailsLoading(false);
       return;
     }
-    
+
     try {
       // Fetch detailed diff information
       const hostDetails = await diffApi.getHostDiffDetails(host.name);
@@ -289,13 +372,13 @@ const DiffPage: React.FC = () => {
 
   const handleRefreshHost = async () => {
     if (!selectedHost) return;
-    
+
     // Cannot refresh disabled hosts
     if (selectedHost.disabled) {
       showError('Host is disabled', 'Cannot refresh diff data for disabled hosts');
       return;
     }
-    
+
     setDetailsLoading(true);
     setModalError(null);
     try {
@@ -323,13 +406,13 @@ const DiffPage: React.FC = () => {
   // Handle allowing unauthorized keys
   const handleAllowKey = async (issue: DiffItemResponse) => {
     if (!selectedHost || !hostDetails) return;
-    
+
     // Cannot authorize keys on disabled hosts
     if (selectedHost.disabled) {
       showError('Host is disabled', 'Cannot authorize keys on disabled hosts');
       return;
     }
-    
+
     // Extract username from the issue details
     const username = issue.details?.username;
     if (!username) {
@@ -338,10 +421,10 @@ const DiffPage: React.FC = () => {
     }
 
     // Find the login from the current login section
-    const currentLogin = hostDetails.logins.find(login => 
+    const currentLogin = hostDetails.logins.find(login =>
       login.issues.some(i => i === issue)
     )?.login;
-    
+
     if (!currentLogin) {
       showError('Cannot authorize key', 'Login not found for this issue');
       return;
@@ -350,14 +433,14 @@ const DiffPage: React.FC = () => {
     try {
       // Call the API to authorize the key
       await diffApi.authorizeKey(
-        selectedHost.name, 
-        username, 
+        selectedHost.name,
+        username,
         currentLogin,
         issue.details?.key?.options || undefined
       );
-      
+
       showSuccess('Key authorized', `Key for user "${username}" has been authorized for login "${currentLogin}"`);
-      
+
       // Refresh the host details to show updated status
       const refreshedDetails = await diffApi.getHostDiffDetails(selectedHost.name, true);
       setHostDetails(refreshedDetails);
@@ -385,10 +468,10 @@ const DiffPage: React.FC = () => {
     }
 
     // Find the login from the current login section where the unknown key issue is
-    const currentLogin = hostDetails.logins.find(login => 
+    const currentLogin = hostDetails.logins.find(login =>
       login.issues.some(i => i === unknownKeyIssue)
     )?.login;
-    
+
     if (!currentLogin) {
       showError('Cannot assign key', 'Login not found for this unknown key');
       return;
@@ -412,19 +495,19 @@ const DiffPage: React.FC = () => {
         // Key might already exist, which means it's already assigned to a user
         const errorMessage = keyError instanceof Error ? keyError.message : String(keyError);
         console.log('Caught key assignment error:', errorMessage);
-        
+
         // Check for database error message from backend
-        if (errorMessage.includes('database error') || 
-            errorMessage.includes('UNIQUE constraint') || 
-            errorMessage.includes('already exists') || 
-            errorMessage.includes('key_base64')) {
+        if (errorMessage.includes('database error') ||
+          errorMessage.includes('UNIQUE constraint') ||
+          errorMessage.includes('already exists') ||
+          errorMessage.includes('key_base64')) {
           console.log('Key already exists in the system');
           // Don't re-throw, just continue without the key assigned
         } else {
           throw keyError; // Re-throw if it's a different error
         }
       }
-      
+
       // Also create authorization to add the user to this host (if not already exists)
       const authData = {
         host_id: selectedHost.id,
@@ -432,7 +515,7 @@ const DiffPage: React.FC = () => {
         login: currentLogin,
         options: unknownKeyIssue.details.key.options || undefined
       };
-      
+
       let authorizationCreated = false;
       try {
         await authorizationsService.createAuthorization(authData);
@@ -441,9 +524,9 @@ const DiffPage: React.FC = () => {
         // Authorization might already exist, which is fine
         console.log('Authorization might already exist:', authError);
       }
-      
+
       const selectedUser = allUsers.find(u => u.id === userId);
-      
+
       // Construct appropriate success message based on what actually happened
       if (keyAssigned && authorizationCreated) {
         showSuccess('Key assigned and user added to host', `Key has been assigned to user "${selectedUser?.username}" and user has been added to host "${selectedHost.name}"`);
@@ -454,10 +537,10 @@ const DiffPage: React.FC = () => {
       } else {
         showSuccess('No changes needed', `User "${selectedUser?.username}" already has this key and is already authorized on this host`);
       }
-      
+
       setShowUnknownKeyModal(false);
       setUnknownKeyIssue(null);
-      
+
       // Refresh the host details to show updated status
       const refreshedDetails = await diffApi.getHostDiffDetails(selectedHost.name, true);
       setHostDetails(refreshedDetails);
@@ -471,26 +554,26 @@ const DiffPage: React.FC = () => {
   // Handle syncing SSH keys to host
   const handleSyncKeys = async () => {
     if (!selectedHost || !hostDetails) return;
-    
+
     // Cannot sync keys to disabled hosts
     if (selectedHost.disabled) {
       showError('Host is disabled', 'Cannot sync keys to disabled hosts');
       return;
     }
-    
+
     try {
       // Apply the sync changes
       await diffApi.syncKeys(selectedHost.name);
-      
+
       showSuccess('Keys synchronized', `SSH keys have been synchronized to ${selectedHost.name}`);
-      
+
       // Refresh the host details to show updated status
       const refreshedDetails = await diffApi.getHostDiffDetails(selectedHost.name, true);
       setHostDetails(refreshedDetails);
-      
+
       // Update the host in the list to reflect synchronized status
-      setHosts(prev => prev.map(h => 
-        h.id === selectedHost.id 
+      setHosts(prev => prev.map(h =>
+        h.id === selectedHost.id
           ? { ...h, is_empty: true, total_items: 0, diff_summary: "No differences found" }
           : h
       ));
@@ -512,10 +595,10 @@ const DiffPage: React.FC = () => {
     }
 
     // Find the login from the current login section where the unknown key issue is
-    const currentLogin = hostDetails.logins.find(login => 
+    const currentLogin = hostDetails.logins.find(login =>
       login.issues.some(i => i === unknownKeyIssue)
     )?.login;
-    
+
     if (!currentLogin) {
       showError('Cannot create user', 'Login not found for this unknown key');
       return;
@@ -530,21 +613,21 @@ const DiffPage: React.FC = () => {
     try {
       // Validate and clean username
       const cleanUsername = keyComment.trim();
-      
+
       // Basic username validation
       if (cleanUsername.length < 2) {
         showError('Invalid username', 'Username must be at least 2 characters long.');
         return;
       }
-      
+
       if (!/^[a-zA-Z0-9._\-\s@#]+$/.test(cleanUsername)) {
         showError('Invalid username', 'Username can only contain letters, numbers, dots, underscores, hyphens, spaces, @ symbols, and # symbols.');
         return;
       }
-      
+
       // Check if user already exists
       const existingUser = allUsers.find(u => u.username.toLowerCase() === cleanUsername.toLowerCase());
-      
+
       if (existingUser) {
         showError('Username already exists', `User "${cleanUsername}" already exists. Please assign the key to the existing user instead.`);
         return;
@@ -559,7 +642,7 @@ const DiffPage: React.FC = () => {
       const userResponse = await usersService.createUser(userData);
       console.log('Full user creation response:', userResponse);
       console.log('User data from response:', userResponse.data);
-      
+
       if (!userResponse.success || !userResponse.data) {
         // Provide more specific error messaging
         let errorMsg = userResponse.message || 'Failed to create user';
@@ -575,10 +658,10 @@ const DiffPage: React.FC = () => {
       if (!freshUsersResponse.success || !freshUsersResponse.data) {
         throw new Error('Could not fetch users to find the newly created user');
       }
-      
+
       // Find the newly created user to get the proper numeric ID
       const newUser = freshUsersResponse.data.find(u => u.username === cleanUsername);
-      
+
       if (!newUser) {
         throw new Error('User was created but could not be found to assign the key');
       }
@@ -604,12 +687,12 @@ const DiffPage: React.FC = () => {
         // For a new user, key shouldn't already exist, but handle gracefully
         const errorMessage = keyError instanceof Error ? keyError.message : String(keyError);
         console.log('Caught key assignment error:', errorMessage);
-        
+
         // Check for database error message from backend
-        if (errorMessage.includes('database error') || 
-            errorMessage.includes('UNIQUE constraint') || 
-            errorMessage.includes('already exists') || 
-            errorMessage.includes('key_base64')) {
+        if (errorMessage.includes('database error') ||
+          errorMessage.includes('UNIQUE constraint') ||
+          errorMessage.includes('already exists') ||
+          errorMessage.includes('key_base64')) {
           console.log('Key already exists in the system - this is unexpected for a new user');
           showError('Key already exists', 'This key is already assigned to another user. The new user was created but the key could not be assigned.');
           // Don't re-throw, just continue without the key assigned
@@ -617,7 +700,7 @@ const DiffPage: React.FC = () => {
           throw keyError; // Re-throw if it's a different error
         }
       }
-      
+
       // Also create authorization to add the user to this host (only if key was assigned)
       if (keyAssigned) {
         const authData = {
@@ -626,7 +709,7 @@ const DiffPage: React.FC = () => {
           login: currentLogin,
           options: unknownKeyIssue.details.key.options || undefined
         };
-        
+
         try {
           await authorizationsService.createAuthorization(authData);
           showSuccess('User created and added to host', `New user "${userData.username}" has been created with the key and added to host "${selectedHost.name}"`);
@@ -639,10 +722,10 @@ const DiffPage: React.FC = () => {
         // If key wasn't assigned (already exists), just notify about user creation
         showSuccess('User created', `New user "${userData.username}" has been created (key already exists in system)`);
       }
-      
+
       setShowUnknownKeyModal(false);
       setUnknownKeyIssue(null);
-      
+
       // Refresh users list and host details
       await loadAllUsers();
       const refreshedDetails = await diffApi.getHostDiffDetails(selectedHost.name, true);
@@ -656,6 +739,32 @@ const DiffPage: React.FC = () => {
 
   // Table column definitions
   const columns: Column<DiffHost>[] = [
+    {
+      key: 'select' as keyof DiffHost,
+      header: '',
+      render: (_, host) => {
+        const canSync = !host.disabled && !host.is_empty;
+        return (
+          <input
+            type="checkbox"
+            checked={selectedHostIds.has(host.id)}
+            onChange={(e) => {
+              e.stopPropagation();
+              const newSelected = new Set(selectedHostIds);
+              if (e.target.checked) {
+                newSelected.add(host.id);
+              } else {
+                newSelected.delete(host.id);
+              }
+              setSelectedHostIds(newSelected);
+            }}
+            disabled={!canSync}
+            className="rounded border-gray-300 dark:border-gray-600 disabled:opacity-30"
+            onClick={(e) => e.stopPropagation()}
+          />
+        );
+      }
+    },
     {
       key: 'name',
       header: 'Name',
@@ -707,10 +816,10 @@ const DiffPage: React.FC = () => {
             </Tooltip>
           );
         }
-        
+
         if (host.error) {
           return (
-            <Tooltip 
+            <Tooltip
               content={
                 <div className="space-y-1">
                   <div className="font-semibold">Connection Error</div>
@@ -725,7 +834,7 @@ const DiffPage: React.FC = () => {
             </Tooltip>
           );
         }
-        
+
         if (host.is_empty === false) {
           return (
             <Tooltip
@@ -744,7 +853,7 @@ const DiffPage: React.FC = () => {
             </Tooltip>
           );
         }
-        
+
         if (host.is_empty === true) {
           return (
             <Tooltip
@@ -757,7 +866,7 @@ const DiffPage: React.FC = () => {
             </Tooltip>
           );
         }
-        
+
         return (
           <span className="text-gray-400 dark:text-gray-500">Unknown</span>
         );
@@ -911,6 +1020,16 @@ const DiffPage: React.FC = () => {
               >
                 Refresh All
               </Button>
+              <Button
+                onClick={() => setShowSyncAllModal(true)}
+                variant="primary"
+                size="sm"
+                leftIcon={<Upload size={16} />}
+                className="whitespace-nowrap bg-blue-600 hover:bg-blue-700"
+                disabled={!hosts.some(h => !h.disabled && !h.is_empty)}
+              >
+                Sync All
+              </Button>
               <Filter size={16} className="text-gray-500 dark:text-gray-400" />
               <select
                 value={statusFilter}
@@ -933,8 +1052,8 @@ const DiffPage: React.FC = () => {
             loading={loading}
             emptyMessage={
               statusFilter === 'all' ? "No hosts found. Please check your host configuration." :
-              statusFilter === 'active' ? "No active hosts found. Please check your host configuration or view disabled hosts." :
-              `No hosts with status '${statusFilterOptions.find(o => o.value === statusFilter)?.label || statusFilter}'.`
+                statusFilter === 'active' ? "No active hosts found. Please check your host configuration or view disabled hosts." :
+                  `No hosts with status '${statusFilterOptions.find(o => o.value === statusFilter)?.label || statusFilter}'.`
             }
             searchPlaceholder="Search hosts by name or address..."
             initialSort={{ key: 'name', direction: 'asc' }}
@@ -1019,11 +1138,10 @@ const DiffPage: React.FC = () => {
               <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3 border-b border-gray-200 dark:border-gray-700 pb-2">Status Summary</h3>
                 <div className="flex items-center justify-between mb-3">
-                  <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-semibold ${
-                    hostDetails.logins.length === 0 
-                      ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 border border-green-200 dark:border-green-800' 
-                      : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 border border-red-200 dark:border-red-800'
-                  }`}>
+                  <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-semibold ${hostDetails.logins.length === 0
+                    ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 border border-green-200 dark:border-green-800'
+                    : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 border border-red-200 dark:border-red-800'
+                    }`}>
                     {hostDetails.logins.length === 0 ? '✓ Synchronized' : '⚠ Needs Sync'}
                   </span>
                   <div className="text-sm text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-3 py-1 rounded-full">
@@ -1044,7 +1162,7 @@ const DiffPage: React.FC = () => {
                       <div key={index} className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-3 hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors">
                         <div className="flex justify-between items-start mb-2">
                           <div className="truncate">
-                            <span className="font-semibold text-gray-900 dark:text-gray-100 text-sm">{key.username}</span> 
+                            <span className="font-semibold text-gray-900 dark:text-gray-100 text-sm">{key.username}</span>
                             <span className="text-gray-600 dark:text-gray-400 text-sm"> → {key.login}</span>
                             {key.comment && <span className="text-gray-500 dark:text-gray-400 ml-1 text-xs">({key.comment})</span>}
                           </div>
@@ -1070,39 +1188,39 @@ const DiffPage: React.FC = () => {
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3 border-b border-gray-200 dark:border-gray-700 pb-2">Issues Found</h3>
                 <div className="max-h-96 overflow-y-auto">
                   <div className="space-y-4">
-                  {hostDetails.logins.map((loginDiff, loginIndex) => (
-                    <div key={loginIndex} className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-                      <div className="bg-gradient-to-r from-gray-100 to-gray-50 dark:from-gray-800 dark:to-gray-750 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-                        <div className="flex items-center justify-between">
-                          <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 flex items-center">
-                            <span className="text-gray-600 dark:text-gray-400 mr-2">Login:</span>
-                            <code className="bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200 px-2 py-1 rounded-md text-xs font-bold">{loginDiff.login}</code>
-                          </h4>
-                          <span className="text-xs text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-700 px-2 py-1 rounded-full font-medium">
-                            {loginDiff.issues.length} issue{loginDiff.issues.length !== 1 ? 's' : ''}
-                          </span>
-                        </div>
-                        {loginDiff.readonly_condition && (
-                          <div className="text-xs text-amber-700 dark:text-amber-400 mt-2 flex items-center">
-                            <span className="mr-1">🔒</span>
-                            <span className="font-medium">Readonly:</span>
-                            <span className="ml-1">{loginDiff.readonly_condition}</span>
+                    {hostDetails.logins.map((loginDiff, loginIndex) => (
+                      <div key={loginIndex} className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                        <div className="bg-gradient-to-r from-gray-100 to-gray-50 dark:from-gray-800 dark:to-gray-750 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+                          <div className="flex items-center justify-between">
+                            <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 flex items-center">
+                              <span className="text-gray-600 dark:text-gray-400 mr-2">Login:</span>
+                              <code className="bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200 px-2 py-1 rounded-md text-xs font-bold">{loginDiff.login}</code>
+                            </h4>
+                            <span className="text-xs text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-700 px-2 py-1 rounded-full font-medium">
+                              {loginDiff.issues.length} issue{loginDiff.issues.length !== 1 ? 's' : ''}
+                            </span>
                           </div>
-                        )}
-                      </div>
-                      <div className="p-4 bg-white dark:bg-gray-900">
-                        <div className="grid grid-cols-3 gap-3">
-                          {loginDiff.issues.map((issue, issueIndex) => (
-                            <div key={issueIndex} className="min-w-0">
-                              <div className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-2 hover:shadow-sm transition-shadow">
-                                <DiffIssue issue={issue} onAllowKey={handleAllowKey} onAddUnknownKey={handleAddUnknownKey} />
-                              </div>
+                          {loginDiff.readonly_condition && (
+                            <div className="text-xs text-amber-700 dark:text-amber-400 mt-2 flex items-center">
+                              <span className="mr-1">🔒</span>
+                              <span className="font-medium">Readonly:</span>
+                              <span className="ml-1">{loginDiff.readonly_condition}</span>
                             </div>
-                          ))}
+                          )}
+                        </div>
+                        <div className="p-4 bg-white dark:bg-gray-900">
+                          <div className="grid grid-cols-3 gap-3">
+                            {loginDiff.issues.map((issue, issueIndex) => (
+                              <div key={issueIndex} className="min-w-0">
+                                <div className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-2 hover:shadow-sm transition-shadow">
+                                  <DiffIssue issue={issue} onAllowKey={handleAllowKey} onAddUnknownKey={handleAddUnknownKey} />
+                                </div>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
                   </div>
                 </div>
               </div>
@@ -1115,7 +1233,7 @@ const DiffPage: React.FC = () => {
                   <span className="font-medium">Ready to apply changes?</span>
                 </div>
                 <div className="flex space-x-3">
-                  <Button 
+                  <Button
                     onClick={handleRefreshHost}
                     loading={detailsLoading}
                     leftIcon={<RefreshCw size={16} />}
@@ -1166,7 +1284,7 @@ const DiffPage: React.FC = () => {
 
             <div className="space-y-3">
               <h4 className="font-medium text-gray-900 dark:text-gray-100">Choose an option:</h4>
-              
+
               {/* Assign to existing user */}
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -1212,7 +1330,7 @@ const DiffPage: React.FC = () => {
                           const username = unknownKeyIssue.details.key.comment.trim();
                           const existingUser = allUsers.find(u => u.username.toLowerCase() === username.toLowerCase());
                           const isValid = username.length >= 2 && /^[a-zA-Z0-9._\-\s@#]+$/.test(username);
-                          
+
                           if (existingUser) {
                             return <p className="text-xs text-amber-500">⚠ User already exists</p>;
                           } else if (!isValid) {
@@ -1253,6 +1371,15 @@ const DiffPage: React.FC = () => {
         onClose={() => setShowSyncModal(false)}
         hostDetails={hostDetails}
         onSync={handleSyncKeys}
+      />
+
+      {/* Sync All Modal */}
+      <SyncAllModal
+        isOpen={showSyncAllModal}
+        onClose={() => setShowSyncAllModal(false)}
+        hosts={syncableHostsInfo}
+        onSync={handleSyncAll}
+        onFetchDetails={fetchHostDetails}
       />
 
       {/* Edit Host Modal */}
