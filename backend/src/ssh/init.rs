@@ -123,7 +123,11 @@ impl SshFirstConnectionHandler {
 
         let connection_result = match self.data.jump_via {
             Some(via) => {
-                let jump_host = Host::get_from_id(self.conn.get().unwrap(), via)
+                let conn = self.conn.get().map_err(|e| {
+                    error!("Failed to get database connection: {}", e);
+                    SshClientError::ExecutionError(format!("Database connection error: {}", e))
+                })?;
+                let jump_host = Host::get_from_id(conn, via)
                     .await?
                     .ok_or(SshClientError::NoSuchHost)?;
                 let stream = ssh_client

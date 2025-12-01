@@ -16,7 +16,7 @@ use crate::{
     api_types::*,
     db::UserAndOptions,
     logging::RequestLogger,
-    routes::{ForceUpdateQuery, get_db_conn, get_db_conn_string, internal_error_response, not_found_response, bad_request_response},
+    routes::{get_db_conn, get_db_conn_string, internal_error_response, not_found_response, bad_request_response},
     ssh::{CachingSshClient, SshClient, SshFirstConnectionHandler},
     ConnectionPool,
 };
@@ -24,6 +24,11 @@ use crate::{
 use crate::activity_logger;
 
 use crate::models::{Host, NewHost};
+
+#[derive(Deserialize)]
+struct LoginsQuery {
+    force_update: Option<bool>,
+}
 
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(get_all_hosts)
@@ -185,7 +190,7 @@ async fn get_logins(
     conn: Data<ConnectionPool>,
     caching_ssh_client: Data<CachingSshClient>,
     host_name: Path<String>,
-    update: Query<ForceUpdateQuery>,
+    update: Query<LoginsQuery>,
 ) -> Result<impl Responder> {
     match Host::get_from_name(get_db_conn(&conn)?, host_name.to_string()).await {
         Ok(Some(host)) => {

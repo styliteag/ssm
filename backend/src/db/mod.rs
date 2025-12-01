@@ -52,19 +52,31 @@ pub struct AllowedUserOnHost {
     pub options: Option<String>,
 }
 
-impl From<AllowedUserOnHost> for AuthorizedKey {
-    fn from(value: AllowedUserOnHost) -> Self {
-        Self {
-            options: value
-                .options
-                .map(|opts| ConfigOpts::new(opts).expect("Encountered invalid key"))
-                .unwrap_or_default(),
+impl TryFrom<AllowedUserOnHost> for AuthorizedKey {
+    type Error = String;
 
-            algorithm: Algorithm::from_str(value.key.key_type.as_str())
-                .expect("Key algorithm in database is invalid"),
+    fn try_from(value: AllowedUserOnHost) -> Result<Self, Self::Error> {
+        let options = if let Some(opts) = value.options {
+            ConfigOpts::new(opts).map_err(|e| {
+                error!("Encountered invalid key options: {}", e);
+                format!("Invalid key options: {}", e)
+            })?
+        } else {
+            ConfigOpts::default()
+        };
+
+        let algorithm = Algorithm::from_str(value.key.key_type.as_str())
+            .map_err(|e| {
+                error!("Key algorithm in database is invalid: {} (algorithm: {})", e, value.key.key_type);
+                format!("Invalid key algorithm '{}': {}", value.key.key_type, e)
+            })?;
+
+        Ok(Self {
+            options,
+            algorithm,
             base64: value.key.key_base64,
             comment: value.key.name,
-        }
+        })
     }
 }
 

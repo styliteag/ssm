@@ -1,4 +1,4 @@
-use log::debug;
+use log::{debug, error};
 use russh::keys::ssh_encoding::{Base64Writer, Encode};
 use russh::keys::{ssh_key::authorized_keys::ConfigOpts, Algorithm};
 use serde::Deserialize;
@@ -196,13 +196,30 @@ impl From<&str> for AuthorizedKeyEntry {
             Ok(entry) => {
                 //TODO: algorithm to estimate size
                 let mut buf = vec![0u8; 1024];
-                let mut writer = Base64Writer::new(&mut buf).expect("buf is non-zero");
+                let writer_result = Base64Writer::new(&mut buf);
+                let mut writer = match writer_result {
+                    Ok(w) => w,
+                    Err(e) => {
+                        error!("Failed to create Base64Writer: {}", e);
+                        return Self::Error(format!("Failed to create Base64Writer: {}", e), value.to_owned());
+                    }
+                };
 
                 let pkey = entry.public_key();
                 let comment = pkey.comment();
 
-                pkey.key_data().encode(&mut writer).expect("Buffer overrun");
-                let b64 = writer.finish().expect("Buffer overrun");
+                if let Err(e) = pkey.key_data().encode(&mut writer) {
+                    error!("Failed to encode key data: {}", e);
+                    return Self::Error(format!("Failed to encode key data: {}", e), value.to_owned());
+                }
+                
+                let b64 = match writer.finish() {
+                    Ok(b) => b,
+                    Err(e) => {
+                        error!("Failed to finish Base64Writer: {}", e);
+                        return Self::Error(format!("Failed to finish Base64Writer: {}", e), value.to_owned());
+                    }
+                };
 
                 Self::Authorization(AuthorizedKey {
                     options: entry.config_opts().clone(),

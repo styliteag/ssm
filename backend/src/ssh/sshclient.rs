@@ -1,7 +1,6 @@
 use actix_web::error::BlockingError;
 use core::fmt;
 use futures::future::BoxFuture;
-use futures::AsyncWriteExt;
 use futures::FutureExt;
 use log::debug;
 use log::error;
@@ -155,7 +154,11 @@ impl SshClient {
         async move {
             let mut handle = match connection_details.jump_via {
                 Some(via) => {
-                    let jump_host = Host::get_from_id(self.conn.get().unwrap(), via)
+                    let conn = self.conn.get().map_err(|e| {
+                        error!("Failed to get database connection: {}", e);
+                        SshClientError::ExecutionError(format!("Database connection error: {}", e))
+                    })?;
+                    let jump_host = Host::get_from_id(conn, via)
                         .await?
                         .ok_or(SshClientError::IndirectError(
                             via.to_string(),
@@ -246,7 +249,11 @@ impl SshClient {
             }
         }
         
-        let host = Host::get_from_name(self.conn.get().unwrap(), host_name.clone())
+        let conn = self.conn.get().map_err(|e| {
+            error!("Failed to get database connection: {}", e);
+            SshClientError::ExecutionError(format!("Database connection error: {}", e))
+        })?;
+        let host = Host::get_from_name(conn, host_name.clone())
             .await?
             .ok_or(SshClientError::NoSuchHost)?;
         let handle = self.clone().connect(host.to_connection().await?).await?;
@@ -269,7 +276,11 @@ impl SshClient {
             }
         }
         
-        let host = Host::get_from_id(self.conn.get().unwrap(), host)
+        let conn = self.conn.get().map_err(|e| {
+            error!("Failed to get database connection: {}", e);
+            SshClientError::ExecutionError(format!("Database connection error: {}", e))
+        })?;
+        let host = Host::get_from_id(conn, host)
             .await?
             .ok_or(SshClientError::NoSuchHost)?;
         let handle = self.clone().connect(host.to_connection().await?).await?;
@@ -463,10 +474,11 @@ impl SshClient {
             };
             match msg {
                 russh::ChannelMsg::Data { ref data } => {
-                    out_buf
-                        .write_all(data)
-                        .await
-                        .expect("couldnt write to out_buf");
+                    use std::io::Write;
+                    if let Err(e) = Write::write_all(&mut out_buf, data) {
+                        error!("Failed to write to output buffer: {}", e);
+                        return Err(SshClientError::ExecutionError(format!("Failed to write to output buffer: {}", e)));
+                    }
                 }
                 russh::ChannelMsg::ExitStatus { exit_status } => {
                     exit_code = Some(exit_status);
@@ -507,7 +519,11 @@ impl SshClient {
             }
         }
         
-        let Some(host) = Host::get_from_name(self.conn.get().unwrap(), host_name).await? else {
+        let conn = self.conn.get().map_err(|e| {
+            error!("Failed to get database connection: {}", e);
+            SshClientError::ExecutionError(format!("Database connection error: {}", e))
+        })?;
+        let Some(host) = Host::get_from_name(conn, host_name).await? else {
             return Err(SshClientError::NoSuchHost);
         };
 

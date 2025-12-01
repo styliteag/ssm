@@ -13,7 +13,7 @@ use crate::{
 
 use super::{
     sshclient::SshClientError, AuthorizedKeyEntry, Cache, CacheValue, DiffItem, HostDiff, HostName,
-    Login, ReadonlyCondition, SshClient, SshKeyfiles,
+    Login, ReadonlyCondition, SshClient, SshKeyfiles, AuthorizedKey,
 };
 
 #[derive(Debug)]
@@ -39,7 +39,10 @@ impl CachingSshClient {
     }
 
     async fn get_current_host_data(&self, host_name: &str) -> Result<SshKeyfiles, SshClientError> {
-        let conn = self.conn.get().unwrap();
+        let conn = self.conn.get().map_err(|e| {
+            error!("Failed to get database connection: {}", e);
+            SshClientError::ExecutionError(format!("Database connection error: {}", e))
+        })?;
 
         match Host::get_from_name(conn, host_name.to_owned()).await? {
             Some(host) => self.ssh_client.clone().get_authorized_keys(host).await,
@@ -63,8 +66,9 @@ impl CachingSshClient {
         let time = OffsetDateTime::now_utc();
 
         let mut lock = self.cache.write().await;
-        lock.insert(host_name.clone(), (time, data));
-        Ok(lock.get(host_name).expect("We just inserted this").clone())
+        let cache_value = (time, data.clone());
+        lock.insert(host_name.clone(), cache_value.clone());
+        Ok(cache_value)
     }
 
     fn calculate_diff(
@@ -75,7 +79,10 @@ impl CachingSshClient {
     ) -> Result<Vec<(Login, ReadonlyCondition, Vec<DiffItem>)>, SshClientError> {
         let db_authorized_entries = host.get_authorized_keys(&mut conn)?;
 
-        let mut conn = self.conn.get().unwrap();
+        let mut conn = self.conn.get().map_err(|e| {
+            error!("Failed to get database connection: {}", e);
+            SshClientError::ExecutionError(format!("Database connection error: {}", e))
+        })?;
         let all_user_keys = PublicUserKey::get_all_keys_with_username(&mut conn)?;
 
         let own_key_base64 = self.ssh_client.get_own_key_b64();
@@ -140,10 +147,18 @@ impl CachingSshClient {
 
             for (i, unused_entry) in db_authorized_entries.iter().enumerate() {
                 if !used_indecies.contains(&i) && unused_entry.login.eq(&entry.login) {
-                    this_user_diff.push(DiffItem::KeyMissing(
-                        unused_entry.clone().into(),
-                        unused_entry.username.clone(),
-                    ));
+                    match AuthorizedKey::try_from(unused_entry.clone()) {
+                        Ok(authorized_key) => {
+                            this_user_diff.push(DiffItem::KeyMissing(
+                                authorized_key,
+                                unused_entry.username.clone(),
+                            ));
+                        }
+                        Err(e) => {
+                            error!("Failed to convert AllowedUserOnHost to AuthorizedKey: {}", e);
+                            // Skip this entry if conversion fails - data corruption in database
+                        }
+                    }
                 }
             }
             diff_items.push((entry.login, entry.readonly_condition, this_user_diff));
@@ -169,7 +184,13 @@ impl CachingSshClient {
             }
         };
 
-        let conn = self.conn.get().unwrap();
+        let conn = match self.conn.get() {
+            Ok(c) => c,
+            Err(e) => {
+                error!("Failed to get database connection: {}", e);
+                return (inserted, Err(SshClientError::ExecutionError(format!("Database connection error: {}", e))));
+            }
+        };
 
         (
             inserted,
@@ -179,7 +200,11 @@ impl CachingSshClient {
 
     /// Gets the current state of all known hosts, forcing an update
     pub async fn get_current_state(&self) -> Result<Vec<(HostName, HostDiff)>, String> {
-        let hosts = Host::get_all_hosts(&mut self.conn.get().unwrap())?;
+        let mut conn = self.conn.get().map_err(|e| {
+            error!("Failed to get database connection: {}", e);
+            format!("Database connection error: {}", e)
+        })?;
+        let hosts = Host::get_all_hosts(&mut conn)?;
 
         let mut state = Vec::with_capacity(hosts.len());
 
@@ -215,7 +240,10 @@ impl CachingSshClient {
                 }
                 
                 // Get the expected authorized keys from the database
-                let mut conn = self.conn.get().unwrap();
+                let mut conn = self.conn.get().map_err(|e| {
+                    error!("Failed to get database connection: {}", e);
+                    SshClientError::ExecutionError(format!("Database connection error: {}", e))
+                })?;
                 let expected_keys = host.get_authorized_keys(&mut conn)?;
                 
                 // Group keys by login to get unique logins
@@ -226,7 +254,10 @@ impl CachingSshClient {
                 
                 // Apply authorized_keys for each login using existing method
                 for login in logins {
-                    let mut conn = self.conn.get().unwrap();
+                    let mut conn = self.conn.get().map_err(|e| {
+                        error!("Failed to get database connection: {}", e);
+                        SshClientError::ExecutionError(format!("Database connection error: {}", e))
+                    })?;
                     let authorized_keys_content = host.get_authorized_keys_file_for(&self.ssh_client, &mut conn, &login)?;
                     
                     self.ssh_client.clone().set_authorized_keys(host.name.clone(), login, authorized_keys_content).await?;

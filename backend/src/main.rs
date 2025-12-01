@@ -152,12 +152,6 @@ fn default_loglevel() -> String {
     "info".to_owned()
 }
 
-fn default_session_key() -> String {
-    env::var("SESSION_KEY").unwrap_or_else(|_| {
-        error!("SESSION_KEY environment variable not set! Using insecure default.");
-        String::from("my-secret-key-please-change-me-in-production")
-    })
-}
 
 fn default_htpasswd_path() -> PathBuf {
     PathBuf::from(".htpasswd")
@@ -189,13 +183,12 @@ pub struct Configuration {
     port: u16,
     #[serde(default = "default_loglevel")]
     loglevel: String,
-    #[serde(default = "default_session_key")]
-    session_key: String,
+    session_key: Option<String>,
     #[serde(default = "default_htpasswd_path")]
     htpasswd_path: PathBuf,
 }
 
-fn get_configuration() -> (Configuration, String) {
+fn get_configuration() -> Result<(Configuration, String), String> {
     let config_path = env::var("CONFIG").unwrap_or_else(|_| String::from("./config.toml"));
     let config_builder = Config::builder();
 
@@ -212,27 +205,13 @@ fn get_configuration() -> (Configuration, String) {
         )
     };
 
-    // config:Environment::default() is used to override the configuration file with environment variables
     // Environment variables take precedence over config file settings
-    // This is useful for Docker Compose, where we can set environment variables to override the configuration file
-    // For example, we can set the DATABASE_URL, HTPASSWD, SSH_KEY, and SESSION_KEY environment variables to override the configuration file
-    // This is also useful for development, where we can set the environment variables to override the configuration file
-    // This is also useful for production, where we can set the environment variables to override the configuration file
-    // This is also useful for testing, where we can set the environment variables to override the configuration file
     let mut config: Configuration = config_builder
         .add_source(config::Environment::default())
         .build()
-        .unwrap_or_else(|e| {
-            eprintln!("Error while reading configuration source: {e}");
-            logging::AppLogger::log_config_error(&format!("Error while reading configuration source: {e}"), true);
-            std::process::exit(3);
-        })
+        .map_err(|e| format!("Error while reading configuration source: {e}"))?
         .try_deserialize()
-        .unwrap_or_else(|e| {
-            eprintln!("Error while parsing configuration: {e}");
-            logging::AppLogger::log_config_error(&format!("Error while parsing configuration: {e}"), true);
-            std::process::exit(3);
-        });
+        .map_err(|e| format!("Error while parsing configuration: {e}"))?;
 
     // Override with specific environment variables that don't follow config crate naming conventions
     if let Ok(htpasswd_path) = std::env::var("HTPASSWD") {
@@ -242,21 +221,37 @@ fn get_configuration() -> (Configuration, String) {
         config.ssh.private_key_file = std::path::PathBuf::from(ssh_key_path);
     }
     if let Ok(session_key) = std::env::var("SESSION_KEY") {
-        config.session_key = session_key;
+        config.session_key = Some(session_key);
     }
 
-    (config, config_source)
+    Ok((config, config_source))
 }
 
 #[tokio::main]
 async fn main() -> Result<(), std::io::Error> {
-    color_eyre::install().expect("Couldn't intall color_eyre");
+    color_eyre::install().map_err(|e| {
+        eprintln!("Failed to install color_eyre: {}", e);
+        std::io::Error::new(std::io::ErrorKind::Other, format!("Failed to install color_eyre: {}", e))
+    })?;
 
     if std::env::var("RUST_SPANTRACE").is_err() {
         std::env::set_var("RUST_SPANTRACE", "0");
     }
 
-    let (configuration, config_source) = get_configuration();
+    let (configuration, config_source) = get_configuration()
+        .map_err(|e| {
+            eprintln!("Configuration error: {}", e);
+            std::io::Error::new(std::io::ErrorKind::InvalidInput, e)
+        })?;
+
+    // Validate session key is set
+    let session_key = configuration.session_key.clone()
+        .or_else(|| env::var("SESSION_KEY").ok())
+        .ok_or_else(|| {
+            let error_msg = "SESSION_KEY environment variable must be set for security. Please set it via environment variable or config file.";
+            eprintln!("{}", error_msg);
+            std::io::Error::new(std::io::ErrorKind::InvalidInput, error_msg)
+        })?;
 
     if env::var("RUST_LOG").is_err() {
         let loglevel = configuration.loglevel.clone();
@@ -291,7 +286,10 @@ async fn main() -> Result<(), std::io::Error> {
 
         // Hash the password with bcrypt
         let hashed_password = bcrypt::hash(&password, bcrypt::DEFAULT_COST)
-            .expect("Failed to hash password");
+            .map_err(|e| {
+                error!("Failed to hash password: {}", e);
+                std::io::Error::new(std::io::ErrorKind::Other, format!("Failed to hash password: {}", e))
+            })?;
 
         // Write to htpasswd file in Apache format
         let htpasswd_content = format!("admin:{}\n", hashed_password);
@@ -321,20 +319,32 @@ async fn main() -> Result<(), std::io::Error> {
     let pool: ConnectionPool = Pool::builder()
         .connection_customizer(Box::new(SqliteConnectionCustomizer))
         .build(manager)
-        .expect("Database URL should be a valid URI");
+        .map_err(|e| {
+            error!("Failed to create database connection pool: {}", e);
+            std::io::Error::new(std::io::ErrorKind::ConnectionRefused, format!("Database URL should be a valid URI: {}", e))
+        })?;
 
     {
         use diesel::{sql_query, RunQueryDsl};
 
         logging::DatabaseLogger::log_connection_event("connecting", 0);
-        let mut conn = pool.get().expect("Couldn't connect to database");
+        let mut conn = pool.get().map_err(|e| {
+            error!("Couldn't connect to database: {}", e);
+            std::io::Error::new(std::io::ErrorKind::ConnectionRefused, format!("Couldn't connect to database: {}", e))
+        })?;
 
         sql_query("PRAGMA foreign_keys = on")
             .execute(&mut conn)
-            .expect("Couldn't activate foreign key support");
+            .map_err(|e| {
+                error!("Couldn't activate foreign key support: {}", e);
+                std::io::Error::new(std::io::ErrorKind::Other, format!("Couldn't activate foreign key support: {}", e))
+            })?;
 
         conn.run_pending_migrations(MIGRATIONS)
-            .expect("Error while running migrations:");
+            .map_err(|e| {
+                error!("Error while running migrations: {}", e);
+                std::io::Error::new(std::io::ErrorKind::Other, format!("Error while running migrations: {}", e))
+            })?;
     }
 
     let key_path = &configuration.ssh.private_key_file;
@@ -350,7 +360,11 @@ async fn main() -> Result<(), std::io::Error> {
         eprintln!("║                                                                              ║");
         eprintln!("║ To generate an ed25519 SSH key pair:                                         ║");
         eprintln!();
-        eprintln!("mkdir -p {}", key_path.parent().unwrap().display());
+        if let Some(parent) = key_path.parent() {
+            eprintln!("mkdir -p {}", parent.display());
+        } else {
+            eprintln!("mkdir -p keys");
+        }
         eprintln!("ssh-keygen -t ed25519 -f {} -C 'ssm-server'", key_path.display());
         eprintln!("chmod 600 {}", key_path.display());
         eprintln!("chmod 644 {}.pub", key_path.display());
@@ -366,7 +380,10 @@ async fn main() -> Result<(), std::io::Error> {
         key_path,
         configuration.ssh.private_key_passphrase.as_deref(),
     )
-    .expect("Failed to load private key:");
+    .map_err(|e| {
+        error!("Failed to load private key: {}", e);
+        std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("Failed to load private key: {}", e))
+    })?;
 
     let config = Data::new(configuration.clone());
     let ssh_client = SshClient::new(pool.clone(), key, configuration.ssh.clone());
@@ -374,7 +391,7 @@ async fn main() -> Result<(), std::io::Error> {
     let caching_ssh_client = Data::new(CachingSshClient::new(pool.clone(), ssh_client.clone()));
 
     logging::AppLogger::log_startup("ssm", env!("CARGO_PKG_VERSION"));
-    let secret_key = cookie::Key::derive_from(configuration.session_key.as_bytes());
+    let secret_key = cookie::Key::derive_from(session_key.as_bytes());
 
     if let Some(scheduler_task) = scheduler::init_scheduler(
         configuration.ssh.check_schedule,
