@@ -324,7 +324,7 @@ impl SshClient {
         if move_exit_code != 0 {
             warn!("Failed to move script into position ({move_exit_code}): {move_out}");
             return Err(SshClientError::ExecutionError(
-                "Couldnt install script to original location".to_owned(),
+                "Couldn't install script to original location".to_owned(),
             ));
         }
 
@@ -399,7 +399,7 @@ impl SshClient {
         if !is_correct_version {
             match self.install_script(handle).await {
                 Ok(()) => {
-                    debug!("Succesfully installed script");
+                    debug!("Successfully installed script");
                 }
                 Err(error) => {
                     warn!("Failed to install script on host: {}", error);
@@ -448,7 +448,7 @@ impl SshClient {
             .await
     }
 
-    /// Runs a command and returns exit code and std{out/err} merged as a touple
+    /// Runs a command and returns exit code and std{out/err} merged as a tuple
     async fn execute_with_data<R>(
         &self,
         handle: &russh::client::Handle<SshHandler>,
