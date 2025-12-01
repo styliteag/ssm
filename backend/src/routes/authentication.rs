@@ -147,15 +147,19 @@ async fn login(
         }).to_string();
 
         // Log activity directly since we have the username and Identity isn't in request yet
-        if let Err(e) = crate::routes::activity_log::log_activity(
-            &mut conn.get().unwrap(),
-            "auth",
-            "User logged in",
-            "via password",
-            &json.username,
-            Some(metadata)
-        ) {
-            error!("Failed to log login activity: {}", e);
+        if let Ok(mut db_conn) = conn.get() {
+            if let Err(e) = crate::routes::activity_log::log_activity(
+                &mut db_conn,
+                "auth",
+                "User logged in",
+                "via password",
+                &json.username,
+                Some(metadata)
+            ) {
+                error!("Failed to log login activity: {}", e);
+            }
+        } else {
+            error!("Failed to get database connection for activity logging");
         }
 
         Ok(HttpResponse::Ok().json(ApiResponse::success(LoginResponse {
@@ -204,12 +208,16 @@ async fn logout(
     conn: Data<crate::ConnectionPool>
 ) -> impl Responder {
     if let Some(id) = identity {
-        activity_logger::log_auth_event(
-            &mut conn.get().unwrap(),
-            Some(&id),
-            "User logged out",
-            "manual logout",
-        );
+        if let Ok(mut db_conn) = conn.get() {
+            if let Err(e) = activity_logger::log_auth_event(
+                &mut db_conn,
+                Some(&id),
+                "User logged out",
+                "manual logout",
+            ) {
+                log::error!("Failed to log logout activity: {}", e);
+            }
+        }
         id.logout();
         // Clear CSRF token from session
         session.remove("csrf_token");

@@ -25,7 +25,7 @@ impl From<ActivityLog> for ActivityResponse {
         // Convert Unix timestamp to relative time string
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_default()
             .as_secs() as i32;
         
         let diff = now - log.timestamp;
