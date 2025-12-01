@@ -15,8 +15,7 @@ use utoipa::{OpenApi, ToSchema};
 use serde::Serialize;
 use crate::api_types::*;
 use crate::ConnectionPool;
-use diesel::r2d2::PooledConnection;
-use diesel::r2d2::ConnectionManager;
+use diesel::r2d2::{PooledConnection, ConnectionManager};
 use crate::DbConnection;
 
 
@@ -42,11 +41,21 @@ pub fn route_config(cfg: &mut web::ServiceConfig) {
 
 /// Standardized error handling helpers for route handlers
 
+/// Internal helper function that performs the actual database connection retrieval
+/// This is the single source of truth for connection error handling
+/// Returns the raw error from the pool
+fn get_db_conn_internal(
+    pool: &ConnectionPool,
+) -> Result<PooledConnection<ConnectionManager<DbConnection>>, impl std::error::Error + Send + Sync> {
+    pool.get()
+}
+
 /// Get a database connection from the pool, returning a standardized error
+/// Use this for direct database access in route handlers
 pub fn get_db_conn(
     pool: &Data<ConnectionPool>,
 ) -> Result<PooledConnection<ConnectionManager<DbConnection>>, actix_web::Error> {
-    pool.get().map_err(|e| {
+    get_db_conn_internal(pool.get_ref()).map_err(|e| {
         log::error!("Database connection error: {}", e);
         actix_web::error::ErrorInternalServerError(format!("Database connection error: {}", e))
     })
@@ -54,10 +63,14 @@ pub fn get_db_conn(
 
 /// Get a database connection from the pool for use in web::block closures
 /// Returns String error for compatibility with web::block error handling
+/// 
+/// Note: This function exists because web::block closures need to move the ConnectionPool,
+/// and Data<ConnectionPool> cannot be moved (it's not Send). Use this version when
+/// passing &ConnectionPool directly to web::block closures.
 pub fn get_db_conn_string(
     pool: &ConnectionPool,
 ) -> Result<PooledConnection<ConnectionManager<DbConnection>>, String> {
-    pool.get().map_err(|e| {
+    get_db_conn_internal(pool).map_err(|e| {
         log::error!("Database connection error: {}", e);
         format!("Database connection error: {}", e)
     })
