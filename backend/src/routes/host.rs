@@ -1006,7 +1006,7 @@ async fn invalidate_host_cache(
     )))
 }
 
-// Custom deserialization to treat empty strings as None
+// Custom deserialization to treat empty strings as None (for string fields only)
 fn empty_string_as_none<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
 where
     D: serde::Deserializer<'de>,
@@ -1019,18 +1019,6 @@ where
     }
 }
 
-fn empty_string_as_none_int<'de, D>(deserializer: D) -> Result<Option<i32>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    let s = String::deserialize(deserializer)?;
-    if s.trim().is_empty() {
-        Ok(None)
-    } else {
-        s.parse::<i32>().map(Some).map_err(serde::de::Error::custom)
-    }
-}
-
 #[derive(Deserialize, ToSchema)]
 pub struct UpdateHostRequest {
     pub name: String,
@@ -1039,7 +1027,7 @@ pub struct UpdateHostRequest {
     pub port: i32,
     #[serde(deserialize_with = "empty_string_as_none")]
     pub key_fingerprint: Option<String>,
-    #[serde(deserialize_with = "empty_string_as_none_int")]
+    /// Jump host ID (null or integer). Accepts both null and integer values directly.
     pub jump_via: Option<i32>,
     #[serde(default)]
     pub disabled: bool,

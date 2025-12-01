@@ -1,4 +1,4 @@
-use actix_web::{get, web, HttpResponse, Responder};
+use actix_web::{get, web, HttpResponse, Responder, Result};
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 use utoipa::{ToSchema, IntoParams};
@@ -6,6 +6,7 @@ use utoipa::{ToSchema, IntoParams};
 use crate::models::ActivityLog;
 use crate::ConnectionPool;
 use crate::api_types::ApiResponse;
+use crate::routes::{get_db_conn, internal_error_response};
 
 #[derive(Serialize, ToSchema)]
 pub struct ActivityResponse {
@@ -82,18 +83,10 @@ fn default_limit() -> i32 {
 pub async fn get_activities(
     pool: web::Data<ConnectionPool>,
     query: web::Query<ActivityQueryParams>,
-) -> impl Responder {
+) -> Result<impl Responder> {
     use crate::schema::activity_log::dsl::*;
 
-    let mut conn = match pool.get() {
-        Ok(conn) => conn,
-        Err(e) => {
-            log::error!("Failed to get DB connection: {}", e);
-            return HttpResponse::InternalServerError().json(serde_json::json!({
-                "error": "Database connection failed"
-            }));
-        }
-    };
+    let mut conn = get_db_conn(&pool)?;
 
     // Ensure limit is within bounds
     let query_limit = query.limit.min(100).max(1);
@@ -113,14 +106,9 @@ pub async fn get_activities(
     match results {
         Ok(logs) => {
             let activities: Vec<ActivityResponse> = logs.into_iter().map(|log| log.into()).collect();
-            HttpResponse::Ok().json(ApiResponse::success(activities))
+            Ok(HttpResponse::Ok().json(ApiResponse::success(activities)))
         }
-        Err(e) => {
-            log::error!("Failed to query activities: {}", e);
-            HttpResponse::InternalServerError().json(serde_json::json!({
-                "error": "Failed to retrieve activities"
-            }))
-        }
+        Err(e) => internal_error_response(format!("Failed to retrieve activities: {}", e)),
     }
 }
 
