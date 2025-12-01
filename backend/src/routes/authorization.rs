@@ -13,6 +13,7 @@ use crate::{
     models::{Host, User},
     ConnectionPool,
 };
+use crate::routes::{get_db_conn_string, internal_error_response, not_found_response};
 
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(change_options)
@@ -94,8 +95,8 @@ async fn get_authorization_dialog_data(
     let conn_clone = conn.clone();
     let username_str = json.username.clone();
     let host_name_str = json.host_name.clone();
-    let (user, host) = web::block(move || {
-        let mut connection = conn_clone.get().map_err(|e| format!("Database connection error: {}", e))?;
+    let result = web::block(move || -> Result<(Result<(String, i32), String>, Result<Option<(String, i32)>, String>), String> {
+        let mut connection = get_db_conn_string(&conn_clone)?;
 
         let user = User::get_user(&mut connection, username_str);
         let host = Host::get_from_name_sync(&mut connection, host_name_str);
@@ -104,19 +105,25 @@ async fn get_authorization_dialog_data(
             host.map(|h| h.map(|h| (h.name, h.id))),
         ))
     })
-    .await??;
+    .await;
+    
+    let (user, host) = match result {
+        Ok(Ok(tuple)) => tuple,
+        Ok(Err(e)) => return internal_error_response(e),
+        Err(e) => return internal_error_response(format!("Database connection error: {}", e)),
+    };
 
     let user = match user {
         Ok(u) => u,
-        Err(error) => return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error))),
+        Err(error) => return internal_error_response(error),
     };
 
     let host = match host {
         Ok(h) => match h {
             Some(h) => h,
-            None => return Ok(HttpResponse::NotFound().json(ApiError::not_found("Host not found".to_string()))),
+            None => return not_found_response("Host not found".to_string()),
         },
-        Err(error) => return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error))),
+        Err(error) => return internal_error_response(error),
     };
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(AuthorizationDialogResponse {
