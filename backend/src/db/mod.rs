@@ -101,7 +101,7 @@ pub type AuthorizedKeysList = Vec<AllowedUserOnHost>;
 pub fn query<T>(query_result: Result<T, Error>) -> Result<T, String> {
     query_result.map_err(|e| {
         error!("Encountered a database error: {}", e);
-        String::from("A database error occured. Please consult the logs.")
+        String::from("A database error occurred. Please consult the logs.")
     })
 }
 
