@@ -69,7 +69,11 @@ async fn get_all_users(
     _pagination: Query<PaginationQuery>,
     _identity: Option<Identity>,
 ) -> Result<impl Responder> {
-    let all_users = web::block(move || User::get_all_users(&mut conn.get().unwrap())).await?;
+    let conn_clone = conn.clone();
+    let all_users = web::block(move || {
+        let mut db_conn = conn_clone.get().map_err(|e| format!("Database connection error: {}", e))?;
+        User::get_all_users(&mut db_conn)
+    }).await?;
 
     match all_users {
         Ok(users) => {
@@ -104,8 +108,12 @@ async fn get_user(
     username: Path<String>,
     _identity: Option<Identity>,
 ) -> Result<impl Responder> {
-    let mut conn = conn.clone().get().unwrap();
-    let maybe_user = web::block(move || User::get_user(&mut conn, username.to_string())).await?;
+    let conn_clone = conn.clone();
+    let username_str = username.to_string();
+    let maybe_user = web::block(move || {
+        let mut db_conn = conn_clone.get().map_err(|e| format!("Database connection error: {}", e))?;
+        User::get_user(&mut db_conn, username_str)
+    }).await?;
 
     match maybe_user {
         Ok(user) => Ok(HttpResponse::Ok().json(ApiResponse::success(UserResponse::from(user)))),
@@ -139,15 +147,23 @@ async fn create_user(
     let conn_clone = conn.clone();
     let username_for_log = new_user.username.clone();
     
-    let res = web::block(move || User::add_user(&mut conn_clone.get().unwrap(), new_user)).await?;
+    let res = web::block(move || {
+        let mut db_conn = conn_clone.get().map_err(|e| format!("Database connection error: {}", e))?;
+        User::add_user(&mut db_conn, new_user)
+    }).await?;
     match res {
         Ok(user_id) => {
-            activity_logger::log_user_event(
-                &mut conn.get().unwrap(),
+            let mut db_conn = conn.get().map_err(|e| {
+                actix_web::error::ErrorInternalServerError(format!("Database connection error: {}", e))
+            })?;
+            if let Err(e) = activity_logger::log_user_event(
+                &mut db_conn,
                 _identity.as_ref(),
                 "Created user",
                 &username_for_log,
-            );
+            ) {
+                log::error!("Failed to log user creation: {}", e);
+            }
             Ok(HttpResponse::Created().json(ApiResponse::success_with_message(
                 serde_json::json!({"id": user_id}),
                 "User created successfully".to_string(),
@@ -184,15 +200,23 @@ async fn delete_user(
     let username_str = username.to_string();
     let username_for_log = username_str.clone();
     
-    let res = web::block(move || User::delete_user(&mut conn_clone.get().unwrap(), &username_str)).await?;
+    let res = web::block(move || {
+        let mut db_conn = conn_clone.get().map_err(|e| format!("Database connection error: {}", e))?;
+        User::delete_user(&mut db_conn, &username_str)
+    }).await?;
     match res {
         Ok(()) => {
-            activity_logger::log_user_event(
-                &mut conn.get().unwrap(),
+            let mut db_conn = conn.get().map_err(|e| {
+                actix_web::error::ErrorInternalServerError(format!("Database connection error: {}", e))
+            })?;
+            if let Err(e) = activity_logger::log_user_event(
+                &mut db_conn,
                 _identity.as_ref(),
                 "Deleted user",
                 &username_for_log,
-            );
+            ) {
+                log::error!("Failed to log user deletion: {}", e);
+            }
             Ok(HttpResponse::Ok().json(ApiResponse::success_message("User deleted successfully".to_string())))
         },
         Err(e) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e))),
@@ -236,9 +260,11 @@ async fn get_user_keys(
     username: Path<String>,
     _identity: Option<Identity>,
 ) -> Result<impl Responder> {
+    let conn_clone = conn.clone();
+    let username_str = username.to_string();
     let maybe_user_keys = web::block(move || {
-        let mut connection = conn.get().unwrap();
-        let user = User::get_user(&mut connection, username.to_string())?;
+        let mut connection = conn_clone.get().map_err(|e| format!("Database connection error: {}", e))?;
+        let user = User::get_user(&mut connection, username_str)?;
         user.get_keys(&mut connection)
     })
     .await?;
@@ -295,9 +321,11 @@ async fn get_user_authorizations(
     username: Path<String>,
     _identity: Option<Identity>,
 ) -> Result<impl Responder> {
+    let conn_clone = conn.clone();
+    let username_str = username.to_string();
     let maybe_user_auth = web::block(move || {
-        let mut connection = conn.get().unwrap();
-        let user = User::get_user(&mut connection, username.to_string())?;
+        let mut connection = conn_clone.get().map_err(|e| format!("Database connection error: {}", e))?;
+        let user = User::get_user(&mut connection, username_str)?;
         user.get_authorizations(&mut connection)
     })
     .await?;
@@ -356,16 +384,25 @@ async fn assign_key_to_user(
     );
 
     let conn_clone = conn.clone();
-    let res = web::block(move || PublicUserKey::add_key(&mut conn_clone.get().unwrap(), new_key)).await?;
+    let user_id_for_log = json.user_id;
+    let res = web::block(move || {
+        let mut db_conn = conn_clone.get().map_err(|e| format!("Database connection error: {}", e))?;
+        PublicUserKey::add_key(&mut db_conn, new_key)
+    }).await?;
 
     match res {
         Ok(()) => {
-            activity_logger::log_key_event(
-                &mut conn.get().unwrap(),
+            let mut db_conn = conn.get().map_err(|e| {
+                actix_web::error::ErrorInternalServerError(format!("Database connection error: {}", e))
+            })?;
+            if let Err(e) = activity_logger::log_key_event(
+                &mut db_conn,
                 _identity.as_ref(),
                 "Assigned key to user",
-                &format!("User ID {}", json.user_id),
-            );
+                &format!("User ID {}", user_id_for_log),
+            ) {
+                log::error!("Failed to log key assignment: {}", e);
+            }
             Ok(HttpResponse::Created().json(ApiResponse::success_message("Key assigned successfully".to_string())))
         },
         Err(e) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e))),
@@ -403,10 +440,12 @@ async fn update_user(
     json: Json<UpdateUserRequest>,
     _identity: Option<Identity>,
 ) -> Result<impl Responder> {
-    let mut conn = conn.get().unwrap();
+    let mut db_conn = conn.get().map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!("Database connection error: {}", e))
+    })?;
     
     // Fetch the old user to track changes
-    let old_user = User::get_user(&mut conn, old_username.to_string())
+    let old_user = User::get_user(&mut db_conn, old_username.to_string())
         .map_err(|_| actix_web::error::ErrorNotFound("User not found"))?;
     
     // Track changes for metadata
@@ -432,7 +471,7 @@ async fn update_user(
     }
     
     match User::update_user(
-        &mut conn,
+        &mut db_conn,
         &old_username,
         &json.username,
         json.enabled,
@@ -447,7 +486,7 @@ async fn update_user(
             };
             
             if let Err(e) = crate::routes::activity_log::log_activity(
-                &mut conn,
+                &mut db_conn,
                 "user",
                 "Updated user",
                 &json.username,

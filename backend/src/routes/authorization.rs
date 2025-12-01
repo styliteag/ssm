@@ -91,17 +91,20 @@ async fn get_authorization_dialog_data(
     let options = json.options.clone();
     let login = json.login.clone();
     let comment = json.comment.clone();
+    let conn_clone = conn.clone();
+    let username_str = json.username.clone();
+    let host_name_str = json.host_name.clone();
     let (user, host) = web::block(move || {
-        let mut connection = conn.get().unwrap();
+        let mut connection = conn_clone.get().map_err(|e| format!("Database connection error: {}", e))?;
 
-        let user = User::get_user(&mut connection, json.username.clone());
-        let host = Host::get_from_name_sync(&mut connection, json.host_name.clone());
-        (
+        let user = User::get_user(&mut connection, username_str);
+        let host = Host::get_from_name_sync(&mut connection, host_name_str);
+        Ok((
             user.map(|u| (u.username, u.id)),
             host.map(|h| h.map(|h| (h.name, h.id))),
-        )
+        ))
     })
-    .await?;
+    .await??;
 
     let user = match user {
         Ok(u) => u,

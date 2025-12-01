@@ -193,7 +193,11 @@ async fn get_hosts_for_diff(conn: Data<ConnectionPool>) -> Result<impl Responder
     info!("GET /api/diff - Fetching hosts available for diff comparison");
     debug!("Getting all hosts from database for diff view");
     
-    let hosts = web::block(move || Host::get_all_hosts(&mut conn.get().unwrap())).await?;
+    let conn_clone = conn.clone();
+    let hosts = web::block(move || {
+        let mut db_conn = conn_clone.get().map_err(|e| format!("Database connection error: {}", e))?;
+        Host::get_all_hosts(&mut db_conn)
+    }).await?;
 
     match hosts {
         Ok(hosts) => {
@@ -248,7 +252,10 @@ async fn get_host_diff(
     debug!("Query parameters: force_update={:?}, show_empty={:?}", 
            query.force_update, query.show_empty);
     
-    let res = Host::get_from_name(conn.get().unwrap(), host_name.to_string()).await;
+    let mut db_conn = conn.get().map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!("Database connection error: {}", e))
+    })?;
+    let res = Host::get_from_name(&mut db_conn, host_name.to_string()).await;
 
     let host = match res {
         Ok(maybe_host) => {
@@ -376,7 +383,10 @@ async fn get_diff_details(
     info!("GET /api/diff/{}/details - Fetching detailed diff with raw content", host_name);
     debug!("Looking up host '{}' for detailed diff analysis", host_name);
     
-    let res = Host::get_from_name(conn.get().unwrap(), host_name.to_string()).await;
+    let mut db_conn = conn.get().map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!("Database connection error: {}", e))
+    })?;
+    let res = Host::get_from_name(&mut db_conn, host_name.to_string()).await;
 
     let host = match res {
         Ok(maybe_host) => {
@@ -410,7 +420,10 @@ async fn get_diff_details(
     }
     
     // Get the expected authorized keys from database
-    let expected_keys = match host.get_authorized_keys(&mut conn.get().unwrap()) {
+    let mut db_conn = conn.get().map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!("Database connection error: {}", e))
+    })?;
+    let expected_keys = match host.get_authorized_keys(&mut db_conn) {
         Ok(keys) => keys,
         Err(error) => {
             error!("Failed to get expected keys for host '{}': {}", host.name, error);
@@ -487,7 +500,10 @@ async fn sync_host_keys(
 ) -> Result<impl Responder> {
     info!("POST /api/diff/{}/sync - Starting SSH key synchronization", host_name);
     
-    let res = Host::get_from_name(conn.get().unwrap(), host_name.to_string()).await;
+    let mut db_conn = conn.get().map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!("Database connection error: {}", e))
+    })?;
+    let res = Host::get_from_name(&mut db_conn, host_name.to_string()).await;
 
     let host = match res {
         Ok(maybe_host) => {
@@ -656,8 +672,11 @@ async fn sync_host_keys(
             };
             
             // Log the activity
+            let mut db_conn = conn.get().map_err(|e| {
+                actix_web::error::ErrorInternalServerError(format!("Database connection error: {}", e))
+            })?;
             if let Err(e) = crate::routes::activity_log::log_activity(
-                &mut conn.get().unwrap(),
+                &mut db_conn,
                 "host",
                 &action,
                 &host.name,
