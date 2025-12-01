@@ -16,7 +16,7 @@ use crate::{
     api_types::*,
     db::UserAndOptions,
     logging::RequestLogger,
-    routes::ForceUpdateQuery,
+    routes::{ForceUpdateQuery, get_db_conn, get_db_conn_string, internal_error_response, not_found_response, bad_request_response},
     ssh::{CachingSshClient, SshClient, SshFirstConnectionHandler},
     ConnectionPool,
 };
@@ -102,7 +102,7 @@ async fn get_all_hosts(
     logger.log_request_start("get_all_hosts");
     let conn_clone = conn.clone();
     let hosts = web::block(move || {
-        let mut db_conn = conn_clone.get().map_err(|e| format!("Database connection error: {}", e))?;
+        let mut db_conn = get_db_conn_string(&conn_clone)?;
         Host::get_all_hosts(&mut db_conn)
     }).await?;
     
@@ -116,9 +116,7 @@ async fn get_all_hosts(
                 // Set jumphost name if applicable
                 if let Some(jumphost_id) = host.jump_via {
                     let conn_for_jump = conn.clone();
-                    match Host::get_from_id(conn_for_jump.get().map_err(|e| {
-                        actix_web::error::ErrorInternalServerError(format!("Database connection error: {}", e))
-                    })?, jumphost_id).await {
+                    match Host::get_from_id(get_db_conn(&conn_for_jump)?, jumphost_id).await {
                         Ok(Some(jumphost)) => {
                             host_response.jumphost_name = Some(jumphost.name);
                         }
@@ -135,9 +133,7 @@ async fn get_all_hosts(
                 // Individual host endpoint will test connections when needed
                 
                 // Get authorizations for this host
-                let mut db_conn_for_auth = conn.get().map_err(|e| {
-                    actix_web::error::ErrorInternalServerError(format!("Database connection error: {}", e))
-                })?;
+                let mut db_conn_for_auth = get_db_conn(&conn)?;
                 match host.get_authorized_users(&mut db_conn_for_auth) {
                     Ok(authorizations) => {
                         host_response.authorizations = authorizations;
@@ -158,7 +154,7 @@ async fn get_all_hosts(
         Err(error) => {
             let duration = start_time.elapsed().as_millis() as u64;
             logger.log_request_complete("get_all_hosts", duration, 500);
-            Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error)))
+            internal_error_response(error)
         }
     }
 }
@@ -191,14 +187,7 @@ async fn get_logins(
     host_name: Path<String>,
     update: Query<ForceUpdateQuery>,
 ) -> Result<impl Responder> {
-    let mut db_conn = conn.get().map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Database connection error: {}", e))
-    })?;
-    let host = Host::get_from_name(&mut db_conn, host_name.to_string()).await;
-
-    match host {
-        Err(error) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error))),
-        Ok(None) => Ok(HttpResponse::NotFound().json(ApiError::not_found("Host not found".to_string()))),
+    match Host::get_from_name(get_db_conn(&conn)?, host_name.to_string()).await {
         Ok(Some(host)) => {
             // Return empty logins list if host is disabled
             if host.disabled {
@@ -210,9 +199,11 @@ async fn get_logins(
                 .await;
             match logins {
                 Ok(logins) => Ok(HttpResponse::Ok().json(ApiResponse::success(LoginsResponse { logins }))),
-                Err(error) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error.to_string()))),
+                Err(error) => internal_error_response(error.to_string()),
             }
         }
+        Ok(None) => return not_found_response("Host not found".to_string()),
+        Err(error) => return internal_error_response(error),
     }
 }
 
@@ -239,16 +230,13 @@ async fn get_host(
     host_name: Path<String>,
     _identity: Option<Identity>,
 ) -> Result<impl Responder> {
-    let mut db_conn = conn.get().map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Database connection error: {}", e))
-    })?;
-    let host = match Host::get_from_name(&mut db_conn, host_name.to_string()).await {
+    let host = match Host::get_from_name(get_db_conn(&conn)?, host_name.to_string()).await {
         Ok(Some(host)) => host,
         Ok(None) => {
-            return Ok(HttpResponse::NotFound().json(ApiError::not_found("Host not found".to_string())));
+            return not_found_response("Host not found".to_string());
         }
         Err(error) => {
-            return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error)));
+            return internal_error_response(error);
         }
     };
 
@@ -257,17 +245,15 @@ async fn get_host(
     // Set jumphost name if applicable
     if let Some(jumphost_id) = host.jump_via {
         let conn_for_jump = conn.clone();
-        match Host::get_from_id(conn_for_jump.get().map_err(|e| {
-            actix_web::error::ErrorInternalServerError(format!("Database connection error: {}", e))
-        })?, jumphost_id).await {
+        match Host::get_from_id(get_db_conn(&conn_for_jump)?, jumphost_id).await {
             Ok(Some(jumphost)) => {
                 host_response.jumphost_name = Some(jumphost.name);
             }
             Ok(None) => {
-                return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error("Jumphost not found".to_string())));
+                return internal_error_response("Jumphost not found");
             }
             Err(error) => {
-                return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error)));
+                return internal_error_response(error);
             }
         }
     }
@@ -290,9 +276,7 @@ async fn get_host(
     }
     
     // Get authorizations for this host
-    let mut db_conn = conn.get().map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Database connection error: {}", e))
-    })?;
+    let mut db_conn = get_db_conn(&conn)?;
     match host.get_authorized_users(&mut db_conn) {
         Ok(authorizations) => {
             host_response.authorizations = authorizations;
@@ -356,15 +340,13 @@ async fn add_host_key(
     json: Json<AddHostkeyRequest>,
     _identity: Option<Identity>,
 ) -> Result<impl Responder> {
-    let host = match Host::get_from_id(conn.get().map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Database connection error: {}", e))
-    })?, *host_id).await {
+    let host = match Host::get_from_id(get_db_conn(&conn)?, *host_id).await {
         Ok(Some(h)) => h,
-        Ok(None) => return Ok(HttpResponse::NotFound().json(ApiError::not_found("Host not found".to_string()))),
-        Err(e) => return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e))),
+        Ok(None) => return not_found_response("Host not found".to_string()),
+        Err(e) => return internal_error_response(e),
     };
     let port = host.port.try_into().map_err(|_| {
-        actix_web::error::ErrorInternalServerError("Invalid port value in database".to_string())
+        actix_web::error::ErrorInternalServerError("Invalid port value in database")
     })?;
 
     let handler = SshFirstConnectionHandler::new(
@@ -380,7 +362,7 @@ async fn add_host_key(
     let handler = match handler {
         Ok(handler) => handler,
         Err(e) => {
-            return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e.to_string())));
+            return internal_error_response(e.to_string());
         }
     };
 
@@ -390,7 +372,7 @@ async fn add_host_key(
         let recv_result = match res {
             Ok(receiver) => receiver.await,
             Err(e) => {
-                return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e.to_string())));
+                return internal_error_response(e.to_string());
             }
         };
 
@@ -398,7 +380,7 @@ async fn add_host_key(
             Ok(key_fingerprint) => key_fingerprint,
             Err(e) => {
                 error!("Error receiving key: {e}");
-                return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e.to_string())));
+                return internal_error_response(e.to_string());
             }
         };
 
@@ -417,25 +399,21 @@ async fn add_host_key(
 
     let res = handler.try_authenticate(&ssh_client).await;
     if let Err(e) = res {
-        return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e.to_string())));
+        return internal_error_response(e.to_string());
     }
 
-    let mut db_conn = conn.get().map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Database connection error: {}", e))
-    })?;
+    let mut db_conn = get_db_conn(&conn)?;
     match host.update_fingerprint(&mut db_conn, key_fingerprint.to_owned()) {
         Ok(()) => {
-            if let Err(e) = activity_logger::log_host_event(
+            activity_logger::log_host_event(
                 &mut db_conn,
                 _identity.as_ref(),
                 "Added SSH host key",
                 &host.name,
-            ) {
-                log::error!("Failed to log host key addition: {}", e);
-            }
+            );
             Ok(HttpResponse::Ok().json(ApiResponse::success_message("Host key updated successfully".to_string())))
         },
-        Err(e) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e.to_string()))),
+        Err(e) => internal_error_response(e.to_string()),
     }
 }
 
@@ -473,7 +451,7 @@ async fn create_host(
     let handler = match handler {
         Ok(handler) => handler,
         Err(e) => {
-            return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e.to_string())));
+            return internal_error_response(e.to_string());
         }
     };
 
@@ -483,7 +461,7 @@ async fn create_host(
         let recv_result = match res {
             Ok(receiver) => receiver.await,
             Err(e) => {
-                return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e.to_string())));
+                return internal_error_response(e.to_string());
             }
         };
 
@@ -491,7 +469,7 @@ async fn create_host(
             Ok(key_fingerprint) => key_fingerprint,
             Err(e) => {
                 error!("Error receiving key: {e}");
-                return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e.to_string())));
+                return internal_error_response(e.to_string());
             }
         };
 
@@ -510,7 +488,7 @@ async fn create_host(
     let handler = handler.set_hostkey(key_fingerprint.clone());
     let res = handler.try_authenticate(&ssh_client).await;
     if let Err(e) = res {
-        return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e.to_string())));
+        return internal_error_response(e.to_string());
     }
 
     let new_host = NewHost {
@@ -525,24 +503,20 @@ async fn create_host(
     };
     let conn_clone = conn.clone();
     let res = web::block(move || {
-        let mut db_conn = conn_clone.get().map_err(|e| format!("Database connection error: {}", e))?;
+        let mut db_conn = get_db_conn_string(&conn_clone)?;
         Host::add_host(&mut db_conn, &new_host)
     }).await?;
 
     match res {
         Ok(id) => match ssh_client.install_script_on_host(id).await {
             Ok(()) => {
-                let mut db_conn = conn.get().map_err(|e| {
-                    actix_web::error::ErrorInternalServerError(format!("Database connection error: {}", e))
-                })?;
-                if let Err(e) = activity_logger::log_host_event(
+                let mut db_conn = get_db_conn(&conn)?;
+                activity_logger::log_host_event(
                     &mut db_conn,
                     _identity.as_ref(),
                     "Created host",
                     &json.name,
-                ) {
-                    log::error!("Failed to log host creation: {}", e);
-                }
+                );
                 Ok(HttpResponse::Created().json(ApiResponse::success_with_message(
                 HostResponse::from(Host {
                     id,
@@ -557,9 +531,9 @@ async fn create_host(
                 }),
                 "Host created successfully".to_string(),
             )))},
-            Err(error) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(format!("Failed to install script: {error}")))),
+            Err(error) => internal_error_response(format!("Failed to install script: {error}")),
         },
-        Err(e) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e.to_string()))),
+        Err(e) => internal_error_response(e.to_string()),
     }
 }
 
@@ -597,9 +571,7 @@ async fn authorize_user(
     let comment_for_log = json.comment.clone();
     
     // Fetch host and user names for better logging
-    let mut db_conn = conn.get().map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Database connection error: {}", e))
-    })?;
+    let mut db_conn = get_db_conn(&conn)?;
     let host_name = Host::get_from_id_sync(&mut db_conn, host_id_for_log)
         .ok()
         .flatten()
@@ -612,7 +584,7 @@ async fn authorize_user(
         .unwrap_or_else(|| format!("ID {}", user_id_for_log));
     
     let res = web::block(move || {
-        let mut db_conn = conn_clone.get().map_err(|e| format!("Database connection error: {}", e))?;
+        let mut db_conn = get_db_conn_string(&conn_clone)?;
         Host::authorize_user(
             &mut db_conn,
             json.host_id,
@@ -648,7 +620,7 @@ async fn authorize_user(
             }
             Ok(HttpResponse::Ok().json(ApiResponse::success_message("User authorized successfully".to_string())))
         },
-        Err(e) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e.to_string()))),
+        Err(e) => internal_error_response(e.to_string()),
     }
 }
 
@@ -685,34 +657,29 @@ async fn gen_authorized_keys(
     let host_name = &json.host_name;
     let login = &json.login;
 
-    let mut db_conn = conn.get().map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Database connection error: {}", e))
-    })?;
-    let host = match Host::get_from_name(&mut db_conn, host_name.to_owned()).await
+    let host = match Host::get_from_name(get_db_conn(&conn)?, host_name.to_owned()).await
     {
         Err(error) => {
-            return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error)));
+            return internal_error_response(error);
         }
         Ok(None) => {
-            return Ok(HttpResponse::NotFound().json(ApiError::not_found("Host not found".to_string())));
+            return not_found_response("Host not found".to_string());
         }
         Ok(Some(host)) => host,
     };
     
     // Check if host is disabled
     if host.disabled {
-        return Ok(HttpResponse::BadRequest().json(ApiError::bad_request("Cannot generate authorized keys for disabled host".to_string())));
+        return bad_request_response("Cannot generate authorized keys for disabled host".to_string());
     }
     
-    let mut db_conn = conn.get().map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Database connection error: {}", e))
-    })?;
+    let mut db_conn = get_db_conn(&conn)?;
     let authorized_keys = host.get_authorized_keys_file_for(&ssh_client, &mut db_conn, login.as_ref());
 
     let authorized_keys = match authorized_keys {
         Ok(keys) => keys,
         Err(error) => {
-            return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error)));
+            return internal_error_response(error);
         }
     };
 
@@ -722,7 +689,7 @@ async fn gen_authorized_keys(
     {
         Ok(diff) => diff,
         Err(_) => {
-            return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error("Couldn't calculate key diff".to_string())));
+            return internal_error_response("Couldn't calculate key diff");
         }
     };
 
@@ -732,14 +699,12 @@ async fn gen_authorized_keys(
         authorized_keys,
     };
 
-    if let Err(e) = activity_logger::log_host_event(
+    activity_logger::log_host_event(
         &mut db_conn,
         _identity.as_ref(),
         "Generated authorized_keys",
         host_name,
-    ) {
-        log::error!("Failed to log authorized_keys generation: {}", e);
-    }
+    );
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(response)))
 }
@@ -772,21 +737,19 @@ async fn set_authorized_keys(
     _identity: Option<Identity>,
 ) -> Result<impl Responder> {
     // Check if host exists and is not disabled
-    let host = match Host::get_from_name(conn.get().map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Database connection error: {}", e))
-    })?, host_name.to_string()).await {
+    let host = match Host::get_from_name(get_db_conn(&conn)?, host_name.to_string()).await {
         Err(error) => {
-            return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error)));
+            return internal_error_response(error);
         }
         Ok(None) => {
-            return Ok(HttpResponse::NotFound().json(ApiError::not_found("Host not found".to_string())));
+            return not_found_response("Host not found".to_string());
         }
         Ok(Some(host)) => host,
     };
     
     // Check if host is disabled
     if host.disabled {
-        return Ok(HttpResponse::BadRequest().json(ApiError::bad_request("Cannot set authorized keys on disabled host".to_string())));
+        return bad_request_response("Cannot set authorized keys on disabled host".to_string());
     }
     
     let res = ssh_client
@@ -799,20 +762,16 @@ async fn set_authorized_keys(
 
     match res {
         Ok(()) => {
-            let mut db_conn = conn.get().map_err(|e| {
-                actix_web::error::ErrorInternalServerError(format!("Database connection error: {}", e))
-            })?;
-            if let Err(e) = activity_logger::log_host_event(
+            let mut db_conn = get_db_conn(&conn)?;
+            activity_logger::log_host_event(
                 &mut db_conn,
                 _identity.as_ref(),
                 "Deployed authorized_keys",
                 &host_name,
-            ) {
-                log::error!("Failed to log authorized_keys deployment: {}", e);
-            }
+            );
             Ok(HttpResponse::Ok().json(ApiResponse::success_message("Authorized keys applied successfully".to_string())))
         },
-        Err(error) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error.to_string()))),
+        Err(error) => internal_error_response(error.to_string()),
     }
 }
 
@@ -837,35 +796,29 @@ async fn delete_host(
     host_name: Path<String>,
     _identity: Option<Identity>,
 ) -> Result<impl Responder> {
-    let host = match Host::get_from_name(conn.get().map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Database connection error: {}", e))
-    })?, host_name.to_owned()).await {
+    let host = match Host::get_from_name(get_db_conn(&conn)?, host_name.to_owned()).await {
         Ok(None) => {
-            return Ok(HttpResponse::NotFound().json(ApiError::not_found("Host not found".to_string())));
+            return not_found_response("Host not found".to_string());
         }
         Err(error) => {
-            return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(format!("Database error: {error}"))));
+            return internal_error_response(format!("Database error: {error}"));
         }
         Ok(Some(host)) => host,
     };
 
-    let mut db_conn = conn.get().map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Database connection error: {}", e))
-    })?;
+    let mut db_conn = get_db_conn(&conn)?;
     match host.delete(&mut db_conn) {
         Ok(amt) => {
             caching_ssh_client.remove(host_name.as_str()).await;
-            if let Err(e) = activity_logger::log_host_event(
+            activity_logger::log_host_event(
                 &mut db_conn,
                 _identity.as_ref(),
                 "Deleted host",
                 &host_name,
-            ) {
-                log::error!("Failed to log host deletion: {}", e);
-            }
+            );
             Ok(HttpResponse::Ok().json(ApiResponse::success_message(format!("Deleted {amt} record(s)"))))
         }
-        Err(e) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(format!("Failed to delete host: {e}")))),
+        Err(e) => internal_error_response(format!("Failed to delete host: {e}")),
     }
 }
 
@@ -892,24 +845,21 @@ async fn list_host_authorizations(
     conn: Data<ConnectionPool>,
     _identity: Option<Identity>,
 ) -> Result<impl Responder> {
-    let mut db_conn = conn.get().map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Database connection error: {}", e))
-    })?;
-    let host = match Host::get_from_name(&mut db_conn, host_name.to_string()).await {
+    let host = match Host::get_from_name(get_db_conn(&conn)?, host_name.to_string()).await {
         Ok(Some(host)) => host,
-        Ok(None) => return Ok(HttpResponse::NotFound().json(ApiError::not_found("Host not found".to_string()))),
-        Err(error) => return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error))),
+        Ok(None) => return not_found_response("Host not found".to_string()),
+        Err(error) => return internal_error_response(error),
     };
     
     let conn_clone = conn.clone();
     let res = web::block(move || {
-        let mut db_conn = conn_clone.get().map_err(|e| format!("Database connection error: {}", e))?;
+        let mut db_conn = get_db_conn_string(&conn_clone)?;
         host.get_authorized_users(&mut db_conn)
     }).await?;
 
     match res {
         Ok(authorizations) => Ok(HttpResponse::Ok().json(ApiResponse::success(HostAuthorizationsResponse { authorizations }))),
-        Err(error) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error))),
+        Err(error) => internal_error_response(error),
     }
 }
 
@@ -939,10 +889,10 @@ async fn delete_authorization(
     // Fetch authorization details before deleting for better logging
     let auth_details = web::block({
         let conn_for_fetch = conn.clone();
-        move || {
+        move || -> Result<Option<(String, String, String)>, String> {
             use crate::schema::{authorization, host, user};
             use diesel::prelude::*;
-            let mut connection = conn_for_fetch.get().map_err(|e| format!("Database connection error: {}", e))?;
+            let mut connection = get_db_conn_string(&conn_for_fetch)?;
             
             authorization::table
                 .inner_join(user::table)
@@ -955,12 +905,13 @@ async fn delete_authorization(
                 ))
                 .first::<(String, String, String)>(&mut connection)
                 .optional()
+                .map_err(|e| format!("Database error: {}", e))
         }
     })
     .await?;
     
     let res = web::block(move || {
-        let mut connection = conn_clone.get().map_err(|e| format!("Database connection error: {}", e))?;
+        let mut connection = get_db_conn_string(&conn_clone)?;
         Host::delete_authorization(&mut connection, auth_id_val)
     })
     .await?;
@@ -989,9 +940,7 @@ async fn delete_authorization(
                 )
             };
             
-            let mut db_conn = conn.get().map_err(|e| {
-                actix_web::error::ErrorInternalServerError(format!("Database connection error: {}", e))
-            })?;
+            let mut db_conn = get_db_conn(&conn)?;
             if let Err(e) = crate::routes::activity_log::log_activity(
                 &mut db_conn,
                 "auth",
@@ -1005,7 +954,7 @@ async fn delete_authorization(
             
             Ok(HttpResponse::Ok().json(ApiResponse::success_message("Authorization deleted successfully".to_string())))
         },
-        Err(e) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e.to_string()))),
+        Err(e) => internal_error_response(e.to_string()),
     }
 }
 
@@ -1034,15 +983,13 @@ async fn invalidate_host_cache(
     _identity: Option<Identity>,
 ) -> Result<impl Responder> {
     // Check if host exists
-    let host = match Host::get_from_name(conn.get().map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Database connection error: {}", e))
-    })?, host_name.to_string()).await {
+    let host = match Host::get_from_name(get_db_conn(&conn)?, host_name.to_string()).await {
         Ok(Some(_host)) => _host,
         Ok(None) => {
-            return Ok(HttpResponse::NotFound().json(ApiError::not_found("Host not found".to_string())));
+            return not_found_response("Host not found".to_string());
         }
         Err(error) => {
-            return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error)));
+            return internal_error_response(error);
         }
     };
 
@@ -1116,9 +1063,7 @@ async fn update_host(
     json: Json<UpdateHostRequest>,
     _identity: Option<Identity>,
 ) -> Result<impl Responder> {
-    let mut db_conn = conn.get().map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Database connection error: {}", e))
-    })?;
+    let mut db_conn = get_db_conn(&conn)?;
     let request = json.into_inner();
     let new_name = request.name.clone();
     
@@ -1128,7 +1073,7 @@ async fn update_host(
     
     let old_host = match old_host {
         Some(h) => h,
-        None => return Ok(HttpResponse::NotFound().json(ApiError::not_found("Host not found".to_string()))),
+        None => return not_found_response("Host not found".to_string()),
     };
     
     // Track changes for metadata
@@ -1215,6 +1160,6 @@ async fn update_host(
             
             Ok(HttpResponse::Ok().json(ApiResponse::success_message("Host updated successfully".to_string())))
         },
-        Err(e) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e.to_string()))),
+        Err(e) => internal_error_response(e.to_string()),
     }
 }

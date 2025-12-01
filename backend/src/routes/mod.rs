@@ -8,12 +8,16 @@ pub mod activity_log;
 
 use actix_web::{
     get,
-    web::{self},
+    web::{self, Data},
     HttpResponse, Responder, Result,
 };
 use utoipa::{OpenApi, ToSchema};
 use serde::{Deserialize, Serialize};
 use crate::api_types::*;
+use crate::ConnectionPool;
+use diesel::r2d2::PooledConnection;
+use diesel::r2d2::ConnectionManager;
+use crate::DbConnection;
 
 
 
@@ -47,6 +51,81 @@ type ForceUpdate = web::Query<ForceUpdateQuery>;
 #[allow(dead_code)]
 fn should_update(force_update: ForceUpdate) -> bool {
     force_update.force_update.is_some_and(|update| update)
+}
+
+/// Standardized error handling helpers for route handlers
+
+/// Get a database connection from the pool, returning a standardized error
+pub fn get_db_conn(
+    pool: &Data<ConnectionPool>,
+) -> Result<PooledConnection<ConnectionManager<DbConnection>>, actix_web::Error> {
+    pool.get().map_err(|e| {
+        log::error!("Database connection error: {}", e);
+        actix_web::error::ErrorInternalServerError(format!("Database connection error: {}", e))
+    })
+}
+
+/// Get a database connection from the pool for use in web::block closures
+/// Returns String error for compatibility with web::block error handling
+pub fn get_db_conn_string(
+    pool: &ConnectionPool,
+) -> Result<PooledConnection<ConnectionManager<DbConnection>>, String> {
+    pool.get().map_err(|e| {
+        log::error!("Database connection error: {}", e);
+        format!("Database connection error: {}", e)
+    })
+}
+
+/// Convert a database operation result to an HTTP response
+#[allow(dead_code)]
+pub fn db_result_to_response<T: Serialize>(
+    result: Result<T, String>,
+) -> Result<HttpResponse, actix_web::Error> {
+    match result {
+        Ok(data) => Ok(HttpResponse::Ok().json(ApiResponse::success(data))),
+        Err(error) => {
+            log::error!("Database operation error: {}", error);
+            Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error)))
+        }
+    }
+}
+
+/// Convert a database operation result to a 404 response if not found, 500 otherwise
+#[allow(dead_code)]
+pub fn db_result_to_response_with_404<T: Serialize>(
+    result: Result<T, String>,
+    not_found_msg: String,
+) -> Result<HttpResponse, actix_web::Error> {
+    match result {
+        Ok(data) => Ok(HttpResponse::Ok().json(ApiResponse::success(data))),
+        Err(error) => {
+            if error.contains("not found") || error.to_lowercase().contains("not found") {
+                log::warn!("Resource not found: {}", error);
+                Ok(HttpResponse::NotFound().json(ApiError::not_found(not_found_msg)))
+            } else {
+                log::error!("Database operation error: {}", error);
+                Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error)))
+            }
+        }
+    }
+}
+
+/// Standardized error response for internal server errors
+pub fn internal_error_response(error: impl std::fmt::Display) -> Result<HttpResponse, actix_web::Error> {
+    log::error!("Internal server error: {}", error);
+    Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error.to_string())))
+}
+
+/// Standardized error response for not found errors
+pub fn not_found_response(message: String) -> Result<HttpResponse, actix_web::Error> {
+    log::warn!("Resource not found: {}", message);
+    Ok(HttpResponse::NotFound().json(ApiError::not_found(message)))
+}
+
+/// Standardized error response for bad request errors
+pub fn bad_request_response(message: String) -> Result<HttpResponse, actix_web::Error> {
+    log::warn!("Bad request: {}", message);
+    Ok(HttpResponse::BadRequest().json(ApiError::bad_request(message)))
 }
 
 #[derive(Serialize, ToSchema)]

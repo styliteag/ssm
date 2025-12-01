@@ -17,9 +17,9 @@ use utoipa::ToSchema;
 use crate::{
     ConnectionPool,
 };
+use crate::routes::{get_db_conn, get_db_conn_string, internal_error_response, not_found_response, bad_request_response};
 
 use crate::models::Host;
-use crate::activity_logger;
 
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(get_hosts_for_diff)
@@ -195,7 +195,7 @@ async fn get_hosts_for_diff(conn: Data<ConnectionPool>) -> Result<impl Responder
     
     let conn_clone = conn.clone();
     let hosts = web::block(move || {
-        let mut db_conn = conn_clone.get().map_err(|e| format!("Database connection error: {}", e))?;
+        let mut db_conn = get_db_conn_string(&conn_clone)?;
         Host::get_all_hosts(&mut db_conn)
     }).await?;
 
@@ -210,7 +210,7 @@ async fn get_hosts_for_diff(conn: Data<ConnectionPool>) -> Result<impl Responder
         }
         Err(error) => {
             error!("Failed to fetch hosts for diff: {}", error);
-            Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error)))
+            internal_error_response(error)
         }
     }
 }
@@ -252,23 +252,20 @@ async fn get_host_diff(
     debug!("Query parameters: force_update={:?}, show_empty={:?}", 
            query.force_update, query.show_empty);
     
-    let mut db_conn = conn.get().map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Database connection error: {}", e))
-    })?;
-    let res = Host::get_from_name(&mut db_conn, host_name.to_string()).await;
+    let res = Host::get_from_name(get_db_conn(&conn)?, host_name.to_string()).await;
 
     let host = match res {
         Ok(maybe_host) => {
             let Some(host) = maybe_host else {
                 warn!("Host '{}' not found in database", host_name);
-                return Ok(HttpResponse::NotFound().json(ApiError::not_found("Host not found".to_string())));
+                return not_found_response("Host not found".to_string());
             };
             info!("Found host: {} (id: {}, address: {})", host.name, host.id, host.address);
             host
         }
         Err(error) => {
             error!("Database error while looking up host '{}': {}", host_name, error);
-            return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error)));
+            return internal_error_response(error);
         }
     };
 
@@ -349,7 +346,7 @@ async fn get_host_diff(
         }
         Err(error) => {
             error!("Failed to get diff for host '{}': {}", host.name, error);
-            Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error.to_string())))
+            internal_error_response(error.to_string())
         }
     }
 }
@@ -383,23 +380,20 @@ async fn get_diff_details(
     info!("GET /api/diff/{}/details - Fetching detailed diff with raw content", host_name);
     debug!("Looking up host '{}' for detailed diff analysis", host_name);
     
-    let mut db_conn = conn.get().map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Database connection error: {}", e))
-    })?;
-    let res = Host::get_from_name(&mut db_conn, host_name.to_string()).await;
+    let res = Host::get_from_name(get_db_conn(&conn)?, host_name.to_string()).await;
 
     let host = match res {
         Ok(maybe_host) => {
             let Some(host) = maybe_host else {
                 warn!("Host '{}' not found for details view", host_name);
-                return Ok(HttpResponse::NotFound().json(ApiError::not_found("Host not found".to_string())));
+                return not_found_response("Host not found".to_string());
             };
             info!("Found host for details: {} (id: {}, address: {})", host.name, host.id, host.address);
             host
         }
         Err(error) => {
             error!("Database error while looking up host '{}' for details: {}", host_name, error);
-            return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error)));
+            return internal_error_response(error);
         }
     };
 
@@ -420,14 +414,12 @@ async fn get_diff_details(
     }
     
     // Get the expected authorized keys from database
-    let mut db_conn = conn.get().map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Database connection error: {}", e))
-    })?;
+    let mut db_conn = get_db_conn(&conn)?;
     let expected_keys = match host.get_authorized_keys(&mut db_conn) {
         Ok(keys) => keys,
         Err(error) => {
             error!("Failed to get expected keys for host '{}': {}", host.name, error);
-            return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error.to_string())));
+            return internal_error_response(error.to_string());
         }
     };
 
@@ -469,7 +461,7 @@ async fn get_diff_details(
         }
         Err(error) => {
             error!("Failed to get detailed diff for host '{}': {}", host.name, error);
-            Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error.to_string())))
+            internal_error_response(error.to_string())
         }
     }
 }
@@ -500,32 +492,27 @@ async fn sync_host_keys(
 ) -> Result<impl Responder> {
     info!("POST /api/diff/{}/sync - Starting SSH key synchronization", host_name);
     
-    let mut db_conn = conn.get().map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Database connection error: {}", e))
-    })?;
-    let res = Host::get_from_name(&mut db_conn, host_name.to_string()).await;
+    let res = Host::get_from_name(get_db_conn(&conn)?, host_name.to_string()).await;
 
     let host = match res {
         Ok(maybe_host) => {
             let Some(host) = maybe_host else {
                 warn!("Host '{}' not found for sync operation", host_name);
-                return Ok(HttpResponse::NotFound().json(ApiError::not_found("Host not found".to_string())));
+                return not_found_response("Host not found".to_string());
             };
             info!("Found host for sync: {} (id: {}, address: {})", host.name, host.id, host.address);
             host
         }
         Err(error) => {
             error!("Database error while looking up host '{}' for sync: {}", host_name, error);
-            return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error)));
+            return internal_error_response(error);
         }
     };
 
     // Prevent syncing to disabled hosts
     if host.disabled {
         warn!("Cannot sync SSH keys to disabled host '{}'", host.name);
-        return Ok(HttpResponse::BadRequest().json(ApiError::bad_request(
-            format!("Cannot sync SSH keys to disabled host '{}'", host.name)
-        )));
+        return bad_request_response(format!("Cannot sync SSH keys to disabled host '{}'", host.name));
     }
 
     // Get the diff before syncing to log what will be changed
@@ -672,9 +659,7 @@ async fn sync_host_keys(
             };
             
             // Log the activity
-            let mut db_conn = conn.get().map_err(|e| {
-                actix_web::error::ErrorInternalServerError(format!("Database connection error: {}", e))
-            })?;
+            let mut db_conn = get_db_conn(&conn)?;
             if let Err(e) = crate::routes::activity_log::log_activity(
                 &mut db_conn,
                 "host",
@@ -693,7 +678,7 @@ async fn sync_host_keys(
         }
         Err(error) => {
             error!("Failed to sync SSH keys for host '{}': {}", host.name, error);
-            Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(format!("Sync operation failed: {}", error))))
+            internal_error_response(format!("Sync operation failed: {}", error))
         }
     }
 }

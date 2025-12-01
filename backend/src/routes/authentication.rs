@@ -15,6 +15,7 @@ use rand::Rng;
 
 use crate::{Configuration, api_types::*, logging::{AuthLogger, SecurityLogger}};
 use crate::activity_logger;
+use crate::routes::{get_db_conn, internal_error_response};
 
 #[derive(Deserialize, ToSchema)]
 pub struct LoginRequest {
@@ -87,9 +88,7 @@ async fn login(
     // Check if password file exists
     if !htpasswd_path.exists() {
         error!("Authentication file not found");
-        return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(
-            "Authentication file not found".to_string(),
-        )));
+        return internal_error_response("Authentication file not found");
     }
 
     // Read and verify credentials from password file
@@ -97,9 +96,7 @@ async fn login(
         Ok(content) => content,
         Err(e) => {
             error!("Error reading authentication file: {e}");
-            return Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(
-                "Error reading authentication file".to_string(),
-            )));
+            return internal_error_response("Error reading authentication file");
         }
     };
 
@@ -147,7 +144,7 @@ async fn login(
         }).to_string();
 
         // Log activity directly since we have the username and Identity isn't in request yet
-        if let Ok(mut db_conn) = conn.get() {
+        if let Ok(mut db_conn) = get_db_conn(&conn) {
             if let Err(e) = crate::routes::activity_log::log_activity(
                 &mut db_conn,
                 "auth",
@@ -208,15 +205,13 @@ async fn logout(
     conn: Data<crate::ConnectionPool>
 ) -> impl Responder {
     if let Some(id) = identity {
-        if let Ok(mut db_conn) = conn.get() {
-            if let Err(e) = activity_logger::log_auth_event(
+        if let Ok(mut db_conn) = get_db_conn(&conn) {
+            activity_logger::log_auth_event(
                 &mut db_conn,
                 Some(&id),
                 "User logged out",
                 "manual logout",
-            ) {
-                log::error!("Failed to log logout activity: {}", e);
-            }
+            );
         }
         id.logout();
         // Clear CSRF token from session

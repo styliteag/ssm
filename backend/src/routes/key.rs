@@ -13,6 +13,7 @@ use crate::{
     db::UsernameAndKey,
     ConnectionPool,
 };
+use crate::routes::{get_db_conn, get_db_conn_string, internal_error_response};
 
 use crate::activity_logger;
 
@@ -67,7 +68,7 @@ pub async fn get_all_keys(
     let conn_clone = conn.clone();
     let all_keys =
         web::block(move || {
-            let mut db_conn = conn_clone.get().map_err(|e| format!("Database connection error: {}", e))?;
+            let mut db_conn = get_db_conn_string(&conn_clone)?;
             PublicUserKey::get_all_keys_with_username(&mut db_conn)
         })
             .await?;
@@ -77,7 +78,7 @@ pub async fn get_all_keys(
             let key_responses: Vec<KeyResponse> = keys.into_iter().map(KeyResponse::from).collect();
             Ok(HttpResponse::Ok().json(ApiResponse::success(KeysResponse { keys: key_responses })))
         }
-        Err(error) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error))),
+        Err(error) => internal_error_response(error),
     }
 }
 
@@ -109,26 +110,22 @@ pub async fn delete_key(
     let key_id_for_log = *key_id;
     let res =
         web::block(move || {
-            let mut db_conn = conn_clone.get().map_err(|e| format!("Database connection error: {}", e))?;
+            let mut db_conn = get_db_conn_string(&conn_clone)?;
             PublicUserKey::delete_key(&mut db_conn, key_id_val)
         }).await?;
 
     match res {
         Ok(()) => {
-            let mut db_conn = conn.get().map_err(|e| {
-                actix_web::error::ErrorInternalServerError(format!("Database connection error: {}", e))
-            })?;
-            if let Err(e) = activity_logger::log_key_event(
+            let mut db_conn = get_db_conn(&conn)?;
+            activity_logger::log_key_event(
                 &mut db_conn,
                 _identity.as_ref(),
                 "Deleted SSH key",
                 &format!("ID {}", key_id_for_log),
-            ) {
-                log::error!("Failed to log key deletion: {}", e);
-            }
+            );
             Ok(HttpResponse::Ok().json(ApiResponse::success_message("Key deleted successfully".to_string())))
         },
-        Err(e) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e))),
+        Err(e) => internal_error_response(e),
     }
 }
 
@@ -165,19 +162,21 @@ pub async fn update_key_comment(
     let key_id = key_id.into_inner();
     let conn_clone = conn.clone();
     let key_id_for_log = key_id;
-    let result = web::block(move || {
-        let mut db_conn = conn_clone.get().map_err(|e| format!("Database connection error: {}", e))?;
+    let result = web::block(move || -> Result<(), String> {
+        let mut db_conn = get_db_conn_string(&conn_clone)?;
 
         // Update name if provided
         if let Some(name) = &json.name {
             use crate::db::key::update_key_name;
-            update_key_name(&mut db_conn, key_id, name)?;
+            update_key_name(&mut db_conn, key_id, name)
+                .map_err(|e| format!("Database error: {}", e))?;
         }
 
         // Update extra_comment if provided
         if let Some(extra_comment) = &json.extra_comment {
             use crate::db::key::update_key_extra_comment;
-            update_key_extra_comment(&mut db_conn, key_id, extra_comment)?;
+            update_key_extra_comment(&mut db_conn, key_id, extra_comment)
+                .map_err(|e| format!("Database error: {}", e))?;
         }
 
         Ok(())
@@ -186,20 +185,16 @@ pub async fn update_key_comment(
 
     match result {
         Ok(()) => {
-            let mut db_conn = conn.get().map_err(|e| {
-                actix_web::error::ErrorInternalServerError(format!("Database connection error: {}", e))
-            })?;
-            if let Err(e) = activity_logger::log_key_event(
+            let mut db_conn = get_db_conn(&conn)?;
+            activity_logger::log_key_event(
                 &mut db_conn,
                 _identity.as_ref(),
                 "Updated SSH key",
                 &format!("ID {}", key_id_for_log),
-            ) {
-                log::error!("Failed to log key update: {}", e);
-            }
+            );
             Ok(HttpResponse::Ok().json(ApiResponse::success_message("Key information updated successfully".to_string())))
         },
-        Err(e) => Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(e))),
+        Err(e) => internal_error_response(e),
     }
 }
 
