@@ -110,26 +110,20 @@ export const HostEditModal: React.FC<HostEditModalProps> = ({
     
     try {
       setSubmitting(true);
-      const hostData = {
+      // Convert jump_via from string to number | null
+      const jumpViaValue = values.jump_via && String(values.jump_via).trim() !== '' 
+        ? Number(values.jump_via) 
+        : null;
+      
+      const response = await hostsService.updateHost(host.name, {
         name: values.name,
         address: values.address,
         port: Number(values.port),
         username: values.username,
-        jump_via: values.jump_via && String(values.jump_via) !== '' ? String(values.jump_via) : '',
-        key_fingerprint: values.key_fingerprint && values.key_fingerprint.trim() !== '' ? values.key_fingerprint.trim() : '',
+        key_fingerprint: values.key_fingerprint && values.key_fingerprint.trim() !== '' ? values.key_fingerprint.trim() : undefined,
+        jump_via: jumpViaValue !== null ? jumpViaValue : null,
         disabled: values.disabled || false,
-        comment: values.comment && values.comment.trim() !== '' ? values.comment.trim() : ''
-      };
-      
-      const response = await hostsService.updateHost(host.name, {
-        name: hostData.name,
-        address: hostData.address,
-        port: hostData.port,
-        username: hostData.username,
-        key_fingerprint: hostData.key_fingerprint,
-        jump_via: hostData.jump_via,
-        disabled: hostData.disabled,
-        comment: hostData.comment
+        comment: values.comment && values.comment.trim() !== '' ? values.comment.trim() : undefined
       });
       
       if (response.success) {
@@ -158,7 +152,7 @@ export const HostEditModal: React.FC<HostEditModalProps> = ({
             port: hostData.port,
             username: hostData.username,
             key_fingerprint: hostData.key_fingerprint || undefined,
-            jump_via: hostData.jump_via ? Number(hostData.jump_via) : undefined,
+            jump_via: jumpViaValue ?? undefined,
             disabled: hostData.disabled,
             comment: hostData.comment || undefined,
             authorizations: host.authorizations,

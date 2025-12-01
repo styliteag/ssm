@@ -44,19 +44,10 @@ export const hostsService = {
   },
 
   // Update existing host by name
-  updateHost: async (name: string, host: Partial<Host> & { jump_via?: string | number }): Promise<ApiResponse<Host>> => {
-    // Convert jump_via to string for backend compatibility
-    const requestData: Record<string, unknown> = { ...host };
-
-    if (host.jump_via !== undefined) {
-      // Only include jump_via if it's being changed
-      requestData.jump_via = host.jump_via === null ? '' : String(host.jump_via);
-    } else {
-      // Remove jump_via from request if it's undefined (not being changed)
-      delete requestData.jump_via;
-    }
-
-    return api.put<Host>(`/host/${encodeURIComponent(name)}`, requestData);
+  updateHost: async (name: string, host: Partial<Host>): Promise<ApiResponse<Host>> => {
+    // Backend now accepts Option<i32> directly, so we can send number | null
+    // No conversion needed - send as-is
+    return api.put<Host>(`/host/${encodeURIComponent(name)}`, host);
   },
 
   // Delete host by name
