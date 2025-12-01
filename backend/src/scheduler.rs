@@ -23,14 +23,19 @@ pub(super) async fn init_scheduler(
         return None;
     }
 
-    let mut sched = JobScheduler::new()
-        .await
-        .expect("Failed to create job scheduler");
+    let mut sched = match JobScheduler::new().await {
+        Ok(s) => s,
+        Err(e) => {
+            error!("Failed to create job scheduler: {}", e);
+            return None;
+        }
+    };
 
     info!("Initializing scheduler");
     if let Err(e) = sched.init().await {
-        panic!("Couldn't initialize job scheduler: {e}")
-    };
+        error!("Couldn't initialize job scheduler: {}", e);
+        return None;
+    }
 
     if let Some(check_schedule) = check_schedule {
         let client = ssh_client.clone();
@@ -63,10 +68,17 @@ pub(super) async fn init_scheduler(
             })
         }));
 
-        sched
-            .add(job.build().expect("Failed to build check job"))
-            .await
-            .expect("Failed to create check job");
+        let built_job = match job.build() {
+            Ok(j) => j,
+            Err(e) => {
+                error!("Failed to build check job: {}", e);
+                return None;
+            }
+        };
+        if let Err(e) = sched.add(built_job).await {
+            error!("Failed to create check job: {}", e);
+            return None;
+        }
         info!("Scheduled check job: '{}'", check_schedule.pattern);
     }
 
@@ -98,10 +110,17 @@ pub(super) async fn init_scheduler(
             })
         }));
 
-        sched
-            .add(job.build().expect("Failed to build update job"))
-            .await
-            .expect("Failed to create update job");
+        let built_job = match job.build() {
+            Ok(j) => j,
+            Err(e) => {
+                error!("Failed to build update job: {}", e);
+                return None;
+            }
+        };
+        if let Err(e) = sched.add(built_job).await {
+            error!("Failed to create update job: {}", e);
+            return None;
+        }
         info!("Scheduled update job: '{}'", update_schedule.pattern);
     }
     Some(

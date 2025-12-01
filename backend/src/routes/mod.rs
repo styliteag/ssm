@@ -12,7 +12,7 @@ use actix_web::{
     HttpResponse, Responder, Result,
 };
 use utoipa::{OpenApi, ToSchema};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use crate::api_types::*;
 use crate::ConnectionPool;
 use diesel::r2d2::PooledConnection;
@@ -40,19 +40,6 @@ pub fn route_config(cfg: &mut web::ServiceConfig) {
         .default_service(web::to(not_found));
 }
 
-#[derive(Deserialize)]
-struct ForceUpdateQuery {
-    force_update: Option<bool>,
-}
-
-#[allow(dead_code)]
-type ForceUpdate = web::Query<ForceUpdateQuery>;
-
-#[allow(dead_code)]
-fn should_update(force_update: ForceUpdate) -> bool {
-    force_update.force_update.is_some_and(|update| update)
-}
-
 /// Standardized error handling helpers for route handlers
 
 /// Get a database connection from the pool, returning a standardized error
@@ -76,39 +63,6 @@ pub fn get_db_conn_string(
     })
 }
 
-/// Convert a database operation result to an HTTP response
-#[allow(dead_code)]
-pub fn db_result_to_response<T: Serialize>(
-    result: Result<T, String>,
-) -> Result<HttpResponse, actix_web::Error> {
-    match result {
-        Ok(data) => Ok(HttpResponse::Ok().json(ApiResponse::success(data))),
-        Err(error) => {
-            log::error!("Database operation error: {}", error);
-            Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error)))
-        }
-    }
-}
-
-/// Convert a database operation result to a 404 response if not found, 500 otherwise
-#[allow(dead_code)]
-pub fn db_result_to_response_with_404<T: Serialize>(
-    result: Result<T, String>,
-    not_found_msg: String,
-) -> Result<HttpResponse, actix_web::Error> {
-    match result {
-        Ok(data) => Ok(HttpResponse::Ok().json(ApiResponse::success(data))),
-        Err(error) => {
-            if error.contains("not found") || error.to_lowercase().contains("not found") {
-                log::warn!("Resource not found: {}", error);
-                Ok(HttpResponse::NotFound().json(ApiError::not_found(not_found_msg)))
-            } else {
-                log::error!("Database operation error: {}", error);
-                Ok(HttpResponse::InternalServerError().json(ApiError::internal_error(error)))
-            }
-        }
-    }
-}
 
 /// Standardized error response for internal server errors
 pub fn internal_error_response(error: impl std::fmt::Display) -> Result<HttpResponse, actix_web::Error> {

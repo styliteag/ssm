@@ -214,6 +214,7 @@ impl AppLogger {
     }
 
     /// Log configuration errors
+    #[allow(dead_code)]
     pub fn log_config_error(error: &str, fatal: bool) {
         if fatal {
             error!("CONFIG_ERROR_FATAL error={}", error);
