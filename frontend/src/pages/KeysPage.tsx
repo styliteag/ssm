@@ -511,7 +511,7 @@ const KeysPage: React.FC = () => {
           ) : (
             <UserX size={16} className="text-gray-400" />
           )}
-          <span className={item.user_id && item.user_id !== 0 ? 'text-gray-900 dark:text-gray-100' : 'text-gray-400'}>
+          <span className={item.user_id && item.user_id !== 0 ? 'text-foreground' : 'text-gray-400'}>
             {(value as string) || 'Unassigned'}
           </span>
           {item.user_id && item.user_id !== 0 && (
@@ -529,9 +529,9 @@ const KeysPage: React.FC = () => {
                 }
               }}
               title="Edit user"
-              className="p-1 h-auto hover:bg-gray-100 dark:hover:bg-gray-700"
+              className="p-1 h-auto hover:bg-accent"
             >
-              <Edit2 size={14} className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300" />
+              <Edit2 size={14} className="text-muted-foreground hover:text-foreground" />
             </Button>
           )}
         </div>
@@ -542,7 +542,7 @@ const KeysPage: React.FC = () => {
       header: 'Key Name',
       searchable: true,
       render: (value: unknown, key: ExtendedKey) => (
-        <div className="text-gray-600 dark:text-gray-400 max-w-xs">
+        <div className="text-muted-foreground max-w-xs">
           <div className="truncate">
             <span className="font-medium">Name:</span> {(value as string) || '—'}
           </div>
@@ -740,7 +740,7 @@ const KeysPage: React.FC = () => {
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       {/* Header with Glassmorphism */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 rounded-2xl bg-card/30 backdrop-blur-xl border border-white/10 shadow-lg">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 rounded-2xl bg-card/30 backdrop-blur-xl border border-border/50 shadow-lg">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-3">
             <div className="p-2 bg-primary/10 rounded-lg text-primary">
@@ -1037,32 +1037,32 @@ const KeysPage: React.FC = () => {
           <div className="space-y-6">
             {/* Key Information */}
             <div className="space-y-4">
-              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Key Information</h3>
+              <h3 className="text-lg font-medium text-foreground">Key Information</h3>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Key Type</label>
-                  <p className="mt-1 text-gray-900 dark:text-gray-100">{selectedKey.key_type}</p>
+                  <label className="text-sm font-medium text-muted-foreground">Key Type</label>
+                  <p className="mt-1 text-foreground">{selectedKey.key_type}</p>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Status</label>
+                  <label className="text-sm font-medium text-muted-foreground">Status</label>
                   <div className="mt-1 flex items-center space-x-2">
                     {getStatusIcon(selectedKey.status)}
-                    <span className="capitalize text-gray-900 dark:text-gray-100">{selectedKey.status}</span>
+                    <span className="capitalize text-foreground">{selectedKey.status}</span>
                   </div>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Assigned User</label>
-                  <p className="mt-1 text-gray-900 dark:text-gray-100">{selectedKey.username || 'Unassigned'}</p>
+                  <label className="text-sm font-medium text-muted-foreground">Assigned User</label>
+                  <p className="mt-1 text-foreground">{selectedKey.username || 'Unassigned'}</p>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Host Access</label>
-                  <p className="mt-1 text-gray-900 dark:text-gray-100">{selectedKey.hostCount || 0} hosts</p>
+                  <label className="text-sm font-medium text-muted-foreground">Host Access</label>
+                  <p className="mt-1 text-foreground">{selectedKey.hostCount || 0} hosts</p>
                 </div>
                 <div className="col-span-2 space-y-4">
                   {/* Key Name */}
                   <div>
                     <div className="flex items-center justify-between">
-                      <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Key Name</label>
+                      <label className="text-sm font-medium text-muted-foreground">Key Name</label>
                       <Button
                         variant="ghost"
                         size="sm"
@@ -1088,7 +1088,7 @@ const KeysPage: React.FC = () => {
                           value={keyNameValue}
                           onChange={(e) => setKeyNameValue(e.target.value)}
                           placeholder="Enter key name"
-                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="w-full px-3 py-2 border border-input rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                           disabled={submitting}
                           autoFocus
                         />
@@ -1107,14 +1107,14 @@ const KeysPage: React.FC = () => {
                         </div>
                       </div>
                     ) : (
-                      <p className="mt-1 text-gray-900 dark:text-gray-100">{selectedKey.key_name || 'No name'}</p>
+                      <p className="mt-1 text-foreground">{selectedKey.key_name || 'No name'}</p>
                     )}
                   </div>
 
                   {/* Extra Comment */}
                   <div>
                     <div className="flex items-center justify-between">
-                      <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Extra Comment</label>
+                      <label className="text-sm font-medium text-muted-foreground">Extra Comment</label>
                       <Button
                         variant="ghost"
                         size="sm"
@@ -1140,7 +1140,7 @@ const KeysPage: React.FC = () => {
                           value={extraCommentValue}
                           onChange={(e) => setExtraCommentValue(e.target.value)}
                           placeholder="Enter additional comment"
-                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="w-full px-3 py-2 border border-input rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                           disabled={submitting}
                           autoFocus
                         />
@@ -1159,7 +1159,7 @@ const KeysPage: React.FC = () => {
                         </div>
                       </div>
                     ) : (
-                      <p className="mt-1 text-gray-900 dark:text-gray-100">{selectedKey.extra_comment || 'No extra comment'}</p>
+                      <p className="mt-1 text-foreground">{selectedKey.extra_comment || 'No extra comment'}</p>
                     )}
                   </div>
                 </div>
@@ -1169,7 +1169,7 @@ const KeysPage: React.FC = () => {
             {/* Full Key */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Full SSH Key</label>
+                <label className="text-sm font-medium text-muted-foreground">Full SSH Key</label>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -1179,8 +1179,8 @@ const KeysPage: React.FC = () => {
                   Copy Key
                 </Button>
               </div>
-              <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
-                <code className="text-xs font-mono break-all text-gray-900 dark:text-gray-100">
+              <div className="bg-muted/50 rounded-lg p-4">
+                <code className="text-xs font-mono break-all text-foreground">
                   {getFullKeyText(selectedKey)}
                 </code>
               </div>
@@ -1193,9 +1193,9 @@ const KeysPage: React.FC = () => {
               </div>
             ) : keyDetails && (
               <div className="space-y-4">
-                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Access Details</h3>
-                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                <h3 className="text-lg font-medium text-foreground">Access Details</h3>
+                <div className="bg-muted/50 rounded-lg p-4">
+                  <p className="text-sm text-muted-foreground">
                     This key provides access to {keyDetails.authorizations.length} host authorizations.
                   </p>
                 </div>

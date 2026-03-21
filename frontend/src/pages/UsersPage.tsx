@@ -316,7 +316,7 @@ const UsersPage: React.FC = () => {
       render: (value, user) => (
         <div className="flex items-center space-x-2">
           <button
-            className="font-medium text-gray-900 dark:text-gray-100 hover:text-blue-600 dark:hover:text-blue-400 text-left cursor-pointer"
+            className="font-medium text-foreground hover:text-primary text-left cursor-pointer"
             onClick={(e) => {
               e.stopPropagation();
               setSelectedUser(user);
@@ -336,7 +336,7 @@ const UsersPage: React.FC = () => {
       key: 'comment',
       header: 'Comment',
       render: (comment) => (
-        <div className="text-sm text-gray-600 dark:text-gray-400 max-w-48 truncate" title={(comment as string) || ''}>
+        <div className="text-sm text-muted-foreground max-w-48 truncate" title={(comment as string) || ''}>
           {(comment as string) || '—'}
         </div>
       )
@@ -489,7 +489,7 @@ const UsersPage: React.FC = () => {
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       {/* Header with Glassmorphism */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 rounded-2xl bg-card/30 backdrop-blur-xl border border-white/10 shadow-lg">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 rounded-2xl bg-card/30 backdrop-blur-xl border border-border/50 shadow-lg">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-3">
             <div className="p-2 bg-primary/10 rounded-lg text-primary">
