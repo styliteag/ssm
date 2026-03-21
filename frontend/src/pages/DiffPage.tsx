@@ -674,8 +674,6 @@ const DiffPage: React.FC = () => {
       } catch (keyError) {
         // For a new user, key shouldn't already exist, but handle gracefully
         const errorMessage = keyError instanceof Error ? keyError.message : String(keyError);
-        console.log('Caught key assignment error:', errorMessage);
-
         // Check for database error message from backend
         if (errorMessage.includes('database error') ||
           errorMessage.includes('UNIQUE constraint') ||
@@ -745,7 +743,7 @@ const DiffPage: React.FC = () => {
               setSelectedHostIds(newSelected);
             }}
             disabled={!canSync}
-            className="rounded border-gray-300 dark:border-gray-600 disabled:opacity-30"
+            className="rounded border-input disabled:opacity-30"
             onClick={(e) => e.stopPropagation()}
           />
         );
@@ -756,7 +754,7 @@ const DiffPage: React.FC = () => {
       header: 'Name',
       sortable: true,
       render: (value) => (
-        <span className="font-medium text-gray-900 dark:text-gray-100">
+        <span className="font-medium text-foreground">
           {value as string}
         </span>
       )
@@ -766,7 +764,7 @@ const DiffPage: React.FC = () => {
       header: 'Address',
       sortable: true,
       render: (value) => (
-        <div className="text-gray-600 dark:text-gray-400">
+        <div className="text-muted-foreground">
           {value as string}
         </div>
       )
@@ -781,7 +779,7 @@ const DiffPage: React.FC = () => {
               content="This host is disabled and will not be checked for SSH key synchronization"
               position="top"
             >
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-800/50 text-gray-600 dark:text-gray-400 cursor-help">
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground cursor-help">
                 <Ban className="w-3 h-3 mr-1" />
                 Disabled
               </span>
@@ -797,7 +795,7 @@ const DiffPage: React.FC = () => {
             >
               <div className="flex items-center space-x-2 cursor-help">
                 <RefreshCw className="w-4 h-4 animate-spin text-blue-500" />
-                <span className="text-gray-500 dark:text-gray-400">Loading...</span>
+                <span className="text-muted-foreground">Loading...</span>
               </div>
             </Tooltip>
           );
@@ -854,7 +852,7 @@ const DiffPage: React.FC = () => {
         }
 
         return (
-          <span className="text-gray-400 dark:text-gray-500">Unknown</span>
+          <span className="text-muted-foreground">Unknown</span>
         );
       }
     },
@@ -862,12 +860,12 @@ const DiffPage: React.FC = () => {
       key: 'total_items',
       header: 'Differences',
       render: (_, host) => {
-        if (host.disabled) return <span className="text-gray-400 dark:text-gray-500">N/A</span>;
+        if (host.disabled) return <span className="text-muted-foreground">N/A</span>;
         if (host.loading) return '-';
         if (host.error) return 'Error';
         if (host.total_items !== undefined) {
           return (
-            <span className={host.total_items > 0 ? 'text-red-600 dark:text-red-300 font-medium' : 'text-gray-500 dark:text-gray-400'}>
+            <span className={host.total_items > 0 ? 'text-red-600 dark:text-red-300 font-medium' : 'text-muted-foreground'}>
               {host.total_items} {host.total_items === 1 ? 'difference' : 'differences'}
             </span>
           );
@@ -1018,7 +1016,7 @@ const DiffPage: React.FC = () => {
               >
                 Sync All
               </Button>
-              <Filter size={16} className="text-gray-500 dark:text-gray-400" />
+              <Filter size={16} className="text-muted-foreground" />
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
@@ -1098,24 +1096,24 @@ const DiffPage: React.FC = () => {
             {/* Host Information and Status Summary */}
             <div className="grid grid-cols-2 gap-6">
               {/* Basic Host Information */}
-              <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3 border-b border-gray-200 dark:border-gray-700 pb-2">Host Information</h3>
+              <div className="bg-card rounded-lg border border-border p-4">
+                <h3 className="text-lg font-semibold text-foreground mb-3 border-b border-border pb-2">Host Information</h3>
                 <div className="grid grid-cols-2 gap-x-6 gap-y-3">
                   <div className="flex flex-col">
-                    <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">ID</span>
-                    <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 mt-1">{hostDetails.host.id}</span>
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">ID</span>
+                    <span className="text-sm font-semibold text-foreground mt-1">{hostDetails.host.id}</span>
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Name</span>
-                    <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 mt-1">{hostDetails.host.name}</span>
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Name</span>
+                    <span className="text-sm font-semibold text-foreground mt-1">{hostDetails.host.name}</span>
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Address</span>
-                    <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 mt-1">{hostDetails.host.address}</span>
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Address</span>
+                    <span className="text-sm font-semibold text-foreground mt-1">{hostDetails.host.address}</span>
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Last Updated</span>
-                    <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 mt-1">
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Last Updated</span>
+                    <span className="text-sm font-semibold text-foreground mt-1">
                       {new Date(hostDetails.cache_timestamp).toLocaleString()}
                     </span>
                   </div>
@@ -1123,8 +1121,8 @@ const DiffPage: React.FC = () => {
               </div>
 
               {/* Status Summary */}
-              <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3 border-b border-gray-200 dark:border-gray-700 pb-2">Status Summary</h3>
+              <div className="bg-card rounded-lg border border-border p-4">
+                <h3 className="text-lg font-semibold text-foreground mb-3 border-b border-border pb-2">Status Summary</h3>
                 <div className="flex items-center justify-between mb-3">
                   <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-semibold ${hostDetails.logins.length === 0
                     ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 border border-green-200 dark:border-green-800'
@@ -1132,34 +1130,34 @@ const DiffPage: React.FC = () => {
                     }`}>
                     {hostDetails.logins.length === 0 ? 'Synchronized' : 'Needs Sync'}
                   </span>
-                  <div className="text-sm text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-3 py-1 rounded-full">
+                  <div className="text-sm text-muted-foreground bg-muted px-3 py-1 rounded-full">
                     {hostDetails.expected_keys.length} expected keys
                   </div>
                 </div>
-                <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{hostDetails.summary}</p>
+                <p className="text-sm text-foreground/80 leading-relaxed">{hostDetails.summary}</p>
               </div>
             </div>
 
             {/* Expected Keys */}
             {hostDetails.expected_keys.length > 0 && (
-              <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3 border-b border-gray-200 dark:border-gray-700 pb-2">Expected Keys</h3>
+              <div className="bg-card rounded-lg border border-border p-4">
+                <h3 className="text-lg font-semibold text-foreground mb-3 border-b border-border pb-2">Expected Keys</h3>
                 <div className="max-h-64 overflow-y-auto">
                   <div className="grid grid-cols-3 gap-3">
                     {hostDetails.expected_keys.map((key, index) => (
-                      <div key={index} className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-3 hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors">
+                      <div key={index} className="bg-muted/50 border border-border rounded-lg p-3 hover:bg-accent transition-colors">
                         <div className="flex justify-between items-start mb-2">
                           <div className="truncate">
-                            <span className="font-semibold text-gray-900 dark:text-gray-100 text-sm">{key.username}</span>
-                            <span className="text-gray-600 dark:text-gray-400 text-sm"> → {key.login}</span>
-                            {key.comment && <span className="text-gray-500 dark:text-gray-400 ml-1 text-xs">({key.comment})</span>}
+                            <span className="font-semibold text-foreground text-sm">{key.username}</span>
+                            <span className="text-muted-foreground text-sm"> → {key.login}</span>
+                            {key.comment && <span className="text-muted-foreground ml-1 text-xs">({key.comment})</span>}
                           </div>
                           <span className="text-xs bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200 px-2 py-1 rounded-full ml-2 flex-shrink-0 font-medium">
                             {key.key_type}
                           </span>
                         </div>
                         {key.options && (
-                          <div className="text-xs text-gray-600 dark:text-gray-400 font-mono bg-gray-100 dark:bg-gray-700 p-1 rounded truncate">
+                          <div className="text-xs text-muted-foreground font-mono bg-muted p-1 rounded truncate">
                             Options: {key.options}
                           </div>
                         )}
@@ -1172,19 +1170,19 @@ const DiffPage: React.FC = () => {
 
             {/* Detailed Issues */}
             {hostDetails.logins.length > 0 && (
-              <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3 border-b border-gray-200 dark:border-gray-700 pb-2">Issues Found</h3>
+              <div className="bg-card rounded-lg border border-border p-4">
+                <h3 className="text-lg font-semibold text-foreground mb-3 border-b border-border pb-2">Issues Found</h3>
                 <div className="max-h-96 overflow-y-auto">
                   <div className="space-y-4">
                     {hostDetails.logins.map((loginDiff, loginIndex) => (
-                      <div key={loginIndex} className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-                        <div className="bg-gradient-to-r from-gray-100 to-gray-50 dark:from-gray-800 dark:to-gray-750 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+                      <div key={loginIndex} className="bg-muted/50 border border-border rounded-lg overflow-hidden">
+                        <div className="bg-muted/50 px-4 py-3 border-b border-border">
                           <div className="flex items-center justify-between">
-                            <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 flex items-center">
-                              <span className="text-gray-600 dark:text-gray-400 mr-2">Login:</span>
+                            <h4 className="text-sm font-semibold text-foreground flex items-center">
+                              <span className="text-muted-foreground mr-2">Login:</span>
                               <code className="bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200 px-2 py-1 rounded-md text-xs font-bold">{loginDiff.login}</code>
                             </h4>
-                            <span className="text-xs text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-700 px-2 py-1 rounded-full font-medium">
+                            <span className="text-xs text-muted-foreground bg-card px-2 py-1 rounded-full font-medium">
                               {loginDiff.issues.length} issue{loginDiff.issues.length !== 1 ? 's' : ''}
                             </span>
                           </div>
@@ -1196,11 +1194,11 @@ const DiffPage: React.FC = () => {
                             </div>
                           )}
                         </div>
-                        <div className="p-4 bg-white dark:bg-gray-900">
+                        <div className="p-4 bg-card">
                           <div className="grid grid-cols-3 gap-3">
                             {loginDiff.issues.map((issue, issueIndex) => (
                               <div key={issueIndex} className="min-w-0">
-                                <div className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-2 hover:shadow-sm transition-shadow">
+                                <div className="bg-muted/50 border border-border rounded-lg p-2 hover:shadow-sm transition-shadow">
                                   <DiffIssue issue={issue} onAllowKey={handleAllowKey} onAddUnknownKey={handleAddUnknownKey} />
                                 </div>
                               </div>
@@ -1215,9 +1213,9 @@ const DiffPage: React.FC = () => {
             )}
 
             {/* Actions */}
-            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+            <div className="bg-muted/50 rounded-lg border border-border p-4">
               <div className="flex justify-between items-center">
-                <div className="text-sm text-gray-600 dark:text-gray-400">
+                <div className="text-sm text-muted-foreground">
                   <span className="font-medium">Ready to apply changes?</span>
                 </div>
                 <div className="flex space-x-3">
@@ -1259,27 +1257,27 @@ const DiffPage: React.FC = () => {
       >
         {unknownKeyIssue && (
           <div className="space-y-4">
-            <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
-              <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-2">Key Details</h4>
-              <div className="text-sm text-gray-700 dark:text-gray-300 space-y-1">
-                <div><strong className="text-gray-900 dark:text-gray-100">Type:</strong> {unknownKeyIssue.details?.key?.key_type}</div>
+            <div className="bg-muted/50 p-4 rounded-lg">
+              <h4 className="font-medium text-foreground mb-2">Key Details</h4>
+              <div className="text-sm text-foreground/80 space-y-1">
+                <div><strong className="text-foreground">Type:</strong> {unknownKeyIssue.details?.key?.key_type}</div>
                 {unknownKeyIssue.details?.key?.comment && (
-                  <div><strong className="text-gray-900 dark:text-gray-100">Comment:</strong> {unknownKeyIssue.details.key.comment}</div>
+                  <div><strong className="text-foreground">Comment:</strong> {unknownKeyIssue.details.key.comment}</div>
                 )}
-                <div><strong className="text-gray-900 dark:text-gray-100">Key (truncated):</strong> {unknownKeyIssue.details?.key?.base64.substring(0, 32)}...</div>
+                <div><strong className="text-foreground">Key (truncated):</strong> {unknownKeyIssue.details?.key?.base64.substring(0, 32)}...</div>
               </div>
             </div>
 
             <div className="space-y-3">
-              <h4 className="font-medium text-gray-900 dark:text-gray-100">Choose an option:</h4>
+              <h4 className="font-medium text-foreground">Choose an option:</h4>
 
               {/* Assign to existing user */}
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                <label className="block text-sm font-medium text-foreground/80">
                   Assign to existing user:
                 </label>
                 <select
-                  className="w-full h-10 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full h-10 px-3 py-2 text-sm border border-input rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
                   onChange={(e) => {
                     if (e.target.value) {
                       handleAssignToExistingUser(Number(e.target.value));
@@ -1301,16 +1299,16 @@ const DiffPage: React.FC = () => {
               </div>
 
               {/* Create new user */}
-              <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
+              <div className="pt-3 border-t border-border">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    <p className="text-sm font-medium text-foreground/80">
                       Create new user
                     </p>
                     {unknownKeyIssue.details?.key?.comment ? (
                       <div className="space-y-1">
-                        <p className="text-xs text-gray-500 dark:text-gray-400">
-                          Username: <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">
+                        <p className="text-xs text-muted-foreground">
+                          Username: <code className="bg-muted px-1 rounded">
                             {unknownKeyIssue.details.key.comment.trim()}
                           </code>
                         </p>

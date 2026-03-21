@@ -32,8 +32,7 @@ const DiffViewer: React.FC<DiffViewerProps> = ({
   const handleCopyToClipboard = async (content: string, type: 'expected' | 'actual') => {
     try {
       await navigator.clipboard.writeText(content);
-      // You could add a notification here
-      console.log(`${type} content copied to clipboard`);
+      // Copy succeeded
     } catch (err) {
       console.error('Failed to copy content:', err);
     }
