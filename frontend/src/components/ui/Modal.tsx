@@ -141,8 +141,8 @@ const Modal: React.FC<ModalProps> = ({
       <div
         ref={modalRef}
         className={cn(
-          'relative w-full bg-white dark:bg-gray-900 rounded-lg shadow-xl',
-          'border border-gray-200 dark:border-gray-700',
+          'relative w-full bg-card rounded-lg shadow-xl',
+          'border border-border',
           'max-h-[90vh] overflow-hidden flex flex-col',
           sizeClasses[size],
           className
@@ -153,13 +153,13 @@ const Modal: React.FC<ModalProps> = ({
         {/* Header */}
         {(title || showCloseButton) && (
           <div className={cn(
-            'flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700',
+            'flex items-center justify-between p-6 border-b border-border',
             headerClassName
           )}>
             {title && (
               <div
                 id="modal-title"
-                className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex-1"
+                className="text-lg font-semibold text-foreground flex-1"
               >
                 {title}
               </div>
@@ -189,7 +189,7 @@ const Modal: React.FC<ModalProps> = ({
         {/* Footer */}
         {footer && (
           <div className={cn(
-            'flex items-center justify-end space-x-3 p-6 border-t border-gray-200 dark:border-gray-700',
+            'flex items-center justify-end space-x-3 p-6 border-t border-border',
             footerClassName
           )}>
             {footer}

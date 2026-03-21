@@ -519,20 +519,22 @@ const UsersPage: React.FC = () => {
             <button
               onClick={() => setViewMode('list')}
               className={cn(
-                "p-2 rounded-md transition-all duration-200",
+                "p-2 rounded-md transition-all duration-200 cursor-pointer",
                 viewMode === 'list' ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
               )}
               title="List View"
+              aria-label="Switch to list view"
             >
               <List size={18} />
             </button>
             <button
               onClick={() => setViewMode('grid')}
               className={cn(
-                "p-2 rounded-md transition-all duration-200",
+                "p-2 rounded-md transition-all duration-200 cursor-pointer",
                 viewMode === 'grid' ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
               )}
               title="Grid View"
+              aria-label="Switch to grid view"
             >
               <LayoutGrid size={18} />
             </button>

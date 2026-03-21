@@ -66,21 +66,7 @@ const AuthorizationsPage: React.FC = () => {
 
   // Restore view state when component mounts
   useEffect(() => {
-    if (urlView === 'matrix') {
-      // Try to restore Matrix state from localStorage
-      const savedState = localStorage.getItem('matrixNavigationState');
-      if (savedState) {
-        // Matrix component will handle this when it mounts
-        console.log('Matrix state available for restoration');
-      }
-    } else if (urlView === 'stats') {
-      // Try to restore Stats state from localStorage  
-      const savedState = localStorage.getItem('statsNavigationState');
-      if (savedState) {
-        // Stats component will handle this when it mounts
-        console.log('Stats state available for restoration');
-      }
-    }
+    // Matrix and Stats components restore their own state from localStorage on mount
   }, [urlView]);
 
   // Load all data
@@ -116,32 +102,10 @@ const AuthorizationsPage: React.FC = () => {
 
   // Create authorizations with details for list view
   useEffect(() => {
-    console.log('Creating authorizationsWithDetails...');
-    console.log('Authorizations count:', authorizations.length);
-    console.log('Users count:', users.length);
-    console.log('Hosts count:', hosts.length);
-    
-    if (authorizations.length > 0) {
-      console.log('Sample authorization:', authorizations[0]);
-    }
-    if (users.length > 0) {
-      console.log('Sample user:', users[0]);
-    }
-    if (hosts.length > 0) {
-      console.log('Sample host:', hosts[0]);
-    }
-    
     const withDetails = authorizations.map(auth => {
       const user = users.find(u => u.id === auth.user_id);
       const host = hosts.find(h => h.id === auth.host_id);
-      
-      if (!user) {
-        console.log(`No user found for user_id: ${auth.user_id}`);
-      }
-      if (!host) {
-        console.log(`No host found for host_id: ${auth.host_id}`);
-      }
-      
+
       return {
         ...auth,
         user: user!,
@@ -212,12 +176,7 @@ const AuthorizationsPage: React.FC = () => {
     const host = hosts.find(h => h.id === hostId);
     
     if (user && host) {
-      // Set view mode to list and apply search filter
       handleViewModeChange('list');
-      // You could also implement additional filtering logic here
-      console.log(`Managing ${userAuthorizations.length} authorizations for ${user.username} on ${host.name}:`, 
-        userAuthorizations.map(auth => auth.login).join(', ')
-      );
     }
   }, [users, hosts, handleViewModeChange]);
 
@@ -311,11 +270,13 @@ const AuthorizationsPage: React.FC = () => {
       <div>
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center space-x-2">
-              <Shield size={24} />
-              <span>Authorizations</span>
+            <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-3">
+              <div className="p-2 bg-primary/10 rounded-lg text-primary">
+                <Shield size={24} />
+              </div>
+              Authorizations
             </h1>
-            <p className="text-gray-600 dark:text-gray-400">
+            <p className="text-muted-foreground mt-1 ml-14">
               Manage user access permissions for hosts
             </p>
           </div>
@@ -324,7 +285,7 @@ const AuthorizationsPage: React.FC = () => {
         {/* Action buttons in separate row */}
         <div className="flex flex-wrap items-center gap-3">
           {/* View Mode Toggle */}
-          <div className="inline-flex bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
+          <div className="inline-flex bg-secondary/50 rounded-lg p-1 border border-border">
             <Button
               size="sm"
               variant={viewMode === 'stats' ? 'primary' : 'ghost'}

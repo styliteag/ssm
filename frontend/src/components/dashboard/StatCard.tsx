@@ -28,7 +28,7 @@ export const StatCard: React.FC<StatCardProps> = ({
     gradient
 }) => {
     return (
-        <Card className={cn("overflow-hidden relative transition-all duration-200 hover:shadow-md", className)}>
+        <Card className={cn("overflow-hidden relative transition-all duration-200 hover:shadow-md cursor-pointer", className)}>
             {gradient && (
                 <div className={cn("absolute inset-0 opacity-10", gradient)} />
             )}
