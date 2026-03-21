@@ -178,7 +178,7 @@ const DiffPage: React.FC = () => {
       await hostsService.invalidateCache(updatedHost.name);
       showSuccess('Host updated', 'Cache has been invalidated for fresh data');
     } catch (cacheError) {
-      console.warn('Failed to invalidate cache for host:', updatedHost.name, cacheError);
+      // Cache invalidation is best-effort
       // Don't fail the update if cache invalidation fails
     }
 
@@ -494,14 +494,11 @@ const DiffPage: React.FC = () => {
       } catch (keyError) {
         // Key might already exist, which means it's already assigned to a user
         const errorMessage = keyError instanceof Error ? keyError.message : String(keyError);
-        console.log('Caught key assignment error:', errorMessage);
-
         // Check for database error message from backend
         if (errorMessage.includes('database error') ||
           errorMessage.includes('UNIQUE constraint') ||
           errorMessage.includes('already exists') ||
           errorMessage.includes('key_base64')) {
-          console.log('Key already exists in the system');
           // Don't re-throw, just continue without the key assigned
         } else {
           throw keyError; // Re-throw if it's a different error
@@ -522,7 +519,6 @@ const DiffPage: React.FC = () => {
         authorizationCreated = true;
       } catch (authError) {
         // Authorization might already exist, which is fine
-        console.log('Authorization might already exist:', authError);
       }
 
       const selectedUser = allUsers.find(u => u.id === userId);
@@ -640,9 +636,6 @@ const DiffPage: React.FC = () => {
       };
 
       const userResponse = await usersService.createUser(userData);
-      console.log('Full user creation response:', userResponse);
-      console.log('User data from response:', userResponse.data);
-
       if (!userResponse.success || !userResponse.data) {
         // Provide more specific error messaging
         let errorMsg = userResponse.message || 'Failed to create user';
@@ -666,8 +659,6 @@ const DiffPage: React.FC = () => {
         throw new Error('User was created but could not be found to assign the key');
       }
 
-      console.log('Found created user:', newUser);
-
       // Assign the key to the new user
       const keyData = {
         user_id: newUser.id, // Use the proper numeric ID
@@ -676,9 +667,6 @@ const DiffPage: React.FC = () => {
         key_name: unknownKeyIssue.details.key.comment || null,
         extra_comment: null
       };
-      console.log('Key data being sent:', keyData);
-      console.log('user_id type:', typeof keyData.user_id, 'value:', keyData.user_id);
-
       let keyAssigned = false;
       try {
         await usersService.assignKeyToUser(keyData);
@@ -693,7 +681,6 @@ const DiffPage: React.FC = () => {
           errorMessage.includes('UNIQUE constraint') ||
           errorMessage.includes('already exists') ||
           errorMessage.includes('key_base64')) {
-          console.log('Key already exists in the system - this is unexpected for a new user');
           showError('Key already exists', 'This key is already assigned to another user. The new user was created but the key could not be assigned.');
           // Don't re-throw, just continue without the key assigned
         } else {
@@ -715,7 +702,6 @@ const DiffPage: React.FC = () => {
           showSuccess('User created and added to host', `New user "${userData.username}" has been created with the key and added to host "${selectedHost.name}"`);
         } catch (authError) {
           // This shouldn't happen for new users, but handle gracefully
-          console.log('Could not create authorization for new user:', authError);
           showSuccess('User created', `New user "${userData.username}" has been created with the key`);
         }
       } else {
@@ -994,11 +980,13 @@ const DiffPage: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center space-x-2">
-            <Activity size={24} />
-            <span>Hosts Diff Overview</span>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-3">
+            <div className="p-2 bg-primary/10 rounded-lg text-primary">
+              <Activity size={24} />
+            </div>
+            Hosts Diff Overview
           </h1>
-          <p className="text-gray-600 dark:text-gray-400">
+          <p className="text-muted-foreground mt-1 ml-14">
             Monitor SSH key synchronization status across all hosts
           </p>
         </div>
@@ -1034,7 +1022,7 @@ const DiffPage: React.FC = () => {
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
-                className="h-8 px-3 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="h-8 px-3 py-1 text-sm border border-input rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent cursor-pointer"
               >
                 {statusFilterOptions.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -1142,7 +1130,7 @@ const DiffPage: React.FC = () => {
                     ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 border border-green-200 dark:border-green-800'
                     : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 border border-red-200 dark:border-red-800'
                     }`}>
-                    {hostDetails.logins.length === 0 ? '✓ Synchronized' : '⚠ Needs Sync'}
+                    {hostDetails.logins.length === 0 ? 'Synchronized' : 'Needs Sync'}
                   </span>
                   <div className="text-sm text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-3 py-1 rounded-full">
                     {hostDetails.expected_keys.length} expected keys
@@ -1202,7 +1190,7 @@ const DiffPage: React.FC = () => {
                           </div>
                           {loginDiff.readonly_condition && (
                             <div className="text-xs text-amber-700 dark:text-amber-400 mt-2 flex items-center">
-                              <span className="mr-1">🔒</span>
+                              <Ban size={12} className="mr-1" />
                               <span className="font-medium">Readonly:</span>
                               <span className="ml-1">{loginDiff.readonly_condition}</span>
                             </div>
@@ -1332,9 +1320,9 @@ const DiffPage: React.FC = () => {
                           const isValid = username.length >= 2 && /^[a-zA-Z0-9._\-\s@#]+$/.test(username);
 
                           if (existingUser) {
-                            return <p className="text-xs text-amber-500">⚠ User already exists</p>;
+                            return <p className="text-xs text-amber-500">User already exists</p>;
                           } else if (!isValid) {
-                            return <p className="text-xs text-red-500">⚠ Invalid username format</p>;
+                            return <p className="text-xs text-red-500">Invalid username format</p>;
                           }
                           return null;
                         })()}
