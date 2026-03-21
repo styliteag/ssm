@@ -181,16 +181,16 @@ const DeploymentModal: React.FC<DeploymentModalProps> = ({
   const PreviewContent = () => (
     <div className="space-y-6">
       <div className="text-center">
-        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
+        <h3 className="text-lg font-medium text-foreground mb-2">
           Deploy SSH Key Changes
         </h3>
-        <p className="text-gray-600 dark:text-gray-400">
+        <p className="text-muted-foreground">
           Review and confirm the changes to be deployed to selected hosts
         </p>
       </div>
 
       {/* Deployment Summary */}
-      <Card className="p-6 bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
+      <Card className="p-6 bg-primary/10 border-blue-200 dark:border-blue-800">
         <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-4">Deployment Summary</h4>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
           <div>
@@ -218,28 +218,28 @@ const DeploymentModal: React.FC<DeploymentModalProps> = ({
             <div className="text-sm text-yellow-700 dark:text-yellow-300">Modify Keys</div>
           </div>
           <div>
-            <div className="text-2xl font-bold text-gray-600 dark:text-gray-400">
+            <div className="text-2xl font-bold text-muted-foreground">
               {deploymentSummary.totalKeys}
             </div>
-            <div className="text-sm text-gray-700 dark:text-gray-300">Total Keys</div>
+            <div className="text-sm text-foreground/80">Total Keys</div>
           </div>
         </div>
       </Card>
 
       {/* Deployment Options */}
       <Card className="p-6">
-        <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-4">Deployment Options</h4>
+        <h4 className="font-medium text-foreground mb-4">Deployment Options</h4>
         <div className="space-y-4">
           <label className="flex items-center space-x-3">
             <input
               type="checkbox"
               checked={createBackup}
               onChange={(e) => setCreateBackup(e.target.checked)}
-              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              className="rounded border-gray-300 text-primary focus:ring-ring"
             />
             <div className="flex items-center space-x-2">
-              <Shield size={16} className="text-gray-500 dark:text-gray-400" />
-              <span className="text-gray-900 dark:text-gray-100">Create backup before deployment</span>
+              <Shield size={16} className="text-muted-foreground" />
+              <span className="text-foreground">Create backup before deployment</span>
             </div>
           </label>
           
@@ -248,11 +248,11 @@ const DeploymentModal: React.FC<DeploymentModalProps> = ({
               type="checkbox"
               checked={dryRun}
               onChange={(e) => setDryRun(e.target.checked)}
-              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              className="rounded border-gray-300 text-primary focus:ring-ring"
             />
             <div className="flex items-center space-x-2">
-              <FileText size={16} className="text-gray-500 dark:text-gray-400" />
-              <span className="text-gray-900 dark:text-gray-100">Dry run (preview changes only)</span>
+              <FileText size={16} className="text-muted-foreground" />
+              <span className="text-foreground">Dry run (preview changes only)</span>
             </div>
           </label>
         </div>
@@ -260,7 +260,7 @@ const DeploymentModal: React.FC<DeploymentModalProps> = ({
 
       {/* Host Details */}
       <div className="space-y-4">
-        <h4 className="font-medium text-gray-900 dark:text-gray-100">Affected Hosts</h4>
+        <h4 className="font-medium text-foreground">Affected Hosts</h4>
         {Array.from(selectedDifferences.entries()).map(([hostId, diffIndices]) => {
           const hostDiff = hostDiffs.find(h => h.host_id === hostId);
           if (!hostDiff || diffIndices.size === 0) return null;
@@ -268,14 +268,14 @@ const DeploymentModal: React.FC<DeploymentModalProps> = ({
           return (
             <Card key={hostId} className="p-4">
               <div className="flex items-center justify-between mb-3">
-                <h5 className="font-medium text-gray-900 dark:text-gray-100">
+                <h5 className="font-medium text-foreground">
                   {hostDiff.host.name}
                 </h5>
-                <span className="text-sm text-gray-600 dark:text-gray-400">
+                <span className="text-sm text-muted-foreground">
                   {diffIndices.size} changes
                 </span>
               </div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">
+              <div className="text-sm text-muted-foreground">
                 {hostDiff.host.address}:{hostDiff.host.port} ({hostDiff.host.username})
               </div>
             </Card>
@@ -289,10 +289,10 @@ const DeploymentModal: React.FC<DeploymentModalProps> = ({
     <div className="space-y-6 text-center">
       <div className="flex flex-col items-center space-y-4">
         <Loader size={48} className="animate-spin text-blue-600 dark:text-blue-400" />
-        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
+        <h3 className="text-lg font-medium text-foreground">
           Deploying Changes...
         </h3>
-        <p className="text-gray-600 dark:text-gray-400">
+        <p className="text-muted-foreground">
           Please wait while we deploy the SSH key changes to your hosts
         </p>
       </div>
@@ -301,12 +301,12 @@ const DeploymentModal: React.FC<DeploymentModalProps> = ({
         <Card className="p-6">
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <span className="text-gray-700 dark:text-gray-300">Progress</span>
-              <span className="text-sm text-gray-600 dark:text-gray-400">
+              <span className="text-foreground/80">Progress</span>
+              <span className="text-sm text-muted-foreground">
                 {batchStatus.completed_hosts} / {batchStatus.total_hosts} hosts
               </span>
             </div>
-            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+            <div className="w-full bg-muted rounded-full h-2">
               <div
                 className="bg-blue-600 dark:bg-blue-400 h-2 rounded-full transition-all duration-300"
                 style={{
@@ -326,24 +326,24 @@ const DeploymentModal: React.FC<DeploymentModalProps> = ({
         <div className="mx-auto w-16 h-16 rounded-full bg-green-100 dark:bg-green-900/20 flex items-center justify-center mb-4">
           <CheckCircle size={32} className="text-green-600 dark:text-green-400" />
         </div>
-        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
+        <h3 className="text-lg font-medium text-foreground mb-2">
           Deployment Complete
         </h3>
-        <p className="text-gray-600 dark:text-gray-400">
+        <p className="text-muted-foreground">
           SSH key deployment has finished
         </p>
       </div>
 
       {/* Results Summary */}
       {batchStatus && (
-        <Card className="p-6 bg-gray-50 dark:bg-gray-800">
-          <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-4">Results Summary</h4>
+        <Card className="p-6 bg-muted">
+          <h4 className="font-medium text-foreground mb-4">Results Summary</h4>
           <div className="grid grid-cols-3 gap-4 text-center">
             <div>
-              <div className="text-2xl font-bold text-gray-600 dark:text-gray-400">
+              <div className="text-2xl font-bold text-muted-foreground">
                 {batchStatus.total_hosts}
               </div>
-              <div className="text-sm text-gray-700 dark:text-gray-300">Total Hosts</div>
+              <div className="text-sm text-foreground/80">Total Hosts</div>
             </div>
             <div>
               <div className="text-2xl font-bold text-green-600 dark:text-green-400">
@@ -363,7 +363,7 @@ const DeploymentModal: React.FC<DeploymentModalProps> = ({
 
       {/* Detailed Results */}
       <div className="space-y-3">
-        <h4 className="font-medium text-gray-900 dark:text-gray-100">Deployment Results</h4>
+        <h4 className="font-medium text-foreground">Deployment Results</h4>
         {deploymentResults.map((result) => {
           const host = hostDiffs.find(h => h.host_id === result.host_id)?.host;
           return (
@@ -372,18 +372,18 @@ const DeploymentModal: React.FC<DeploymentModalProps> = ({
                 {getResultIcon(result)}
                 <div className="flex-1">
                   <div className="flex items-center justify-between">
-                    <h5 className="font-medium text-gray-900 dark:text-gray-100">
+                    <h5 className="font-medium text-foreground">
                       {host?.name || `Host ${result.host_id}`}
                     </h5>
-                    <span className="text-sm text-gray-600 dark:text-gray-400">
+                    <span className="text-sm text-muted-foreground">
                       {result.deployed_keys || 0} keys
                     </span>
                   </div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                  <p className="text-sm text-muted-foreground mt-1">
                     {result.message}
                   </p>
                   {result.backup_file && (
-                    <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                    <p className="text-xs text-muted-foreground mt-1">
                       Backup: {result.backup_file}
                     </p>
                   )}
@@ -405,8 +405,8 @@ const DeploymentModal: React.FC<DeploymentModalProps> = ({
 
   return (
     <Modal isOpen={isOpen} onClose={handleClose} className={cn('max-w-4xl', className)}>
-      <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-        <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+      <div className="flex items-center justify-between p-6 border-b border-border">
+        <h2 className="text-xl font-semibold text-foreground">
           {deploymentState === 'preview' && 'Deploy SSH Key Changes'}
           {deploymentState === 'deploying' && 'Deploying Changes...'}
           {deploymentState === 'completed' && 'Deployment Complete'}
@@ -426,7 +426,7 @@ const DeploymentModal: React.FC<DeploymentModalProps> = ({
         {deploymentState === 'completed' && <CompletedContent />}
       </div>
 
-      <div className="flex items-center justify-between p-6 border-t border-gray-200 dark:border-gray-700">
+      <div className="flex items-center justify-between p-6 border-t border-border">
         <div className="flex items-center space-x-2">
           {deploymentState === 'preview' && dryRun && (
             <div className="flex items-center space-x-2 text-yellow-600 dark:text-yellow-400">

@@ -493,7 +493,7 @@ const KeysPage: React.FC = () => {
       case 'ecdsa-sha2-nistp521':
         return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200';
       default:
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200';
+        return 'bg-muted text-foreground';
     }
   };
 

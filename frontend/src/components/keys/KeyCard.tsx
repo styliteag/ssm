@@ -53,7 +53,7 @@ export const KeyCard: React.FC<KeyCardProps> = ({
             case 'ecdsa-sha2-nistp521':
                 return 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300';
             default:
-                return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300';
+                return 'bg-muted text-foreground';
         }
     };
 

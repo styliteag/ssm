@@ -222,8 +222,8 @@ function DataTable<T extends Record<string, unknown>>({
           className={cn(
             'transition-colors',
             isActive && direction === 'asc' 
-              ? 'text-blue-600 dark:text-blue-400' 
-              : 'text-gray-400 dark:text-gray-600'
+              ? 'text-primary' 
+              : 'text-muted-foreground/50'
           )}
         />
         <ChevronDown 
@@ -231,8 +231,8 @@ function DataTable<T extends Record<string, unknown>>({
           className={cn(
             'transition-colors -mt-1',
             isActive && direction === 'desc' 
-              ? 'text-blue-600 dark:text-blue-400' 
-              : 'text-gray-400 dark:text-gray-600'
+              ? 'text-primary' 
+              : 'text-muted-foreground/50'
           )}
         />
       </span>
@@ -243,8 +243,8 @@ function DataTable<T extends Record<string, unknown>>({
     <tr>
       <td colSpan={columns.length + (selectable ? 1 : 0)} className="px-6 py-8 text-center">
         <div className="flex items-center justify-center space-x-2">
-          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-          <span className="text-gray-500 dark:text-gray-400">Loading...</span>
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+          <span className="text-muted-foreground">Loading...</span>
         </div>
       </td>
     </tr>
@@ -252,7 +252,7 @@ function DataTable<T extends Record<string, unknown>>({
 
   const EmptyRow = () => (
     <tr>
-      <td colSpan={columns.length + (selectable ? 1 : 0)} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+      <td colSpan={columns.length + (selectable ? 1 : 0)} className="px-6 py-8 text-center text-muted-foreground">
         {emptyMessage}
       </td>
     </tr>
@@ -276,7 +276,7 @@ function DataTable<T extends Record<string, unknown>>({
           
           {paginated && (
             <div className="flex items-center space-x-2">
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              <label className="text-sm font-medium text-muted-foreground">
                 Show:
               </label>
               <select
@@ -293,18 +293,18 @@ function DataTable<T extends Record<string, unknown>>({
                 <option value={50}>50</option>
                 <option value={100}>100</option>
               </select>
-              <span className="text-sm text-gray-700 dark:text-gray-300">entries</span>
+              <span className="text-sm text-muted-foreground">entries</span>
             </div>
           )}
         </div>
       )}
 
       {/* Table */}
-      <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
+      <div className="overflow-hidden rounded-lg border border-border">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+          <table className="min-w-full divide-y divide-border">
             <thead className={cn(
-              'bg-gray-50 dark:bg-gray-800',
+              'bg-muted',
               stickyHeader && 'sticky top-0 z-10'
             )}>
               <tr>
@@ -319,7 +319,7 @@ function DataTable<T extends Record<string, unknown>>({
                         }
                       }}
                       onChange={(e) => handleSelectAll(e.target.checked)}
-                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      className="h-4 w-4 text-primary focus:ring-ring border-input rounded"
                     />
                   </th>
                 )}
@@ -327,8 +327,8 @@ function DataTable<T extends Record<string, unknown>>({
                   <th
                     key={String(column.key)}
                     className={cn(
-                      'px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider',
-                      sortable && column.sortable !== false && column.key !== 'actions' && 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors',
+                      'px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider',
+                      sortable && column.sortable !== false && column.key !== 'actions' && 'cursor-pointer hover:bg-accent transition-colors',
                       column.headerClassName
                     )}
                     style={{ width: column.width }}
@@ -342,7 +342,7 @@ function DataTable<T extends Record<string, unknown>>({
                 ))}
               </tr>
             </thead>
-            <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+            <tbody className="bg-card divide-y divide-border">
               {loading ? (
                 <LoadingRow />
               ) : paginatedData.length === 0 ? (
@@ -353,8 +353,8 @@ function DataTable<T extends Record<string, unknown>>({
                     key={(item.id as React.Key) || index}
                     className={cn(
                       'transition-colors',
-                      onRowClick && 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800',
-                      selectable && isItemSelected(item) && 'bg-blue-50 dark:bg-blue-900/20',
+                      onRowClick && 'cursor-pointer hover:bg-muted/50',
+                      selectable && isItemSelected(item) && 'bg-primary/10',
                       getRowClassName?.(item, index)
                     )}
                     onClick={(e) => {
@@ -372,7 +372,7 @@ function DataTable<T extends Record<string, unknown>>({
                             e.stopPropagation();
                             handleSelectItem(item, e.target.checked);
                           }}
-                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                          className="h-4 w-4 text-primary focus:ring-ring border-input rounded"
                         />
                       </td>
                     )}
@@ -380,7 +380,7 @@ function DataTable<T extends Record<string, unknown>>({
                       <td
                         key={String(column.key)}
                         className={cn(
-                          'px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100',
+                          'px-6 py-4 whitespace-nowrap text-sm text-foreground',
                           column.className
                         )}
                       >
@@ -408,7 +408,7 @@ function DataTable<T extends Record<string, unknown>>({
       {/* Pagination */}
       {paginated && totalPages > 1 && (
         <div className="flex items-center justify-between">
-          <div className="text-sm text-gray-700 dark:text-gray-300">
+          <div className="text-sm text-muted-foreground">
             Showing {startItem} to {endItem} of {sortedData.length} entries
             {search && ` (filtered from ${data.length} total entries)`}
           </div>

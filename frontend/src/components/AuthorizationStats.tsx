@@ -325,7 +325,7 @@ const AuthorizationStats: React.FC<AuthorizationStatsProps> = ({
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                  <p className="text-sm font-medium text-muted-foreground">
                     {stat.label}
                   </p>
                   <div className="flex items-baseline space-x-2">
@@ -344,12 +344,12 @@ const AuthorizationStats: React.FC<AuthorizationStatsProps> = ({
                     )}
                   </div>
                   {stat.description && (
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    <p className="text-xs text-muted-foreground mt-1">
                       {stat.description}
                     </p>
                   )}
                 </div>
-                <div className={cn('p-3 rounded-full bg-gray-100 dark:bg-gray-800', stat.color)}>
+                <div className={cn('p-3 rounded-full bg-muted', stat.color)}>
                   {stat.icon}
                 </div>
               </div>
@@ -371,13 +371,13 @@ const AuthorizationStats: React.FC<AuthorizationStatsProps> = ({
                 stats.topHosts.map((item, index) => (
                   <div
                     key={item.host.id}
-                    className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"
+                    className="flex items-center justify-between p-3 bg-muted rounded-lg"
                   >
                     <div className="flex items-center space-x-3 flex-1">
                       <div className={cn(
                         'flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium',
                         index === 0 ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' :
-                        index === 1 ? 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200' :
+                        index === 1 ? 'bg-muted text-foreground' :
                         index === 2 ? 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200' :
                         'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
                       )}>
@@ -386,11 +386,11 @@ const AuthorizationStats: React.FC<AuthorizationStatsProps> = ({
                       <div>
                         <button
                           onClick={() => handleHostClick(item.host.name)}
-                          className="font-medium text-left hover:text-blue-600 dark:hover:text-blue-400 transition-colors underline-offset-2 hover:underline text-gray-900 dark:text-white"
+                          className="font-medium text-left hover:text-blue-600 dark:hover:text-blue-400 transition-colors underline-offset-2 hover:underline text-foreground"
                         >
                           {item.host.name}
                         </button>
-                        <div className="text-sm text-gray-500 dark:text-gray-400">
+                        <div className="text-sm text-muted-foreground">
                           {item.host.address}
                         </div>
                       </div>
@@ -408,10 +408,10 @@ const AuthorizationStats: React.FC<AuthorizationStatsProps> = ({
                       <Edit2 size={20} />
                     </Button>
                     <div className="text-right">
-                      <div className="font-semibold text-gray-900 dark:text-white">
+                      <div className="font-semibold text-foreground">
                         {item.activeUserCount}
                       </div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400">
+                      <div className="text-xs text-muted-foreground">
                         active users
                       </div>
                       {item.userCount !== item.activeUserCount && (
@@ -423,7 +423,7 @@ const AuthorizationStats: React.FC<AuthorizationStatsProps> = ({
                   </div>
                 ))
               ) : (
-                <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                <div className="text-center py-8 text-muted-foreground">
                   <Server className="h-12 w-12 mx-auto mb-3 opacity-50" />
                   <p>No hosts with user access</p>
                 </div>
@@ -443,13 +443,13 @@ const AuthorizationStats: React.FC<AuthorizationStatsProps> = ({
                 stats.topUsers.filter(item => item.hostCount > 0).map((item, index) => (
                   <div
                     key={item.user.id}
-                    className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"
+                    className="flex items-center justify-between p-3 bg-muted rounded-lg"
                   >
                     <div className="flex items-center space-x-3 flex-1">
                       <div className={cn(
                         'flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium',
                         index === 0 ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' :
-                        index === 1 ? 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200' :
+                        index === 1 ? 'bg-muted text-foreground' :
                         index === 2 ? 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200' :
                         'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
                       )}>
@@ -463,14 +463,14 @@ const AuthorizationStats: React.FC<AuthorizationStatsProps> = ({
                         <button
                           onClick={() => handleUserClick(item.user.username)}
                           className={cn(
-                            'font-medium text-left hover:text-blue-600 dark:hover:text-blue-400 transition-colors underline-offset-2 hover:underline text-gray-900 dark:text-white',
-                            !item.user.enabled && 'text-gray-500 line-through hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+                            'font-medium text-left hover:text-blue-600 dark:hover:text-blue-400 transition-colors underline-offset-2 hover:underline text-foreground',
+                            !item.user.enabled && 'text-muted-foreground line-through hover:text-foreground'
                           )}
                         >
                           {item.user.username}
                         </button>
                         {!item.user.enabled && (
-                          <span className="text-xs text-gray-400 bg-gray-100 dark:bg-gray-700 px-1 rounded">
+                          <span className="text-xs text-gray-400 bg-muted px-1 rounded">
                             disabled
                           </span>
                         )}
@@ -489,17 +489,17 @@ const AuthorizationStats: React.FC<AuthorizationStatsProps> = ({
                       <Edit2 size={20} />
                     </Button>
                     <div className="text-right">
-                      <div className="font-semibold text-gray-900 dark:text-white">
+                      <div className="font-semibold text-foreground">
                         {item.hostCount}
                       </div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400">
+                      <div className="text-xs text-muted-foreground">
                         hosts
                       </div>
                     </div>
                   </div>
                 ))
               ) : (
-                <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                <div className="text-center py-8 text-muted-foreground">
                   <Users className="h-12 w-12 mx-auto mb-3 opacity-50" />
                   <p>No users with host access</p>
                 </div>
@@ -521,13 +521,13 @@ const AuthorizationStats: React.FC<AuthorizationStatsProps> = ({
                 <span>Users with access</span>
                 <span>{stats.activeUsersWithAccess} / {users.filter(u => u.enabled).length}</span>
               </div>
-              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+              <div className="w-full bg-muted rounded-full h-2">
                 <div 
                   className="bg-purple-600 h-2 rounded-full transition-all duration-300"
                   style={{ width: `${Math.min(stats.userCoverage, 100)}%` }}
                 />
               </div>
-              <div className="text-xs text-gray-500 dark:text-gray-400">
+              <div className="text-xs text-muted-foreground">
                 {stats.userCoverage.toFixed(1)}% of enabled users have access to at least one host
               </div>
             </div>
@@ -544,13 +544,13 @@ const AuthorizationStats: React.FC<AuthorizationStatsProps> = ({
                 <span>Hosts with users</span>
                 <span>{stats.hostsWithActiveUsers} / {hosts.length}</span>
               </div>
-              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+              <div className="w-full bg-muted rounded-full h-2">
                 <div 
                   className="bg-indigo-600 h-2 rounded-full transition-all duration-300"
                   style={{ width: `${Math.min(stats.hostCoverage, 100)}%` }}
                 />
               </div>
-              <div className="text-xs text-gray-500 dark:text-gray-400">
+              <div className="text-xs text-muted-foreground">
                 {stats.hostCoverage.toFixed(1)}% of hosts have at least one active user
               </div>
             </div>

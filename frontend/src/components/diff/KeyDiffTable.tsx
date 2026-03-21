@@ -86,7 +86,7 @@ const KeyDiffTable: React.FC<KeyDiffTableProps> = ({
       case 'modify':
         return <Edit3 size={16} className="text-yellow-600 dark:text-yellow-400" />;
       default:
-        return <AlertCircle size={16} className="text-gray-600 dark:text-gray-400" />;
+        return <AlertCircle size={16} className="text-muted-foreground" />;
     }
   };
 
@@ -117,7 +117,7 @@ const KeyDiffTable: React.FC<KeyDiffTableProps> = ({
         );
       default:
         return (
-          <span className={cn(baseClasses, "bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400")}>
+          <span className={cn(baseClasses, "bg-muted text-foreground")}>
             Unknown
           </span>
         );
@@ -134,8 +134,8 @@ const KeyDiffTable: React.FC<KeyDiffTableProps> = ({
     return (
       <Card className="p-4 space-y-3">
         <div className="flex items-center space-x-2">
-          <Key size={16} className="text-gray-500 dark:text-gray-400" />
-          <span className="font-medium text-gray-900 dark:text-gray-100">
+          <Key size={16} className="text-muted-foreground" />
+          <span className="font-medium text-foreground">
             {isExpected ? 'Expected Key' : 'Actual Key'}
           </span>
         </div>
@@ -143,41 +143,41 @@ const KeyDiffTable: React.FC<KeyDiffTableProps> = ({
         <div className="space-y-2 text-sm">
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <span className="text-gray-500 dark:text-gray-400">Type:</span>
-              <div className="font-mono text-gray-900 dark:text-gray-100">{allowedUser.key.key_type}</div>
+              <span className="text-muted-foreground">Type:</span>
+              <div className="font-mono text-foreground">{allowedUser.key.key_type}</div>
             </div>
             <div>
-              <span className="text-gray-500 dark:text-gray-400">User:</span>
+              <span className="text-muted-foreground">User:</span>
               <div className="flex items-center space-x-1">
                 <User size={14} />
-                <span className="text-gray-900 dark:text-gray-100">{allowedUser.username}</span>
+                <span className="text-foreground">{allowedUser.username}</span>
               </div>
             </div>
             <div>
-              <span className="text-gray-500 dark:text-gray-400">Login:</span>
-              <div className="text-gray-900 dark:text-gray-100">{allowedUser.login}</div>
+              <span className="text-muted-foreground">Login:</span>
+              <div className="text-foreground">{allowedUser.login}</div>
             </div>
           </div>
           
           {allowedUser.options && (
             <div>
-              <span className="text-gray-500 dark:text-gray-400">Options:</span>
-              <div className="font-mono text-sm bg-gray-100 dark:bg-gray-800 p-2 rounded mt-1">
+              <span className="text-muted-foreground">Options:</span>
+              <div className="font-mono text-sm bg-muted p-2 rounded mt-1">
                 {allowedUser.options}
               </div>
             </div>
           )}
           
           <div>
-            <span className="text-gray-500 dark:text-gray-400">Public Key:</span>
-            <div className="font-mono text-sm bg-gray-100 dark:bg-gray-800 p-2 rounded mt-1 break-all">
+            <span className="text-muted-foreground">Public Key:</span>
+            <div className="font-mono text-sm bg-muted p-2 rounded mt-1 break-all">
               {allowedUser.key.key_type} {allowedUser.key.key_base64} {allowedUser.key.key_name || ''}
             </div>
           </div>
           
           <div>
-            <span className="text-gray-500 dark:text-gray-400">Fingerprint:</span>
-            <div className="font-mono text-sm text-gray-900 dark:text-gray-100">
+            <span className="text-muted-foreground">Fingerprint:</span>
+            <div className="font-mono text-sm text-foreground">
               {generateKeyFingerprint(allowedUser.key.key_base64)}
             </div>
           </div>
@@ -197,7 +197,7 @@ const KeyDiffTable: React.FC<KeyDiffTableProps> = ({
           type="checkbox"
           checked={selectedDifferences.has(item.id)}
           onChange={(e) => onSelectDifference?.(item, e.target.checked)}
-          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+          className="rounded border-gray-300 text-primary focus:ring-ring"
         />
       ),
     }] : []),
@@ -213,7 +213,7 @@ const KeyDiffTable: React.FC<KeyDiffTableProps> = ({
       width: '150px',
       render: (value: unknown) => (
         <div className="flex items-center space-x-2">
-          <User size={16} className="text-gray-500 dark:text-gray-400" />
+          <User size={16} className="text-muted-foreground" />
           <span className="font-medium">{value as string}</span>
         </div>
       ),
@@ -231,7 +231,7 @@ const KeyDiffTable: React.FC<KeyDiffTableProps> = ({
       header: 'Fingerprint',
       width: '200px',
       render: (value: unknown) => (
-        <span className="font-mono text-sm text-gray-600 dark:text-gray-400">
+        <span className="font-mono text-sm text-muted-foreground">
           {value as string}
         </span>
       ),
@@ -246,7 +246,7 @@ const KeyDiffTable: React.FC<KeyDiffTableProps> = ({
       key: 'key',
       header: 'Comment',
       render: (_: unknown, item: KeyDiffRow) => (
-        <span className="text-sm text-gray-600 dark:text-gray-400">
+        <span className="text-sm text-muted-foreground">
           {item.key.key.key_name || <em>No comment</em>}
         </span>
       ),
@@ -272,10 +272,10 @@ const KeyDiffTable: React.FC<KeyDiffTableProps> = ({
   const ExpandedRowContent: React.FC<{ difference: KeyDifference }> = ({ difference }) => (
     <tr>
       <td colSpan={columns.length} className="p-0">
-        <div className="bg-gray-50 dark:bg-gray-800 p-6 space-y-4">
+        <div className="bg-muted p-6 space-y-4">
           <div className="flex items-center space-x-2 mb-4">
             {getActionIcon(difference.action)}
-            <h4 className="text-lg font-medium text-gray-900 dark:text-gray-100">
+            <h4 className="text-lg font-medium text-foreground">
               Key Details - {getStatusDisplay(difference.action)}
             </h4>
           </div>
@@ -314,10 +314,10 @@ const KeyDiffTable: React.FC<KeyDiffTableProps> = ({
     return (
       <div className={cn('text-center py-8', className)}>
         <CheckCircle size={48} className="mx-auto text-green-500 dark:text-green-400 mb-4" />
-        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
+        <h3 className="text-lg font-medium text-foreground mb-2">
           No Key Differences Found
         </h3>
-        <p className="text-gray-600 dark:text-gray-400">
+        <p className="text-muted-foreground">
           All SSH keys on {hostName} are synchronized with the expected configuration.
         </p>
       </div>
@@ -327,10 +327,10 @@ const KeyDiffTable: React.FC<KeyDiffTableProps> = ({
   return (
     <div className={className}>
       <div className="mb-4">
-        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
+        <h3 className="text-lg font-medium text-foreground mb-2">
           Key-Level Analysis
         </h3>
-        <div className="flex items-center space-x-4 text-sm text-gray-600 dark:text-gray-400">
+        <div className="flex items-center space-x-4 text-sm text-muted-foreground">
           <span className="flex items-center space-x-1">
             <Plus size={16} className="text-green-600 dark:text-green-400" />
             <span>{differences.filter(d => d.action === 'add').length} keys to add</span>
@@ -346,15 +346,15 @@ const KeyDiffTable: React.FC<KeyDiffTableProps> = ({
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
-        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-          <thead className="bg-gray-50 dark:bg-gray-800">
+      <div className="overflow-hidden rounded-lg border border-border">
+        <table className="min-w-full divide-y divide-border">
+          <thead className="bg-muted">
             <tr>
               {columns.map((column) => (
                 <th
                   key={String(column.key)}
                   className={cn(
-                    'px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider',
+                    'px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider',
                     column.headerClassName
                   )}
                   style={{ width: column.width }}
@@ -364,15 +364,15 @@ const KeyDiffTable: React.FC<KeyDiffTableProps> = ({
               ))}
             </tr>
           </thead>
-          <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+          <tbody className="bg-card divide-y divide-border">
             {tableData.map((item) => (
               <React.Fragment key={item.id}>
-                <tr className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                <tr className="hover:bg-muted/50 transition-colors">
                   {columns.map((column) => (
                     <td
                       key={String(column.key)}
                       className={cn(
-                        'px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100',
+                        'px-6 py-4 whitespace-nowrap text-sm text-foreground',
                         column.className
                       )}
                     >

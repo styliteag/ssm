@@ -139,7 +139,7 @@ const SyncAllModal: React.FC<SyncAllModalProps> = ({
   const getStatusIcon = (status: SyncProgress['status']) => {
     switch (status) {
       case 'pending':
-        return <div className="w-5 h-5 rounded-full bg-gray-300 dark:bg-gray-600" />;
+        return <div className="w-5 h-5 rounded-full bg-muted" />;
       case 'syncing':
         return <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />;
       case 'success':
@@ -182,7 +182,7 @@ const SyncAllModal: React.FC<SyncAllModalProps> = ({
         {errorHost && !syncComplete && (
           <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
             <div className="flex items-start space-x-3">
-              <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 mt-0.5" />
+              <AlertCircle className="w-5 h-5 text-destructive mt-0.5" />
               <div className="flex-1">
                 <h3 className="text-red-800 dark:text-red-200 font-medium">Sync Error</h3>
                 <p className="text-red-700 dark:text-red-300 text-sm mt-1">
@@ -227,32 +227,32 @@ const SyncAllModal: React.FC<SyncAllModalProps> = ({
               </div>
             </div>
 
-            <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
-              <h4 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+            <div className="bg-card rounded-lg border border-border p-4">
+              <h4 className="text-lg font-semibold text-foreground mb-4">
                 Hosts to Sync
               </h4>
               <div className="space-y-2 max-h-96 overflow-y-auto">
                 {syncableHosts.map((host) => (
                   <div
                     key={host.id}
-                    className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden"
+                    className="border border-border rounded-lg overflow-hidden"
                   >
                     <div
-                      className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-750 cursor-pointer"
+                      className="flex items-center justify-between p-3 bg-muted hover:bg-accent cursor-pointer"
                       onClick={() => handleToggleDetails(host.name)}
                     >
                       <div className="flex items-center space-x-3 flex-1">
                         <CheckCircle className="w-5 h-5 text-green-500" />
                         <div className="flex-1">
-                          <div className="font-medium text-gray-900 dark:text-gray-100">
+                          <div className="font-medium text-foreground">
                             {host.name}
                           </div>
-                          <div className="text-xs text-gray-600 dark:text-gray-400">
+                          <div className="text-xs text-muted-foreground">
                             {host.address} • {host.totalIssues} change{host.totalIssues !== 1 ? 's' : ''}
                           </div>
                         </div>
                       </div>
-                      <button className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+                      <button className="text-muted-foreground hover:text-foreground">
                         {expandedHost === host.name ? (
                           <ChevronUp className="w-5 h-5" />
                         ) : (
@@ -263,11 +263,11 @@ const SyncAllModal: React.FC<SyncAllModalProps> = ({
 
                     {/* Expanded Details */}
                     {expandedHost === host.name && (
-                      <div className="p-4 border-t border-gray-200 dark:border-gray-700">
+                      <div className="p-4 border-t border-border">
                         {loadingDetails === host.name ? (
                           <div className="flex items-center justify-center py-4">
                             <Loader2 className="w-5 h-5 animate-spin text-blue-500 mr-2" />
-                            <span className="text-sm text-gray-600 dark:text-gray-400">
+                            <span className="text-sm text-muted-foreground">
                               Loading details...
                             </span>
                           </div>
@@ -275,8 +275,8 @@ const SyncAllModal: React.FC<SyncAllModalProps> = ({
                           <div className="space-y-3">
                             {hostDetails[host.name].logins.map((loginDiff, idx) => (
                               <div key={idx} className="space-y-2">
-                                <div className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                  Login: <code className="bg-gray-200 dark:bg-gray-700 px-2 py-0.5 rounded">{loginDiff.login}</code>
+                                <div className="text-sm font-medium text-foreground/80">
+                                  Login: <code className="bg-muted px-2 py-0.5 rounded">{loginDiff.login}</code>
                                 </div>
                                 {loginDiff.issues.map((issue, issueIdx) => (
                                   <DiffIssue key={issueIdx} issue={issue} />
@@ -285,7 +285,7 @@ const SyncAllModal: React.FC<SyncAllModalProps> = ({
                             ))}
                           </div>
                         ) : (
-                          <div className="text-sm text-gray-600 dark:text-gray-400">
+                          <div className="text-sm text-muted-foreground">
                             Failed to load details
                           </div>
                         )}
@@ -300,13 +300,13 @@ const SyncAllModal: React.FC<SyncAllModalProps> = ({
 
         {/* Progress Mode - During Sync */}
         {(syncing || syncComplete) && Object.keys(progress).length > 0 && (
-          <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+          <div className="bg-card rounded-lg border border-border p-4">
             <div className="flex items-center justify-between mb-4">
-              <h4 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+              <h4 className="text-lg font-semibold text-foreground">
                 {syncComplete ? 'Sync Results' : 'Syncing Hosts'}
               </h4>
               {!syncComplete && (
-                <span className="text-sm text-gray-600 dark:text-gray-400">
+                <span className="text-sm text-muted-foreground">
                   {currentIndex + 1} of {syncableHosts.length}
                 </span>
               )}
@@ -318,20 +318,20 @@ const SyncAllModal: React.FC<SyncAllModalProps> = ({
                 return (
                   <div
                     key={host.id}
-                    className="flex items-center justify-between p-3 border border-gray-200 dark:border-gray-700 rounded-lg"
+                    className="flex items-center justify-between p-3 border border-border rounded-lg"
                   >
                     <div className="flex items-center space-x-3 flex-1">
                       {getStatusIcon(hostProgress.status)}
                       <div className="flex-1">
-                        <div className="font-medium text-gray-900 dark:text-gray-100">
+                        <div className="font-medium text-foreground">
                           {host.name}
                         </div>
-                        <div className="text-xs text-gray-600 dark:text-gray-400">
+                        <div className="text-xs text-muted-foreground">
                           {host.address}
                         </div>
                       </div>
                       {hostProgress.status === 'error' && hostProgress.error && (
-                        <div className="text-xs text-red-600 dark:text-red-400 max-w-xs truncate">
+                        <div className="text-xs text-destructive max-w-xs truncate">
                           {hostProgress.error}
                         </div>
                       )}
@@ -342,13 +342,13 @@ const SyncAllModal: React.FC<SyncAllModalProps> = ({
             </div>
 
             {syncComplete && (
-              <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                <div className="text-sm text-gray-600 dark:text-gray-400">
+              <div className="mt-4 pt-4 border-t border-border">
+                <div className="text-sm text-muted-foreground">
                   <span className="text-green-600 dark:text-green-400 font-medium">{successCount} succeeded</span>
                   {errorCount > 0 && (
                     <>
                       {' • '}
-                      <span className="text-red-600 dark:text-red-400 font-medium">{errorCount} failed</span>
+                      <span className="text-destructive font-medium">{errorCount} failed</span>
                     </>
                   )}
                 </div>
@@ -358,7 +358,7 @@ const SyncAllModal: React.FC<SyncAllModalProps> = ({
         )}
 
         {/* Action Buttons */}
-        <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+        <div className="flex justify-end space-x-3 pt-4 border-t border-border">
           {!syncing && !syncComplete && !errorHost && (
             <>
               <Button

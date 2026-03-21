@@ -264,7 +264,7 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
     const hasAuthorizations = cell.authorizations.length > 0;
 
     return cn(
-      'w-12 h-8 flex items-center justify-center transition-all duration-150 border border-gray-200 dark:border-gray-700',
+      'w-12 h-8 flex items-center justify-center transition-all duration-150 border border-border',
       {
         // Cursor style - pointer only when not in "all" mode
         'cursor-pointer': !isAllMode,
@@ -273,9 +273,9 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
         // Authorization states
         'bg-green-50 dark:bg-green-900/20': (cell.isAuthorized || (isAllMode && hasAuthorizations)) && !cell.loading,
         'hover:bg-green-100 dark:hover:bg-green-900/30': cell.isAuthorized && !cell.loading && !isAllMode,
-        'bg-gray-50 dark:bg-gray-800': (!cell.isAuthorized && !isAllMode) || (isAllMode && !hasAuthorizations) && !cell.loading,
-        'hover:bg-gray-100 dark:hover:bg-gray-700': !cell.isAuthorized && !cell.loading && !isAllMode,
-        'bg-blue-50 dark:bg-blue-900/20': cell.loading,
+        'bg-muted': (!cell.isAuthorized && !isAllMode) || (isAllMode && !hasAuthorizations) && !cell.loading,
+        'hover:bg-accent': !cell.isAuthorized && !cell.loading && !isAllMode,
+        'bg-primary/10': cell.loading,
 
         // Hover states
         'ring-2 ring-blue-500 ring-opacity-50': isHovered && !isAllMode,
@@ -297,7 +297,7 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
         <CardContent className="flex items-center justify-center py-12">
           <div className="flex items-center space-x-2">
             <Loader2 className="h-6 w-6 animate-spin" />
-            <span className="text-gray-900 dark:text-white">Loading authorization matrix...</span>
+            <span className="text-foreground">Loading authorization matrix...</span>
           </div>
         </CardContent>
       </Card>
@@ -362,7 +362,7 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
 
           {/* Active Filters Indicator */}
           {(userSearchTerm || hostSearchTerm || showOnlyAuthorized) && (
-            <div className="flex items-center justify-between p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-sm">
+            <div className="flex items-center justify-between p-2 bg-primary/10 rounded-lg text-sm">
               <div className="flex items-center space-x-2 text-blue-800 dark:text-blue-200">
                 <Search size={14} />
                 <span>
@@ -396,10 +396,10 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
         {filteredUsers.length === 0 || filteredHosts.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12">
             <AlertCircle className="h-12 w-12 text-gray-400 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+            <h3 className="text-lg font-medium text-foreground mb-2">
               No Data Available
             </h3>
-            <p className="text-gray-500 dark:text-gray-400 text-center">
+            <p className="text-muted-foreground text-center">
               {filteredHosts.length === 0
                 ? selectedLoginAccount === 'all'
                   ? 'No hosts found with any authorizations.'
@@ -412,21 +412,21 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
             </p>
           </div>
         ) : (
-          <div className="overflow-hidden border border-gray-200 dark:border-gray-700 rounded-lg">
+          <div className="overflow-hidden border border-border rounded-lg">
             <div className="min-w-max">
               {/* Header with host names */}
-              <div className="flex bg-gray-50 dark:bg-gray-800 sticky top-0 z-10">
-                <div className="w-40 h-16 flex items-center px-3 border-r border-gray-200 dark:border-gray-700 font-medium text-sm text-gray-900 dark:text-white">
+              <div className="flex bg-muted sticky top-0 z-10">
+                <div className="w-40 h-16 flex items-center px-3 border-r border-border font-medium text-sm text-foreground">
                   Users / Hosts
                 </div>
                 {filteredHosts.map((host) => (
                   <div
                     key={host.id}
-                    className="w-12 h-16 flex items-center justify-center border-r border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors relative overflow-hidden"
+                    className="w-12 h-16 flex items-center justify-center border-r border-border cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors relative overflow-hidden"
                     title={`${host.name} (${host.address}) - Click to navigate to hosts page`}
                     onClick={() => handleHostClick(host.name)}
                   >
-                    <span className="text-xs font-medium transform -rotate-45 origin-center whitespace-nowrap text-gray-900 dark:text-white absolute hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
+                    <span className="text-xs font-medium transform -rotate-45 origin-center whitespace-nowrap text-foreground absolute hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
                       {truncateText(host.name, 10)}
                     </span>
                   </div>
@@ -439,13 +439,13 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
                   {/* User name column */}
                   <div
                     className={cn(
-                      'w-40 h-8 flex items-center px-3 border-r border-b border-gray-200 dark:border-gray-700 text-sm cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors',
-                      !user.enabled && 'text-gray-400 dark:text-gray-500 italic'
+                      'w-40 h-8 flex items-center px-3 border-r border-b border-border text-sm cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors',
+                      !user.enabled && 'text-muted-foreground italic'
                     )}
                     title={`${user.username}${!user.enabled ? ' (disabled)' : ''} - Click to navigate to users page`}
                     onClick={() => handleUserClick(user.username)}
                   >
-                    <span className="truncate text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
+                    <span className="truncate text-foreground hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
                       {truncateText(user.username, 16)}
                       {!user.enabled && ' (disabled)'}
                     </span>
@@ -516,13 +516,13 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
                 <div className="w-6 h-6 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded flex items-center justify-center">
                   <span className="text-xs font-semibold text-green-600 dark:text-green-400">N</span>
                 </div>
-                <span className="text-gray-900 dark:text-white">Number of authorizations (view only)</span>
+                <span className="text-foreground">Number of authorizations (view only)</span>
               </div>
               <div className="flex items-center space-x-2">
-                <div className="w-6 h-6 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded flex items-center justify-center">
+                <div className="w-6 h-6 bg-muted border border-border rounded flex items-center justify-center">
                   <span className="text-xs text-gray-400">-</span>
                 </div>
-                <span className="text-gray-900 dark:text-white">No authorizations</span>
+                <span className="text-foreground">No authorizations</span>
               </div>
             </>
           ) : (
@@ -531,19 +531,19 @@ const AuthorizationMatrix: React.FC<AuthorizationMatrixProps> = ({
                 <div className="w-4 h-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded flex items-center justify-center">
                   <Check size={12} className="text-green-500" />
                 </div>
-                <span className="text-gray-900 dark:text-white">Authorized as {selectedLoginAccount}</span>
+                <span className="text-foreground">Authorized as {selectedLoginAccount}</span>
               </div>
               <div className="flex items-center space-x-2">
-                <div className="w-4 h-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded flex items-center justify-center">
+                <div className="w-4 h-4 bg-muted border border-border rounded flex items-center justify-center">
                   <X size={12} className="text-gray-400" />
                 </div>
-                <span className="text-gray-900 dark:text-white">Not Authorized</span>
+                <span className="text-foreground">Not Authorized</span>
               </div>
               <div className="flex items-center space-x-2">
-                <div className="w-4 h-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded flex items-center justify-center">
+                <div className="w-4 h-4 bg-primary/10 border border-blue-200 dark:border-blue-800 rounded flex items-center justify-center">
                   <Loader2 size={12} className="text-blue-500" />
                 </div>
-                <span className="text-gray-900 dark:text-white">Updating</span>
+                <span className="text-foreground">Updating</span>
               </div>
             </>
           )}

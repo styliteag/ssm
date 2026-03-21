@@ -63,7 +63,7 @@ const DiffViewer: React.FC<DiffViewerProps> = ({
       case 'modified':
         return 'bg-yellow-50 dark:bg-yellow-900/20 border-l-4 border-yellow-500';
       case 'unchanged':
-        return 'bg-gray-50 dark:bg-gray-800/50';
+        return 'bg-muted/50';
       default:
         return '';
     }
@@ -84,7 +84,7 @@ const DiffViewer: React.FC<DiffViewerProps> = ({
 
   const LineNumberColumn: React.FC<{ lineNumber?: number; type: DiffLine['type'] }> = ({ lineNumber, type }) => (
     <div className={cn(
-      'w-12 flex-shrink-0 text-xs text-gray-500 dark:text-gray-400 text-right pr-2 py-1 select-none',
+      'w-12 flex-shrink-0 text-xs text-muted-foreground text-right pr-2 py-1 select-none',
       type === 'added' && 'bg-green-100 dark:bg-green-900/30',
       type === 'removed' && 'bg-red-100 dark:bg-red-900/30',
       type === 'modified' && 'bg-yellow-100 dark:bg-yellow-900/30'
@@ -94,8 +94,8 @@ const DiffViewer: React.FC<DiffViewerProps> = ({
   );
 
   const LineContent: React.FC<{ line: DiffLine }> = ({ line }) => (
-    <div className="flex-1 font-mono text-sm text-gray-900 dark:text-gray-100 py-1 px-2 overflow-x-auto">
-      <span className="text-gray-400 dark:text-gray-500 mr-2 select-none">
+    <div className="flex-1 font-mono text-sm text-foreground py-1 px-2 overflow-x-auto">
+      <span className="text-muted-foreground mr-2 select-none">
         {getLineTypePrefix(line.type)}
       </span>
       <span className={cn(
@@ -110,13 +110,13 @@ const DiffViewer: React.FC<DiffViewerProps> = ({
 
   if (collapsed && collapsible) {
     return (
-      <div className={cn('border border-gray-200 dark:border-gray-700 rounded-lg', className)}>
-        <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-t-lg">
+      <div className={cn('border border-border rounded-lg', className)}>
+        <div className="flex items-center justify-between p-4 bg-muted rounded-t-lg">
           <div className="flex items-center space-x-4">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
+            <h3 className="text-lg font-medium text-foreground">
               Diff for {hostName}
             </h3>
-            <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
+            <div className="flex items-center space-x-2 text-sm text-muted-foreground">
               <span className="text-green-600 dark:text-green-400">+{fileDiff.summary.added}</span>
               <span className="text-red-600 dark:text-red-400">-{fileDiff.summary.removed}</span>
               {fileDiff.summary.modified > 0 && (
@@ -138,14 +138,14 @@ const DiffViewer: React.FC<DiffViewerProps> = ({
   }
 
   return (
-    <div className={cn('border border-gray-200 dark:border-gray-700 rounded-lg', className)}>
+    <div className={cn('border border-border rounded-lg', className)}>
       {/* Header */}
-      <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-t-lg border-b border-gray-200 dark:border-gray-700">
+      <div className="flex items-center justify-between p-4 bg-muted rounded-t-lg border-b border-border">
         <div className="flex items-center space-x-4">
-          <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
+          <h3 className="text-lg font-medium text-foreground">
             Diff for {hostName}
           </h3>
-          <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
+          <div className="flex items-center space-x-2 text-sm text-muted-foreground">
             <span className="text-green-600 dark:text-green-400">+{fileDiff.summary.added}</span>
             <span className="text-red-600 dark:text-red-400">-{fileDiff.summary.removed}</span>
             {fileDiff.summary.modified > 0 && (
@@ -156,7 +156,7 @@ const DiffViewer: React.FC<DiffViewerProps> = ({
 
         <div className="flex items-center space-x-2">
           {/* View mode toggle */}
-          <div className="flex border border-gray-300 dark:border-gray-600 rounded-md">
+          <div className="flex border border-input rounded-md">
             <Button
               variant={viewMode === 'split' ? 'primary' : 'ghost'}
               size="sm"
@@ -199,8 +199,8 @@ const DiffViewer: React.FC<DiffViewerProps> = ({
 
       {/* Controls */}
       {(showCopyButtons || showDownloadButton) && (
-        <div className="flex items-center justify-between p-2 bg-gray-100 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
-          <div className="text-sm text-gray-600 dark:text-gray-400">
+        <div className="flex items-center justify-between p-2 bg-muted border-b border-border">
+          <div className="text-sm text-muted-foreground">
             authorized_keys comparison
           </div>
           <div className="flex items-center space-x-2">
@@ -243,17 +243,17 @@ const DiffViewer: React.FC<DiffViewerProps> = ({
 
       {/* Diff content */}
       <div 
-        className="overflow-auto bg-white dark:bg-gray-900"
+        className="overflow-auto bg-card"
         style={{ maxHeight }}
       >
         {viewMode === 'split' ? (
           <div className="flex">
             {/* Expected (left side) */}
-            <div className="flex-1 border-r border-gray-200 dark:border-gray-700">
-              <div className="bg-gray-100 dark:bg-gray-800 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 border-b border-gray-200 dark:border-gray-700">
+            <div className="flex-1 border-r border-border">
+              <div className="bg-muted px-4 py-2 text-sm font-medium text-foreground/80 border-b border-border">
                 Expected
               </div>
-              <div className="divide-y divide-gray-100 dark:divide-gray-800">
+              <div className="divide-y divide-border">
                 {filteredLines.map((line, index) => {
                   if (line.type === 'added') return null;
                   return (
@@ -270,10 +270,10 @@ const DiffViewer: React.FC<DiffViewerProps> = ({
 
             {/* Actual (right side) */}
             <div className="flex-1">
-              <div className="bg-gray-100 dark:bg-gray-800 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 border-b border-gray-200 dark:border-gray-700">
+              <div className="bg-muted px-4 py-2 text-sm font-medium text-foreground/80 border-b border-border">
                 Actual
               </div>
-              <div className="divide-y divide-gray-100 dark:divide-gray-800">
+              <div className="divide-y divide-border">
                 {filteredLines.map((line, index) => {
                   if (line.type === 'removed') return null;
                   return (
@@ -290,7 +290,7 @@ const DiffViewer: React.FC<DiffViewerProps> = ({
           </div>
         ) : (
           /* Unified view */
-          <div className="divide-y divide-gray-100 dark:divide-gray-800">
+          <div className="divide-y divide-border">
             {filteredLines.map((line, index) => (
               <div key={index} className={cn('flex', getLineTypeColor(line.type))}>
                 {showLineNumbers && (
@@ -307,8 +307,8 @@ const DiffViewer: React.FC<DiffViewerProps> = ({
       </div>
 
       {/* Footer with summary */}
-      <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-b-lg border-t border-gray-200 dark:border-gray-700">
-        <div className="text-sm text-gray-600 dark:text-gray-400">
+      <div className="p-3 bg-muted rounded-b-lg border-t border-border">
+        <div className="text-sm text-muted-foreground">
           Total changes: {fileDiff.summary.added + fileDiff.summary.removed + fileDiff.summary.modified} lines
           {!showUnchanged && fileDiff.summary.unchanged > 0 && (
             <span> ({fileDiff.summary.unchanged} unchanged lines hidden)</span>

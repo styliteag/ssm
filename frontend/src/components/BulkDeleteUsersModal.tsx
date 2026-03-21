@@ -107,11 +107,11 @@ const BulkDeleteUsersModal: React.FC<BulkDeleteUsersModalProps> = ({
               {usersToDelete.map((user) => (
                 <div
                   key={user.id}
-                  className="flex items-center justify-between border border-gray-200 dark:border-gray-700 rounded-md px-3 py-2"
+                  className="flex items-center justify-between border border-border rounded-md px-3 py-2"
                 >
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-gray-900 dark:text-gray-100 truncate">{user.username}</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                    <p className="font-medium text-foreground truncate">{user.username}</p>
+                    <p className="text-xs text-muted-foreground truncate">
                       ID #{user.id} • {user.enabled ? 'Enabled' : 'Disabled'}
                     </p>
                   </div>
@@ -131,7 +131,7 @@ const BulkDeleteUsersModal: React.FC<BulkDeleteUsersModalProps> = ({
           </CardContent>
         </Card>
 
-        <div className="border-t border-gray-200 dark:border-gray-700 pt-4 flex items-center justify-end space-x-3">
+        <div className="border-t border-border pt-4 flex items-center justify-end space-x-3">
           <Button
             variant="secondary"
             onClick={onClose}
