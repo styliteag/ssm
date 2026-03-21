@@ -90,11 +90,8 @@ const HostsPage: React.FC = () => {
     });
 
     if (hostsToPoll.length === 0) {
-      console.log('No hosts need polling');
       return;
     }
-
-    console.log(`Polling ${hostsToPoll.length} out of ${hostsList.length} hosts`);
 
     // Process hosts in batches of 10
     for (let i = 0; i < hostsToPoll.length; i += batchSize) {
@@ -118,7 +115,6 @@ const HostsPage: React.FC = () => {
             ));
           } else {
             // API returned error - update host with error status
-            console.error('API error for host', host.name, response.message);
             const errorMessage = response.message || 'API request failed';
             setHosts(prev => prev.map(h =>
               h.id === host.id
@@ -134,7 +130,6 @@ const HostsPage: React.FC = () => {
             ));
           }
         } catch (error) {
-          console.error('Failed to poll status for host', host.name, error);
           // Update host with network/request error
           const errorMessage = `Polling failed: ${error instanceof Error ? error.message : 'Network error'}`;
           setHosts(prev => prev.map(h =>
@@ -198,8 +193,8 @@ const HostsPage: React.FC = () => {
       if (response.success && response.data) {
         setJumpHosts(response.data);
       }
-    } catch (error) {
-      console.error('Failed to load jump hosts:', error);
+    } catch {
+      // Jump hosts will be loaded when hosts data becomes available
     }
   }, [hosts]);
 
@@ -389,7 +384,6 @@ const HostsPage: React.FC = () => {
         comment: values.comment && values.comment.trim() !== '' ? values.comment.trim() : undefined
       };
 
-      console.log('Creating host with data:', hostData);
       const response = await hostsService.createHost({
         ...hostData,
         jump_via: hostData.jump_via ?? undefined,
@@ -397,13 +391,9 @@ const HostsPage: React.FC = () => {
         disabled: hostData.disabled,
         comment: hostData.comment ?? undefined
       });
-      console.log('Host creation response:', response);
-
       if (response.success && response.data) {
         // Check if this is a host key confirmation response (two-step process)
         if (response.data.requires_confirmation) {
-          console.log('Host key confirmation required, sending with fingerprint');
-
           // Second call with the received fingerprint
           const confirmedHostData = {
             ...hostData,
@@ -416,8 +406,6 @@ const HostsPage: React.FC = () => {
             key_fingerprint: confirmedHostData.key_fingerprint ?? undefined,
             disabled: confirmedHostData.disabled
           });
-          console.log('Final host creation response:', finalResponse);
-
           if (finalResponse.success && finalResponse.data) {
             setHosts(prev => [...prev, {
               ...finalResponse.data!,
@@ -427,7 +415,6 @@ const HostsPage: React.FC = () => {
             showSuccess('Host added', `${finalResponse.data!.name} has been added successfully`);
             // Jump hosts will be updated automatically via useEffect when hosts change
           } else {
-            console.error('Final host creation failed:', finalResponse);
             showError('Failed to add host', finalResponse.message || 'Failed to confirm host key');
           }
         } else {
@@ -441,11 +428,9 @@ const HostsPage: React.FC = () => {
           // Jump hosts will be updated automatically via useEffect when hosts change
         }
       } else {
-        console.error('Host creation failed:', response);
         showError('Failed to add host', response.message || 'Please check your input and try again');
       }
-    } catch (error) {
-      console.error('Host creation error:', error);
+    } catch {
       showError('Failed to add host', 'Please check your input and try again');
     } finally {
       setSubmitting(false);
@@ -476,8 +461,8 @@ const HostsPage: React.FC = () => {
           h.id === updatedHost.id ? updatedHost : h
         ));
       }
-    } catch (error) {
-      console.error('Failed to refresh host:', hostName, error);
+    } catch {
+      // Host refresh will be retried on next poll cycle
     }
   }, []);
 
@@ -541,12 +526,11 @@ const HostsPage: React.FC = () => {
             try {
               await hostsService.invalidateCache(host.name);
             } catch (cacheError) {
-              console.warn(`Failed to invalidate cache for ${host.name}:`, cacheError);
+              // Cache invalidation is best-effort
               // Don't fail the operation if cache invalidation fails
             }
           }
-        } catch (error) {
-          console.error(`Failed to update host ${host.name}:`, error);
+        } catch {
           results.push({ success: false, message: `Failed to update ${host.name}` });
         }
       }
@@ -570,8 +554,7 @@ const HostsPage: React.FC = () => {
       } else {
         showError('Bulk update failed', 'All updates failed. Please try again.');
       }
-    } catch (error) {
-      console.error('Bulk update error:', error);
+    } catch {
       showError('Bulk update failed', 'Please try again later');
     }
   };
@@ -671,7 +654,7 @@ const HostsPage: React.FC = () => {
         {host.connection_error && (
           <div className="text-red-400 text-xs mt-1">
             <div className="flex items-start gap-1" style={{ maxWidth: '100%' }}>
-              <span className="flex-shrink-0">❌</span>
+              <AlertCircle size={12} className="flex-shrink-0 text-red-400" />
               <span
                 className="flex-1"
                 style={{
@@ -918,20 +901,22 @@ const HostsPage: React.FC = () => {
             <button
               onClick={() => setViewMode('list')}
               className={cn(
-                "p-2 rounded-md transition-all duration-200",
+                "p-2 rounded-md transition-all duration-200 cursor-pointer",
                 viewMode === 'list' ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
               )}
               title="List View"
+              aria-label="Switch to list view"
             >
               <List size={18} />
             </button>
             <button
               onClick={() => setViewMode('grid')}
               className={cn(
-                "p-2 rounded-md transition-all duration-200",
+                "p-2 rounded-md transition-all duration-200 cursor-pointer",
                 viewMode === 'grid' ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
               )}
               title="Grid View"
+              aria-label="Switch to grid view"
             >
               <LayoutGrid size={18} />
             </button>

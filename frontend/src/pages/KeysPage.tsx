@@ -770,20 +770,22 @@ const KeysPage: React.FC = () => {
             <button
               onClick={() => setViewMode('list')}
               className={cn(
-                "p-2 rounded-md transition-all duration-200",
+                "p-2 rounded-md transition-all duration-200 cursor-pointer",
                 viewMode === 'list' ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
               )}
               title="List View"
+              aria-label="Switch to list view"
             >
               <List size={18} />
             </button>
             <button
               onClick={() => setViewMode('grid')}
               className={cn(
-                "p-2 rounded-md transition-all duration-200",
+                "p-2 rounded-md transition-all duration-200 cursor-pointer",
                 viewMode === 'grid' ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
               )}
               title="Grid View"
+              aria-label="Switch to grid view"
             >
               <LayoutGrid size={18} />
             </button>
@@ -958,41 +960,41 @@ const KeysPage: React.FC = () => {
       >
         <div className="space-y-4">
           <div className="flex items-start space-x-3">
-            <AlertCircle className="text-red-600 mt-0.5" size={20} />
+            <AlertCircle className="text-destructive mt-0.5" size={20} />
             <div>
-              <h3 className="font-medium text-gray-900 dark:text-gray-100">
+              <h3 className="font-medium text-foreground">
                 Are you sure you want to delete this SSH key?
               </h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+              <p className="text-sm text-muted-foreground mt-1">
                 This action cannot be undone. The key will be removed from all authorized_keys files.
               </p>
             </div>
           </div>
 
           {selectedKey && (
-            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+            <div className="bg-muted/50 rounded-lg p-4">
               <div className="space-y-2">
                 <div className="flex justify-between">
-                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Key Type:</span>
-                  <span className="text-sm text-gray-900 dark:text-gray-100">{selectedKey.key_type.replace('ssh-', '').toUpperCase()}</span>
+                  <span className="text-sm font-medium text-muted-foreground">Key Type:</span>
+                  <span className="text-sm text-foreground">{selectedKey.key_type.replace('ssh-', '').toUpperCase()}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">User:</span>
-                  <span className="text-sm text-gray-900 dark:text-gray-100">{selectedKey.username || 'Unassigned'}</span>
+                  <span className="text-sm font-medium text-muted-foreground">User:</span>
+                  <span className="text-sm text-foreground">{selectedKey.username || 'Unassigned'}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Key Name:</span>
-                  <span className="text-sm text-gray-900 dark:text-gray-100">{selectedKey.key_name || '—'}</span>
+                  <span className="text-sm font-medium text-muted-foreground">Key Name:</span>
+                  <span className="text-sm text-foreground">{selectedKey.key_name || '—'}</span>
                 </div>
                 {selectedKey.extra_comment && (
                   <div className="flex justify-between">
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Extra Comment:</span>
-                    <span className="text-sm text-gray-900 dark:text-gray-100">{selectedKey.extra_comment}</span>
+                    <span className="text-sm font-medium text-muted-foreground">Extra Comment:</span>
+                    <span className="text-sm text-foreground">{selectedKey.extra_comment}</span>
                   </div>
                 )}
                 <div className="flex justify-between">
-                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Host Access:</span>
-                  <span className="text-sm text-gray-900 dark:text-gray-100">{selectedKey.hostCount || 0} hosts</span>
+                  <span className="text-sm font-medium text-muted-foreground">Host Access:</span>
+                  <span className="text-sm text-foreground">{selectedKey.hostCount || 0} hosts</span>
                 </div>
               </div>
             </div>
@@ -1007,10 +1009,9 @@ const KeysPage: React.FC = () => {
               Cancel
             </Button>
             <Button
-              variant="primary"
+              variant="danger"
               onClick={handleDeleteKey}
               loading={submitting}
-              className="bg-red-600 hover:bg-red-700 text-white"
               leftIcon={<Trash2 size={16} />}
             >
               Delete Key
@@ -1188,7 +1189,7 @@ const KeysPage: React.FC = () => {
             {/* Key Details */}
             {loadingDetails ? (
               <div className="flex items-center justify-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
               </div>
             ) : keyDetails && (
               <div className="space-y-4">
