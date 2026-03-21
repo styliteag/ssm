@@ -204,7 +204,7 @@ const Form: React.FC<FormProps> = ({
           <div key={field.name} className={cn('space-y-1', field.className)}>
             <label
               htmlFor={field.name}
-              className="block text-sm font-medium text-gray-700 dark:text-gray-300"
+              className="block text-sm font-medium text-foreground"
             >
               {field.label}
               {field.required && <span className="text-red-500 ml-1">*</span>}
@@ -217,16 +217,16 @@ const Form: React.FC<FormProps> = ({
               onChange={(e) => handleChange(field.name, e.target.value)}
               onBlur={() => handleBlur(field.name)}
               className={cn(
-                'flex w-full rounded-md border border-input bg-background text-foreground px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:cursor-not-allowed disabled:opacity-50',
+                'flex w-full rounded-md border border-input bg-background text-foreground px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent disabled:cursor-not-allowed disabled:opacity-50',
                 error && 'border-destructive focus:ring-destructive',
                 field.inputClassName
               )}
             />
             {error && (
-              <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+              <p className="text-sm text-destructive">{error}</p>
             )}
             {field.helperText && !error && (
-              <p className="text-sm text-gray-500 dark:text-gray-400">{field.helperText}</p>
+              <p className="text-sm text-muted-foreground">{field.helperText}</p>
             )}
           </div>
         );
@@ -236,7 +236,7 @@ const Form: React.FC<FormProps> = ({
           <div key={field.name} className={cn('space-y-1', field.className)}>
             <label
               htmlFor={field.name}
-              className="block text-sm font-medium text-gray-700 dark:text-gray-300"
+              className="block text-sm font-medium text-foreground"
             >
               {field.label}
               {field.required && <span className="text-red-500 ml-1">*</span>}
@@ -247,7 +247,7 @@ const Form: React.FC<FormProps> = ({
               onChange={(e) => handleChange(field.name, e.target.value)}
               onBlur={() => handleBlur(field.name)}
               className={cn(
-                'flex h-10 w-full rounded-md border border-input bg-background text-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:cursor-not-allowed disabled:opacity-50',
+                'flex h-10 w-full rounded-md border border-input bg-background text-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent disabled:cursor-not-allowed disabled:opacity-50',
                 error && 'border-destructive focus:ring-destructive',
                 field.inputClassName
               )}
@@ -264,10 +264,10 @@ const Form: React.FC<FormProps> = ({
               ))}
             </select>
             {error && (
-              <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+              <p className="text-sm text-destructive">{error}</p>
             )}
             {field.helperText && !error && (
-              <p className="text-sm text-gray-500 dark:text-gray-400">{field.helperText}</p>
+              <p className="text-sm text-muted-foreground">{field.helperText}</p>
             )}
           </div>
         );
@@ -277,7 +277,7 @@ const Form: React.FC<FormProps> = ({
           <div key={field.name} className={cn('space-y-1', field.className)}>
             <label
               htmlFor={field.name}
-              className="block text-sm font-medium text-gray-700 dark:text-gray-300"
+              className="block text-sm font-medium text-foreground"
             >
               {field.label}
               {field.required && <span className="text-red-500 ml-1">*</span>}
@@ -292,10 +292,10 @@ const Form: React.FC<FormProps> = ({
               forcePosition={field.forcePosition}
             />
             {error && (
-              <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+              <p className="text-sm text-destructive">{error}</p>
             )}
             {field.helperText && !error && (
-              <p className="text-sm text-gray-500 dark:text-gray-400">{field.helperText}</p>
+              <p className="text-sm text-muted-foreground">{field.helperText}</p>
             )}
           </div>
         );
@@ -310,18 +310,18 @@ const Form: React.FC<FormProps> = ({
                 checked={Boolean(values[field.name])}
                 onChange={(e) => handleChange(field.name, e.target.checked)}
                 onBlur={() => handleBlur(field.name)}
-                className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:focus:ring-blue-600"
+                className="h-4 w-4 text-primary border-input rounded focus:ring-ring"
               />
-              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              <span className="text-sm font-medium text-foreground">
                 {field.label}
                 {field.required && <span className="text-red-500 ml-1">*</span>}
               </span>
             </label>
             {error && (
-              <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+              <p className="text-sm text-destructive">{error}</p>
             )}
             {field.helperText && !error && (
-              <p className="text-sm text-gray-500 dark:text-gray-400">{field.helperText}</p>
+              <p className="text-sm text-muted-foreground">{field.helperText}</p>
             )}
           </div>
         );

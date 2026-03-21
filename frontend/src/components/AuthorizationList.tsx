@@ -56,7 +56,7 @@ const AuthorizationList: React.FC<AuthorizationListProps> = ({
             {auth.user?.username || 'Unknown User'}
           </span>
           {!auth.user?.enabled && (
-            <span className="text-xs text-gray-400 bg-gray-100 dark:bg-gray-800 px-1 rounded">
+            <span className="text-xs text-gray-400 bg-muted px-1 rounded">
               disabled
             </span>
           )}
@@ -84,7 +84,7 @@ const AuthorizationList: React.FC<AuthorizationListProps> = ({
       sortable: true,
       searchable: true,
       render: (value) => (
-        <span className="font-mono text-sm bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
+        <span className="font-mono text-sm bg-muted px-2 py-1 rounded">
           {(value as string) || '-'}
         </span>
       ),
@@ -97,7 +97,7 @@ const AuthorizationList: React.FC<AuthorizationListProps> = ({
       render: (value) => (value as string) ? (
         <div className="max-w-xs">
           <div
-            className="font-mono text-xs bg-gray-100 dark:bg-gray-800 p-2 rounded truncate"
+            className="font-mono text-xs bg-muted p-2 rounded truncate"
             title={value as string}
           >
             {value as string}
@@ -116,7 +116,7 @@ const AuthorizationList: React.FC<AuthorizationListProps> = ({
         <div className="max-w-xs">
           {(value as string) ? (
             <div
-              className="text-sm bg-gray-100 dark:bg-gray-800 p-2 rounded truncate"
+              className="text-sm bg-muted p-2 rounded truncate"
               title={value as string}
             >
               {value as string}
@@ -240,31 +240,31 @@ const AuthorizationList: React.FC<AuthorizationListProps> = ({
     <div className={cn('space-y-4', className)}>
       {/* Statistics Header */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-          <div className="text-sm font-medium text-gray-500 dark:text-gray-400">Total</div>
-          <div className="text-2xl font-bold text-gray-900 dark:text-white">{stats.total}</div>
+        <div className="bg-card p-4 rounded-lg border border-border">
+          <div className="text-sm font-medium text-muted-foreground">Total</div>
+          <div className="text-2xl font-bold text-foreground">{stats.total}</div>
         </div>
-        <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-          <div className="text-sm font-medium text-gray-500 dark:text-gray-400">Active</div>
+        <div className="bg-card p-4 rounded-lg border border-border">
+          <div className="text-sm font-medium text-muted-foreground">Active</div>
           <div className="text-2xl font-bold text-green-600">{stats.active}</div>
         </div>
-        <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-          <div className="text-sm font-medium text-gray-500 dark:text-gray-400">Inactive</div>
+        <div className="bg-card p-4 rounded-lg border border-border">
+          <div className="text-sm font-medium text-muted-foreground">Inactive</div>
           <div className="text-2xl font-bold text-yellow-600">{stats.inactive}</div>
         </div>
-        <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-          <div className="text-sm font-medium text-gray-500 dark:text-gray-400">Users</div>
+        <div className="bg-card p-4 rounded-lg border border-border">
+          <div className="text-sm font-medium text-muted-foreground">Users</div>
           <div className="text-2xl font-bold text-blue-600">{stats.users}</div>
         </div>
-        <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-          <div className="text-sm font-medium text-gray-500 dark:text-gray-400">Hosts</div>
+        <div className="bg-card p-4 rounded-lg border border-border">
+          <div className="text-sm font-medium text-muted-foreground">Hosts</div>
           <div className="text-2xl font-bold text-purple-600">{stats.hosts}</div>
         </div>
       </div>
 
       {/* Bulk Actions */}
       {selectedAuthorizations.size > 0 && (
-        <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+        <div className="bg-primary/10 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium text-blue-900 dark:text-blue-100">
               {selectedAuthorizations.size} authorization(s) selected
@@ -300,7 +300,7 @@ const AuthorizationList: React.FC<AuthorizationListProps> = ({
 
       {/* Selection hint */}
       {authorizations.length > 0 && (
-        <div className="text-xs text-gray-500 dark:text-gray-400 text-center">
+        <div className="text-xs text-muted-foreground text-center">
           Click rows to select multiple authorizations for bulk actions
         </div>
       )}
@@ -317,11 +317,11 @@ const AuthorizationList: React.FC<AuthorizationListProps> = ({
         onRowClick={handleRowClick}
         emptyMessage="No authorizations found. Create some authorizations to get started."
         searchPlaceholder="Search authorizations by user, host, login, or comments..."
-        className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700"
+        className="bg-card rounded-lg border border-border"
         stickyHeader={true}
         initialSort={{ key: 'user_name', direction: 'asc' }}
         getItemId={(item) => item.id}
-        getRowClassName={(item) => selectedAuthorizations.has(item.id) ? 'bg-blue-50 dark:bg-blue-900/20' : ''}
+        getRowClassName={(item) => selectedAuthorizations.has(item.id) ? 'bg-primary/10' : ''}
       />
     </div>
   );

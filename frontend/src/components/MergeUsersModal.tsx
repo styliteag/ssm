@@ -228,7 +228,7 @@ const MergeUsersModal: React.FC<MergeUsersModalProps> = ({
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="space-y-3 text-sm text-gray-700 dark:text-gray-300">
+        <div className="space-y-3 text-sm text-foreground/80">
           {selectedUsers.map(user => {
             const details = detailsMap[user.id];
             const keyCount = details?.keys.length ?? user.keyCount ?? 0;
@@ -236,11 +236,11 @@ const MergeUsersModal: React.FC<MergeUsersModalProps> = ({
             return (
               <div
                 key={user.id}
-                className="flex items-center justify-between border border-gray-200 dark:border-gray-700 rounded-md px-3 py-2"
+                className="flex items-center justify-between border border-border rounded-md px-3 py-2"
               >
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium text-gray-900 dark:text-gray-100 truncate">{user.username}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                  <p className="font-medium text-foreground truncate">{user.username}</p>
+                  <p className="text-xs text-muted-foreground truncate">
                     ID #{user.id} • {user.enabled ? 'Enabled' : 'Disabled'}
                   </p>
                 </div>
@@ -280,13 +280,13 @@ const MergeUsersModal: React.FC<MergeUsersModalProps> = ({
                 value="existing"
                 checked={mergeMode === 'existing'}
                 onChange={() => setMergeMode('existing')}
-                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                className="h-4 w-4 text-primary focus:ring-ring border-input"
               />
-              <span className="text-sm text-gray-700 dark:text-gray-300">Merge into an existing user</span>
+              <span className="text-sm text-foreground/80">Merge into an existing user</span>
             </label>
             {mergeMode === 'existing' && (
               <div className="ml-6 space-y-2">
-                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400">Destination User</label>
+                <label className="block text-xs font-medium text-muted-foreground">Destination User</label>
                 <select
                   value={targetUserId ?? ''}
                   onChange={(event) => setTargetUserId(Number(event.target.value) || null)}
@@ -299,14 +299,14 @@ const MergeUsersModal: React.FC<MergeUsersModalProps> = ({
                     </option>
                   ))}
                 </select>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
+                <p className="text-xs text-muted-foreground">
                   Keys and authorizations from the selected users will be moved to this user. The source users will then be deleted.
                 </p>
               </div>
             )}
           </div>
 
-          <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+          <div className="border-t border-border pt-4">
             <label className="flex items-center space-x-2">
               <input
                 type="radio"
@@ -314,14 +314,14 @@ const MergeUsersModal: React.FC<MergeUsersModalProps> = ({
                 value="new"
                 checked={mergeMode === 'new'}
                 onChange={() => setMergeMode('new')}
-                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                className="h-4 w-4 text-primary focus:ring-ring border-input"
               />
-              <span className="text-sm text-gray-700 dark:text-gray-300">Merge into a new user</span>
+              <span className="text-sm text-foreground/80">Merge into a new user</span>
             </label>
             {mergeMode === 'new' && (
               <div className="ml-6 space-y-3">
                 <div>
-                  <label htmlFor="merge-new-username" className="block text-xs font-medium text-gray-500 dark:text-gray-400">New Username</label>
+                  <label htmlFor="merge-new-username" className="block text-xs font-medium text-muted-foreground">New Username</label>
                   <Input
                     id="merge-new-username"
                     value={newUsername}
@@ -331,7 +331,7 @@ const MergeUsersModal: React.FC<MergeUsersModalProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Account Status</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Account Status</label>
                   <select
                     value={newUserEnabled ? 'true' : 'false'}
                     onChange={(event) => setNewUserEnabled(event.target.value === 'true')}
@@ -342,7 +342,7 @@ const MergeUsersModal: React.FC<MergeUsersModalProps> = ({
                   </select>
                 </div>
                 <div>
-                  <label htmlFor="merge-new-comment" className="block text-xs font-medium text-gray-500 dark:text-gray-400">Comment</label>
+                  <label htmlFor="merge-new-comment" className="block text-xs font-medium text-muted-foreground">Comment</label>
                   <textarea
                     id="merge-new-comment"
                     value={newUserComment}
@@ -351,7 +351,7 @@ const MergeUsersModal: React.FC<MergeUsersModalProps> = ({
                     rows={2}
                     placeholder="Optional comment for merged user"
                   />
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  <p className="text-xs text-muted-foreground mt-1">
                     The new user will receive all keys and authorizations from the selected users. The original users will be deleted.
                   </p>
                 </div>
@@ -535,13 +535,13 @@ const MergeUsersModal: React.FC<MergeUsersModalProps> = ({
       {selectedUsers.length < 2 ? (
         <div className="text-center py-8">
           <AlertTriangle size={40} className="mx-auto text-yellow-500" />
-          <p className="mt-4 text-sm text-gray-600 dark:text-gray-300">
+          <p className="mt-4 text-sm text-muted-foreground">
             Select at least two users to merge them into a single account.
           </p>
         </div>
       ) : (
         <div className="space-y-5">
-          <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
+          <div className="bg-primary/10 p-4 rounded-lg">
             <div className="flex items-start space-x-3">
               <UserPlus className="text-blue-600 dark:text-blue-400 mt-1" size={20} />
               <div className="text-sm text-blue-900 dark:text-blue-100">
@@ -564,7 +564,7 @@ const MergeUsersModal: React.FC<MergeUsersModalProps> = ({
             </>
           )}
 
-          <div className="border-t border-gray-200 dark:border-gray-700 pt-4 flex items-center justify-end space-x-3">
+          <div className="border-t border-border pt-4 flex items-center justify-end space-x-3">
             <Button
               variant="secondary"
               onClick={onClose}

@@ -757,7 +757,7 @@ const HostsPage: React.FC = () => {
       header: 'Username',
       sortable: true,
       render: (value) => (
-        <code className="text-sm bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
+        <code className="text-sm bg-muted px-2 py-1 rounded">
           {value as string}
         </code>
       )
@@ -787,8 +787,8 @@ const HostsPage: React.FC = () => {
           online: 'text-green-700 bg-green-50 dark:text-green-400 dark:bg-green-900/20',
           offline: 'text-red-700 bg-red-50 dark:text-red-400 dark:bg-red-900/20',
           error: 'text-orange-700 bg-orange-50 dark:text-orange-400 dark:bg-orange-900/20',
-          unknown: 'text-gray-700 bg-gray-50 dark:text-gray-400 dark:bg-gray-900/20',
-          disabled: 'text-gray-500 bg-gray-100 dark:text-gray-500 dark:bg-gray-800'
+          unknown: 'text-muted-foreground bg-muted',
+          disabled: 'text-muted-foreground bg-muted'
         };
 
         // Use the helper function to get status, considering disabled state first

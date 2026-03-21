@@ -403,7 +403,7 @@ export const BulkGrantModal: React.FC<BulkGrantModalProps> = ({
                   <div
                     key={user.id}
                     className={cn(
-                      'flex items-center space-x-2 p-2 rounded cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors',
+                      'flex items-center space-x-2 p-2 rounded cursor-pointer hover:bg-muted/50 transition-colors',
                       selectedUsers.has(user.id) && 'bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700'
                     )}
                     onClick={() => toggleUser(user.id)}
@@ -412,13 +412,13 @@ export const BulkGrantModal: React.FC<BulkGrantModalProps> = ({
                       'w-4 h-4 rounded border-2 flex items-center justify-center transition-colors',
                       selectedUsers.has(user.id)
                         ? 'bg-blue-500 border-blue-500 dark:bg-blue-400 dark:border-blue-400'
-                        : 'border-gray-300 dark:border-gray-500 bg-white dark:bg-gray-700'
+                        : 'border-input bg-card'
                     )}>
                       {selectedUsers.has(user.id) && (
                         <Check size={12} className="text-white" />
                       )}
                     </div>
-                    <span className="text-sm text-gray-900 dark:text-gray-100">{user.username}</span>
+                    <span className="text-sm text-foreground">{user.username}</span>
                   </div>
                 ))}
               </div>
@@ -452,7 +452,7 @@ export const BulkGrantModal: React.FC<BulkGrantModalProps> = ({
                   <div
                     key={host.id}
                     className={cn(
-                      'flex items-center space-x-2 p-2 rounded cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors',
+                      'flex items-center space-x-2 p-2 rounded cursor-pointer hover:bg-muted/50 transition-colors',
                       selectedHosts.has(host.id) && 'bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700'
                     )}
                     onClick={() => toggleHost(host.id)}
@@ -461,15 +461,15 @@ export const BulkGrantModal: React.FC<BulkGrantModalProps> = ({
                       'w-4 h-4 rounded border-2 flex items-center justify-center transition-colors',
                       selectedHosts.has(host.id)
                         ? 'bg-blue-500 border-blue-500 dark:bg-blue-400 dark:border-blue-400'
-                        : 'border-gray-300 dark:border-gray-500 bg-white dark:bg-gray-700'
+                        : 'border-input bg-card'
                     )}>
                       {selectedHosts.has(host.id) && (
                         <Check size={12} className="text-white" />
                       )}
                     </div>
                     <div className="flex-1">
-                      <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{host.name}</div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400">{host.address}</div>
+                      <div className="text-sm font-medium text-foreground">{host.name}</div>
+                      <div className="text-xs text-muted-foreground">{host.address}</div>
                     </div>
                   </div>
                 ))}
@@ -486,7 +486,7 @@ export const BulkGrantModal: React.FC<BulkGrantModalProps> = ({
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                <label className="block text-sm font-medium text-foreground/80">
                   Login Account *
                 </label>
                 <input
@@ -494,12 +494,12 @@ export const BulkGrantModal: React.FC<BulkGrantModalProps> = ({
                   value={login}
                   onChange={(e) => setLogin(e.target.value)}
                   placeholder="e.g., root, ubuntu, deploy"
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-input rounded-md bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   required
                 />
               </div>
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                <label className="block text-sm font-medium text-foreground/80">
                   SSH Options
                 </label>
                 <input
@@ -507,7 +507,7 @@ export const BulkGrantModal: React.FC<BulkGrantModalProps> = ({
                   value={options}
                   onChange={(e) => setOptions(e.target.value)}
                   placeholder="Optional SSH key options"
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-input rounded-md bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                 />
               </div>
             </div>
@@ -538,7 +538,7 @@ export const BulkGrantModal: React.FC<BulkGrantModalProps> = ({
         )}
 
         {/* Footer */}
-        <div className="flex items-center justify-end space-x-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+        <div className="flex items-center justify-end space-x-3 pt-4 border-t border-border">
           <Button variant="secondary" onClick={onClose} disabled={loading}>
             Cancel
           </Button>
@@ -599,20 +599,20 @@ export const DeleteAuthorizationModal: React.FC<DeleteAuthorizationModalProps> =
         <div className="flex items-start space-x-3">
           <AlertTriangle className="h-6 w-6 text-red-500 flex-shrink-0 mt-1" />
           <div>
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+            <h3 className="text-lg font-medium text-foreground">
               Revoke User Access
             </h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            <p className="text-sm text-muted-foreground mt-1">
               Are you sure you want to revoke access for{' '}
               <span className="font-medium">{user?.username || 'this user'}</span> to{' '}
               <span className="font-medium">{host?.name || 'this host'}</span>?
             </p>
             {authorization?.login && (
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-                Login account: <span className="font-mono bg-gray-100 dark:bg-gray-800 px-1 rounded">{authorization.login}</span>
+              <p className="text-sm text-muted-foreground mt-2">
+                Login account: <span className="font-mono bg-muted px-1 rounded">{authorization.login}</span>
               </p>
             )}
-            <p className="text-sm text-red-600 dark:text-red-400 mt-2 font-medium">
+            <p className="text-sm text-destructive mt-2 font-medium">
               This action cannot be undone.
             </p>
           </div>

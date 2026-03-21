@@ -79,9 +79,9 @@ const SyncModal: React.FC<SyncModalProps> = ({ isOpen, onClose, hostDetails, onS
             </div>
 
             {/* Changes Summary */}
-            <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+            <div className="bg-card rounded-lg border border-border p-4">
               <div className="flex items-center justify-between mb-4">
-                <h4 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Changes to Apply</h4>
+                <h4 className="text-lg font-semibold text-foreground">Changes to Apply</h4>
                 <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300">
                   {totalIssues} {totalIssues === 1 ? 'change' : 'changes'}
                 </span>
@@ -90,19 +90,19 @@ const SyncModal: React.FC<SyncModalProps> = ({ isOpen, onClose, hostDetails, onS
               {!hasIssues ? (
                 <div className="text-center py-8">
                   <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-3" />
-                  <p className="text-gray-600 dark:text-gray-400">No changes needed - all keys are already synchronized!</p>
+                  <p className="text-muted-foreground">No changes needed - all keys are already synchronized!</p>
                 </div>
               ) : (
                 <div className="max-h-96 overflow-y-auto space-y-4">
                   {hostDetails.logins.map((loginDiff, loginIndex) => (
-                    <div key={loginIndex} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-                      <div className="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+                    <div key={loginIndex} className="border border-border rounded-lg overflow-hidden">
+                      <div className="bg-muted px-4 py-3 border-b border-border">
                         <div className="flex items-center justify-between">
-                          <h5 className="text-sm font-semibold text-gray-900 dark:text-gray-100 flex items-center">
-                            <span className="text-gray-600 dark:text-gray-400 mr-2">Login:</span>
+                          <h5 className="text-sm font-semibold text-foreground flex items-center">
+                            <span className="text-muted-foreground mr-2">Login:</span>
                             <code className="bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200 px-2 py-1 rounded text-xs font-bold">{loginDiff.login}</code>
                           </h5>
-                          <span className="text-xs text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-700 px-2 py-1 rounded font-medium">
+                          <span className="text-xs text-muted-foreground bg-card px-2 py-1 rounded font-medium">
                             {loginDiff.issues.length} action{loginDiff.issues.length !== 1 ? 's' : ''}
                           </span>
                         </div>
@@ -128,8 +128,8 @@ const SyncModal: React.FC<SyncModalProps> = ({ isOpen, onClose, hostDetails, onS
             </div>
 
             {/* Action Buttons */}
-            <div className="flex justify-between items-center pt-4 border-t border-gray-200 dark:border-gray-700">
-              <div className="text-sm text-gray-600 dark:text-gray-400">
+            <div className="flex justify-between items-center pt-4 border-t border-border">
+              <div className="text-sm text-muted-foreground">
                 {hasIssues ? (
                   <>This will modify authorized_keys files on the remote host.</>
                 ) : (

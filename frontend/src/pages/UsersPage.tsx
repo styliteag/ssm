@@ -421,7 +421,7 @@ const UsersPage: React.FC = () => {
       header: 'User ID',
       sortable: true,
       render: (id) => (
-        <code className="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
+        <code className="text-xs bg-muted px-2 py-1 rounded">
           #{id as number}
         </code>
       )

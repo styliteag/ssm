@@ -230,7 +230,7 @@ const SplitKeysModal: React.FC<SplitKeysModalProps> = ({
     >
       <div className="space-y-6">
         {/* Header Info */}
-        <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
+        <div className="bg-primary/10 p-4 rounded-lg">
           <div className="flex items-start space-x-3">
             <UserPlus className="text-blue-600 dark:text-blue-400 mt-1" size={20} />
             <div>
@@ -256,7 +256,7 @@ const SplitKeysModal: React.FC<SplitKeysModalProps> = ({
           <CardContent>
             <div className="space-y-4">
               <div>
-                <label htmlFor="newUsername" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <label htmlFor="newUsername" className="block text-sm font-medium text-foreground/80 mb-1">
                   New Username
                 </label>
                 <Input
@@ -281,7 +281,7 @@ const SplitKeysModal: React.FC<SplitKeysModalProps> = ({
                 <Key size={18} />
                 <span>Select Keys to Split ({formData.selectedKeys.length} selected)</span>
               </div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">
+              <div className="text-sm text-muted-foreground">
                 {remainingKeysCount} key{remainingKeysCount !== 1 ? 's' : ''} will remain with original user
               </div>
             </CardTitle>
@@ -301,13 +301,13 @@ const SplitKeysModal: React.FC<SplitKeysModalProps> = ({
 
             <div className="space-y-3">
               {userKeys.map((key) => (
-                <div key={key.id} className="flex items-start space-x-3 p-3 border border-gray-200 dark:border-gray-700 rounded-lg">
+                <div key={key.id} className="flex items-start space-x-3 p-3 border border-border rounded-lg">
                   <input
                     type="checkbox"
                     id={`key-${key.id}`}
                     checked={formData.selectedKeys.includes(key.id)}
                     onChange={() => handleKeyToggle(key.id)}
-                    className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    className="mt-1 h-4 w-4 text-primary focus:ring-ring border-input rounded"
                   />
                   <label htmlFor={`key-${key.id}`} className="flex-1 cursor-pointer">
                     <div className="flex items-center space-x-2 mb-2">
@@ -315,17 +315,17 @@ const SplitKeysModal: React.FC<SplitKeysModalProps> = ({
                         {key.key_type}
                       </span>
                       {key.key_name && (
-                        <span className="text-sm text-gray-600 dark:text-gray-400">
+                        <span className="text-sm text-muted-foreground">
                           Name: {key.key_name}
                         </span>
                       )}
                       {key.extra_comment && (
-                        <span className="text-sm text-gray-600 dark:text-gray-400 ml-2">
+                        <span className="text-sm text-muted-foreground ml-2">
                           Comment: {key.extra_comment}
                         </span>
                       )}
                     </div>
-                    <code className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 p-2 rounded block overflow-x-auto">
+                    <code className="text-xs bg-muted text-foreground p-2 rounded block overflow-x-auto">
                       {key.key_type} {key.key_base64.substring(0, 60)}...
                     </code>
                   </label>
@@ -343,7 +343,7 @@ const SplitKeysModal: React.FC<SplitKeysModalProps> = ({
               <span>Copy Authorizations ({formData.selectedAuthorizations.length} selected)</span>
             </CardTitle>
             {userAuthorizations.length > 0 && (
-              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+              <p className="text-sm text-muted-foreground mt-1">
                 All authorizations are selected by default. Uncheck any you don't want to copy.
               </p>
             )}
@@ -351,11 +351,11 @@ const SplitKeysModal: React.FC<SplitKeysModalProps> = ({
           <CardContent>
             {userAuthorizations.length === 0 ? (
               <div className="text-center py-8">
-                <Shield size={48} className="mx-auto text-gray-400 dark:text-gray-600" />
-                <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">
+                <Shield size={48} className="mx-auto text-muted-foreground" />
+                <h3 className="mt-4 text-lg font-medium text-foreground">
                   No Authorizations
                 </h3>
-                <p className="mt-2 text-gray-500 dark:text-gray-400">
+                <p className="mt-2 text-muted-foreground">
                   This user has no host authorizations to copy.
                 </p>
               </div>
@@ -364,23 +364,23 @@ const SplitKeysModal: React.FC<SplitKeysModalProps> = ({
                 {userAuthorizations.map((auth) => {
                   const host = allHosts.find(h => h.id === auth.host_id);
                   return (
-                    <div key={auth.id} className="flex items-start space-x-3 p-3 border border-gray-200 dark:border-gray-700 rounded-lg">
+                    <div key={auth.id} className="flex items-start space-x-3 p-3 border border-border rounded-lg">
                       <input
                         type="checkbox"
                         id={`auth-${auth.id}`}
                         checked={formData.selectedAuthorizations.includes(auth.id)}
                         onChange={() => handleAuthorizationToggle(auth.id)}
-                        className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                        className="mt-1 h-4 w-4 text-primary focus:ring-ring border-input rounded"
                       />
                       <label htmlFor={`auth-${auth.id}`} className="flex-1 cursor-pointer">
                         <div className="flex items-center space-x-2 mb-2">
                           <Shield size={14} className="text-green-500" />
                           <div className="flex-1 min-w-0">
-                            <div className="font-medium text-gray-900 dark:text-gray-100 text-sm truncate">
+                            <div className="font-medium text-foreground text-sm truncate">
                               {host?.name || 'Unknown Host'}
                             </div>
                             {host && (
-                              <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                              <div className="text-xs text-muted-foreground truncate">
                                 {host.address}:{host.port}
                               </div>
                             )}
@@ -388,15 +388,15 @@ const SplitKeysModal: React.FC<SplitKeysModalProps> = ({
                         </div>
                         <div className="text-xs space-y-1">
                           <div className="flex items-center space-x-1">
-                            <span className="font-medium text-gray-600 dark:text-gray-400">Login as:</span>
+                            <span className="font-medium text-muted-foreground">Login as:</span>
                             <code className="bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 px-2 py-1 rounded font-medium">
                               {auth.login}
                             </code>
                           </div>
                           {auth.options && (
                             <div className="flex items-start space-x-1">
-                              <span className="font-medium text-gray-600 dark:text-gray-400 mt-0.5">Options:</span>
-                              <code className="bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-1 py-0.5 rounded text-xs break-all flex-1">
+                              <span className="font-medium text-muted-foreground mt-0.5">Options:</span>
+                              <code className="bg-muted text-foreground px-1 py-0.5 rounded text-xs break-all flex-1">
                                 {auth.options}
                               </code>
                             </div>
@@ -412,7 +412,7 @@ const SplitKeysModal: React.FC<SplitKeysModalProps> = ({
         </Card>
 
         {/* Actions */}
-        <div className="flex items-center justify-end space-x-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+        <div className="flex items-center justify-end space-x-3 pt-4 border-t border-border">
           <Button
             variant="secondary"
             onClick={onClose}
