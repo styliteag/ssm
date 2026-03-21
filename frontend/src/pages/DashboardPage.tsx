@@ -64,7 +64,6 @@ const DashboardPage: React.FC = () => {
 
   const pieData = [
     { name: 'Active', value: stats.hosts },
-    { name: 'Disabled', value: 2 }, // Mock disabled count
   ];
 
   if (isLoading) {
@@ -104,43 +103,39 @@ const DashboardPage: React.FC = () => {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Link to="/hosts">
+        <Link to="/hosts" className="cursor-pointer">
           <StatCard
             title="Total Hosts"
             value={stats.hosts}
             icon={Server}
             iconColor="text-blue-500"
-            trend={{ value: 12, isPositive: true }}
             gradient="bg-gradient-to-br from-blue-500 to-blue-600"
           />
         </Link>
-        <Link to="/users">
+        <Link to="/users" className="cursor-pointer">
           <StatCard
             title="Active Users"
             value={stats.users}
             icon={Users}
             iconColor="text-green-500"
-            trend={{ value: 5, isPositive: true }}
             gradient="bg-gradient-to-br from-green-500 to-green-600"
           />
         </Link>
-        <Link to="/keys">
+        <Link to="/keys" className="cursor-pointer">
           <StatCard
             title="SSH Keys"
             value={stats.keys}
             icon={Key}
             iconColor="text-purple-500"
-            trend={{ value: 2, isPositive: true }}
             gradient="bg-gradient-to-br from-purple-500 to-purple-600"
           />
         </Link>
-        <Link to="/authorizations">
+        <Link to="/authorizations" className="cursor-pointer">
           <StatCard
             title="Authorizations"
             value={stats.authorizations}
             icon={Shield}
             iconColor="text-orange-500"
-            trend={{ value: 0, isPositive: true }}
             gradient="bg-gradient-to-br from-orange-500 to-orange-600"
           />
         </Link>
@@ -159,7 +154,7 @@ const DashboardPage: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Link
                   to="/hosts"
-                  className="group flex items-center justify-between p-4 bg-secondary/50 hover:bg-secondary rounded-lg transition-colors border border-transparent hover:border-border"
+                  className="group flex items-center justify-between p-4 bg-secondary/50 hover:bg-secondary rounded-lg transition-colors border border-transparent hover:border-border cursor-pointer"
                 >
                   <div className="flex items-center space-x-3">
                     <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-md text-blue-600 dark:text-blue-400">
@@ -172,7 +167,7 @@ const DashboardPage: React.FC = () => {
 
                 <Link
                   to="/users"
-                  className="group flex items-center justify-between p-4 bg-secondary/50 hover:bg-secondary rounded-lg transition-colors border border-transparent hover:border-border"
+                  className="group flex items-center justify-between p-4 bg-secondary/50 hover:bg-secondary rounded-lg transition-colors border border-transparent hover:border-border cursor-pointer"
                 >
                   <div className="flex items-center space-x-3">
                     <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-md text-green-600 dark:text-green-400">
@@ -185,7 +180,7 @@ const DashboardPage: React.FC = () => {
 
                 <Link
                   to="/keys"
-                  className="group flex items-center justify-between p-4 bg-secondary/50 hover:bg-secondary rounded-lg transition-colors border border-transparent hover:border-border"
+                  className="group flex items-center justify-between p-4 bg-secondary/50 hover:bg-secondary rounded-lg transition-colors border border-transparent hover:border-border cursor-pointer"
                 >
                   <div className="flex items-center space-x-3">
                     <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-md text-purple-600 dark:text-purple-400">
@@ -198,7 +193,7 @@ const DashboardPage: React.FC = () => {
 
                 <Link
                   to="/diff"
-                  className="group flex items-center justify-between p-4 bg-secondary/50 hover:bg-secondary rounded-lg transition-colors border border-transparent hover:border-border"
+                  className="group flex items-center justify-between p-4 bg-secondary/50 hover:bg-secondary rounded-lg transition-colors border border-transparent hover:border-border cursor-pointer"
                 >
                   <div className="flex items-center space-x-3">
                     <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-md text-orange-600 dark:text-orange-400">
@@ -223,11 +218,12 @@ const DashboardPage: React.FC = () => {
             />
             <Card className="flex flex-col justify-center p-6 bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20 h-full">
               <div className="text-center space-y-2">
-                <h3 className="text-lg font-semibold text-primary">System Health</h3>
-                <p className="text-4xl font-bold text-foreground">98.5%</p>
-                <p className="text-sm text-muted-foreground">Uptime this month</p>
-                <div className="w-full bg-secondary h-2 rounded-full mt-4 overflow-hidden">
-                  <div className="bg-green-500 h-full rounded-full" style={{ width: '98.5%' }}></div>
+                <h3 className="text-lg font-semibold text-primary">Summary</h3>
+                <p className="text-4xl font-bold text-foreground">{stats.hosts + stats.users}</p>
+                <p className="text-sm text-muted-foreground">Total managed resources</p>
+                <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                  <div className="text-muted-foreground">{stats.keys} keys</div>
+                  <div className="text-muted-foreground">{stats.authorizations} auths</div>
                 </div>
               </div>
             </Card>

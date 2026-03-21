@@ -138,22 +138,22 @@ const ActivitiesPage: React.FC = () => {
                             )}
                             {metadata.incorrect_options > 0 && (
                                 <span className="text-xs bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 px-2 py-0.5 rounded">
-                                    ⚙️ {metadata.incorrect_options} options fixed
+                                    {metadata.incorrect_options} options fixed
                                 </span>
                             )}
                             {metadata.unauthorized_keys > 0 && (
                                 <span className="text-xs bg-orange-100 dark:bg-orange-900/20 text-orange-700 dark:text-orange-400 px-2 py-0.5 rounded">
-                                    🚫 {metadata.unauthorized_keys} unauthorized
+                                    {metadata.unauthorized_keys} unauthorized
                                 </span>
                             )}
                             {metadata.duplicate_keys > 0 && (
                                 <span className="text-xs bg-purple-100 dark:bg-purple-900/20 text-purple-700 dark:text-purple-400 px-2 py-0.5 rounded">
-                                    2x {metadata.duplicate_keys} duplicates
+                                    {metadata.duplicate_keys} duplicates
                                 </span>
                             )}
                             {metadata.faulty_keys > 0 && (
                                 <span className="text-xs bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-400 px-2 py-0.5 rounded">
-                                    ⚠️ {metadata.faulty_keys} faulty
+                                    {metadata.faulty_keys} faulty
                                 </span>
                             )}
                             {metadata.logins_affected > 0 && (
@@ -166,7 +166,7 @@ const ActivitiesPage: React.FC = () => {
                     {hasDiff && activityId !== undefined && (
                         <button
                             onClick={() => setExpandedDiff(expandedDiff === activityId ? null : activityId)}
-                            className="text-xs bg-primary/10 text-primary hover:bg-primary/20 px-2 py-0.5 rounded transition-colors"
+                            className="text-xs bg-primary/10 text-primary hover:bg-primary/20 px-2 py-0.5 rounded transition-colors cursor-pointer"
                         >
                             {expandedDiff === activityId ? 'Hide Details' : 'View Details'}
                         </button>

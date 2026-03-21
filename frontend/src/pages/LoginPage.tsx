@@ -56,7 +56,7 @@ const LoginPage: React.FC = () => {
       <div className="absolute top-6 right-6 z-20 animate-in slide-in-from-top-4 fade-in duration-700">
         <button
           onClick={toggleTheme}
-          className="p-3 rounded-full bg-white/10 backdrop-blur-md border border-white/20 shadow-lg hover:bg-white/20 transition-all duration-300 text-foreground"
+          className="p-3 cursor-pointer rounded-full bg-white/10 backdrop-blur-md border border-white/20 shadow-lg hover:bg-white/20 transition-all duration-300 text-foreground"
           aria-label="Toggle theme"
         >
           {theme === 'dark' ? <Sun size={20} className="text-yellow-400" /> : <Moon size={20} className="text-slate-700" />}
@@ -105,24 +105,17 @@ const LoginPage: React.FC = () => {
                   className="bg-white/50 dark:bg-gray-900/50 backdrop-blur-sm"
                 />
 
-                <div className="space-y-1">
-                  <Input
-                    label="Password"
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    required
-                    autoComplete="current-password"
-                    disabled={isLoading}
-                    className="bg-white/50 dark:bg-gray-900/50 backdrop-blur-sm"
-                  />
-                  <div className="flex justify-end">
-                    <a href="#" className="text-xs font-medium text-primary hover:text-primary/80 transition-colors">
-                      Forgot password?
-                    </a>
-                  </div>
-                </div>
+                <Input
+                  label="Password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  required
+                  autoComplete="current-password"
+                  disabled={isLoading}
+                  className="bg-white/50 dark:bg-gray-900/50 backdrop-blur-sm"
+                />
               </div>
 
               <Button
