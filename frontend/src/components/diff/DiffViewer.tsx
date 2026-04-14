@@ -29,7 +29,7 @@ const DiffViewer: React.FC<DiffViewerProps> = ({
   const [showUnchanged, setShowUnchanged] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
 
-  const handleCopyToClipboard = async (content: string, type: 'expected' | 'actual') => {
+  const handleCopyToClipboard = async (content: string, _type: 'expected' | 'actual') => {
     try {
       await navigator.clipboard.writeText(content);
       // Copy succeeded

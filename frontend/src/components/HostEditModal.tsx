@@ -121,7 +121,7 @@ export const HostEditModal: React.FC<HostEditModalProps> = ({
         port: Number(values.port),
         username: values.username,
         key_fingerprint: values.key_fingerprint && values.key_fingerprint.trim() !== '' ? values.key_fingerprint.trim() : undefined,
-        jump_via: jumpViaValue !== null ? jumpViaValue : null,
+        jump_via: jumpViaValue ?? undefined,
         disabled: values.disabled || false,
         comment: values.comment && values.comment.trim() !== '' ? values.comment.trim() : undefined
       });
@@ -130,8 +130,8 @@ export const HostEditModal: React.FC<HostEditModalProps> = ({
         // Invalidate cache for the updated host (backend already does this, but we can be explicit)
         // This is especially important if the host name changed
         try {
-          await hostsService.invalidateCache(hostData.name);
-          if (host.name !== hostData.name) {
+          await hostsService.invalidateCache(values.name);
+          if (host.name !== values.name) {
             // Also invalidate old name if host was renamed
             await hostsService.invalidateCache(host.name);
           }
@@ -141,20 +141,20 @@ export const HostEditModal: React.FC<HostEditModalProps> = ({
         }
         
         onClose();
-        showSuccess('Host updated', `${hostData.name} has been updated successfully`);
+        showSuccess('Host updated', `${values.name} has been updated successfully`);
         
         // Notify parent component with updated data
         if (onHostUpdated) {
           onHostUpdated({
             ...host,
-            name: hostData.name,
-            address: hostData.address,
-            port: hostData.port,
-            username: hostData.username,
-            key_fingerprint: hostData.key_fingerprint || undefined,
+            name: values.name,
+            address: values.address,
+            port: values.port,
+            username: values.username,
+            key_fingerprint: values.key_fingerprint || undefined,
             jump_via: jumpViaValue ?? undefined,
-            disabled: hostData.disabled,
-            comment: hostData.comment || undefined,
+            disabled: values.disabled || false,
+            comment: values.comment || undefined,
             authorizations: host.authorizations,
             id: host.id,
             connection_status: host.connection_status
