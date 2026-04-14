@@ -26,7 +26,7 @@ from ssm.db.deps import db_session
 from ssm.db.models import Authorization, Host, UserKey
 from ssm.ssh.deps import get_ssh_client
 from ssm.ssh.protocol import SshClient, SshTarget
-from ssm.ssh.safety import ensure_host_not_disabled
+from ssm.ssh.safety import ensure_host_not_disabled, ensure_writable
 
 router = protected_router(prefix="/diffs", tags=["diffs"])
 
@@ -157,4 +157,53 @@ async def get_host_diff(
 
     return ApiResponse[HostDiff].ok(
         HostDiff(host_id=host.id, host_name=host.name, disabled=host.disabled, logins=login_diffs)
+    )
+
+
+class SyncedLogin(BaseModel):
+    login: str
+    written_keys: int
+
+
+class SyncResult(BaseModel):
+    host_id: int
+    host_name: str
+    logins: list[SyncedLogin]
+
+
+@router.post("/{host_id}/sync", response_model=ApiResponse[SyncResult])
+async def sync_host(
+    host_id: int,
+    session: Annotated[AsyncSession, Depends(db_session)],
+    ssh: Annotated[SshClient, Depends(get_ssh_client)],
+) -> ApiResponse[SyncResult]:
+    host = await session.get(Host, host_id)
+    if host is None:
+        raise HostNotFound(f"host {host_id} not found")
+    ensure_host_not_disabled(disabled=host.disabled, host_name=host.name)
+
+    target = await _build_target(session, host)
+
+    logins_stmt = (
+        select(Authorization.login)
+        .where(Authorization.host_id == host_id)
+        .distinct()
+        .order_by(Authorization.login)
+    )
+    logins = list((await session.execute(logins_stmt)).scalars().all())
+
+    # Fail loudly and early on any readonly login so we never partial-write.
+    for login in logins:
+        await ensure_writable(ssh, target, login)
+
+    synced: list[SyncedLogin] = []
+    for login in logins:
+        _, expected = await _expected_keys_for_login(session, host_id, login)
+        content = "".join(f"{line}\n" for line in expected)
+        path = f"/home/{login}/.ssh/authorized_keys"
+        await ssh.write_file(target, path, content)
+        synced.append(SyncedLogin(login=login, written_keys=len(expected)))
+
+    return ApiResponse[SyncResult].ok(
+        SyncResult(host_id=host.id, host_name=host.name, logins=synced)
     )
