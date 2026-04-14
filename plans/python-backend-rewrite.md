@@ -118,7 +118,7 @@ backend/
 **Phase 4 — Routes** (each with contract tests asserting envelope shape)
 - [x] `/api/v2/hosts` — CRUD; `jump_via: int | None` (no more string hack); `disabled` flag
 - [x] `/api/v2/users` — CRUD
-- [ ] `/api/v2/keys` — CRUD
+- [x] `/api/v2/keys` — CRUD
 - [ ] `/api/v2/authorizations` — links user↔host with remote username
 - [ ] `/api/v2/diffs/{host_id}` — returns `HOST_DISABLED` error if disabled; otherwise SSH reads+diffs `authorized_keys`
 - [ ] `/api/v2/diffs/{host_id}/sync` — blocks if disabled or readonly
