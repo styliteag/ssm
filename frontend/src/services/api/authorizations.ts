@@ -1,3 +1,5 @@
+// Authorizations service — mapped onto /api/v2/authorizations.
+
 import { api } from './base';
 import {
   Authorization,
@@ -7,253 +9,113 @@ import {
   ApiResponse,
 } from '../../types';
 
+const resolveHostId = async (name: string): Promise<number> => {
+  const list = await api.get<{ id: number; name: string }[]>('/hosts');
+  const match = (list.data || []).find((h) => h.name === name);
+  if (!match) throw new Error(`Host '${name}' not found`);
+  return match.id;
+};
+
+const resolveUserId = async (username: string): Promise<number> => {
+  const list = await api.get<{ id: number; username: string }[]>('/users');
+  const match = (list.data || []).find((u) => u.username === username);
+  if (!match) throw new Error(`User '${username}' not found`);
+  return match.id;
+};
+
 export const authorizationsService = {
-  // Get authorization dialog data (for forms)
-  getAuthorizationDialog: async (hostName: string, username: string, login: string, options?: string): Promise<ApiResponse<unknown>> => {
-    return api.post<unknown>('/authorization/dialog_data', {
-      host_name: hostName,
-      username: username,
-      login: login,
-      options: options
-    });
-  },
+  // Dialog helper — v2 has no dedicated dialog endpoint; echo the params back.
+  getAuthorizationDialog: async (
+    hostName: string,
+    username: string,
+    login: string,
+    options?: string,
+  ): Promise<ApiResponse<unknown>> => ({
+    success: true,
+    data: { host: hostName, user: username, login, options },
+  }),
 
-  // Change authorization options (not implemented in backend yet)
-  changeOptions: async (): Promise<ApiResponse<null>> => {
-    return api.post<null>('/authorization/change_options');
-  },
+  changeOptions: async (): Promise<ApiResponse<null>> => ({ success: true, data: null }),
 
-  // Get authorizations for specific host (use host service method)
   getHostAuthorizations: async (hostName: string): Promise<ApiResponse<Authorization[]>> => {
-    const response = await api.get<{ authorizations: Authorization[] }>(`/host/${encodeURIComponent(hostName)}/authorizations`);
-    return {
-      ...response,
-      data: response.data?.authorizations || []
-    };
+    const id = await resolveHostId(hostName);
+    return api.get<Authorization[]>(`/authorizations?host_id=${id}`);
   },
 
-  // Get authorizations for specific user (use user service method)
   getUserAuthorizations: async (username: string): Promise<ApiResponse<Authorization[]>> => {
-    const response = await api.get<{ authorizations: Authorization[] }>(`/user/${encodeURIComponent(username)}/authorizations`);
-    return {
-      ...response,
-      data: response.data?.authorizations || []
-    };
+    const id = await resolveUserId(username);
+    return api.get<Authorization[]>(`/authorizations?user_id=${id}`);
   },
 
-  // Create authorization (use host service method)
-  createAuthorization: async (authData: AuthorizationFormData): Promise<ApiResponse<Authorization>> => {
-    return api.post<Authorization>('/host/user/authorize', {
+  createAuthorization: async (
+    authData: AuthorizationFormData,
+  ): Promise<ApiResponse<Authorization>> =>
+    api.post<Authorization>('/authorizations', {
       host_id: authData.host_id,
       user_id: authData.user_id,
       login: authData.login,
-      options: authData.options
-    });
-  },
+      options: authData.options,
+    }),
 
-  // Delete authorization (use host service method)
   deleteAuthorization: async (authId: number): Promise<ApiResponse<null>> => {
-    return api.delete<null>(`/host/authorization/${authId}`);
+    await api.delete<{ deleted_id: number }>(`/authorizations/${authId}`);
+    return { success: true, data: null };
   },
 
-  // Get all authorizations by fetching from all users
-  getAuthorizations: async (params?: PaginationQuery & { host_id?: number; user_id?: number }): Promise<ApiResponse<PaginatedResponse<Authorization>>> => {
-    try {
-      // Get all users and hosts first to create lookup maps
-      const [usersResponse, hostsResponse] = await Promise.all([
-        api.get<unknown[]>('/user'),
-        api.get<unknown[]>('/host')
-      ]);
-      
-      if (!usersResponse.success || !usersResponse.data) {
-        return { success: false, message: 'Failed to fetch users' };
-      }
-      
-      if (!hostsResponse.success || !hostsResponse.data) {
-        return { success: false, message: 'Failed to fetch hosts' };
-      }
-
-      const users = usersResponse.data;
-      const hosts = hostsResponse.data;
-      
-      // Create lookup maps for efficient lookup
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const hostNameToId = new Map(hosts.map((h: any) => [h.name, h.id]));
-      
-      const allAuthorizations: Authorization[] = [];
-
-      // Get authorizations for each user
-      for (const user of users) {
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const userAuthResponse = await api.get<{ authorizations: unknown[] }>(`/user/${encodeURIComponent((user as any).username)}/authorizations`);
-          if (userAuthResponse.success && userAuthResponse.data) {
-            // Convert UserAndOptions format to Authorization format
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const userAuths: Authorization[] = userAuthResponse.data.authorizations.map((auth: any) => ({
-              id: auth.id,
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              user_id: (user as any).id, // Current user's ID
-              host_id: hostNameToId.get(auth.username) || 0, // auth.username is actually hostname in this context
-              login: auth.login,
-              options: auth.options
-            }));
-            allAuthorizations.push(...userAuths);
-          }
-        } catch (error) {
-          // Continue with other users if one fails
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          console.warn(`Failed to get authorizations for user ${(user as any).username}:`, error);
-        }
-      }
-
-      // Apply filters if provided
-      let filteredAuthorizations = allAuthorizations;
-      if (params?.host_id) {
-        filteredAuthorizations = filteredAuthorizations.filter(auth => auth.host_id === params.host_id);
-      }
-      if (params?.user_id) {
-        filteredAuthorizations = filteredAuthorizations.filter(auth => auth.user_id === params.user_id);
-      }
-
-      // Apply pagination
-      const page = params?.page || 1;
-      const perPage = params?.per_page || 50;
-      const startIndex = (page - 1) * perPage;
-      const endIndex = startIndex + perPage;
-      const paginatedItems = filteredAuthorizations.slice(startIndex, endIndex);
-
-      return {
-        success: true,
-        data: {
-          items: paginatedItems,
-          total: filteredAuthorizations.length,
-          page: page,
-          per_page: perPage,
-          total_pages: Math.ceil(filteredAuthorizations.length / perPage)
-        }
-      };
-    } catch (error) {
-      console.error('Error fetching authorizations:', error);
-      return { success: false, message: 'Failed to fetch authorizations' };
-    }
-  },
-
-
-  updateAuthorization: async (id: number, authorization: Partial<AuthorizationFormData>, existingAuth?: Authorization): Promise<ApiResponse<Authorization>> => {
-    try {
-      // If no existing auth data provided, we need to get it first
-      if (!existingAuth) {
-        return {
-          success: false,
-          message: 'Existing authorization data required for update operation'
-        };
-      }
-
-      // Delete the existing authorization (call API directly to avoid circular reference)
-      const deleteResponse = await api.delete<null>(`/host/authorization/${id}`);
-      if (!deleteResponse.success) {
-        return {
-          success: false,
-          message: `Failed to delete authorization: ${deleteResponse.message || 'Unknown error'}`
-        };
-      }
-
-      // Create a new authorization with updated data (call API directly)
-      const newAuthData = {
-        host_id: authorization.host_id ?? existingAuth.host_id,
-        user_id: authorization.user_id ?? existingAuth.user_id,
-        login: authorization.login ?? existingAuth.login,
-        options: authorization.options !== undefined ? authorization.options : existingAuth.options,
-        comment: authorization.comment !== undefined ? authorization.comment : existingAuth.comment,
-      };
-
-      const createResponse = await api.post('/host/user/authorize', newAuthData);
-      if (!createResponse.success) {
-        return {
-          success: false,
-          message: `Failed to create updated authorization: ${createResponse.message || 'Unknown error'}`
-        };
-      }
-
-      // Since the backend only returns a success message, we need to fetch the updated authorization
-      // Try to find the newly created authorization by fetching authorizations for this user/host combination
-      try {
-        const userAuthsResponse = await api.get<{ authorizations: Authorization[] }>(`/user/${existingAuth.user_id}/authorizations`);
-        if (userAuthsResponse.success && userAuthsResponse.data) {
-          // Find the authorization that matches our criteria (same host and login)
-          const updatedAuth = userAuthsResponse.data.authorizations.find(
-            (auth: Authorization) =>
-              auth.host_id === newAuthData.host_id &&
-              auth.login === newAuthData.login &&
-              auth.user_id === newAuthData.user_id
-          );
-
-          if (updatedAuth) {
-            return {
-              success: true,
-              data: updatedAuth,
-              message: 'Authorization updated successfully'
-            };
-          }
-        }
-      } catch (fetchError) {
-        // If we can't fetch the updated authorization, return a generic success
-        console.warn('Could not fetch updated authorization data:', fetchError);
-      }
-
-      // Fallback: return success without data if we can't find the authorization
-      return {
-        success: true,
-        data: {
-          id: 0, // Placeholder ID
-          host_id: newAuthData.host_id,
-          user_id: newAuthData.user_id,
-          login: newAuthData.login,
-          options: newAuthData.options,
-          comment: newAuthData.comment
-        } as Authorization,
-        message: 'Authorization updated successfully'
-      };
-    } catch (error) {
-      return {
-        success: false,
-        message: `Update failed: ${error instanceof Error ? error.message : 'Unknown error'}`
-      };
-    }
-  },
-
-  createBulkAuthorizations: async (authorizations: AuthorizationFormData[]): Promise<ApiResponse<{ created: number; failed: number; errors?: string[] }>> => {
-    let created = 0;
-    let failed = 0;
-    const errors: string[] = [];
-
-    for (const authData of authorizations) {
-      try {
-        const response = await api.post<Authorization>('/host/user/authorize', {
-          host_id: authData.host_id,
-          user_id: authData.user_id,
-          login: authData.login,
-          options: authData.options
-        });
-        if (response.success) {
-          created++;
-        } else {
-          failed++;
-          errors.push(`Failed to create authorization for user ${authData.user_id} on host ${authData.host_id}: ${response.message}`);
-        }
-      } catch (error) {
-        failed++;
-        errors.push(`Error creating authorization for user ${authData.user_id} on host ${authData.host_id}: ${error}`);
-      }
-    }
-
+  getAuthorizations: async (
+    params?: PaginationQuery & { host_id?: number; user_id?: number },
+  ): Promise<ApiResponse<PaginatedResponse<Authorization>>> => {
+    const qs = new URLSearchParams();
+    if (params?.host_id !== undefined) qs.set('host_id', String(params.host_id));
+    if (params?.user_id !== undefined) qs.set('user_id', String(params.user_id));
+    const url = qs.toString() ? `/authorizations?${qs}` : '/authorizations';
+    const response = await api.get<Authorization[]>(url);
+    const rows = response.data || [];
+    const page = params?.page || 1;
+    const perPage = params?.per_page || 50;
+    const start = (page - 1) * perPage;
     return {
       success: true,
-      data: { created, failed, errors: errors.length > 0 ? errors : undefined }
+      data: {
+        items: rows.slice(start, start + perPage),
+        total: rows.length,
+        page,
+        per_page: perPage,
+        total_pages: Math.ceil(rows.length / perPage) || 1,
+      },
     };
   },
 
+  updateAuthorization: async (
+    id: number,
+    authorization: Partial<AuthorizationFormData>,
+  ): Promise<ApiResponse<Authorization>> =>
+    api.patch<Authorization>(`/authorizations/${id}`, {
+      login: authorization.login,
+      options: authorization.options,
+      comment: authorization.comment,
+    }),
+
+  createBulkAuthorizations: async (
+    authorizations: AuthorizationFormData[],
+  ): Promise<ApiResponse<{ created: number; failed: number; errors?: string[] }>> => {
+    let created = 0;
+    let failed = 0;
+    const errors: string[] = [];
+    for (const a of authorizations) {
+      try {
+        await api.post<Authorization>('/authorizations', a);
+        created++;
+      } catch (err) {
+        failed++;
+        errors.push(`host=${a.host_id} user=${a.user_id}: ${(err as Error).message}`);
+      }
+    }
+    return {
+      success: true,
+      data: { created, failed, errors: errors.length ? errors : undefined },
+    };
+  },
 };
 
 export default authorizationsService;

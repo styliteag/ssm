@@ -1,3 +1,5 @@
+// Users service — mapped onto /api/v2/users + /api/v2/keys + /api/v2/authorizations.
+
 import { api } from './base';
 import {
   User,
@@ -9,74 +11,67 @@ import {
   PublicUserKey,
 } from '../../types';
 
+const resolveUserId = async (idOrName: number | string): Promise<number> => {
+  if (typeof idOrName === 'number') return idOrName;
+  const asInt = Number(idOrName);
+  if (!Number.isNaN(asInt) && String(asInt) === idOrName) return asInt;
+  const list = await api.get<User[]>('/users');
+  const match = (list.data || []).find((u) => u.username === idOrName);
+  if (!match) throw new Error(`User '${idOrName}' not found`);
+  return match.id;
+};
+
 export const usersService = {
-  // Get paginated list of users
-  getUsers: async (params?: PaginationQuery & { search?: string; enabled?: boolean }): Promise<ApiResponse<PaginatedResponse<User>>> => {
-    // Backend returns array directly, not paginated
-    const response = await api.get<User[]>('/user', { params });
-    // Convert to paginated response format expected by frontend
-    const data = response.data || [];
+  getUsers: async (
+    params?: PaginationQuery & { search?: string; enabled?: boolean },
+  ): Promise<ApiResponse<PaginatedResponse<User>>> => {
+    const response = await api.get<User[]>('/users');
+    let data = response.data || [];
+    if (params?.search) {
+      const q = params.search.toLowerCase();
+      data = data.filter((u) => u.username.toLowerCase().includes(q));
+    }
+    if (params?.enabled !== undefined) data = data.filter((u) => u.enabled === params.enabled);
     return {
-      ...response,
-      data: {
-        items: data,
-        total: data.length,
-        page: 1,
-        per_page: data.length,
-        total_pages: 1
-      }
+      success: true,
+      data: { items: data, total: data.length, page: 1, per_page: data.length, total_pages: 1 },
     };
   },
 
-  // Get single user by username (backend uses username, not ID)
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  getUser: async (_id: number): Promise<ApiResponse<User>> => {
-    throw new Error('getUser by ID not supported. Use getUserByUsername instead.');
-  },
+  getUser: async (id: number): Promise<ApiResponse<User>> => api.get<User>(`/users/${id}`),
 
-  // Get user by username (this is what the backend actually supports)
   getUserByUsername: async (username: string): Promise<ApiResponse<User>> => {
-    return api.get<User>(`/user/${encodeURIComponent(username)}`);
+    const id = await resolveUserId(username);
+    return api.get<User>(`/users/${id}`);
   },
 
-  // Create new user
-  createUser: async (user: UserFormData): Promise<ApiResponse<User>> => {
-    return api.post<User>('/user', user);
-  },
+  createUser: async (user: UserFormData): Promise<ApiResponse<User>> => api.post<User>('/users', user),
 
-  // Update existing user by username
   updateUser: async (oldUsername: string, user: UserFormData): Promise<ApiResponse<User>> => {
-    return api.put<User>(`/user/${encodeURIComponent(oldUsername)}`, {
+    const id = await resolveUserId(oldUsername);
+    return api.patch<User>(`/users/${id}`, {
       username: user.username,
       enabled: user.enabled,
-      comment: user.comment
+      comment: user.comment,
     });
   },
 
-  // Delete user by username
   deleteUser: async (username: string): Promise<ApiResponse<null>> => {
-    return api.delete<null>(`/user/${encodeURIComponent(username)}`);
+    const id = await resolveUserId(username);
+    await api.delete<{ deleted_id: number }>(`/users/${id}`);
+    return { success: true, data: null };
   },
 
-  // Get user authorizations by username
   getUserAuthorizations: async (username: string): Promise<ApiResponse<Authorization[]>> => {
-    const response = await api.get<{ authorizations: Authorization[] }>(`/user/${encodeURIComponent(username)}/authorizations`);
-    return {
-      ...response,
-      data: response.data?.authorizations || []
-    };
+    const id = await resolveUserId(username);
+    return api.get<Authorization[]>(`/authorizations?user_id=${id}`);
   },
 
-  // Get user SSH keys by username
   getUserKeys: async (username: string): Promise<ApiResponse<PublicUserKey[]>> => {
-    const response = await api.get<{ keys: PublicUserKey[] }>(`/user/${encodeURIComponent(username)}/keys`);
-    return {
-      ...response,
-      data: response.data?.keys || []
-    };
+    const id = await resolveUserId(username);
+    return api.get<PublicUserKey[]>(`/keys?user_id=${id}`);
   },
 
-  // Assign key to user
   assignKeyToUser: async (keyData: {
     user_id: number;
     key_type: string;
@@ -84,44 +79,43 @@ export const usersService = {
     key_name: string | null;
     extra_comment: string | null;
   }): Promise<ApiResponse<null>> => {
-    console.log('assignKeyToUser called with:', keyData);
-    return api.post<null>('/user/assign_key', keyData);
+    await api.post<unknown>('/keys', {
+      user_id: keyData.user_id,
+      key_type: keyData.key_type,
+      key_base64: keyData.key_base64,
+      name: keyData.key_name,
+      extra_comment: keyData.extra_comment,
+    });
+    return { success: true, data: null };
   },
 
-  // Add key dialog (preview key before assignment)
   previewKey: async (keyData: {
     key_type: string;
     key_base64: string;
     key_name?: string;
     extra_comment?: string;
   }): Promise<ApiResponse<unknown>> => {
-    return api.post<unknown>('/user/add_key', keyData);
+    // No preview endpoint in v2 — echo the input so the UI can render it.
+    return { success: true, data: keyData };
   },
 
-  // Get all users (for dropdowns, etc.)
-  getAllUsers: async (): Promise<ApiResponse<User[]>> => {
-    return api.get<User[]>('/user');
-  },
+  getAllUsers: async (): Promise<ApiResponse<User[]>> => api.get<User[]>('/users'),
 
-  // These methods don't exist in backend - calling code will need to be updated
   getEnabledUsers: async (): Promise<ApiResponse<User[]>> => {
-    // Filter enabled users on frontend since backend doesn't have this endpoint
-    const response = await api.get<User[]>('/user');
-    const data = response.data || [];
+    const response = await api.get<User[]>('/users');
+    return { success: true, data: (response.data || []).filter((u) => u.enabled) };
+  },
+
+  toggleUser: async (id: number, enabled: boolean): Promise<ApiResponse<User>> =>
+    api.patch<User>(`/users/${id}`, { enabled }),
+
+  searchUsers: async (query: string): Promise<ApiResponse<User[]>> => {
+    const response = await api.get<User[]>('/users');
+    const q = query.toLowerCase();
     return {
-      ...response,
-      data: data.filter(user => user.enabled)
+      success: true,
+      data: (response.data || []).filter((u) => u.username.toLowerCase().includes(q)),
     };
-  },
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  toggleUser: async (_id: number, _enabled: boolean): Promise<ApiResponse<User>> => {
-    throw new Error('toggleUser endpoint not available in backend. Use updateUser instead.');
-  },
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  searchUsers: async (_query: string): Promise<ApiResponse<User[]>> => {
-    throw new Error('searchUsers endpoint not available in backend');
   },
 };
 

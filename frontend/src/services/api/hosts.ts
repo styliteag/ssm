@@ -1,3 +1,7 @@
+// Hosts service — mapped onto /api/v2/hosts + /api/v2/diffs.
+//
+// Kept same function names so existing pages compile without changes.
+
 import { api } from './base';
 import {
   Host,
@@ -8,169 +12,163 @@ import {
   AllowedUserOnHost,
 } from '../../types';
 
+type IdOrName = number | string;
+
+const resolveHostId = async (idOrName: IdOrName): Promise<number> => {
+  if (typeof idOrName === 'number') return idOrName;
+  const asInt = Number(idOrName);
+  if (!Number.isNaN(asInt) && String(asInt) === idOrName) return asInt;
+  const list = await api.get<Host[]>('/hosts');
+  const match = (list.data || []).find((h) => h.name === idOrName);
+  if (!match) throw new Error(`Host '${idOrName}' not found`);
+  return match.id;
+};
+
 export const hostsService = {
-  // Get paginated list of hosts
-  getHosts: async (params?: PaginationQuery & { search?: string }): Promise<ApiResponse<PaginatedResponse<Host>>> => {
-    // Backend returns array directly, not paginated
-    const response = await api.get<Host[]>('/host', { params });
-    // Convert to paginated response format expected by frontend
-    const data = response.data || [];
+  getHosts: async (
+    params?: PaginationQuery & { search?: string },
+  ): Promise<ApiResponse<PaginatedResponse<Host>>> => {
+    const response = await api.get<Host[]>('/hosts', { params });
+    const rows = response.data || [];
+    const q = params?.search?.toLowerCase() || '';
+    const filtered = q ? rows.filter((h) => h.name.toLowerCase().includes(q)) : rows;
     return {
-      ...response,
+      success: true,
       data: {
-        items: data,
-        total: data.length,
+        items: filtered,
+        total: filtered.length,
         page: 1,
-        per_page: data.length,
-        total_pages: 1
-      }
+        per_page: filtered.length,
+        total_pages: 1,
+      },
     };
   },
 
-  // Get single host by name (backend uses name, not ID)
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  getHost: async (_id: number): Promise<ApiResponse<Host>> => {
-    throw new Error('getHost by ID not supported. Use getHostByName instead.');
-  },
+  getHost: async (id: number): Promise<ApiResponse<Host>> => api.get<Host>(`/hosts/${id}`),
 
-  // Get host by name (this is what the backend actually supports)
   getHostByName: async (name: string): Promise<ApiResponse<Host>> => {
-    return api.get<Host>(`/host/${encodeURIComponent(name)}`);
+    const id = await resolveHostId(name);
+    return api.get<Host>(`/hosts/${id}`);
   },
 
-  // Create new host
-  createHost: async (host: Partial<Host> & { key_fingerprint?: string }): Promise<ApiResponse<Host & { requires_confirmation?: boolean; key_fingerprint?: string }>> => {
-    return api.post<Host & { requires_confirmation?: boolean; key_fingerprint?: string }>('/host', host);
+  createHost: async (
+    host: Partial<Host> & { key_fingerprint?: string },
+  ): Promise<ApiResponse<Host & { requires_confirmation?: boolean; key_fingerprint?: string }>> => {
+    return api.post<Host & { requires_confirmation?: boolean; key_fingerprint?: string }>(
+      '/hosts',
+      host,
+    );
   },
 
-  // Update existing host by name
-  updateHost: async (name: string, host: Partial<Host>): Promise<ApiResponse<Host>> => {
-    // Backend now accepts Option<i32> directly, so we can send number | null
-    // No conversion needed - send as-is
-    return api.put<Host>(`/host/${encodeURIComponent(name)}`, host);
+  updateHost: async (nameOrId: IdOrName, host: Partial<Host>): Promise<ApiResponse<Host>> => {
+    const id = await resolveHostId(nameOrId);
+    return api.patch<Host>(`/hosts/${id}`, host);
   },
 
-  // Delete host by name
-  deleteHost: async (name: string): Promise<ApiResponse<null>> => {
-    return api.delete<null>(`/host/${encodeURIComponent(name)}`);
+  deleteHost: async (nameOrId: IdOrName): Promise<ApiResponse<null>> => {
+    const id = await resolveHostId(nameOrId);
+    await api.delete<{ deleted_id: number }>(`/hosts/${id}`);
+    return { success: true, data: null };
   },
 
-  // Get host authorizations by name
-  getHostAuthorizations: async (name: string): Promise<ApiResponse<Authorization[]>> => {
-    return api.get<Authorization[]>(`/host/${encodeURIComponent(name)}/authorizations`);
+  getHostAuthorizations: async (nameOrId: IdOrName): Promise<ApiResponse<Authorization[]>> => {
+    const id = await resolveHostId(nameOrId);
+    return api.get<Authorization[]>(`/authorizations?host_id=${id}`);
   },
 
-  // Add authorization to host (backend uses different endpoint structure)
-  addHostAuthorization: async (hostId: number, authorization: Omit<Authorization, 'id' | 'host_id'>): Promise<ApiResponse<Authorization>> => {
-    return api.post<Authorization>('/host/user/authorize', {
+  addHostAuthorization: async (
+    hostId: number,
+    authorization: Omit<Authorization, 'id' | 'host_id'>,
+  ): Promise<ApiResponse<Authorization>> => {
+    return api.post<Authorization>('/authorizations', {
       host_id: hostId,
       user_id: authorization.user_id,
       login: authorization.login,
       options: authorization.options,
-      comment: authorization.comment
+      comment: authorization.comment,
     });
   },
 
-  // Remove authorization (backend uses different endpoint)
   removeHostAuthorization: async (authId: number): Promise<ApiResponse<null>> => {
-    return api.delete<null>(`/host/authorization/${authId}`);
+    await api.delete<{ deleted_id: number }>(`/authorizations/${authId}`);
+    return { success: true, data: null };
   },
 
-  // Get logins for host
-  getHostLogins: async (name: string, forceUpdate?: boolean): Promise<ApiResponse<string[]>> => {
-    const params = forceUpdate ? { force_update: true } : undefined;
-    const response = await api.get<{ logins: string[] }>(`/host/${encodeURIComponent(name)}/logins`, { params });
-    return {
-      ...response,
-      data: response.data?.logins || []
-    };
+  // v2 doesn't enumerate remote login accounts; derive logins from authorizations.
+  getHostLogins: async (
+    nameOrId: IdOrName,
+    _forceUpdate?: boolean,
+  ): Promise<ApiResponse<string[]>> => {
+    const id = await resolveHostId(nameOrId);
+    const resp = await api.get<Authorization[]>(`/authorizations?host_id=${id}`);
+    const logins = Array.from(new Set((resp.data || []).map((a) => a.login)));
+    return { success: true, data: logins };
   },
 
-  // Add host key
-  addHostKey: async (_id: number, keyFingerprint?: string): Promise<ApiResponse<unknown>> => {
-    return api.post<unknown>(`/host/${_id}/add_hostkey`, { key_fingerprint: keyFingerprint });
+  // Hostkey fingerprint confirmation flow — not in v2; kept as a no-op success.
+  addHostKey: async (
+    _id: number,
+    _keyFingerprint?: string,
+  ): Promise<ApiResponse<unknown>> => ({ success: true, data: null }),
+
+  // Get a rendered authorized_keys preview via the v2 diff endpoint.
+  generateAuthorizedKeys: async (
+    hostName: string,
+    _login: string,
+  ): Promise<ApiResponse<unknown>> => {
+    const id = await resolveHostId(hostName);
+    return api.get<unknown>(`/diffs/${id}`);
   },
 
-  // Generate authorized keys
-  generateAuthorizedKeys: async (hostName: string, login: string): Promise<ApiResponse<unknown>> => {
-    return api.post<unknown>('/host/gen_authorized_keys', { host_name: hostName, login });
+  // In v2 sync rewrites ALL logins; for a single login, sync everything.
+  setAuthorizedKeys: async (
+    hostName: string,
+    _login: string,
+    _authorizedKeys: string,
+  ): Promise<ApiResponse<null>> => {
+    const id = await resolveHostId(hostName);
+    await api.post<unknown>(`/diffs/${id}/sync`);
+    return { success: true, data: null };
   },
 
-  // Set authorized keys on host
-  setAuthorizedKeys: async (hostName: string, login: string, authorizedKeys: string): Promise<ApiResponse<null>> => {
-    return api.post<null>(`/host/${encodeURIComponent(hostName)}/set_authorized_keys`, {
-      login,
-      authorized_keys: authorizedKeys
-    });
-  },
+  getAllHosts: async (): Promise<ApiResponse<Host[]>> => api.get<Host[]>('/hosts'),
 
-  // Legacy methods for backwards compatibility - these will need to be updated in calling code
-  getAllHosts: async (): Promise<ApiResponse<Host[]>> => {
-    return api.get<Host[]>('/host');
-  },
-
-  // These methods don't exist in backend - calling code will need to be updated
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   getAllowedUsers: async (_id: number): Promise<ApiResponse<AllowedUserOnHost[]>> => {
-    throw new Error('getAllowedUsers endpoint not available in backend');
+    throw new Error('getAllowedUsers endpoint not available in v2');
   },
 
-  // Invalidate cache for a specific host
-  invalidateCache: async (hostName: string): Promise<ApiResponse<{ message: string }>> => {
-    return api.post<{ message: string }>(`/host/${encodeURIComponent(hostName)}/cache/invalidate`);
-  },
+  // v2 CachingSshClient exposes this server-side; no remote trigger today.
+  invalidateCache: async (_hostName: string): Promise<ApiResponse<{ message: string }>> => ({
+    success: true,
+    data: { message: 'cache invalidation is server-side only in v2' },
+  }),
 
-  // Test connection by attempting to get logins (requires SSH connectivity)
-  testConnection: async (hostName: string): Promise<ApiResponse<{ success: boolean; message: string }>> => {
+  testConnection: async (
+    hostName: string,
+  ): Promise<ApiResponse<{ success: boolean; message: string }>> => {
     try {
-      const response = await api.get<{ logins: string[] }>(`/host/${encodeURIComponent(hostName)}/logins`);
-      if (response.success) {
-        return {
-          ...response,
-          data: {
-            success: true,
-            message: `Connection successful. Found ${response.data?.logins?.length || 0} available logins.`
-          }
-        };
-      } else {
-        return {
-          ...response,
-          data: {
-            success: false,
-            message: response.message || 'Connection failed'
-          }
-        };
-      }
-    } catch (error: unknown) {
-      // Extract error message from API response if available
-      let errorMessage = 'Connection failed';
-      const errorObj = error as { response?: { data?: { message?: string } }; message?: string };
-      if (errorObj?.response?.data?.message) {
-        errorMessage = errorObj.response.data.message;
-      } else if (errorObj?.message) {
-        errorMessage = errorObj.message;
-      }
-
+      const id = await resolveHostId(hostName);
+      const resp = await api.get<unknown>(`/diffs/${id}`);
+      const ok = resp.success !== false;
       return {
-        success: false,
-        message: errorMessage,
-        data: {
-          success: false,
-          message: errorMessage
-        }
+        success: true,
+        data: { success: ok, message: ok ? 'Connection successful.' : 'Connection failed.' },
       };
+    } catch (error: unknown) {
+      const message = (error as Error)?.message || 'Connection failed';
+      return { success: false, message, data: { success: false, message } };
     }
   },
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  deployKeys: async (_id: number): Promise<ApiResponse<{ message: string }>> => {
-    throw new Error('deployKeys endpoint not available in backend');
+  deployKeys: async (id: number): Promise<ApiResponse<{ message: string }>> => {
+    await api.post<unknown>(`/diffs/${id}/sync`);
+    return { success: true, data: { message: 'synced' } };
   },
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  getKeyDifferences: async (_id: number): Promise<ApiResponse<unknown>> => {
-    throw new Error('getKeyDifferences endpoint not available in backend');
-  },
+  getKeyDifferences: async (id: number): Promise<ApiResponse<unknown>> => api.get<unknown>(`/diffs/${id}`),
 };
 
 export default hostsService;

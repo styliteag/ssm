@@ -1,3 +1,5 @@
+// Keys service — mapped onto /api/v2/keys.
+
 import { api } from './base';
 import {
   PublicUserKey,
@@ -8,121 +10,102 @@ import {
 } from '../../types';
 
 export const keysService = {
-  // Get paginated list of all keys
-  getKeys: async (params?: PaginationQuery & { search?: string; user_id?: number }): Promise<ApiResponse<PaginatedResponse<PublicUserKey>>> => {
-    // Backend returns wrapped response with keys array
-    interface BackendKey extends Omit<PublicUserKey, 'key_name' | 'extra_comment'> {
-      key_comment?: string;
-      comment?: string;
-      key_name?: string;
-      extra_comment?: string;
+  getKeys: async (
+    params?: PaginationQuery & { search?: string; user_id?: number },
+  ): Promise<ApiResponse<PaginatedResponse<PublicUserKey>>> => {
+    const url = params?.user_id !== undefined ? `/keys?user_id=${params.user_id}` : '/keys';
+    const response = await api.get<PublicUserKey[]>(url);
+    let keys = response.data || [];
+    if (params?.search) {
+      const q = params.search.toLowerCase();
+      keys = keys.filter(
+        (k) =>
+          (k.key_name || '').toLowerCase().includes(q) ||
+          (k.key_base64 || '').toLowerCase().includes(q),
+      );
     }
-    const response = await api.get<{ keys: BackendKey[] }>('/key', { params });
-    // Convert to paginated response format expected by frontend and handle field mapping
-    const keys = (response.data?.keys || []).map((key: BackendKey) => ({
-      ...key,
-      // Handle backward compatibility: if backend still sends old format, map to new format
-      key_name: key.key_name || key.key_comment || key.comment,
-      extra_comment: key.extra_comment || undefined,
-    }));
     return {
-      ...response,
-      data: {
-        items: keys,
-        total: keys.length,
-        page: 1,
-        per_page: keys.length,
-        total_pages: 1
-      }
+      success: true,
+      data: { items: keys, total: keys.length, page: 1, per_page: keys.length, total_pages: 1 },
     };
   },
 
-  // Delete SSH key by ID
+  getKey: async (id: number): Promise<ApiResponse<PublicUserKey>> => api.get<PublicUserKey>(`/keys/${id}`),
+
+  createKey: async (userId: number, key: KeyFormData): Promise<ApiResponse<PublicUserKey>> =>
+    api.post<PublicUserKey>('/keys', {
+      user_id: userId,
+      key_type: key.key_type,
+      key_base64: key.key_base64,
+      name: key.key_name,
+      extra_comment: key.extra_comment,
+    }),
+
+  updateKey: async (id: number, key: Partial<KeyFormData>): Promise<ApiResponse<PublicUserKey>> =>
+    api.patch<PublicUserKey>(`/keys/${id}`, {
+      name: key.key_name,
+      extra_comment: key.extra_comment,
+    }),
+
   deleteKey: async (id: number): Promise<ApiResponse<null>> => {
-    return api.delete<null>(`/key/${id}`);
+    await api.delete<{ deleted_id: number }>(`/keys/${id}`);
+    return { success: true, data: null };
   },
 
-  // Update key name
   updateKeyName: async (id: number, name: string): Promise<ApiResponse<null>> => {
-    return api.put<null>(`/key/${id}/comment`, { name });
+    await api.patch<unknown>(`/keys/${id}`, { name });
+    return { success: true, data: null };
   },
 
-  // Update key extra comment
   updateKeyExtraComment: async (id: number, extraComment: string): Promise<ApiResponse<null>> => {
-    return api.put<null>(`/key/${id}/comment`, { extra_comment: extraComment });
+    await api.patch<unknown>(`/keys/${id}`, { extra_comment: extraComment });
+    return { success: true, data: null };
   },
 
-  // Update key comment (legacy method for backward compatibility)
   updateKeyComment: async (id: number, comment: string): Promise<ApiResponse<null>> => {
-    return api.put<null>(`/key/${id}/comment`, { comment });
+    await api.patch<unknown>(`/keys/${id}`, { name: comment });
+    return { success: true, data: null };
   },
 
-  // Get all keys for a user (use the user service method instead)
   getKeysForUser: async (username: string): Promise<ApiResponse<PublicUserKey[]>> => {
-    interface BackendKey extends Omit<PublicUserKey, 'key_name' | 'extra_comment'> {
-      key_comment?: string;
-      comment?: string;
-      key_name?: string;
-      extra_comment?: string;
-    }
-    const response = await api.get<{ keys: BackendKey[] }>(`/user/${encodeURIComponent(username)}/keys`);
-    // Handle field mapping for backward compatibility
-    const keys = (response.data?.keys || []).map((key: BackendKey) => ({
-      ...key,
-      // Handle backward compatibility: if backend still sends old format, map to new format
-      key_name: key.key_name || key.key_comment || key.comment,
-      extra_comment: key.extra_comment || undefined,
-    }));
-    return {
-      ...response,
-      data: keys
-    };
-  },
-
-  // These methods don't exist in the backend - calling code will need to be updated
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  getKey: async (_id: number): Promise<ApiResponse<PublicUserKey>> => {
-    throw new Error('getKey endpoint not available in backend');
-  },
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  createKey: async (_userId: number, _key: KeyFormData): Promise<ApiResponse<PublicUserKey>> => {
-    throw new Error('createKey endpoint not available in backend. Use usersService.assignKeyToUser instead.');
-  },
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  updateKey: async (_id: number, _key: Partial<KeyFormData>): Promise<ApiResponse<PublicUserKey>> => {
-    throw new Error('updateKey endpoint not available in backend. Use updateKeyComment for comment updates.');
+    const users = await api.get<{ id: number; username: string }[]>('/users');
+    const match = (users.data || []).find((u) => u.username === username);
+    if (!match) return { success: true, data: [] };
+    return api.get<PublicUserKey[]>(`/keys?user_id=${match.id}`);
   },
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   parseKey: async (_keyText: string): Promise<ApiResponse<{ key_type: string; key_base64: string; comment?: string }>> => {
-    throw new Error('parseKey endpoint not available in backend');
+    throw new Error('parseKey not available in v2 — parse client-side.');
   },
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   validateKey: async (_keyText: string): Promise<ApiResponse<{ valid: boolean; message?: string }>> => {
-    throw new Error('validateKey endpoint not available in backend');
+    throw new Error('validateKey not available in v2 — validate client-side.');
   },
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   getKeyFingerprint: async (_keyId: number): Promise<ApiResponse<{ fingerprint: string }>> => {
-    throw new Error('getKeyFingerprint endpoint not available in backend');
+    throw new Error('getKeyFingerprint not available in v2.');
   },
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   importKeys: async (_userId: number, _keysText: string): Promise<ApiResponse<{ imported: number; failed: number; errors?: string[] }>> => {
-    throw new Error('importKeys endpoint not available in backend');
+    throw new Error('importKeys not available in v2.');
   },
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   exportKeys: async (_userId: number): Promise<ApiResponse<{ keys_text: string }>> => {
-    throw new Error('exportKeys endpoint not available in backend');
+    throw new Error('exportKeys not available in v2.');
   },
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  searchKeys: async (_query: string): Promise<ApiResponse<PublicUserKey[]>> => {
-    throw new Error('searchKeys endpoint not available in backend');
+  searchKeys: async (query: string): Promise<ApiResponse<PublicUserKey[]>> => {
+    const response = await api.get<PublicUserKey[]>('/keys');
+    const q = query.toLowerCase();
+    return {
+      success: true,
+      data: (response.data || []).filter((k) => (k.key_name || '').toLowerCase().includes(q)),
+    };
   },
 };
 
