@@ -99,7 +99,7 @@ backend/
 - [x] Config loader (env > config.toml; `DATABASE_URL`, `JWT_SECRET`, `SSH_KEY`, `HTPASSWD`, `CONFIG`, `RUST_LOG` → Python logging)
 - [x] `ApiResponse[T]` envelope + `ErrorCode` enum (`AUTH_REQUIRED`, `HOST_DISABLED`, `SSH_READONLY`, `HOST_NOT_FOUND`, `VALIDATION_FAILED`, etc.) + global exception handlers
 - [x] SQLAlchemy models mirroring current schema; Alembic initial migration reproducing it 1:1
-- [ ] `scripts/migrate_from_rust.py` (reads `backend-rust/*.sqlite`, writes new DB, verifies row counts)
+- [x] `scripts/migrate_from_rust.py` (reads `backend-rust/*.sqlite`, writes new DB, verifies row counts)
 
 **Phase 2 — Auth**
 - [ ] `passlib` htpasswd verification against existing `.htpasswd`
