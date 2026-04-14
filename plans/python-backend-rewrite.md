@@ -105,7 +105,7 @@ backend/
 - [x] `passlib` htpasswd verification against existing `.htpasswd`
 - [x] JWT issue/verify (access 15min, refresh 7d), `JWT_SECRET` env
 - [x] Endpoints: `POST /api/v2/auth/login`, `POST /api/v2/auth/refresh`, `POST /api/v2/auth/logout`, `GET /api/v2/auth/me`
-- [ ] `Depends(get_current_user)` guarding all non-auth routes; 401 returns `ApiResponse` with `AUTH_REQUIRED`
+- [x] `Depends(get_current_user)` guarding all non-auth routes; 401 returns `ApiResponse` with `AUTH_REQUIRED`
 
 **Phase 3 — SSH subsystem**
 - [ ] `SshClient` Protocol (connect, exec, read_file, write_file, close)

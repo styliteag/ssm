@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 from typing import Annotated
 
-from fastapi import Depends, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from ssm.auth.htpasswd import HtpasswdStore
@@ -44,3 +45,16 @@ def get_current_user(
         raise AuthRequired
     claims = jwt_service.verify(credentials.credentials, expected_type=TokenType.ACCESS)
     return CurrentUser(username=claims.sub)
+
+
+def protected_router(
+    *, prefix: str = "", tags: list[str | Enum] | None = None
+) -> APIRouter:
+    """APIRouter pre-wired with :func:`get_current_user` as a router-level dependency.
+
+    Every endpoint registered on the returned router requires a valid access
+    token. Failures raise :class:`AuthRequired`, which the installed exception
+    handlers render as an :class:`ssm.core.envelope.ApiResponse` with
+    ``error.code == "AUTH_REQUIRED"``.
+    """
+    return APIRouter(prefix=prefix, tags=tags, dependencies=[Depends(get_current_user)])
