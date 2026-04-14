@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use log::{error, info};
-use rand::{Rng, thread_rng};
-use rand::distributions::Alphanumeric;
+use rand::Rng;
+use rand::distr::Alphanumeric;
 
 pub fn ensure_htpasswd_file(htpasswd_path: &PathBuf) -> Result<(), std::io::Error> {
     if !htpasswd_path.exists() {
@@ -16,7 +16,7 @@ pub fn ensure_htpasswd_file(htpasswd_path: &PathBuf) -> Result<(), std::io::Erro
         }
 
         // Generate a random password
-        let password: String = thread_rng()
+        let password: String = rand::rng()
             .sample_iter(&Alphanumeric)
             .take(16)
             .map(char::from)

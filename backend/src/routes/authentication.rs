@@ -43,8 +43,8 @@ pub struct CsrfTokenResponse {
 }
 
 fn generate_csrf_token() -> String {
-    let mut rng = rand::thread_rng();
-    let token_bytes: [u8; 32] = rng.gen();
+    let mut rng = rand::rng();
+    let token_bytes: [u8; 32] = rng.random();
     STANDARD.encode(token_bytes)
 }
 
