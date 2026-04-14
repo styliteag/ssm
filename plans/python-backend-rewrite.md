@@ -141,7 +141,7 @@ backend/
 - [x] Verify GH Actions multi-arch build on `v*.*.*` tags still works (cryptography wheels for arm64 confirmed on PyPI)
 
 **Phase 8 — Cutover**
-- [ ] All tests green, ≥80% coverage, `ruff`, `mypy --strict`, `bandit` clean
+- [x] All tests green, ≥80% coverage, `ruff`, `mypy --strict`, `bandit` clean
 - [ ] Run `scripts/migrate_from_rust.py` against prod DB snapshot in staging; smoke-test
 - [ ] Merge commit deletes `backend-rust/`
 - [ ] Tag `v2.0.0` → CI builds + publishes images
