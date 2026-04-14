@@ -153,7 +153,7 @@ The API uses singular resource names in the URL paths:
 - **Routes** (`backend/src/routes/`): RESTful API endpoints organized by domain (host, user, key, auth, authorization, diff)
 - **Database Models** (`backend/src/db/`): Diesel ORM models for core entities
 - **SSH Client** (`backend/src/ssh/`): Custom SSH client with caching (`CachingSshClient`) for remote host operations
-- **Safety System** (`backend/src/tests/safety.rs`): Test-only SSH mock system preventing production system modification during testing
+- **Tests**: Inline `#[cfg(test)]` modules (e.g., in `ssh/sshclient.rs`, `main.rs`) — use mock SSH client, no real connections
 
 ### Frontend Architecture
 - **State Management**: Zustand stores + React Context for auth/notifications/theme
@@ -194,10 +194,9 @@ The API uses singular resource names in the URL paths:
 - Test isolation via mock SSH client to prevent production system access during testing
 
 ### Testing Infrastructure
-- **Backend**: Comprehensive test suite (107+ tests) with mock SSH client
-- **Safety**: `src/tests/safety.rs` enforces test-only database/SSH operations
-- **Test Categories**: HTTP endpoints, SSH integration, authentication, authorization, security
-- All tests use mock SSH client - no real SSH connections during testing
+- **Backend**: Inline `#[cfg(test)]` modules with mock SSH client — no real SSH connections
+- **Run**: `cargo test` from `backend/`; single test via `cargo test <name>`
+- **Frontend**: No test framework configured yet
 
 ### Configuration
 - Main config: `config.toml` (optional - database URL, SSH private key, server settings)
