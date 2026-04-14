@@ -127,7 +127,7 @@ backend/
 **Phase 5 — Scheduler + activity log**
 - [x] APScheduler `AsyncIOScheduler` + `SQLAlchemyJobStore(url=DATABASE_URL)`, start/stop via lifespan
 - [x] Periodic job: poll connection status for all non-disabled hosts
-- [ ] `log_activity(action, actor, target, details)` helper, called from routes; async SQLAlchemy insert
+- [x] `log_activity(action, actor, target, details)` helper, called from routes; async SQLAlchemy insert
 
 **Phase 6 — OpenAPI + frontend cutover**
 - [ ] Confirm FastAPI-generated `/api/v2/openapi.json` + `/api/v2/docs`
