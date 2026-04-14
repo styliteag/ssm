@@ -122,7 +122,7 @@ backend/
 - [x] `/api/v2/authorizations` — links user↔host with remote username
 - [x] `/api/v2/diffs/{host_id}` — returns `HOST_DISABLED` error if disabled; otherwise SSH reads+diffs `authorized_keys`
 - [x] `/api/v2/diffs/{host_id}/sync` — blocks if disabled or readonly
-- [ ] `/api/v2/activity-log` — paginated list, `meta.total/page/page_size`
+- [x] `/api/v2/activity-log` — paginated list, `meta.total/page/page_size`
 
 **Phase 5 — Scheduler + activity log**
 - [ ] APScheduler `AsyncIOScheduler` + `SQLAlchemyJobStore(url=DATABASE_URL)`, start/stop via lifespan
