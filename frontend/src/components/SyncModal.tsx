@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Upload, AlertTriangle, CheckCircle, RefreshCw } from 'lucide-react';
+import { Upload, CheckCircle, RefreshCw } from 'lucide-react';
 import { Modal, Button } from './ui';
 import { DetailedDiffResponse } from '../services/api/diff';
 import DiffIssue from './DiffIssue';

@@ -169,7 +169,7 @@ const AuthorizationsPage: React.FC = () => {
   }, [authorizations, users, hosts, loadData]);
 
   // Handle managing multiple authorizations (for matrix view)
-  const handleManageAuthorizations = useCallback((userId: number, hostId: number, userAuthorizations: Authorization[]) => {
+  const handleManageAuthorizations = useCallback((userId: number, hostId: number, _userAuthorizations: Authorization[]) => {
     // For now, we'll navigate to the list view with a filter
     // In the future, this could open a dedicated modal
     const user = users.find(u => u.id === userId);

@@ -511,7 +511,7 @@ const HostsPage: React.FC = () => {
 
         // Apply bulk changes only to fields that were specified
         if (updateData.jump_via !== undefined) {
-          hostUpdate.jump_via = updateData.jump_via;
+          hostUpdate.jump_via = updateData.jump_via ?? undefined;
         }
         if (updateData.disabled !== undefined) {
           hostUpdate.disabled = updateData.disabled;
