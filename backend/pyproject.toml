@@ -30,6 +30,7 @@ dev = [
     "pytest>=8",
     "pytest-asyncio>=0.24",
     "httpx>=0.27",
+    "testcontainers>=4.14.2",
 ]
 
 [tool.ruff]
