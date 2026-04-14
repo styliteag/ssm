@@ -47,9 +47,7 @@ def get_current_user(
     return CurrentUser(username=claims.sub)
 
 
-def protected_router(
-    *, prefix: str = "", tags: list[str | Enum] | None = None
-) -> APIRouter:
+def protected_router(*, prefix: str = "", tags: list[str | Enum] | None = None) -> APIRouter:
     """APIRouter pre-wired with :func:`get_current_user` as a router-level dependency.
 
     Every endpoint registered on the returned router requires a valid access

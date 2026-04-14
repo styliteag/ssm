@@ -108,7 +108,7 @@ backend/
 - [x] `Depends(get_current_user)` guarding all non-auth routes; 401 returns `ApiResponse` with `AUTH_REQUIRED`
 
 **Phase 3 — SSH subsystem**
-- [ ] `SshClient` Protocol (connect, exec, read_file, write_file, close)
+- [x] `SshClient` Protocol (connect, exec, read_file, write_file, close)
 - [ ] `AsyncSshClient` implementation with jump-host support mapping to `Host.jump_via`
 - [ ] `MockSshClient` with scriptable responses for unit tests
 - [ ] `CachingSshClient` wrapper — connection pool keyed by host, `authorized_keys` read cache with explicit invalidation on write
