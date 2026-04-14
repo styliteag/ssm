@@ -8,14 +8,21 @@ const ACCESS_KEY = 'ssm.v2.access_token';
 const REFRESH_KEY = 'ssm.v2.refresh_token';
 
 export class ApiError extends Error {
+  readonly code: ErrorCode;
+  readonly details: Record<string, unknown> | null;
+  readonly status?: number;
+
   constructor(
-    public readonly code: ErrorCode,
+    code: ErrorCode,
     message: string,
-    public readonly details: Record<string, unknown> | null = null,
-    public readonly status?: number,
+    details: Record<string, unknown> | null = null,
+    status?: number,
   ) {
     super(message);
     this.name = 'ApiError';
+    this.code = code;
+    this.details = details;
+    this.status = status;
   }
 }
 

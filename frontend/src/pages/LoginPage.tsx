@@ -1,10 +1,17 @@
 import React, { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import { Key, Sun, Moon, ShieldCheck, Lock } from 'lucide-react';
+import { Key, Sun, Moon, ShieldCheck, Lock, Zap } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useNotifications } from '../contexts/NotificationContext';
 import { Button, Input, Card, CardHeader, CardContent } from '../components/ui';
+
+// Vite replaces `import.meta.env.DEV` with a literal `true` / `false` at build
+// time — anything gated on it is dead-code-eliminated from production bundles.
+// `npm run build` → DEV === false → the dev-login branch never ships.
+const IS_DEV = import.meta.env.DEV;
+const DEV_USERNAME = (import.meta.env.VITE_DEV_USERNAME as string | undefined) || 'admin';
+const DEV_PASSWORD = (import.meta.env.VITE_DEV_PASSWORD as string | undefined) || 'admin';
 
 const LoginPage: React.FC = () => {
   const [username, setUsername] = useState('');
@@ -38,6 +45,27 @@ const LoginPage: React.FC = () => {
       }
     } catch (error: unknown) {
       showError('Login Failed', (error as { message?: string })?.message || 'Invalid username or password');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Dev-only: one-click login as the seeded admin user.
+  // The whole function and its caller are tree-shaken when IS_DEV is false.
+  const handleDevLogin = async () => {
+    setIsLoading(true);
+    try {
+      const success = await login({ username: DEV_USERNAME, password: DEV_PASSWORD });
+      if (success) {
+        navigate('/dashboard');
+      } else {
+        showError(
+          'Dev login failed',
+          `Could not sign in as ${DEV_USERNAME}. Seed the dev .htpasswd or set VITE_DEV_USERNAME / VITE_DEV_PASSWORD.`,
+        );
+      }
+    } catch (error: unknown) {
+      showError('Dev login failed', (error as { message?: string })?.message || 'Unknown error');
     } finally {
       setIsLoading(false);
     }
@@ -122,6 +150,25 @@ const LoginPage: React.FC = () => {
               >
                 Sign in
               </Button>
+
+              {IS_DEV && (
+                <div className="pt-2 border-t border-dashed border-warning/40">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="w-full"
+                    loading={isLoading}
+                    disabled={isLoading}
+                    onClick={handleDevLogin}
+                  >
+                    <Zap className="w-4 h-4 mr-2" />
+                    Dev login ({DEV_USERNAME})
+                  </Button>
+                  <p className="mt-2 text-[10px] text-warning text-center uppercase tracking-wider font-w510">
+                    Dev build only — removed from production bundles
+                  </p>
+                </div>
+              )}
             </form>
           </CardContent>
         </Card>

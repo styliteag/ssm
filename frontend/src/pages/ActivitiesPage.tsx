@@ -250,8 +250,8 @@ const ActivitiesPage: React.FC = () => {
  <User size={12} />
  <span>{activity.user}</span>
  </div>
- {activity.metadata?.ip && (
- <div className="hidden md:flex items-center gap-1 text-xs bg-muted px-1.5 py-0.5 rounded" title={activity.metadata.via ? `Via: ${activity.metadata.via}` : undefined}>
+ {activity.metadata && typeof activity.metadata.ip === 'string' && (
+ <div className="hidden md:flex items-center gap-1 text-xs bg-muted px-1.5 py-0.5 rounded" title={typeof activity.metadata.via === 'string' ? `Via: ${activity.metadata.via}` : undefined}>
  <span className="font-mono">{activity.metadata.ip}</span>
  </div>
  )}

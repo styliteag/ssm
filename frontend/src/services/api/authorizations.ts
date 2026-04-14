@@ -89,6 +89,7 @@ export const authorizationsService = {
   updateAuthorization: async (
     id: number,
     authorization: Partial<AuthorizationFormData>,
+    _existingAuth?: Authorization,
   ): Promise<ApiResponse<Authorization>> =>
     api.patch<Authorization>(`/authorizations/${id}`, {
       login: authorization.login,
