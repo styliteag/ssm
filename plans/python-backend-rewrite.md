@@ -109,7 +109,7 @@ backend/
 
 **Phase 3 — SSH subsystem**
 - [x] `SshClient` Protocol (connect, exec, read_file, write_file, close)
-- [ ] `AsyncSshClient` implementation with jump-host support mapping to `Host.jump_via`
+- [x] `AsyncSshClient` implementation with jump-host support mapping to `Host.jump_via`
 - [ ] `MockSshClient` with scriptable responses for unit tests
 - [ ] `CachingSshClient` wrapper — connection pool keyed by host, `authorized_keys` read cache with explicit invalidation on write
 - [ ] Safety layer: respect `.ssh/system_readonly`, `.ssh/user_readonly`, `host.disabled` — raise typed errors that map to `SSH_READONLY` / `HOST_DISABLED`
