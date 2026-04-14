@@ -63,14 +63,41 @@ export default {
           DEFAULT: "hsl(var(--info))",
           foreground: "hsl(var(--info-foreground))",
         },
+        // Linear surface stack — elevation via luminance steps
+        surface: {
+          1: "hsl(var(--surface-1))",
+          2: "hsl(var(--surface-2))",
+          3: "hsl(var(--surface-3))",
+          4: "hsl(var(--surface-4))",
+        },
       },
       borderRadius: {
-        lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
+        // Linear's full radius scale
+        micro: "2px",
+        sm: "4px",
+        DEFAULT: "6px",
+        md: "6px",
+        lg: "8px",
+        xl: "12px",
+        '2xl': "22px",
+        full: "9999px",
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
+        sans: ['"Inter Variable"', 'Inter', 'system-ui', '-apple-system', '"SF Pro Display"', 'sans-serif'],
+        mono: ['"Berkeley Mono"', 'ui-monospace', '"SF Mono"', 'Menlo', 'monospace'],
+      },
+      fontWeight: {
+        // Linear's signature weights between the usual stops
+        medium: '510',
+        semibold: '590',
+      },
+      boxShadow: {
+        'linear-dialog':
+          '0 8px 2px 0 rgba(0,0,0,0), 0 5px 2px 0 rgba(0,0,0,0.01), 0 3px 2px 0 rgba(0,0,0,0.04), 0 1px 1px 0 rgba(0,0,0,0.07), 0 0 1px 0 rgba(0,0,0,0.08)',
+        'linear-focus': '0 4px 12px rgba(0,0,0,0.1)',
+        'linear-ring': '0 0 0 1px rgba(0,0,0,0.2)',
+        'linear-elevated': '0 2px 4px rgba(0,0,0,0.4)',
+        'linear-inset': 'inset 0 0 12px 0 rgba(0,0,0,0.2)',
       },
       animation: {
         'in': 'fadeIn 0.3s ease-in-out',

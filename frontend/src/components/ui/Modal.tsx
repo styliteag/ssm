@@ -130,7 +130,7 @@ const Modal: React.FC<ModalProps> = ({
     <div
       className={cn(
         'fixed inset-0 z-50 flex items-center justify-center p-4',
-        'bg-black bg-opacity-50 backdrop-blur-sm',
+        'bg-black/[0.85] backdrop-blur-sm',
         overlayClassName
       )}
       onClick={handleOverlayClick}
@@ -141,7 +141,7 @@ const Modal: React.FC<ModalProps> = ({
       <div
         ref={modalRef}
         className={cn(
-          'relative w-full bg-card rounded-lg shadow-xl',
+          'relative w-full bg-popover rounded-xl shadow-linear-dialog',
           'border border-border',
           'max-h-[90vh] overflow-hidden flex flex-col',
           sizeClasses[size],
@@ -159,7 +159,7 @@ const Modal: React.FC<ModalProps> = ({
             {title && (
               <div
                 id="modal-title"
-                className="text-lg font-semibold text-foreground flex-1"
+                className="text-lg font-w590 tracking-h3 text-foreground flex-1"
               >
                 {title}
               </div>

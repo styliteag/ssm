@@ -22,18 +22,19 @@ const NotificationToast: React.FC = () => {
     }
   };
 
+  // Linear toasts: translucent popover surface, colored accent icon
   const getNotificationStyles = (type: NotificationState['type']) => {
     switch (type) {
       case 'success':
-        return 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-800 dark:text-green-200';
+        return 'bg-popover border-success/30 text-foreground [&_svg]:text-success';
       case 'error':
-        return 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-800 dark:text-red-200';
+        return 'bg-popover border-destructive/40 text-foreground [&_svg]:text-destructive';
       case 'warning':
-        return 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800 text-yellow-800 dark:text-yellow-200';
+        return 'bg-popover border-warning/40 text-foreground [&_svg]:text-warning';
       case 'info':
-        return 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-200';
+        return 'bg-popover border-primary/40 text-foreground [&_svg]:text-primary';
       default:
-        return 'bg-muted border-border text-foreground';
+        return 'bg-popover border-border text-foreground';
     }
   };
 
@@ -47,7 +48,7 @@ const NotificationToast: React.FC = () => {
         <div
           key={notification.id}
           className={cn(
-            'animate-in slide-in-from-right-full duration-300 rounded-lg border p-4 shadow-lg',
+            'animate-in slide-in-from-right-full duration-300 rounded-lg border p-4 shadow-linear-dialog backdrop-blur-sm',
             getNotificationStyles(notification.type)
           )}
         >
@@ -56,11 +57,11 @@ const NotificationToast: React.FC = () => {
               {getNotificationIcon(notification.type)}
             </div>
             <div className="flex-1 min-w-0">
-              <h4 className="text-sm font-medium">
+              <h4 className="text-sm font-w590">
                 {notification.title}
               </h4>
               {notification.message && (
-                <p className="text-sm mt-1 opacity-90">
+                <p className="text-sm mt-1 text-muted-foreground tracking-body-lg">
                   {notification.message}
                 </p>
               )}

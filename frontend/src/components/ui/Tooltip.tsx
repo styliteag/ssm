@@ -119,7 +119,7 @@ const Tooltip: React.FC<TooltipProps> = ({
       </div>
       {isVisible && content && createPortal(
         <div
-          className={`fixed z-50 px-3 py-2 text-sm text-white bg-gray-900 dark:bg-gray-700 rounded-lg shadow-lg max-w-xs break-words pointer-events-none ${className}`}
+          className={`fixed z-50 px-2.5 py-1.5 text-xs font-w510 text-popover-foreground bg-popover border border-border rounded-md shadow-linear-dialog max-w-xs break-words pointer-events-none ${className}`}
           style={{
             top: `${coords.top}px`,
             left: `${coords.left}px`,
@@ -127,7 +127,7 @@ const Tooltip: React.FC<TooltipProps> = ({
         >
           {content}
           <div
-            className={`absolute w-2 h-2 bg-gray-900 dark:bg-gray-700 transform rotate-45 ${
+            className={`absolute w-2 h-2 bg-popover border border-border transform rotate-45 ${
               position === 'top' ? 'bottom-[-4px] left-1/2 -translate-x-1/2' :
               position === 'bottom' ? 'top-[-4px] left-1/2 -translate-x-1/2' :
               position === 'left' ? 'right-[-4px] top-1/2 -translate-y-1/2' :
