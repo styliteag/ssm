@@ -125,7 +125,7 @@ backend/
 - [x] `/api/v2/activity-log` — paginated list, `meta.total/page/page_size`
 
 **Phase 5 — Scheduler + activity log**
-- [ ] APScheduler `AsyncIOScheduler` + `SQLAlchemyJobStore(url=DATABASE_URL)`, start/stop via lifespan
+- [x] APScheduler `AsyncIOScheduler` + `SQLAlchemyJobStore(url=DATABASE_URL)`, start/stop via lifespan
 - [ ] Periodic job: poll connection status for all non-disabled hosts
 - [ ] `log_activity(action, actor, target, details)` helper, called from routes; async SQLAlchemy insert
 

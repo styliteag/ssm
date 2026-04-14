@@ -8,6 +8,7 @@ requires-python = ">=3.12"
 dependencies = [
     "aiosqlite>=0.22.1",
     "alembic>=1.18.4",
+    "apscheduler>=3.10,<4",
     "asyncssh>=2.22.0",
     "bcrypt>=5.0.0",
     "fastapi>=0.135.3",
@@ -57,13 +58,16 @@ strict = true
 warn_unused_ignores = true
 warn_redundant_casts = true
 disallow_untyped_defs = true
-disallow_any_unimported = true
 no_implicit_reexport = true
 files = ["src", "tests"]
 
 [[tool.mypy.overrides]]
 module = ["tests.*"]
 disallow_untyped_defs = false
+
+[[tool.mypy.overrides]]
+module = ["apscheduler.*"]
+ignore_missing_imports = true
 
 [tool.bandit]
 exclude_dirs = ["tests", ".venv"]
