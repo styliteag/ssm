@@ -112,7 +112,7 @@ backend/
 - [x] `AsyncSshClient` implementation with jump-host support mapping to `Host.jump_via`
 - [x] `MockSshClient` with scriptable responses for unit tests
 - [x] `CachingSshClient` wrapper — connection pool keyed by host, `authorized_keys` read cache with explicit invalidation on write
-- [ ] Safety layer: respect `.ssh/system_readonly`, `.ssh/user_readonly`, `host.disabled` — raise typed errors that map to `SSH_READONLY` / `HOST_DISABLED`
+- [x] Safety layer: respect `.ssh/system_readonly`, `.ssh/user_readonly`, `host.disabled` — raise typed errors that map to `SSH_READONLY` / `HOST_DISABLED`
 - [ ] testcontainers integration test: spin up `linuxserver/openssh-server`, verify connect/exec/readonly/jumphost paths
 
 **Phase 4 — Routes** (each with contract tests asserting envelope shape)
