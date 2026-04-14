@@ -10,6 +10,10 @@ backend/config.toml
 backend/.htpasswd
 backend/server.log
 backend/data*
+backend/keys/
+# Dev artifacts that end up in backend/ from running the server locally.
+backend/ssh_host_*
+backend/known_hosts
 logs/
 
 # Python (interpreters, uv, tests, linters, packaging)
