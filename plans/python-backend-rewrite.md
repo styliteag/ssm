@@ -137,7 +137,7 @@ backend/
 
 **Phase 7 — Deploy**
 - [x] `backend/Dockerfile`: stage 1 `python:3.12-slim` + uv build venv; stage 2 copy venv + source, non-root user, `uvicorn ssm.main:app --host 0.0.0.0 --port 8000`
-- [ ] Update `docker/compose.prod.yml` build context / image
+- [x] Update `docker/compose.prod.yml` build context / image
 - [ ] Verify GH Actions multi-arch build on `v*.*.*` tags still works (cryptography wheels for arm64 confirmed on PyPI)
 
 **Phase 8 — Cutover**

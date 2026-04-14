@@ -1,0 +1,50 @@
+# Production deployment for the Python/FastAPI backend.
+#
+# Build context is the repository root so the Dockerfile can pull ``backend/``
+# straight from the checkout. The frontend is served as static files by any
+# static host (nginx, Caddy, a CDN) in front of this container; only the
+# ``/api/v2`` routes are served here.
+
+services:
+  backend:
+    container_name: ssm-backend
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    image: ssm-backend:latest
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data/db:/app/db
+      - ./data/config:/app/config:ro
+      - ./data/keys:/app/keys:ro
+    environment:
+      - CONFIG=/app/config/config.toml
+      - DATABASE_URL=sqlite:///app/db/ssm.db
+      - HTPASSWD=/app/config/.htpasswd
+      - SSH_KEY=/app/keys/id_ssm
+      # JWT_SECRET MUST be set; uncomment and supply a 32+ char value:
+      # - JWT_SECRET=replace-me-with-a-long-random-string
+      - LOGLEVEL=info
+    networks:
+      - ssm-network
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - "CMD"
+        - "python"
+        - "-c"
+        - >
+          import urllib.request,sys;
+          sys.exit(0 if urllib.request.urlopen(
+            'http://127.0.0.1:8000/api/v2/openapi.json',
+            timeout=3
+          ).status == 200 else 1)
+      start_period: 20s
+      timeout: 5s
+      interval: 30s
+      retries: 3
+
+networks:
+  ssm-network:
+    driver: bridge
