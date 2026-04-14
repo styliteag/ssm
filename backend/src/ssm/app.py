@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from fastapi import FastAPI
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from ssm.api.v2 import v2_router
 from ssm.auth.htpasswd import HtpasswdStore
@@ -16,15 +17,17 @@ from ssm.core.exception_handlers import install_exception_handlers
 class AppDependencies:
     htpasswd_store: HtpasswdStore
     jwt_service: JwtService
+    sessionmaker: async_sessionmaker[AsyncSession] | None = None
 
 
 def create_app(deps: AppDependencies) -> FastAPI:
-    """Build a FastAPI app with the given auth dependencies wired up."""
+    """Build a FastAPI app with the given auth + DB dependencies wired up."""
     app = FastAPI(
         title="ssm", version="2.0.0", docs_url="/api/v2/docs", openapi_url="/api/v2/openapi.json"
     )
     app.state.htpasswd_store = deps.htpasswd_store
     app.state.jwt_service = deps.jwt_service
+    app.state.sessionmaker = deps.sessionmaker
 
     install_exception_handlers(app)
     app.include_router(v2_router)

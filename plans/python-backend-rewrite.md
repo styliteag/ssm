@@ -116,7 +116,7 @@ backend/
 - [x] testcontainers integration test: spin up `linuxserver/openssh-server`, verify connect/exec/readonly/jumphost paths
 
 **Phase 4 — Routes** (each with contract tests asserting envelope shape)
-- [ ] `/api/v2/hosts` — CRUD; `jump_via: int | None` (no more string hack); `disabled` flag
+- [x] `/api/v2/hosts` — CRUD; `jump_via: int | None` (no more string hack); `disabled` flag
 - [ ] `/api/v2/users` — CRUD
 - [ ] `/api/v2/keys` — CRUD
 - [ ] `/api/v2/authorizations` — links user↔host with remote username
