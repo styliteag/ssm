@@ -133,7 +133,7 @@ backend/
 - [x] Confirm FastAPI-generated `/api/v2/openapi.json` + `/api/v2/docs`
 - [x] Rewrite `frontend/src/services/api/` for v2: pluralized paths, Bearer-token interceptor, refresh flow, `unwrap<T>(ApiResponse<T>)` helper
 - [x] Drop `String(host.jump_via)` conversion in `hostsService`
-- [ ] Update any UI that read error messages to branch on `error.code` instead
+- [x] Update any UI that read error messages to branch on `error.code` instead
 
 **Phase 7 — Deploy**
 - [ ] `backend/Dockerfile`: stage 1 `python:3.12-slim` + uv build venv; stage 2 copy venv + source, non-root user, `uvicorn ssm.main:app --host 0.0.0.0 --port 8000`

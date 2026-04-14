@@ -12,3 +12,4 @@ export {
 } from './authorizations';
 export { diffsApi } from './diffs';
 export { activityLogApi, type ActivityLogQuery, type ActivityLogPage } from './activityLog';
+export { describeError, isApiErrorCode } from './errorMessages';
