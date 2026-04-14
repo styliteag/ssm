@@ -102,7 +102,7 @@ backend/
 - [x] `scripts/migrate_from_rust.py` (reads `backend-rust/*.sqlite`, writes new DB, verifies row counts)
 
 **Phase 2 — Auth**
-- [ ] `passlib` htpasswd verification against existing `.htpasswd`
+- [x] `passlib` htpasswd verification against existing `.htpasswd`
 - [ ] JWT issue/verify (access 15min, refresh 7d), `JWT_SECRET` env
 - [ ] Endpoints: `POST /api/v2/auth/login`, `POST /api/v2/auth/refresh`, `POST /api/v2/auth/logout`, `GET /api/v2/auth/me`
 - [ ] `Depends(get_current_user)` guarding all non-auth routes; 401 returns `ApiResponse` with `AUTH_REQUIRED`
