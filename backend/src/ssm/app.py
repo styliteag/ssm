@@ -11,6 +11,7 @@ from ssm.api.v2 import v2_router
 from ssm.auth.htpasswd import HtpasswdStore
 from ssm.auth.jwt import JwtService
 from ssm.core.exception_handlers import install_exception_handlers
+from ssm.ssh.protocol import SshClient
 
 
 @dataclass(frozen=True, slots=True)
@@ -18,6 +19,7 @@ class AppDependencies:
     htpasswd_store: HtpasswdStore
     jwt_service: JwtService
     sessionmaker: async_sessionmaker[AsyncSession] | None = None
+    ssh_client: SshClient | None = None
 
 
 def create_app(deps: AppDependencies) -> FastAPI:
@@ -28,6 +30,7 @@ def create_app(deps: AppDependencies) -> FastAPI:
     app.state.htpasswd_store = deps.htpasswd_store
     app.state.jwt_service = deps.jwt_service
     app.state.sessionmaker = deps.sessionmaker
+    app.state.ssh_client = deps.ssh_client
 
     install_exception_handlers(app)
     app.include_router(v2_router)

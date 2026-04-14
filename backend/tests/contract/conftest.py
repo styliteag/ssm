@@ -16,6 +16,7 @@ from ssm.app import AppDependencies, create_app
 from ssm.auth.htpasswd import HtpasswdStore
 from ssm.auth.jwt import JwtService
 from ssm.db.base import Base
+from ssm.ssh.mock import MockSshClient
 
 TEST_SECRET = "contract-test-secret-32-bytes-long-XXXX"
 
@@ -28,8 +29,13 @@ def _make_htpasswd(tmp_path: Path, password: str = "secret") -> HtpasswdStore:
 
 
 @pytest.fixture
-def auth_client(tmp_path: Path) -> Iterator[TestClient]:
-    """TestClient with an in-memory SQLite DB, migrations applied, JWT auth wired."""
+def mock_ssh() -> MockSshClient:
+    return MockSshClient()
+
+
+@pytest.fixture
+def auth_client(tmp_path: Path, mock_ssh: MockSshClient) -> Iterator[TestClient]:
+    """TestClient with an in-memory SQLite DB, migrations applied, JWT + mock SSH wired."""
     engine = create_async_engine("sqlite+aiosqlite:///:memory:", future=True)
 
     @event.listens_for(engine.sync_engine, "connect")
@@ -45,6 +51,7 @@ def auth_client(tmp_path: Path) -> Iterator[TestClient]:
         htpasswd_store=_make_htpasswd(tmp_path),
         jwt_service=JwtService(secret=TEST_SECRET),
         sessionmaker=sm,
+        ssh_client=mock_ssh,
     )
     app = create_app(deps)
     with TestClient(app) as client:
