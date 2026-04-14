@@ -131,7 +131,7 @@ backend/
 
 **Phase 6 — OpenAPI + frontend cutover**
 - [x] Confirm FastAPI-generated `/api/v2/openapi.json` + `/api/v2/docs`
-- [ ] Rewrite `frontend/src/services/api/` for v2: pluralized paths, Bearer-token interceptor, refresh flow, `unwrap<T>(ApiResponse<T>)` helper
+- [x] Rewrite `frontend/src/services/api/` for v2: pluralized paths, Bearer-token interceptor, refresh flow, `unwrap<T>(ApiResponse<T>)` helper
 - [ ] Drop `String(host.jump_via)` conversion in `hostsService`
 - [ ] Update any UI that read error messages to branch on `error.code` instead
 
