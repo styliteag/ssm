@@ -93,7 +93,7 @@ backend/
 **Phase 0 — Branch setup**
 - [x] `git checkout -b grill-me`
 - [x] `git mv backend backend-rust`
-- [ ] Scaffold `backend/` (pyproject.toml via `uv init`, ruff/mypy/bandit configs, empty package)
+- [x] Scaffold `backend/` (pyproject.toml via `uv init`, ruff/mypy/bandit configs, empty package)
 
 **Phase 1 — Foundation** (TDD throughout, all modules ≤400 lines)
 - [ ] Config loader (env > config.toml; `DATABASE_URL`, `JWT_SECRET`, `SSH_KEY`, `HTPASSWD`, `CONFIG`, `RUST_LOG` → Python logging)
