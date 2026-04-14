@@ -1,4 +1,4 @@
-"""Contract tests for POST /api/v2/diffs/{host_id}/sync."""
+"""Contract tests for POST /api/v2/diffs/{host_id}/sync — script-driven writes."""
 
 from __future__ import annotations
 
@@ -65,8 +65,12 @@ def _make_auth(
 
 
 def _allow_writable(mock: MockSshClient) -> None:
-    """``ensure_writable`` runs a shell probe whose empty stdout means writable."""
+    """Every exec (version probe, upload, set_authorized_keyfile) succeeds."""
     mock.default_exec = SshResult(stdout="", stderr="", exit_code=0)
+
+
+def _stdin_for(mock: MockSshClient, command_substring: str) -> list[str]:
+    return [stdin or "" for _, cmd, stdin in mock.exec_inputs if command_substring in cmd]
 
 
 def test_sync_requires_auth(auth_client: TestClient) -> None:
@@ -96,26 +100,25 @@ def test_sync_blocks_readonly_host(
     hid = _make_host(auth_client, auth_headers, name="h", address="10.0.0.1")
     _make_auth(auth_client, auth_headers, host_id=hid, user_id=uid, login="deploy")
 
-    mock_ssh.default_exec = SshResult(stdout="system_readonly: freeze\n", stderr="", exit_code=0)
+    # Script says: Keyfile is readonly, aborting — exit 1.
+    mock_ssh.set_exec(
+        host_id=hid,
+        command="sh .ssm/script.sh set_authorized_keyfile deploy",
+        result=SshResult(stdout="Keyfile is readonly, aborting.\n", stderr="", exit_code=1),
+    )
+    _allow_writable(mock_ssh)
 
     r = auth_client.post(f"/api/v2/diffs/{hid}/sync", headers=auth_headers)
     assert r.status_code == 409
     assert r.json()["error"]["code"] == "SSH_READONLY"
-    # No writes should have happened.
-    assert mock_ssh.write_calls == []
 
 
-def test_sync_writes_expected_keys(
+def test_sync_writes_expected_keys_via_script(
     auth_client: TestClient, auth_headers: dict[str, str], mock_ssh: MockSshClient
 ) -> None:
     uid = _make_user(auth_client, auth_headers, "alice")
     _make_key(auth_client, auth_headers, user_id=uid, key_base64="A" * 64)
-    _make_key(
-        auth_client,
-        auth_headers,
-        user_id=uid,
-        key_base64="B" * 64,
-    )
+    _make_key(auth_client, auth_headers, user_id=uid, key_base64="B" * 64)
     hid = _make_host(auth_client, auth_headers, name="h", address="10.0.0.1")
     _make_auth(auth_client, auth_headers, host_id=hid, user_id=uid, login="deploy")
 
@@ -124,18 +127,14 @@ def test_sync_writes_expected_keys(
     r = auth_client.post(f"/api/v2/diffs/{hid}/sync", headers=auth_headers)
     assert r.status_code == 200, r.text
     body = r.json()["data"]
-    assert body["host_id"] == hid
     assert body["logins"] == [{"login": "deploy", "written_keys": 2}]
 
-    # Exactly one write happened, with both key lines.
-    assert len(mock_ssh.write_calls) == 1
-    host_id, path, content = mock_ssh.write_calls[0]
-    assert host_id == hid
-    assert path == "/home/deploy/.ssh/authorized_keys"
-    lines = [line for line in content.splitlines() if line.strip()]
-    assert len(lines) == 2
-    assert any("A" * 64 in line for line in lines)
-    assert any("B" * 64 in line for line in lines)
+    # The expected keys were piped into the script via stdin — no raw SFTP writes.
+    assert mock_ssh.write_calls == []
+    payloads = _stdin_for(mock_ssh, "set_authorized_keyfile deploy")
+    assert len(payloads) == 1
+    assert ("A" * 64) in payloads[0]
+    assert ("B" * 64) in payloads[0]
 
 
 def test_sync_noop_when_no_authorizations(
@@ -147,4 +146,4 @@ def test_sync_noop_when_no_authorizations(
     r = auth_client.post(f"/api/v2/diffs/{hid}/sync", headers=auth_headers)
     assert r.status_code == 200
     assert r.json()["data"]["logins"] == []
-    assert mock_ssh.write_calls == []
+    assert _stdin_for(mock_ssh, "set_authorized_keyfile") == []

@@ -1,10 +1,9 @@
 """``/api/v2/diffs/{host_id}`` — compare the host's authorized_keys to the DB.
 
-For each distinct ``login`` authorized on the host we:
-  1. Build the set of key lines the DB says should be present for that login.
-  2. Read ``/home/<login>/.ssh/authorized_keys`` over SSH.
-  3. Return one :class:`KeyDiff` per expected-or-observed line, tagged as
-     ``present``, ``missing_on_host``, or ``extra_on_host``.
+Every read and write goes through :class:`~ssm.ssh.script_runner.ScriptRunner`
+— never raw SFTP — so we get the shell script's home-dir probing,
+``has_pragma`` detection, readonly-sentinel check, and managed-file backup
+behaviour for free.
 
 Disabled hosts short-circuit with ``HOST_DISABLED`` before any SSH happens.
 """
@@ -26,7 +25,8 @@ from ssm.db.deps import db_session
 from ssm.db.models import Authorization, Host, UserKey
 from ssm.ssh.deps import get_ssh_client
 from ssm.ssh.protocol import SshClient, SshTarget
-from ssm.ssh.safety import ensure_host_not_disabled, ensure_writable
+from ssm.ssh.safety import ensure_host_not_disabled
+from ssm.ssh.script_runner import LoginKeyfile, ScriptRunner
 
 router = protected_router(prefix="/diffs", tags=["diffs"])
 
@@ -44,6 +44,8 @@ class KeyDiff(BaseModel):
 
 class LoginDiff(BaseModel):
     login: str
+    has_pragma: bool = False
+    readonly_condition: str | None = None
     read_error: str | None = None
     items: list[KeyDiff]
 
@@ -62,7 +64,6 @@ def _format_key_line(key_type: str, key_base64: str, label: str | None) -> str:
 
 
 def _parse_authorized_keys(text: str) -> list[str]:
-    """Strip comments and blank lines; preserve the remaining verbatim."""
     lines: list[str] = []
     for raw in text.splitlines():
         stripped = raw.strip()
@@ -88,45 +89,28 @@ async def _build_target(session: AsyncSession, host: Host) -> SshTarget:
     )
 
 
-async def _expected_keys_for_login(
-    session: AsyncSession, host_id: int, login: str
-) -> tuple[list[int], list[str]]:
-    """Return (user_ids authorized as ``login``, expected key lines)."""
+async def _expected_keys_for_login(session: AsyncSession, host_id: int, login: str) -> list[str]:
     stmt = select(Authorization.user_id).where(
         Authorization.host_id == host_id, Authorization.login == login
     )
     user_ids = list((await session.execute(stmt)).scalars().all())
     if not user_ids:
-        return [], []
-
+        return []
     keys_stmt = select(UserKey).where(UserKey.user_id.in_(user_ids))
     rows = (await session.execute(keys_stmt)).scalars().all()
-    lines = [_format_key_line(k.key_type, k.key_base64, k.name) for k in rows]
-    return user_ids, lines
+    return [_format_key_line(k.key_type, k.key_base64, k.name) for k in rows]
 
 
-async def _diff_for_login(
-    client: SshClient, target: SshTarget, login: str, expected: list[str]
-) -> LoginDiff:
-    expected_set = set(expected)
-    actual_set: set[str] = set()
-    read_error: str | None = None
-
-    path = f"/home/{login}/.ssh/authorized_keys"
-    try:
-        file = await client.read_file(target, path)
-        actual_set = set(_parse_authorized_keys(file.content))
-    except SshConnectFailed as exc:
-        read_error = str(exc)
-
+def _compute_diff(expected: list[str], actual: list[str]) -> list[KeyDiff]:
+    exp_set, act_set = set(expected), set(actual)
     items: list[KeyDiff] = []
-    for line in sorted(expected_set & actual_set):
+    for line in sorted(exp_set & act_set):
         items.append(KeyDiff(status=DiffStatus.PRESENT, line=line))
-    for line in sorted(expected_set - actual_set):
+    for line in sorted(exp_set - act_set):
         items.append(KeyDiff(status=DiffStatus.MISSING_ON_HOST, line=line))
-    for line in sorted(actual_set - expected_set):
+    for line in sorted(act_set - exp_set):
         items.append(KeyDiff(status=DiffStatus.EXTRA_ON_HOST, line=line))
-    return LoginDiff(login=login, read_error=read_error, items=items)
+    return items
 
 
 @router.get("/{host_id}", response_model=ApiResponse[HostDiff])
@@ -141,19 +125,36 @@ async def get_host_diff(
     ensure_host_not_disabled(disabled=host.disabled, host_name=host.name)
 
     target = await _build_target(session, host)
+    runner = ScriptRunner(ssh)
 
-    logins_stmt = (
-        select(Authorization.login)
-        .where(Authorization.host_id == host_id)
-        .distinct()
-        .order_by(Authorization.login)
-    )
-    logins = list((await session.execute(logins_stmt)).scalars().all())
+    # Collect every login the script sees on the host AND every login the DB
+    # authorizes. A login present only on one side still needs a diff row.
+    observed: dict[str, LoginKeyfile] = {}
+    read_error: str | None = None
+    try:
+        for observed_entry in await runner.get_ssh_keyfiles(target):
+            observed[observed_entry.login] = observed_entry
+    except SshConnectFailed as exc:
+        read_error = str(exc)
+
+    logins_stmt = select(Authorization.login).where(Authorization.host_id == host_id).distinct()
+    expected_logins = set((await session.execute(logins_stmt)).scalars().all())
+    all_logins = sorted(expected_logins | set(observed))
 
     login_diffs: list[LoginDiff] = []
-    for login in logins:
-        _, expected = await _expected_keys_for_login(session, host_id, login)
-        login_diffs.append(await _diff_for_login(ssh, target, login, expected))
+    for login in all_logins:
+        expected = await _expected_keys_for_login(session, host_id, login)
+        entry = observed.get(login)
+        actual = _parse_authorized_keys(entry.keyfile) if entry is not None else []
+        login_diffs.append(
+            LoginDiff(
+                login=login,
+                has_pragma=bool(entry and entry.has_pragma),
+                readonly_condition=entry.readonly_condition if entry else None,
+                read_error=read_error if entry is None and read_error else None,
+                items=_compute_diff(expected, actual),
+            )
+        )
 
     return ApiResponse[HostDiff].ok(
         HostDiff(host_id=host.id, host_name=host.name, disabled=host.disabled, logins=login_diffs)
@@ -183,6 +184,7 @@ async def sync_host(
     ensure_host_not_disabled(disabled=host.disabled, host_name=host.name)
 
     target = await _build_target(session, host)
+    runner = ScriptRunner(ssh)
 
     logins_stmt = (
         select(Authorization.login)
@@ -192,16 +194,14 @@ async def sync_host(
     )
     logins = list((await session.execute(logins_stmt)).scalars().all())
 
-    # Fail loudly and early on any readonly login so we never partial-write.
-    for login in logins:
-        await ensure_writable(ssh, target, login)
-
     synced: list[SyncedLogin] = []
     for login in logins:
-        _, expected = await _expected_keys_for_login(session, host_id, login)
+        expected = await _expected_keys_for_login(session, host_id, login)
         content = "".join(f"{line}\n" for line in expected)
-        path = f"/home/{login}/.ssh/authorized_keys"
-        await ssh.write_file(target, path, content)
+        # set_authorized_keyfile raises SshReadOnly if the sentinel is set, so
+        # we bail out atomically on the first readonly login and never
+        # partial-write the host.
+        await runner.set_authorized_keyfile(target, login=login, content=content)
         synced.append(SyncedLogin(login=login, written_keys=len(expected)))
 
     return ApiResponse[SyncResult].ok(

@@ -29,6 +29,7 @@ class MockSshClient(SshClient):
 
     connect_calls: list[int] = field(default_factory=list)
     exec_calls: list[tuple[int, str]] = field(default_factory=list)
+    exec_inputs: list[tuple[int, str, str | None]] = field(default_factory=list)
     read_calls: list[tuple[int, str]] = field(default_factory=list)
     write_calls: list[tuple[int, str, str]] = field(default_factory=list)
     closed: bool = False
@@ -49,9 +50,10 @@ class MockSshClient(SshClient):
         if target.host_id in self.connect_failures:
             raise SshConnectFailed(f"mock: connect failed for host {target.host_id}")
 
-    async def exec(self, target: SshTarget, command: str) -> SshResult:
+    async def exec(self, target: SshTarget, command: str, *, input: str | None = None) -> SshResult:
         await self.connect(target)
         self.exec_calls.append((target.host_id, command))
+        self.exec_inputs.append((target.host_id, command, input))
         scripted = self.exec_responses.get((target.host_id, command))
         if scripted is not None:
             return scripted

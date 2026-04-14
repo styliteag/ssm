@@ -32,8 +32,8 @@ class CachingSshClient(SshClient):
     async def connect(self, target: SshTarget) -> None:
         await self._inner.connect(target)
 
-    async def exec(self, target: SshTarget, command: str) -> SshResult:
-        return await self._inner.exec(target, command)
+    async def exec(self, target: SshTarget, command: str, *, input: str | None = None) -> SshResult:
+        return await self._inner.exec(target, command, input=input)
 
     async def read_file(self, target: SshTarget, path: str) -> SshFile:
         key = _CacheKey(target.host_id, path)

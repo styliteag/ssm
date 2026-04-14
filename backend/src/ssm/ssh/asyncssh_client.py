@@ -43,10 +43,15 @@ class AsyncSshClient(SshClient):
     async def connect(self, target: SshTarget) -> None:
         await self._get_connection(target)
 
-    async def exec(self, target: SshTarget, command: str) -> SshResult:
+    async def exec(self, target: SshTarget, command: str, *, input: str | None = None) -> SshResult:
         conn = await self._get_connection(target)
         try:
-            result = await conn.run(command, check=False, timeout=self._timeout_seconds)
+            if input is None:
+                result = await conn.run(command, check=False, timeout=self._timeout_seconds)
+            else:
+                result = await conn.run(
+                    command, check=False, timeout=self._timeout_seconds, input=input
+                )
         except (asyncssh.Error, OSError, TimeoutError) as exc:
             raise SshConnectFailed(f"ssh exec failed on {target.name}: {exc}") from exc
         exit_code = 0 if result.exit_status is None else int(result.exit_status)

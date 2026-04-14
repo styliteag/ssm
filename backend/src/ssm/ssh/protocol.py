@@ -55,8 +55,13 @@ class SshClient(Protocol):
         """Ensure a connection to ``target`` exists; idempotent."""
         ...
 
-    async def exec(self, target: SshTarget, command: str) -> SshResult:
-        """Run ``command`` on ``target`` and return its result."""
+    async def exec(self, target: SshTarget, command: str, *, input: str | None = None) -> SshResult:
+        """Run ``command`` on ``target`` and return its result.
+
+        ``input`` is piped to the remote process's stdin. This is the channel
+        :class:`~ssm.ssh.script_runner.ScriptRunner` uses to hand new
+        ``authorized_keys`` content to ``script.sh set_authorized_keyfile``.
+        """
         ...
 
     async def read_file(self, target: SshTarget, path: str) -> SshFile:
