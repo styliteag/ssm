@@ -204,10 +204,10 @@ const Form: React.FC<FormProps> = ({
           <div key={field.name} className={cn('space-y-1', field.className)}>
             <label
               htmlFor={field.name}
-              className="block text-sm font-medium text-foreground"
+              className="block text-sm font-w510 text-foreground"
             >
               {field.label}
-              {field.required && <span className="text-red-500 ml-1">*</span>}
+              {field.required && <span className="text-destructive ml-1">*</span>}
             </label>
             <textarea
               {...commonProps}
@@ -217,7 +217,7 @@ const Form: React.FC<FormProps> = ({
               onChange={(e) => handleChange(field.name, e.target.value)}
               onBlur={() => handleBlur(field.name)}
               className={cn(
-                'flex w-full rounded-md border border-input bg-background text-foreground px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent disabled:cursor-not-allowed disabled:opacity-50',
+                'flex w-full rounded-md border border-border bg-white/[0.02] text-foreground px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring disabled:cursor-not-allowed disabled:opacity-50 transition-colors',
                 error && 'border-destructive focus:ring-destructive',
                 field.inputClassName
               )}
@@ -236,10 +236,10 @@ const Form: React.FC<FormProps> = ({
           <div key={field.name} className={cn('space-y-1', field.className)}>
             <label
               htmlFor={field.name}
-              className="block text-sm font-medium text-foreground"
+              className="block text-sm font-w510 text-foreground"
             >
               {field.label}
-              {field.required && <span className="text-red-500 ml-1">*</span>}
+              {field.required && <span className="text-destructive ml-1">*</span>}
             </label>
             <select
               {...commonProps}
@@ -247,7 +247,7 @@ const Form: React.FC<FormProps> = ({
               onChange={(e) => handleChange(field.name, e.target.value)}
               onBlur={() => handleBlur(field.name)}
               className={cn(
-                'flex h-10 w-full rounded-md border border-input bg-background text-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent disabled:cursor-not-allowed disabled:opacity-50',
+                'flex h-9 w-full rounded-md border border-border bg-white/[0.02] text-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring disabled:cursor-not-allowed disabled:opacity-50 transition-colors',
                 error && 'border-destructive focus:ring-destructive',
                 field.inputClassName
               )}
@@ -277,10 +277,10 @@ const Form: React.FC<FormProps> = ({
           <div key={field.name} className={cn('space-y-1', field.className)}>
             <label
               htmlFor={field.name}
-              className="block text-sm font-medium text-foreground"
+              className="block text-sm font-w510 text-foreground"
             >
               {field.label}
-              {field.required && <span className="text-red-500 ml-1">*</span>}
+              {field.required && <span className="text-destructive ml-1">*</span>}
             </label>
             <SearchableSelect
               {...commonProps}
@@ -310,11 +310,11 @@ const Form: React.FC<FormProps> = ({
                 checked={Boolean(values[field.name])}
                 onChange={(e) => handleChange(field.name, e.target.checked)}
                 onBlur={() => handleBlur(field.name)}
-                className="h-4 w-4 text-primary border-input rounded focus:ring-ring"
+                className="h-4 w-4 accent-primary border-border rounded focus:ring-ring"
               />
-              <span className="text-sm font-medium text-foreground">
+              <span className="text-sm font-w510 text-foreground">
                 {field.label}
-                {field.required && <span className="text-red-500 ml-1">*</span>}
+                {field.required && <span className="text-destructive ml-1">*</span>}
               </span>
             </label>
             {error && (

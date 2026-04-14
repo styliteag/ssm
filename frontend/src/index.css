@@ -1,148 +1,160 @@
-/* Local Inter font definitions */
+/* Inter Variable — includes full weight axis (100-900) required for Linear's 510/590 signature weights */
 @font-face {
-  font-family: 'Inter';
+  font-family: 'Inter Variable';
   font-style: normal;
-  font-weight: 400;
+  font-weight: 100 900;
   font-display: swap;
-  src: url('/fonts/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuLyfMZg.ttf') format('truetype');
-}
-
-@font-face {
-  font-family: 'Inter';
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url('/fonts/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuI6fMZg.ttf') format('truetype');
-}
-
-@font-face {
-  font-family: 'Inter';
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url('/fonts/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuGKYMZg.ttf') format('truetype');
-}
-
-@font-face {
-  font-family: 'Inter';
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url('/fonts/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuFuYMZg.ttf') format('truetype');
+  src: url('https://rsms.me/inter/font-files/InterVariable.woff2') format('woff2-variations');
 }
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Custom color variables for proper styling */
+/*
+ * Linear-inspired design system.
+ * Dark mode is the native medium; light mode is a softened neutral variant.
+ * Colors expressed in HSL to match Tailwind's hsl(var(--token)) convention.
+ */
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Light mode — soft off-white canvas */
+    --background: 210 7% 97%;       /* #f7f8f8 */
+    --foreground: 222 47% 4%;       /* near-black text */
+
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 222 47% 4%;
+
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    
-    /* Vibrant Blue Primary */
-    --primary: 221.2 83.2% 53.3%; /* #2563EB */
-    --primary-foreground: 210 40% 98%;
-    
-    --primary-50: 213.8 100% 96.1%;
-    --primary-100: 214.3 94.6% 92%;
-    --primary-200: 213.3 96.9% 87.3%;
-    --primary-300: 212 96.7% 78.6%;
-    --primary-400: 212.7 94% 68.4%;
-    --primary-500: 221.2 83.2% 53.3%;
-    --primary-600: 224.3 76.3% 48%;
-    --primary-700: 226.2 70.7% 40.2%;
-    --primary-800: 224.3 64.3% 32.9%;
-    --primary-900: 224.4 55.8% 26.3%;
+    --popover-foreground: 222 47% 4%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    /* Linear brand indigo-violet */
+    --primary: 232 55% 60%;         /* #5e6ad2 */
+    --primary-foreground: 0 0% 100%;
 
-    --success: 142.1 76.2% 36.3%;
-    --success-foreground: 355.7 100% 97.3%;
+    --primary-50: 232 100% 96%;
+    --primary-100: 232 95% 92%;
+    --primary-200: 232 90% 85%;
+    --primary-300: 232 80% 75%;
+    --primary-400: 240 100% 75%;    /* #828fff */
+    --primary-500: 240 100% 72%;    /* #7170ff */
+    --primary-600: 232 55% 60%;     /* #5e6ad2 */
+    --primary-700: 232 45% 50%;
+    --primary-800: 232 40% 38%;
+    --primary-900: 232 35% 28%;
+
+    --secondary: 214 16% 92%;
+    --secondary-foreground: 222 47% 11%;
+
+    --muted: 214 16% 94%;
+    --muted-foreground: 217 6% 45%;
+
+    --accent: 240 100% 72%;         /* #7170ff */
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 133 62% 40%;         /* #27a644 */
+    --success-foreground: 0 0% 100%;
 
     --warning: 38 92% 50%;
-    --warning-foreground: 48 96% 89%;
+    --warning-foreground: 48 96% 12%;
 
-    --info: 199 89% 48%;
+    --info: 232 55% 60%;
     --info-foreground: 0 0% 100%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
-    --radius: 0.5rem;
+    --border: 214 16% 85%;          /* #d0d6e0 */
+    --input: 214 16% 85%;
+    --ring: 232 55% 60%;
+    --radius: 0.5rem;               /* 8px — Linear card radius */
+
+    /* Linear surface stack (elevation via luminance, not shadow) */
+    --surface-1: 210 7% 97%;        /* marketing bg */
+    --surface-2: 210 7% 94%;        /* panel */
+    --surface-3: 0 0% 100%;         /* elevated */
+    --surface-4: 214 16% 92%;       /* hover */
+
+    /* Semi-transparent white borders (fallbacks are used at rgba() directly via utilities) */
+    --border-subtle: 214 16% 85%;
+    --border-standard: 214 16% 80%;
   }
 
   .dark {
-    --background: 222.2 47.4% 11.2%;
-    --foreground: 210 40% 98%;
-    
-    --card: 222.2 47.4% 11.2%;
-    --card-foreground: 210 40% 98%;
-    
-    --popover: 222.2 47.4% 11.2%;
-    --popover-foreground: 210 40% 98%;
-    
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 47.4% 11.2%;
+    /* Linear dark — the native medium */
+    --background: 220 11% 4%;       /* #08090a marketing black */
+    --foreground: 210 7% 97%;       /* #f7f8f8 primary text */
 
-    --primary-50: 213.8 100% 96.1%;
-    --primary-100: 214.3 94.6% 92%;
-    --primary-200: 213.3 96.9% 87.3%;
-    --primary-300: 212 96.7% 78.6%;
-    --primary-400: 212.7 94% 68.4%;
-    --primary-500: 221.2 83.2% 53.3%;
-    --primary-600: 224.3 76.3% 48%;
-    --primary-700: 226.2 70.7% 40.2%;
-    --primary-800: 224.3 64.3% 32.9%;
-    --primary-900: 224.4 55.8% 26.3%;
-    
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    
-    --success: 142.1 70.6% 45.3%;
-    --success-foreground: 144.9 80.4% 10%;
+    --card: 220 6% 7%;              /* #0f1011 panel */
+    --card-foreground: 210 7% 97%;
 
-    --warning: 48 96% 89%;
-    --warning-foreground: 38 92% 50%;
+    --popover: 220 3% 10%;          /* #191a1b elevated */
+    --popover-foreground: 210 7% 97%;
 
-    --info: 199 89% 48%;
+    --primary: 232 55% 60%;         /* #5e6ad2 */
+    --primary-foreground: 0 0% 100%;
+
+    --primary-50: 232 35% 20%;
+    --primary-100: 232 35% 28%;
+    --primary-200: 232 40% 38%;
+    --primary-300: 232 45% 50%;
+    --primary-400: 232 55% 60%;     /* #5e6ad2 */
+    --primary-500: 240 100% 72%;    /* #7170ff */
+    --primary-600: 240 100% 75%;    /* #828fff */
+    --primary-700: 232 90% 85%;
+    --primary-800: 232 95% 92%;
+    --primary-900: 232 100% 96%;
+
+    --secondary: 240 4% 16%;        /* #28282c */
+    --secondary-foreground: 210 7% 97%;
+
+    --muted: 220 3% 10%;            /* #191a1b */
+    --muted-foreground: 217 6% 57%; /* #8a8f98 */
+
+    --accent: 240 100% 72%;         /* #7170ff */
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 210 7% 97%;
+
+    --success: 161 84% 39%;         /* #10b981 */
+    --success-foreground: 210 7% 97%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 48 96% 12%;
+
+    --info: 240 100% 72%;
     --info-foreground: 0 0% 100%;
-    
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 48%;
+
+    --border: 220 9% 15%;           /* #23252a */
+    --input: 220 9% 15%;
+    --ring: 240 100% 72%;
+
+    /* Linear luminance stack — each level a slightly lighter surface */
+    --surface-1: 220 11% 4%;        /* #08090a */
+    --surface-2: 220 6% 7%;         /* #0f1011 */
+    --surface-3: 220 3% 10%;        /* #191a1b */
+    --surface-4: 240 4% 16%;        /* #28282c */
+
+    --border-subtle: 220 9% 15%;
+    --border-standard: 220 9% 18%;
   }
 }
 
 :root {
-  font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  /*
+   * Inter Variable with Linear's signature OpenType features:
+   *   cv01 — single-story lowercase 'a' (geometric alternate)
+   *   ss03 — cleaner curved terminals on select letterforms
+   * These features are non-negotiable for Linear's typeface identity.
+   */
+  font-family: 'Inter Variable', 'Inter', system-ui, -apple-system, 'SF Pro Display',
+               'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Helvetica Neue', sans-serif;
+  font-feature-settings: 'cv01', 'ss03';
+  font-variation-settings: 'opsz' 14;
   line-height: 1.5;
   font-weight: 400;
-  
+
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -152,7 +164,32 @@
 body {
   margin: 0;
   min-height: 100vh;
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: inherit;
+  font-feature-settings: inherit;
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+}
+
+/* Translucent semi-transparent white borders — Linear's wireframes-in-moonlight */
+@layer utilities {
+  .border-subtle-white { border-color: rgba(255, 255, 255, 0.05); }
+  .border-standard-white { border-color: rgba(255, 255, 255, 0.08); }
+  .bg-surface-ghost { background-color: rgba(255, 255, 255, 0.02); }
+  .bg-surface-subtle { background-color: rgba(255, 255, 255, 0.04); }
+  .bg-surface-elevated { background-color: rgba(255, 255, 255, 0.05); }
+
+  /* Linear's three-tier weight system */
+  .font-w510 { font-weight: 510; }
+  .font-w590 { font-weight: 590; }
+
+  /* Compressed display tracking (scales with size) */
+  .tracking-display-xl { letter-spacing: -1.584px; }
+  .tracking-display-lg { letter-spacing: -1.408px; }
+  .tracking-display    { letter-spacing: -1.056px; }
+  .tracking-h1         { letter-spacing: -0.704px; }
+  .tracking-h2         { letter-spacing: -0.288px; }
+  .tracking-h3         { letter-spacing: -0.24px; }
+  .tracking-body-lg    { letter-spacing: -0.165px; }
 }
 
 /* Respect reduced motion preferences */

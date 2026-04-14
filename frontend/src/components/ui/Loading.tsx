@@ -23,7 +23,7 @@ const Loading: React.FC<LoadingProps> = ({
       <div className="flex items-center space-x-2">
         <svg
           className={cn(
-            'animate-spin text-blue-600',
+            'animate-spin text-primary',
             sizes[size]
           )}
           xmlns="http://www.w3.org/2000/svg"

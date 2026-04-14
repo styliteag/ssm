@@ -5,95 +5,95 @@ import { activitiesService, Activity } from '../../services/api/activities';
 import { Link } from 'react-router-dom';
 
 const iconMap = {
-    key: Key,
-    host: Server,
-    user: User,
-    auth: Shield,
+ key: Key,
+ host: Server,
+ user: User,
+ auth: Shield,
 };
 
 const colorMap = {
-    key: 'text-purple-500 bg-purple-100 dark:bg-purple-900/20',
-    host: 'text-blue-500 bg-blue-100 dark:bg-blue-900/20',
-    user: 'text-green-500 bg-green-100 dark:bg-green-900/20',
-    auth: 'text-orange-500 bg-orange-100 dark:bg-orange-900/20',
+ key: 'text-accent bg-accent/10 border border-accent/20',
+ host: 'text-primary bg-primary/10 border border-primary/20',
+ user: 'text-success bg-success/10 border border-success/20',
+ auth: 'text-warning bg-warning/10 border border-warning/20',
 };
 
 export const ActivityFeed: React.FC = () => {
-    const [activities, setActivities] = useState<Activity[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+ const [activities, setActivities] = useState<Activity[]>([]);
+ const [loading, setLoading] = useState(true);
+ const [error, setError] = useState<string | null>(null);
 
-    useEffect(() => {
-        const fetchActivities = async (isBackground = false) => {
-            if (!isBackground) setLoading(true);
-            // Don't clear error on background refresh to avoid flickering if it fails transiently
-            if (!isBackground) setError(null);
+ useEffect(() => {
+ const fetchActivities = async (isBackground = false) => {
+ if (!isBackground) setLoading(true);
+ // Don't clear error on background refresh to avoid flickering if it fails transiently
+ if (!isBackground) setError(null);
 
-            const response = await activitiesService.getActivities(10);
+ const response = await activitiesService.getActivities(10);
 
-            if (response.success && response.data) {
-                setActivities(response.data);
-                setError(null); // Clear error on success
-            } else if (!isBackground) {
-                setError(response.message || 'Failed to load activities');
-            }
-            setLoading(false);
-        };
+ if (response.success && response.data) {
+ setActivities(response.data);
+ setError(null); // Clear error on success
+ } else if (!isBackground) {
+ setError(response.message || 'Failed to load activities');
+ }
+ setLoading(false);
+ };
 
-        fetchActivities();
+ fetchActivities();
 
-        // Refresh activities every 30 seconds
-        const interval = setInterval(() => fetchActivities(true), 30000);
-        return () => clearInterval(interval);
-    }, []);
+ // Refresh activities every 30 seconds
+ const interval = setInterval(() => fetchActivities(true), 30000);
+ return () => clearInterval(interval);
+ }, []);
 
-    return (
-        <Card className="h-full">
-            <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="text-base font-medium">Recent Activity</CardTitle>
-                <Link to="/activities" className="text-xs text-primary hover:underline">
-                    View All
-                </Link>
-            </CardHeader>
-            <CardContent>
-                {loading ? (
-                    <div className="flex items-center justify-center py-8">
-                        <Loader2 size={24} className="animate-spin text-primary" />
-                    </div>
-                ) : error ? (
-                    <div className="flex items-center gap-2 py-8 text-destructive">
-                        <AlertCircle size={20} />
-                        <span className="text-sm">{error}</span>
-                    </div>
-                ) : activities.length === 0 ? (
-                    <div className="py-8 text-center text-muted-foreground text-sm">
-                        No recent activity
-                    </div>
-                ) : (
-                    <div className="space-y-6">
-                        {activities.map((activity) => {
-                            const Icon = iconMap[activity.type];
-                            return (
-                                <div key={activity.id} className="flex items-start space-x-4">
-                                    <div className={`p-2 rounded-full ${colorMap[activity.type]}`}>
-                                        <Icon size={16} />
-                                    </div>
-                                    <div className="flex-1 space-y-1">
-                                        <p className="text-sm font-medium text-foreground">
-                                            {activity.action} <span className="text-muted-foreground">on</span> {activity.target}
-                                        </p>
-                                        <div className="flex items-center text-xs text-muted-foreground">
-                                            <span>{activity.user}</span>
-                                            <span className="mx-1">•</span>
-                                            <span>{activity.timestamp}</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                )}
-            </CardContent>
-        </Card>
-    );
+ return (
+ <Card className="h-full">
+ <CardHeader className="flex flex-row items-center justify-between">
+ <CardTitle className="text-base font-w510">Recent Activity</CardTitle>
+ <Link to="/activities" className="text-xs text-primary hover:underline">
+ View All
+ </Link>
+ </CardHeader>
+ <CardContent>
+ {loading ? (
+ <div className="flex items-center justify-center py-8">
+ <Loader2 size={24} className="animate-spin text-primary" />
+ </div>
+ ) : error ? (
+ <div className="flex items-center gap-2 py-8 text-destructive">
+ <AlertCircle size={20} />
+ <span className="text-sm">{error}</span>
+ </div>
+ ) : activities.length === 0 ? (
+ <div className="py-8 text-center text-muted-foreground text-sm">
+ No recent activity
+ </div>
+ ) : (
+ <div className="space-y-6">
+ {activities.map((activity) => {
+ const Icon = iconMap[activity.type];
+ return (
+ <div key={activity.id} className="flex items-start space-x-4">
+ <div className={`p-2 rounded-full ${colorMap[activity.type]}`}>
+ <Icon size={16} />
+ </div>
+ <div className="flex-1 space-y-1">
+ <p className="text-sm font-w510 text-foreground">
+ {activity.action} <span className="text-muted-foreground">on</span> {activity.target}
+ </p>
+ <div className="flex items-center text-xs text-muted-foreground">
+ <span>{activity.user}</span>
+ <span className="mx-1">•</span>
+ <span>{activity.timestamp}</span>
+ </div>
+ </div>
+ </div>
+ );
+ })}
+ </div>
+ )}
+ </CardContent>
+ </Card>
+ );
 };

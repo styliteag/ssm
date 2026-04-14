@@ -20,21 +20,22 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(({
   children,
   ...props
 }, ref) => {
-  const baseClasses = 'inline-flex items-center justify-center font-medium transition-all duration-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed active:scale-95';
+  // Linear's buttons: transparency over solid fills, whisper-thin borders, weight 510
+  const baseClasses = 'inline-flex items-center justify-center font-w510 transition-colors duration-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0 disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed';
 
   const variants = {
-    primary: 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm hover:shadow-md',
-    secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80 shadow-sm hover:shadow-md',
-    danger: 'bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-sm hover:shadow-md',
-    ghost: 'text-foreground hover:bg-accent hover:text-accent-foreground',
-    outline: 'border border-input bg-background hover:bg-accent hover:text-accent-foreground shadow-sm hover:shadow-md',
-    gradient: 'bg-gradient-to-r from-primary to-primary-600 text-primary-foreground hover:opacity-90 shadow-md hover:shadow-lg border-0',
+    primary: 'bg-primary text-primary-foreground hover:bg-[hsl(240_100%_72%)] dark:hover:bg-[hsl(240_100%_75%)]',
+    secondary: 'bg-secondary text-secondary-foreground border border-border hover:bg-surface-4',
+    danger: 'bg-destructive text-destructive-foreground hover:bg-destructive/90',
+    ghost: 'bg-white/[0.02] text-foreground border border-border hover:bg-white/[0.05] dark:bg-white/[0.02] dark:hover:bg-white/[0.05]',
+    outline: 'border border-border bg-transparent text-foreground hover:bg-white/[0.04] dark:hover:bg-white/[0.04]',
+    gradient: 'bg-primary text-primary-foreground hover:bg-[hsl(240_100%_72%)]',
   };
 
   const sizes = {
     sm: 'h-8 px-3 text-sm rounded-md',
-    md: 'h-10 px-4 py-2 rounded-md',
-    lg: 'h-12 px-6 py-3 text-lg rounded-lg',
+    md: 'h-9 px-4 text-sm rounded-md',
+    lg: 'h-11 px-5 text-base rounded-md',
   };
 
   return (

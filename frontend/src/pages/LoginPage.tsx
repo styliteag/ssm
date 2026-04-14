@@ -44,50 +44,47 @@ const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center relative overflow-hidden bg-background transition-colors duration-500">
-      {/* Animated Background Gradients */}
+    <div className="min-h-screen w-full flex items-center justify-center relative overflow-hidden bg-background">
+      {/* Subtle Linear-style indigo halo — single accent, not competing gradients */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-[20%] -left-[10%] w-[70%] h-[70%] rounded-full bg-primary/20 blur-[120px] animate-pulse-slow" />
-        <div className="absolute top-[40%] -right-[10%] w-[60%] h-[60%] rounded-full bg-secondary/20 blur-[100px] animate-pulse-slow delay-1000" />
-        <div className="absolute -bottom-[20%] left-[20%] w-[50%] h-[50%] rounded-full bg-accent/20 blur-[120px] animate-pulse-slow delay-2000" />
+        <div className="absolute top-[30%] left-1/2 -translate-x-1/2 w-[600px] h-[600px] rounded-full bg-primary/10 blur-[140px]" />
       </div>
 
-      {/* Theme Toggle */}
-      <div className="absolute top-6 right-6 z-20 animate-in slide-in-from-top-4 fade-in duration-700">
+      {/* Theme Toggle — ghost button in Linear style */}
+      <div className="absolute top-6 right-6 z-20">
         <button
           onClick={toggleTheme}
-          className="p-3 cursor-pointer rounded-full bg-white/10 backdrop-blur-md border border-white/20 shadow-lg hover:bg-white/20 transition-all duration-300 text-foreground"
+          className="p-2.5 cursor-pointer rounded-md bg-white/[0.02] border border-border hover:bg-white/[0.05] transition-colors text-muted-foreground hover:text-foreground"
           aria-label="Toggle theme"
         >
-          {theme === 'dark' ? <Sun size={20} className="text-yellow-400" /> : <Moon size={20} className="text-slate-700" />}
+          {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
         </button>
       </div>
 
-      <div className="w-full max-w-md px-4 z-10">
-        <div className="text-center mb-8 animate-in slide-in-from-bottom-8 fade-in duration-700">
-          <div className="relative inline-block mb-6">
-            <div className="absolute inset-0 bg-primary/30 blur-xl rounded-full animate-pulse-slow" />
-            <div className="relative h-20 w-20 mx-auto bg-gradient-to-br from-primary to-primary-600 rounded-2xl flex items-center justify-center shadow-2xl transform rotate-3 hover:rotate-6 transition-transform duration-300">
-              <Key className="h-10 w-10 text-white drop-shadow-md" />
+      <div className="w-full max-w-[400px] px-4 z-10">
+        <div className="text-center mb-10">
+          <div className="relative inline-flex mb-8">
+            <div className="h-12 w-12 bg-primary rounded-lg flex items-center justify-center">
+              <Key className="h-6 w-6 text-primary-foreground" />
             </div>
-            <div className="absolute -bottom-2 -right-2 bg-background rounded-full p-1.5 shadow-lg border border-border">
-              <ShieldCheck className="h-5 w-5 text-success" />
+            <div className="absolute -bottom-1 -right-1 bg-surface-3 rounded-full p-1 border border-border">
+              <ShieldCheck className="h-3 w-3 text-success" />
             </div>
           </div>
 
-          <h1 className="text-4xl font-bold tracking-tight text-foreground mb-2">
-            Welcome Back
+          <h1 className="text-[48px] leading-[1] font-w510 tracking-display text-foreground mb-3">
+            Welcome back
           </h1>
-          <p className="text-muted-foreground text-lg">
+          <p className="text-muted-foreground text-[15px] tracking-body-lg">
             Secure SSH Key Management
           </p>
         </div>
 
-        <Card variant="glass" className="animate-in slide-in-from-bottom-4 fade-in duration-700 delay-150">
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-center space-x-2 text-sm text-muted-foreground mb-2">
-              <Lock className="w-4 h-4" />
-              <span>Secure Login</span>
+        <Card variant="default" className="bg-white/[0.02]">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-center space-x-2 text-xs text-muted-foreground">
+              <Lock className="w-3.5 h-3.5" />
+              <span className="font-w510">Secure Login</span>
             </div>
           </CardHeader>
           <CardContent>
@@ -102,7 +99,6 @@ const LoginPage: React.FC = () => {
                   required
                   autoComplete="username"
                   disabled={isLoading}
-                  className="bg-white/50 dark:bg-gray-900/50 backdrop-blur-sm"
                 />
 
                 <Input
@@ -114,25 +110,24 @@ const LoginPage: React.FC = () => {
                   required
                   autoComplete="current-password"
                   disabled={isLoading}
-                  className="bg-white/50 dark:bg-gray-900/50 backdrop-blur-sm"
                 />
               </div>
 
               <Button
                 type="submit"
-                variant="gradient"
-                className="w-full h-11 text-base font-semibold shadow-lg shadow-primary/25"
+                variant="primary"
+                className="w-full"
                 loading={isLoading}
                 disabled={isLoading || !username.trim() || !password.trim()}
               >
-                Sign In
+                Sign in
               </Button>
             </form>
           </CardContent>
         </Card>
 
-        <div className="mt-8 text-center animate-in fade-in duration-700 delay-300">
-          <p className="text-xs text-muted-foreground/60 font-medium">
+        <div className="mt-8 text-center">
+          <p className="text-xs text-muted-foreground/60 font-w510">
             Secure SSH Manager v1.0.0 • Encrypted Connection
           </p>
         </div>

@@ -10,18 +10,19 @@ const Card = React.forwardRef<HTMLDivElement, CardProps>(({
   variant = 'default',
   ...props
 }, ref) => {
+  // Linear cards: translucent backgrounds over solid, semi-transparent white borders
   const variants = {
-    default: 'bg-card text-card-foreground border border-border shadow-sm',
-    bordered: 'bg-card text-card-foreground border-2 border-border shadow-sm',
-    elevated: 'bg-card text-card-foreground shadow-lg border border-border',
-    glass: 'bg-white/70 dark:bg-gray-900/70 backdrop-blur-lg border border-white/20 dark:border-gray-700/30 shadow-xl',
+    default: 'bg-card text-card-foreground border border-border',
+    bordered: 'bg-card text-card-foreground border border-border',
+    elevated: 'bg-surface-3 text-card-foreground border border-border shadow-linear-dialog',
+    glass: 'bg-white/[0.02] dark:bg-white/[0.02] text-foreground border border-white/[0.08] backdrop-blur-sm',
   };
 
   return (
     <div
       ref={ref}
       className={cn(
-        'rounded-xl transition-all duration-200',
+        'rounded-lg transition-colors duration-200',
         variants[variant],
         className
       )}
@@ -52,7 +53,7 @@ const CardTitle = React.forwardRef<HTMLParagraphElement, HTMLAttributes<HTMLHead
 }, ref) => (
   <h3
     ref={ref}
-    className={cn('text-lg font-semibold leading-none tracking-tight text-foreground', className)}
+    className={cn('text-xl font-w590 leading-tight tracking-h3 text-foreground', className)}
     {...props}
   >
     {children}

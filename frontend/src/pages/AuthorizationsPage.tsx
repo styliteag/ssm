@@ -270,7 +270,7 @@ const AuthorizationsPage: React.FC = () => {
       <div>
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-3">
+            <h1 className="text-[32px] leading-tight font-w510 tracking-h1 text-foreground flex items-center gap-3">
               <div className="p-2 bg-primary/10 rounded-lg text-primary">
                 <Shield size={24} />
               </div>

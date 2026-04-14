@@ -1,475 +1,475 @@
 import React, { useState, useEffect } from 'react';
 import {
-  X,
-  Play,
-  AlertTriangle,
-  CheckCircle,
-  XCircle,
-  Shield,
-  FileText,
-  Loader,
-  Download,
+ X,
+ Play,
+ AlertTriangle,
+ CheckCircle,
+ XCircle,
+ Shield,
+ FileText,
+ Loader,
+ Download,
 } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import {
-  HostDiffStatus,
-  DeploymentResult,
-  BatchDeploymentStatus,
-  DiffDeployment,
+ HostDiffStatus,
+ DeploymentResult,
+ BatchDeploymentStatus,
+ DiffDeployment,
 } from '../../types';
 import { Modal, Button, Card } from '../ui';
 
 export interface DeploymentModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  hostDiffs: HostDiffStatus[];
-  selectedDifferences: Map<number, Set<number>>; // host_id -> set of difference indices
-  onDeploy: (deployments: DiffDeployment[]) => Promise<BatchDeploymentStatus>;
-  className?: string;
+ isOpen: boolean;
+ onClose: () => void;
+ hostDiffs: HostDiffStatus[];
+ selectedDifferences: Map<number, Set<number>>; // host_id -> set of difference indices
+ onDeploy: (deployments: DiffDeployment[]) => Promise<BatchDeploymentStatus>;
+ className?: string;
 }
 
 const DeploymentModal: React.FC<DeploymentModalProps> = ({
-  isOpen,
-  onClose,
-  hostDiffs,
-  selectedDifferences,
-  onDeploy,
-  className,
+ isOpen,
+ onClose,
+ hostDiffs,
+ selectedDifferences,
+ onDeploy,
+ className,
 }) => {
-  const [deploymentState, setDeploymentState] = useState<'preview' | 'deploying' | 'completed'>('preview');
-  const [createBackup, setCreateBackup] = useState(true);
-  const [dryRun, setDryRun] = useState(false);
-  const [batchStatus, setBatchStatus] = useState<BatchDeploymentStatus | null>(null);
-  const [deploymentResults, setDeploymentResults] = useState<DeploymentResult[]>([]);
+ const [deploymentState, setDeploymentState] = useState<'preview' | 'deploying' | 'completed'>('preview');
+ const [createBackup, setCreateBackup] = useState(true);
+ const [dryRun, setDryRun] = useState(false);
+ const [batchStatus, setBatchStatus] = useState<BatchDeploymentStatus | null>(null);
+ const [deploymentResults, setDeploymentResults] = useState<DeploymentResult[]>([]);
 
-  // Reset state when modal opens/closes
-  useEffect(() => {
-    if (isOpen) {
-      setDeploymentState('preview');
-      setBatchStatus(null);
-      setDeploymentResults([]);
-    }
-  }, [isOpen]);
+ // Reset state when modal opens/closes
+ useEffect(() => {
+ if (isOpen) {
+ setDeploymentState('preview');
+ setBatchStatus(null);
+ setDeploymentResults([]);
+ }
+ }, [isOpen]);
 
-  // Calculate deployment summary
-  const deploymentSummary = React.useMemo(() => {
-    let totalHosts = 0;
-    let totalKeys = 0;
-    let addKeys = 0;
-    let removeKeys = 0;
-    let modifyKeys = 0;
+ // Calculate deployment summary
+ const deploymentSummary = React.useMemo(() => {
+ let totalHosts = 0;
+ let totalKeys = 0;
+ let addKeys = 0;
+ let removeKeys = 0;
+ let modifyKeys = 0;
 
-    selectedDifferences.forEach((diffIndices, hostId) => {
-      if (diffIndices.size > 0) {
-        totalHosts++;
-        const hostDiff = hostDiffs.find(h => h.host_id === hostId);
-        if (hostDiff?.key_differences) {
-          diffIndices.forEach(index => {
-            const diff = hostDiff.key_differences![index];
-            if (diff) {
-              totalKeys++;
-              switch (diff.action) {
-                case 'add':
-                  addKeys++;
-                  break;
-                case 'remove':
-                  removeKeys++;
-                  break;
-                case 'modify':
-                  modifyKeys++;
-                  break;
-              }
-            }
-          });
-        }
-      }
-    });
+ selectedDifferences.forEach((diffIndices, hostId) => {
+ if (diffIndices.size > 0) {
+ totalHosts++;
+ const hostDiff = hostDiffs.find(h => h.host_id === hostId);
+ if (hostDiff?.key_differences) {
+ diffIndices.forEach(index => {
+ const diff = hostDiff.key_differences![index];
+ if (diff) {
+ totalKeys++;
+ switch (diff.action) {
+ case 'add':
+ addKeys++;
+ break;
+ case 'remove':
+ removeKeys++;
+ break;
+ case 'modify':
+ modifyKeys++;
+ break;
+ }
+ }
+ });
+ }
+ }
+ });
 
-    return { totalHosts, totalKeys, addKeys, removeKeys, modifyKeys };
-  }, [selectedDifferences, hostDiffs]);
+ return { totalHosts, totalKeys, addKeys, removeKeys, modifyKeys };
+ }, [selectedDifferences, hostDiffs]);
 
-  const handleStartDeployment = async () => {
-    setDeploymentState('deploying');
-    
-    // Prepare deployment requests
-    const deployments: DiffDeployment[] = [];
-    
-    selectedDifferences.forEach((diffIndices, hostId) => {
-      if (diffIndices.size > 0) {
-        const hostDiff = hostDiffs.find(h => h.host_id === hostId);
-        if (hostDiff?.key_differences) {
-          const selectedDiffs = Array.from(diffIndices)
-            .map(index => hostDiff.key_differences![index])
-            .filter(Boolean);
-          
-          deployments.push({
-            host_id: hostId,
-            selected_differences: selectedDiffs,
-            create_backup: createBackup,
-            dry_run: dryRun,
-          });
-        }
-      }
-    });
+ const handleStartDeployment = async () => {
+ setDeploymentState('deploying');
+ 
+ // Prepare deployment requests
+ const deployments: DiffDeployment[] = [];
+ 
+ selectedDifferences.forEach((diffIndices, hostId) => {
+ if (diffIndices.size > 0) {
+ const hostDiff = hostDiffs.find(h => h.host_id === hostId);
+ if (hostDiff?.key_differences) {
+ const selectedDiffs = Array.from(diffIndices)
+ .map(index => hostDiff.key_differences![index])
+ .filter(Boolean);
+ 
+ deployments.push({
+ host_id: hostId,
+ selected_differences: selectedDiffs,
+ create_backup: createBackup,
+ dry_run: dryRun,
+ });
+ }
+ }
+ });
 
-    try {
-      const batchResult = await onDeploy(deployments);
-      setBatchStatus(batchResult);
-      setDeploymentResults(batchResult.results);
-      setDeploymentState('completed');
-    } catch (error) {
-      console.error('Deployment failed:', error);
-      setDeploymentState('preview');
-    }
-  };
+ try {
+ const batchResult = await onDeploy(deployments);
+ setBatchStatus(batchResult);
+ setDeploymentResults(batchResult.results);
+ setDeploymentState('completed');
+ } catch (error) {
+ console.error('Deployment failed:', error);
+ setDeploymentState('preview');
+ }
+ };
 
-  const handleClose = () => {
-    if (deploymentState === 'deploying') {
-      // Prevent closing during deployment
-      return;
-    }
-    onClose();
-  };
+ const handleClose = () => {
+ if (deploymentState === 'deploying') {
+ // Prevent closing during deployment
+ return;
+ }
+ onClose();
+ };
 
-  const getResultIcon = (result: DeploymentResult) => {
-    if (result.success) {
-      return <CheckCircle size={20} className="text-green-600 dark:text-green-400" />;
-    } else {
-      return <XCircle size={20} className="text-red-600 dark:text-red-400" />;
-    }
-  };
+ const getResultIcon = (result: DeploymentResult) => {
+ if (result.success) {
+ return <CheckCircle size={20} className="text-success dark:text-success" />;
+ } else {
+ return <XCircle size={20} className="text-destructive dark:text-destructive" />;
+ }
+ };
 
-  const downloadDeploymentReport = () => {
-    if (!batchStatus) return;
+ const downloadDeploymentReport = () => {
+ if (!batchStatus) return;
 
-    const report = [
-      `SSH Key Deployment Report`,
-      `Generated: ${new Date().toISOString()}`,
-      ``,
-      `Summary:`,
-      `- Total Hosts: ${batchStatus.total_hosts}`,
-      `- Successful: ${batchStatus.successful_deploys}`,
-      `- Failed: ${batchStatus.failed_deploys}`,
-      `- Total Keys: ${deploymentSummary.totalKeys}`,
-      ``,
-      `Results:`,
-      ...batchStatus.results.map(result => {
-        const host = hostDiffs.find(h => h.host_id === result.host_id)?.host;
-        return [
-          ``,
-          `Host: ${host?.name || `ID ${result.host_id}`}`,
-          `Status: ${result.success ? 'SUCCESS' : 'FAILED'}`,
-          `Message: ${result.message}`,
-          `Keys Deployed: ${result.deployed_keys || 0}`,
-          ...(result.backup_file ? [`Backup: ${result.backup_file}`] : []),
-          ...(result.errors ? result.errors.map(err => `Error: ${err}`) : []),
-        ].join('\n');
-      }),
-    ].join('\n');
+ const report = [
+ `SSH Key Deployment Report`,
+ `Generated: ${new Date().toISOString()}`,
+ ``,
+ `Summary:`,
+ `- Total Hosts: ${batchStatus.total_hosts}`,
+ `- Successful: ${batchStatus.successful_deploys}`,
+ `- Failed: ${batchStatus.failed_deploys}`,
+ `- Total Keys: ${deploymentSummary.totalKeys}`,
+ ``,
+ `Results:`,
+ ...batchStatus.results.map(result => {
+ const host = hostDiffs.find(h => h.host_id === result.host_id)?.host;
+ return [
+ ``,
+ `Host: ${host?.name || `ID ${result.host_id}`}`,
+ `Status: ${result.success ? 'SUCCESS' : 'FAILED'}`,
+ `Message: ${result.message}`,
+ `Keys Deployed: ${result.deployed_keys || 0}`,
+ ...(result.backup_file ? [`Backup: ${result.backup_file}`] : []),
+ ...(result.errors ? result.errors.map(err => `Error: ${err}`) : []),
+ ].join('\n');
+ }),
+ ].join('\n');
 
-    const blob = new Blob([report], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `ssh-deployment-report-${new Date().toISOString().split('T')[0]}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
+ const blob = new Blob([report], { type: 'text/plain' });
+ const url = URL.createObjectURL(blob);
+ const a = document.createElement('a');
+ a.href = url;
+ a.download = `ssh-deployment-report-${new Date().toISOString().split('T')[0]}.txt`;
+ document.body.appendChild(a);
+ a.click();
+ document.body.removeChild(a);
+ URL.revokeObjectURL(url);
+ };
 
-  const PreviewContent = () => (
-    <div className="space-y-6">
-      <div className="text-center">
-        <h3 className="text-lg font-medium text-foreground mb-2">
-          Deploy SSH Key Changes
-        </h3>
-        <p className="text-muted-foreground">
-          Review and confirm the changes to be deployed to selected hosts
-        </p>
-      </div>
+ const PreviewContent = () => (
+ <div className="space-y-6">
+ <div className="text-center">
+ <h3 className="text-lg font-w510 text-foreground mb-2">
+ Deploy SSH Key Changes
+ </h3>
+ <p className="text-muted-foreground">
+ Review and confirm the changes to be deployed to selected hosts
+ </p>
+ </div>
 
-      {/* Deployment Summary */}
-      <Card className="p-6 bg-primary/10 border-blue-200 dark:border-blue-800">
-        <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-4">Deployment Summary</h4>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
-          <div>
-            <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-              {deploymentSummary.totalHosts}
-            </div>
-            <div className="text-sm text-blue-700 dark:text-blue-300">Hosts</div>
-          </div>
-          <div>
-            <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-              {deploymentSummary.addKeys}
-            </div>
-            <div className="text-sm text-green-700 dark:text-green-300">Add Keys</div>
-          </div>
-          <div>
-            <div className="text-2xl font-bold text-red-600 dark:text-red-400">
-              {deploymentSummary.removeKeys}
-            </div>
-            <div className="text-sm text-red-700 dark:text-red-300">Remove Keys</div>
-          </div>
-          <div>
-            <div className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
-              {deploymentSummary.modifyKeys}
-            </div>
-            <div className="text-sm text-yellow-700 dark:text-yellow-300">Modify Keys</div>
-          </div>
-          <div>
-            <div className="text-2xl font-bold text-muted-foreground">
-              {deploymentSummary.totalKeys}
-            </div>
-            <div className="text-sm text-foreground/80">Total Keys</div>
-          </div>
-        </div>
-      </Card>
+ {/* Deployment Summary */}
+ <Card className="p-6 bg-primary/10 border-primary/30 dark:border-primary/30">
+ <h4 className="font-w510 text-primary mb-4">Deployment Summary</h4>
+ <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
+ <div>
+ <div className="text-2xl font-w590 text-primary dark:text-primary">
+ {deploymentSummary.totalHosts}
+ </div>
+ <div className="text-sm text-primary dark:text-primary">Hosts</div>
+ </div>
+ <div>
+ <div className="text-2xl font-w590 text-success dark:text-success">
+ {deploymentSummary.addKeys}
+ </div>
+ <div className="text-sm text-success dark:text-success">Add Keys</div>
+ </div>
+ <div>
+ <div className="text-2xl font-w590 text-destructive dark:text-destructive">
+ {deploymentSummary.removeKeys}
+ </div>
+ <div className="text-sm text-destructive dark:text-destructive">Remove Keys</div>
+ </div>
+ <div>
+ <div className="text-2xl font-w590 text-warning dark:text-warning">
+ {deploymentSummary.modifyKeys}
+ </div>
+ <div className="text-sm text-warning dark:text-warning">Modify Keys</div>
+ </div>
+ <div>
+ <div className="text-2xl font-w590 text-muted-foreground">
+ {deploymentSummary.totalKeys}
+ </div>
+ <div className="text-sm text-foreground/80">Total Keys</div>
+ </div>
+ </div>
+ </Card>
 
-      {/* Deployment Options */}
-      <Card className="p-6">
-        <h4 className="font-medium text-foreground mb-4">Deployment Options</h4>
-        <div className="space-y-4">
-          <label className="flex items-center space-x-3">
-            <input
-              type="checkbox"
-              checked={createBackup}
-              onChange={(e) => setCreateBackup(e.target.checked)}
-              className="rounded border-gray-300 text-primary focus:ring-ring"
-            />
-            <div className="flex items-center space-x-2">
-              <Shield size={16} className="text-muted-foreground" />
-              <span className="text-foreground">Create backup before deployment</span>
-            </div>
-          </label>
-          
-          <label className="flex items-center space-x-3">
-            <input
-              type="checkbox"
-              checked={dryRun}
-              onChange={(e) => setDryRun(e.target.checked)}
-              className="rounded border-gray-300 text-primary focus:ring-ring"
-            />
-            <div className="flex items-center space-x-2">
-              <FileText size={16} className="text-muted-foreground" />
-              <span className="text-foreground">Dry run (preview changes only)</span>
-            </div>
-          </label>
-        </div>
-      </Card>
+ {/* Deployment Options */}
+ <Card className="p-6">
+ <h4 className="font-w510 text-foreground mb-4">Deployment Options</h4>
+ <div className="space-y-4">
+ <label className="flex items-center space-x-3">
+ <input
+ type="checkbox"
+ checked={createBackup}
+ onChange={(e) => setCreateBackup(e.target.checked)}
+ className="rounded border-border text-primary focus:ring-ring"
+ />
+ <div className="flex items-center space-x-2">
+ <Shield size={16} className="text-muted-foreground" />
+ <span className="text-foreground">Create backup before deployment</span>
+ </div>
+ </label>
+ 
+ <label className="flex items-center space-x-3">
+ <input
+ type="checkbox"
+ checked={dryRun}
+ onChange={(e) => setDryRun(e.target.checked)}
+ className="rounded border-border text-primary focus:ring-ring"
+ />
+ <div className="flex items-center space-x-2">
+ <FileText size={16} className="text-muted-foreground" />
+ <span className="text-foreground">Dry run (preview changes only)</span>
+ </div>
+ </label>
+ </div>
+ </Card>
 
-      {/* Host Details */}
-      <div className="space-y-4">
-        <h4 className="font-medium text-foreground">Affected Hosts</h4>
-        {Array.from(selectedDifferences.entries()).map(([hostId, diffIndices]) => {
-          const hostDiff = hostDiffs.find(h => h.host_id === hostId);
-          if (!hostDiff || diffIndices.size === 0) return null;
+ {/* Host Details */}
+ <div className="space-y-4">
+ <h4 className="font-w510 text-foreground">Affected Hosts</h4>
+ {Array.from(selectedDifferences.entries()).map(([hostId, diffIndices]) => {
+ const hostDiff = hostDiffs.find(h => h.host_id === hostId);
+ if (!hostDiff || diffIndices.size === 0) return null;
 
-          return (
-            <Card key={hostId} className="p-4">
-              <div className="flex items-center justify-between mb-3">
-                <h5 className="font-medium text-foreground">
-                  {hostDiff.host.name}
-                </h5>
-                <span className="text-sm text-muted-foreground">
-                  {diffIndices.size} changes
-                </span>
-              </div>
-              <div className="text-sm text-muted-foreground">
-                {hostDiff.host.address}:{hostDiff.host.port} ({hostDiff.host.username})
-              </div>
-            </Card>
-          );
-        })}
-      </div>
-    </div>
-  );
+ return (
+ <Card key={hostId} className="p-4">
+ <div className="flex items-center justify-between mb-3">
+ <h5 className="font-w510 text-foreground">
+ {hostDiff.host.name}
+ </h5>
+ <span className="text-sm text-muted-foreground">
+ {diffIndices.size} changes
+ </span>
+ </div>
+ <div className="text-sm text-muted-foreground">
+ {hostDiff.host.address}:{hostDiff.host.port} ({hostDiff.host.username})
+ </div>
+ </Card>
+ );
+ })}
+ </div>
+ </div>
+ );
 
-  const DeployingContent = () => (
-    <div className="space-y-6 text-center">
-      <div className="flex flex-col items-center space-y-4">
-        <Loader size={48} className="animate-spin text-blue-600 dark:text-blue-400" />
-        <h3 className="text-lg font-medium text-foreground">
-          Deploying Changes...
-        </h3>
-        <p className="text-muted-foreground">
-          Please wait while we deploy the SSH key changes to your hosts
-        </p>
-      </div>
+ const DeployingContent = () => (
+ <div className="space-y-6 text-center">
+ <div className="flex flex-col items-center space-y-4">
+ <Loader size={48} className="animate-spin text-primary dark:text-primary" />
+ <h3 className="text-lg font-w510 text-foreground">
+ Deploying Changes...
+ </h3>
+ <p className="text-muted-foreground">
+ Please wait while we deploy the SSH key changes to your hosts
+ </p>
+ </div>
 
-      {batchStatus && (
-        <Card className="p-6">
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="text-foreground/80">Progress</span>
-              <span className="text-sm text-muted-foreground">
-                {batchStatus.completed_hosts} / {batchStatus.total_hosts} hosts
-              </span>
-            </div>
-            <div className="w-full bg-muted rounded-full h-2">
-              <div
-                className="bg-blue-600 dark:bg-blue-400 h-2 rounded-full transition-all duration-300"
-                style={{
-                  width: `${(batchStatus.completed_hosts / batchStatus.total_hosts) * 100}%`,
-                }}
-              />
-            </div>
-          </div>
-        </Card>
-      )}
-    </div>
-  );
+ {batchStatus && (
+ <Card className="p-6">
+ <div className="space-y-4">
+ <div className="flex items-center justify-between">
+ <span className="text-foreground/80">Progress</span>
+ <span className="text-sm text-muted-foreground">
+ {batchStatus.completed_hosts} / {batchStatus.total_hosts} hosts
+ </span>
+ </div>
+ <div className="w-full bg-muted rounded-full h-2">
+ <div
+ className="bg-primary dark:bg-primary h-2 rounded-full transition-all duration-300"
+ style={{
+ width: `${(batchStatus.completed_hosts / batchStatus.total_hosts) * 100}%`,
+ }}
+ />
+ </div>
+ </div>
+ </Card>
+ )}
+ </div>
+ );
 
-  const CompletedContent = () => (
-    <div className="space-y-6">
-      <div className="text-center">
-        <div className="mx-auto w-16 h-16 rounded-full bg-green-100 dark:bg-green-900/20 flex items-center justify-center mb-4">
-          <CheckCircle size={32} className="text-green-600 dark:text-green-400" />
-        </div>
-        <h3 className="text-lg font-medium text-foreground mb-2">
-          Deployment Complete
-        </h3>
-        <p className="text-muted-foreground">
-          SSH key deployment has finished
-        </p>
-      </div>
+ const CompletedContent = () => (
+ <div className="space-y-6">
+ <div className="text-center">
+ <div className="mx-auto w-16 h-16 rounded-full bg-success/10 dark:bg-success/20 flex items-center justify-center mb-4">
+ <CheckCircle size={32} className="text-success dark:text-success" />
+ </div>
+ <h3 className="text-lg font-w510 text-foreground mb-2">
+ Deployment Complete
+ </h3>
+ <p className="text-muted-foreground">
+ SSH key deployment has finished
+ </p>
+ </div>
 
-      {/* Results Summary */}
-      {batchStatus && (
-        <Card className="p-6 bg-muted">
-          <h4 className="font-medium text-foreground mb-4">Results Summary</h4>
-          <div className="grid grid-cols-3 gap-4 text-center">
-            <div>
-              <div className="text-2xl font-bold text-muted-foreground">
-                {batchStatus.total_hosts}
-              </div>
-              <div className="text-sm text-foreground/80">Total Hosts</div>
-            </div>
-            <div>
-              <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-                {batchStatus.successful_deploys}
-              </div>
-              <div className="text-sm text-green-700 dark:text-green-300">Successful</div>
-            </div>
-            <div>
-              <div className="text-2xl font-bold text-red-600 dark:text-red-400">
-                {batchStatus.failed_deploys}
-              </div>
-              <div className="text-sm text-red-700 dark:text-red-300">Failed</div>
-            </div>
-          </div>
-        </Card>
-      )}
+ {/* Results Summary */}
+ {batchStatus && (
+ <Card className="p-6 bg-muted">
+ <h4 className="font-w510 text-foreground mb-4">Results Summary</h4>
+ <div className="grid grid-cols-3 gap-4 text-center">
+ <div>
+ <div className="text-2xl font-w590 text-muted-foreground">
+ {batchStatus.total_hosts}
+ </div>
+ <div className="text-sm text-foreground/80">Total Hosts</div>
+ </div>
+ <div>
+ <div className="text-2xl font-w590 text-success dark:text-success">
+ {batchStatus.successful_deploys}
+ </div>
+ <div className="text-sm text-success dark:text-success">Successful</div>
+ </div>
+ <div>
+ <div className="text-2xl font-w590 text-destructive dark:text-destructive">
+ {batchStatus.failed_deploys}
+ </div>
+ <div className="text-sm text-destructive dark:text-destructive">Failed</div>
+ </div>
+ </div>
+ </Card>
+ )}
 
-      {/* Detailed Results */}
-      <div className="space-y-3">
-        <h4 className="font-medium text-foreground">Deployment Results</h4>
-        {deploymentResults.map((result) => {
-          const host = hostDiffs.find(h => h.host_id === result.host_id)?.host;
-          return (
-            <Card key={result.host_id} className="p-4">
-              <div className="flex items-start space-x-3">
-                {getResultIcon(result)}
-                <div className="flex-1">
-                  <div className="flex items-center justify-between">
-                    <h5 className="font-medium text-foreground">
-                      {host?.name || `Host ${result.host_id}`}
-                    </h5>
-                    <span className="text-sm text-muted-foreground">
-                      {result.deployed_keys || 0} keys
-                    </span>
-                  </div>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {result.message}
-                  </p>
-                  {result.backup_file && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Backup: {result.backup_file}
-                    </p>
-                  )}
-                  {result.errors && result.errors.length > 0 && (
-                    <div className="mt-2 text-sm text-red-600 dark:text-red-400">
-                      {result.errors.map((error, index) => (
-                        <div key={index}>• {error}</div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </Card>
-          );
-        })}
-      </div>
-    </div>
-  );
+ {/* Detailed Results */}
+ <div className="space-y-3">
+ <h4 className="font-w510 text-foreground">Deployment Results</h4>
+ {deploymentResults.map((result) => {
+ const host = hostDiffs.find(h => h.host_id === result.host_id)?.host;
+ return (
+ <Card key={result.host_id} className="p-4">
+ <div className="flex items-start space-x-3">
+ {getResultIcon(result)}
+ <div className="flex-1">
+ <div className="flex items-center justify-between">
+ <h5 className="font-w510 text-foreground">
+ {host?.name || `Host ${result.host_id}`}
+ </h5>
+ <span className="text-sm text-muted-foreground">
+ {result.deployed_keys || 0} keys
+ </span>
+ </div>
+ <p className="text-sm text-muted-foreground mt-1">
+ {result.message}
+ </p>
+ {result.backup_file && (
+ <p className="text-xs text-muted-foreground mt-1">
+ Backup: {result.backup_file}
+ </p>
+ )}
+ {result.errors && result.errors.length > 0 && (
+ <div className="mt-2 text-sm text-destructive dark:text-destructive">
+ {result.errors.map((error, index) => (
+ <div key={index}>• {error}</div>
+ ))}
+ </div>
+ )}
+ </div>
+ </div>
+ </Card>
+ );
+ })}
+ </div>
+ </div>
+ );
 
-  return (
-    <Modal isOpen={isOpen} onClose={handleClose} className={cn('max-w-4xl', className)}>
-      <div className="flex items-center justify-between p-6 border-b border-border">
-        <h2 className="text-xl font-semibold text-foreground">
-          {deploymentState === 'preview' && 'Deploy SSH Key Changes'}
-          {deploymentState === 'deploying' && 'Deploying Changes...'}
-          {deploymentState === 'completed' && 'Deployment Complete'}
-        </h2>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleClose}
-          disabled={deploymentState === 'deploying'}
-          leftIcon={<X size={16} />}
-        />
-      </div>
+ return (
+ <Modal isOpen={isOpen} onClose={handleClose} className={cn('max-w-4xl', className)}>
+ <div className="flex items-center justify-between p-6 border-b border-border">
+ <h2 className="text-xl font-w590 text-foreground">
+ {deploymentState === 'preview' && 'Deploy SSH Key Changes'}
+ {deploymentState === 'deploying' && 'Deploying Changes...'}
+ {deploymentState === 'completed' && 'Deployment Complete'}
+ </h2>
+ <Button
+ variant="ghost"
+ size="sm"
+ onClick={handleClose}
+ disabled={deploymentState === 'deploying'}
+ leftIcon={<X size={16} />}
+ />
+ </div>
 
-      <div className="p-6 max-h-[70vh] overflow-y-auto">
-        {deploymentState === 'preview' && <PreviewContent />}
-        {deploymentState === 'deploying' && <DeployingContent />}
-        {deploymentState === 'completed' && <CompletedContent />}
-      </div>
+ <div className="p-6 max-h-[70vh] overflow-y-auto">
+ {deploymentState === 'preview' && <PreviewContent />}
+ {deploymentState === 'deploying' && <DeployingContent />}
+ {deploymentState === 'completed' && <CompletedContent />}
+ </div>
 
-      <div className="flex items-center justify-between p-6 border-t border-border">
-        <div className="flex items-center space-x-2">
-          {deploymentState === 'preview' && dryRun && (
-            <div className="flex items-center space-x-2 text-yellow-600 dark:text-yellow-400">
-              <AlertTriangle size={16} />
-              <span className="text-sm">This is a dry run - no changes will be made</span>
-            </div>
-          )}
-        </div>
+ <div className="flex items-center justify-between p-6 border-t border-border">
+ <div className="flex items-center space-x-2">
+ {deploymentState === 'preview' && dryRun && (
+ <div className="flex items-center space-x-2 text-warning dark:text-warning">
+ <AlertTriangle size={16} />
+ <span className="text-sm">This is a dry run - no changes will be made</span>
+ </div>
+ )}
+ </div>
 
-        <div className="flex items-center space-x-3">
-          {deploymentState === 'preview' && (
-            <>
-              <Button variant="ghost" onClick={handleClose}>
-                Cancel
-              </Button>
-              <Button
-                onClick={handleStartDeployment}
-                disabled={deploymentSummary.totalKeys === 0}
-                leftIcon={<Play size={16} />}
-              >
-                {dryRun ? 'Preview Changes' : 'Deploy Changes'}
-              </Button>
-            </>
-          )}
+ <div className="flex items-center space-x-3">
+ {deploymentState === 'preview' && (
+ <>
+ <Button variant="ghost" onClick={handleClose}>
+ Cancel
+ </Button>
+ <Button
+ onClick={handleStartDeployment}
+ disabled={deploymentSummary.totalKeys === 0}
+ leftIcon={<Play size={16} />}
+ >
+ {dryRun ? 'Preview Changes' : 'Deploy Changes'}
+ </Button>
+ </>
+ )}
 
-          {deploymentState === 'completed' && (
-            <>
-              <Button
-                variant="ghost"
-                onClick={downloadDeploymentReport}
-                leftIcon={<Download size={16} />}
-              >
-                Download Report
-              </Button>
-              <Button onClick={handleClose}>
-                Close
-              </Button>
-            </>
-          )}
-        </div>
-      </div>
-    </Modal>
-  );
+ {deploymentState === 'completed' && (
+ <>
+ <Button
+ variant="ghost"
+ onClick={downloadDeploymentReport}
+ leftIcon={<Download size={16} />}
+ >
+ Download Report
+ </Button>
+ <Button onClick={handleClose}>
+ Close
+ </Button>
+ </>
+ )}
+ </div>
+ </div>
+ </Modal>
+ );
 };
 
 export default DeploymentModal;
