@@ -70,3 +70,4 @@ Thumbs.db
 *.temp
 backend-rust/
 .claude/scheduled_tasks.lock
+.htpasswd
