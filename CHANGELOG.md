@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- 
+
+## [1.1.8] - 2026-04-27
+
 ### Changed
 - **Contributor docs**: `AGENTS.md`/`CLAUDE.md` now spell out a mandatory rule that every database schema change goes through an alembic migration — never hand-edit models without a matching revision in `backend/migrations/versions/`.
 
