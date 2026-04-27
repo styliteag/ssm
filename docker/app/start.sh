@@ -15,11 +15,10 @@ trap cleanup TERM INT
 
 # Apply database migrations before serving traffic. Idempotent — Alembic
 # stamps applied revisions in the alembic_version table, so re-runs are no-ops.
-# The preflight step recognises legacy (Rust-era) databases that share the
-# revision-0001 schema but lack alembic_version, and stamps them so the
-# upgrade does not re-create existing tables.
+# Legacy databases inherited from the Rust/Diesel backend (schema present,
+# no alembic_version) are detected and stamped inside migrations/env.py.
 echo "Running database migrations..."
-cd /app && python -m ssm.db.preflight && alembic upgrade head
+cd /app && alembic upgrade head
 
 echo "Starting nginx reverse proxy on :80..."
 nginx -t
