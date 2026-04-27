@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Container startup no longer crashes on databases inherited from the Rust backend. A preflight step detects legacy databases (schema present, no `alembic_version` table) and stamps them as revision `0001` so `alembic upgrade head` becomes a no-op.
+
 ### Added
 - 
 
