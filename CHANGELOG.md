@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Contributor docs**: `AGENTS.md`/`CLAUDE.md` now spell out a mandatory rule that every database schema change goes through an alembic migration — never hand-edit models without a matching revision in `backend/migrations/versions/`.
+
 ### Fixed
 - **Docker bind-mount permissions**: Container startup now `chown`s `/app/db` to the runtime user, so SQLite databases written under the previous uid-1000 backend image remain writable after upgrading to the combined image.
 

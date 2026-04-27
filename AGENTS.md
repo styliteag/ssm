@@ -41,6 +41,18 @@ diesel migration run        # Apply migrations
 docker-compose -f docker/compose.prod.yml up --build
 ```
 
+## Database Changes — Mandatory: use alembic
+
+⚠️ **Every schema change goes through an alembic migration.** Never edit `backend/src/ssm/db/models.py` (or any ORM model) without producing a matching migration in `backend/migrations/versions/`.
+
+**Rules:**
+- Generate the migration with `cd backend && alembic revision -m "<short description>"` (or `--autogenerate` if model changes are already in place — always review the generated SQL).
+- Run `alembic upgrade head` locally and verify the migration applies cleanly to both a fresh DB and a copy of the prod DB before committing.
+- Provide a working `downgrade()` whenever feasible.
+- If the migration adds new tables, check whether the legacy-stamp path in `backend/migrations/env.py` needs to keep covering legacy (Diesel-era) databases. `metadata.create_all(checkfirst=True)` already creates any tables present in the model metadata; data backfills and non-reflected indexes need explicit handling.
+- Stage the new migration file together with the model change in the same commit, with a `CHANGELOG.md` entry under `Changed`.
+- Never run ad-hoc `metadata.create_all()` or hand-written `CREATE TABLE` against a production-shape database outside of a reviewed alembic revision.
+
 ## CHANGELOG Maintenance — Mandatory
 
 ⚠️ **EVERY commit must include a `CHANGELOG.md` update.** This rule is load-bearing — releases 1.1.4 through 1.1.7 shipped with empty entries because commits landed without it, and had to be backfilled by hand.
