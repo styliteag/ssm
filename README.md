@@ -3,403 +3,158 @@
 > [!NOTE]
 > This is pre-release software. Use at your own risk.
 
-A modern web application for managing SSH keys across multiple hosts with a **React frontend** and **Rust API backend**.
+A web application for managing SSH `authorized_keys` files across multiple hosts — React frontend, Python/FastAPI backend.
 
-## 🚀 Quick Start
+## Prerequisites
 
-### Development Environment
+- **Python** 3.12+ with [uv](https://docs.astral.sh/uv/getting-started/installation/)
+- **Node.js** 24+ with npm
+- **just** — `cargo install just` or `brew install just`
+- **Docker** (optional, for production deployment)
 
-### Prerequisites
-
-- **Rust** (1.75+) with Cargo
-- **Node.js** (24+) with npm
-- **Docker** (optional, for deployment)
-- **htpasswd** utility (for authentication)
-- **SSH** private key (for SSH connections)
-- **just**
-   - install just: `cargo install just`
-- **watch**
-   - install watch: `cargo install cargo-watch`
-
-### Initial Setup
-
-Start both frontend and backend development servers:
+## Quick Start
 
 ```bash
-./start-dev.sh
+just dev          # starts backend + frontend in dev mode
 ```
 
-- **Frontend**: http://localhost:5173 (React + Vite)
-- **Backend API**: http://localhost:8000 (Rust + Actix Web)
+- **Frontend**: http://localhost:5173
+- **Backend API**: http://localhost:8000/api/v2
 
-### Production Deployment
-
-Deploy with Docker:
+Or individually:
 
 ```bash
-docker-compose -f docker/compose.prod.yml up --build
+just backend-install   # uv sync
+just backend-run       # uvicorn with --reload
+
+just frontend-install  # npm install
+just frontend-dev      # vite dev server
 ```
 
-- **Application**: http://localhost/ (nginx serves frontend, proxies API)
+Run `just` to see all available commands.
 
-## 📋 Overview
+## Architecture
 
-SSH Key Manager provides a web interface for managing `authorized_keys` files on remote hosts via SSH connections. The application has been refactored from a monolithic Rust application to a modern distributed architecture:
+| Layer | Stack |
+|---|---|
+| Frontend | React 19 + TypeScript + Tailwind CSS + Vite |
+| Backend | Python 3.12 + FastAPI + SQLAlchemy (async) |
+| Database | SQLite (default) — swappable via `DATABASE_URL` |
+| Migrations | Alembic |
+| Auth | htpasswd credential store + JWT (HS256) |
+| SSH | asyncssh |
 
-- **Frontend**: React + TypeScript + Tailwind CSS
-- **Backend**: Rust + Actix Web REST API  
-- **Database**: SQLite (with PostgreSQL/MySQL support)
-- **Deployment**: Multi-stage Docker build with nginx proxy
-- **Authentication**: Session-based with htpasswd integration
+The production Docker image runs the backend only (port 8000, `/api/v2`). The frontend is served separately (nginx, Caddy, CDN).
 
-## 🏗️ Architecture
+## Development Workflow
 
-### Frontend (`frontend/`)
-- **Framework**: React 19 with TypeScript
-- **Styling**: Tailwind CSS with custom component library
-- **State Management**: Zustand + React Context
-- **Routing**: React Router with protected routes
-- **Build Tool**: Vite for fast development and production builds
-- **API Communication**: Axios with centralized service layer
-
-### Backend (`backend/`)
-- **Framework**: Rust + Actix Web
-- **Database**: Diesel ORM (SQLite/PostgreSQL/MySQL)
-- **Authentication**: Session-based with htpasswd files
-- **SSH Client**: russh for remote host connections
-- **API Design**: RESTful JSON endpoints with structured responses
-
-### Deployment
-- **Multi-stage Docker**: Frontend build → Backend build → Combined runtime
-- **Web Server**: nginx serves React app and proxies API requests
-- **Single Container**: Simplified deployment with internal service communication
-- **Health Checks**: Built-in monitoring and health endpoints
-
-## 🛠️ Development Setup
-
-### Prerequisites
-
-- **Rust** (1.75+) with Cargo
-- **Node.js** (24+) with npm
-- **Docker** (optional, for deployment)
-- **htpasswd** utility (for authentication)
-
-### Initial Setup
-
-1. **Clone the repository**:
-   ```bash
-   git clone <repository-url>
-   cd ssm
-   ```
-
-2. **Set up authentication**:
-   ```bash
-   htpasswd -B -c .htpasswd admin
-   ```
-
-3. **Configure the application**:
-   Create `config.toml` (see [Configuration](#configuration) section)
-
-4. **Set up the database** (from `backend/` directory):
-   ```bash
-   cd backend
-   cargo install diesel_cli --no-default-features --features sqlite
-   diesel setup
-   diesel migration run
-   cd ..
-   ```
-
-5. **Install frontend dependencies**:
-   ```bash
-   cd frontend
-   npm install
-   cd ..
-   ```
-
-### Development Workflow
-
-#### Start Development Servers
-```bash
-# Start both frontend and backend
-./start-dev.sh
-
-# Or start individually:
-# Backend (from backend/ directory)
-cd backend && cargo run
-
-# Frontend (from frontend/ directory)  
-cd frontend && npm run dev
-```
-
-#### Frontend Development
-```bash
-cd frontend
-
-# Start dev server
-npm run dev
-
-# Build for production
-npm run build
-
-# Lint and type check
-npm run lint
-npm run type-check
-```
-
-#### Backend Development
-```bash
-cd backend
-
-# Run with auto-reload
-cargo watch -x run
-
-# Run tests
-cargo test
-
-# Database operations
-diesel migration run
-diesel migration generate <name>
-```
-
-## 🐳 Docker Deployment
-
-### Production Deployment
+### Backend
 
 ```bash
-# Build and start production stack
-docker-compose -f docker/compose.prod.yml up --build
-
-# Run in background
-docker-compose -f docker/compose.prod.yml up -d --build
+just backend-test       # pytest
+just backend-test-cov   # pytest with coverage report
+just backend-lint       # ruff check
+just backend-fmt        # ruff format
+just backend-typecheck  # mypy
+just backend-security   # bandit
 ```
 
-### Development with Docker
+### Frontend
 
 ```bash
-# Start development stack
-docker-compose -f docker/compose.yml up --build
+just frontend-lint        # eslint
+just frontend-typecheck   # tsc --noEmit
+just frontend-build       # production build
 ```
 
-### Docker Architecture
-
-The multi-stage build process:
-
-1. **Frontend Build Stage**: Builds React application with Vite
-2. **Backend Build Stage**: Compiles Rust application with optimizations
-3. **Runtime Stage**: Combines built assets with nginx + Alpine Linux
-
-**Container Structure**:
-- nginx serves React frontend from `/usr/share/nginx/html`
-- nginx proxies `/api/*` requests to Rust backend on port 8000
-- Single container exposes port 80 for all web traffic
-- Persistent volumes for database, configuration, and SSH keys
-
-## ⚙️ Configuration
-
-### Main Configuration (`config.toml`) - Optional
-
-The `config.toml` file is optional. If it doesn't exist, the server will use environment variables and built-in defaults.
-
-```toml
-# Database URL (SQLite default) - can be overridden by DATABASE_URL env var
-# database_url = "sqlite://ssm.db"
-
-# API server configuration
-listen = "127.0.0.1"
-port = 8000
-
-# Logging level
-loglevel = "info"
-
-# htpasswd path - can be overridden by HTPASSWD env var
-# htpasswd_path = ".htpasswd"
-
-[ssh]
-# Path to private key for SSH connections - can be overridden by SSH_KEY env var
-# private_key_file = "/path/to/your/ssh/private/key"
-
-# Optional passphrase
-# private_key_passphrase = "your_passphrase_here"
-```
-
-### Environment Variables
-
-- `CONFIG` - Path to config file (default: `./config/config.toml`)
-- `DATABASE_URL`, `HTPASSWD`, `SSH_KEY`, `SESSION_KEY` - Take precedence over config file settings
-- `RUST_LOG` - Logging level (overrides config)
-- `VITE_API_URL` - Frontend API URL (for production builds)
-
-### SSH Key Setup
-
-**🔑 IMPORTANT**: The server requires a valid SSH private key file to function. The default path is `keys/id_ssm`. If no `config.toml` exists, set the `SSH_KEY` environment variable:
+### Database
 
 ```bash
-SSH_KEY=/path/to/your/private/key cargo run
+just migrate              # alembic upgrade head
+just migrate-new <name>   # create autogenerated revision
+just migrate-down         # downgrade one step
+just migrate-history      # show migration history
 ```
 
-The server will provide detailed instructions for generating an SSH key pair if the file is missing.
+## Configuration
 
-**Generating SSH Keys:**
+Configuration is loaded from `backend/config.toml` (optional). Environment variables take precedence:
 
-For ed25519 keys (recommended):
-```bash
-# Generate key pair in the default location
-ssh-keygen -t ed25519 -f keys/id_ssm -C 'ssm-server'
+| Variable | Default | Description |
+|---|---|---|
+| `CONFIG` | `./config.toml` | Path to config file |
+| `DATABASE_URL` | `sqlite:///ssm.db` | SQLAlchemy database URL |
+| `JWT_SECRET` | — | Required in production (32+ chars) |
+| `SSH_KEY` | `keys/id_ssm` | Path to SSH private key |
+| `HTPASSWD` | `.htpasswd` | Path to htpasswd credential file |
+| `LOGLEVEL` | `info` | Logging level |
+| `PORT` | `8000` | Listen port |
+| `LISTEN` | `::` | Listen address |
 
-# Set proper permissions
-chmod 600 keys/id_ssm
-chmod 644 keys/id_ssm.pub
-```
+`SESSION_KEY` is accepted as an alias for `JWT_SECRET`.
 
-For RSA keys (alternative):
-```bash
-ssh-keygen -t rsa -b 4096 -f keys/id_ssm -C 'ssm-server'
-```
+### SSH Key
 
-**Docker Setup:**
-In Docker, the SSH key should be placed at `/app/keys/id_ssm` (mounted from `docker/data/keys/id_ssm`).
-
-### Authentication Setup
-
-**🔐 IMPORTANT**: Authentication is required for all API endpoints except login/logout.
-
-**Auto-creation**: If no htpasswd file exists when the server starts, it will automatically create one with a default `admin` user and a randomly generated password (displayed on console).
-
-**Manual creation**: You can also create the htpasswd file manually:
+Generate a key for the server to use when connecting to managed hosts:
 
 ```bash
-# Create htpasswd file with bcrypt encryption
-htpasswd -cB .htpasswd admin
-
-# Add additional users
-htpasswd -B .htpasswd another_user
-
-# Set secure session key for production
-export SESSION_KEY="your-super-secret-session-key-change-in-production"
+ssh-keygen -t ed25519 -f backend/keys/id_ssm -C 'ssm-server' -N ''
 ```
 
-**Security Notes:**
-- All API requests (except authentication) require session-based authentication
-- Session cookies are `HttpOnly` and secure
-- bcrypt encryption is used for password storage
-- Unauthenticated requests return `401 Unauthorized`
+### Authentication
 
-### Docker Environment
+The server auto-creates an `.htpasswd` file with a random `admin` password on first start (printed to console). To set credentials manually:
 
-When using Docker, place configuration files in `docker/data/`:
+```bash
+htpasswd -cB backend/.htpasswd admin    # create file
+htpasswd -B backend/.htpasswd user2     # add user
+```
+
+## Production Deployment
+
+```bash
+just up      # docker compose up -d --build
+just down    # docker compose down
+just logs    # tail logs
+```
+
+The compose file (`docker/compose.prod.yml`) expects persistent volumes at `docker/data/`:
 
 ```
 docker/data/
-├── auth/.htpasswd          # Authentication file
-├── config/config.toml      # Main configuration
-├── ssh-keys/              # SSH private keys
-├── db/                    # Database files
-└── logs/                  # Application logs
+├── config/config.toml    # main config
+├── config/.htpasswd      # credentials
+├── keys/id_ssm           # SSH private key
+└── db/                   # SQLite database
 ```
 
-## 🔧 API Documentation
+`JWT_SECRET` must be set — uncomment the line in `compose.prod.yml` and supply a value.
 
-For detailed API documentation including all endpoints, authentication, and examples, see [API_DOCUMENTATION.md](backend/API_DOCUMENTATION.md).
+## Release
 
-## 📁 Project Structure
-
-```
-ssm/
-├── frontend/                 # React frontend application
-│   ├── src/
-│   │   ├── components/      # Reusable React components
-│   │   ├── pages/          # Route components
-│   │   ├── services/       # API communication
-│   │   ├── contexts/       # React contexts
-│   │   └── types/          # TypeScript definitions
-│   ├── package.json
-│   └── vite.config.ts
-├── backend/                 # Rust API backend
-│   ├── src/
-│   │   ├── routes/         # API endpoint handlers
-│   │   ├── db/            # Database models
-│   │   ├── ssh/           # SSH client implementation
-│   │   └── api_types.rs   # API request/response types
-│   ├── migrations/        # Database migrations
-│   └── Cargo.toml
-├── docker/                 # Docker deployment configuration
-│   ├── app/Dockerfile     # Multi-stage build configuration
-│   ├── compose.prod.yml   # Production deployment
-│   └── data/             # Persistent data volumes
-├── start-dev.sh           # Development environment startup
-├── config.toml           # Application configuration
-└── README.md
+```bash
+just release          # patch bump
+just release minor    # minor bump
+just release major    # major bump
 ```
 
-## 🔐 Security Features
+Bumps `VERSION`, commits, tags, and pushes. The tag push triggers the CI build.
 
-**🛡️ Comprehensive Security Implementation:**
+## SSH Management Controls
 
-- **🔒 Required Authentication**: All API endpoints (except login) require session-based authentication
-- **🍪 Secure Sessions**: HttpOnly cookies with session signing keys for protection
-- **🔐 bcrypt Encryption**: Industry-standard password hashing for user credentials
-- **⚡ Session Validation**: Real-time authentication checks on every API request
-- **🚫 Unauthorized Access**: 401 responses for unauthenticated requests
-- **🔑 SSH Key Security**: Key-based authentication for all remote SSH connections
-- **✅ Input Validation**: Comprehensive validation and sanitization of all API inputs
-- **🗄️ Database Security**: Prepared statements and foreign key constraints
-- **🌐 CORS Configuration**: Controlled cross-origin resource sharing for frontend integration
+- **Disabled hosts**: mark a host as disabled in the UI to skip all SSH operations (maintenance, decommission)
+- **`.ssh/system_readonly`** on a remote host: prevents SSM from modifying any keyfile
+- **`.ssh/user_readonly`** on a remote host: prevents modifications for a specific user
 
-**Authentication Flow:**
-1. Login with `.htpasswd` credentials → Session cookie issued
-2. Include session cookie in subsequent API requests
-3. Server validates session on every protected endpoint
-4. Logout to invalidate session
+Both files accept an optional reason string that is displayed in the UI.
 
-## 🚫 SSH Key Management Controls
+## Security Features
 
-### Host Disabling
-- **Disabled Hosts**: Mark hosts as `disabled` to prevent all SSH operations
-- **Use Cases**: Maintenance windows, decommissioned servers, temporary disconnection
-- **Effects**: No SSH connections, no polling, no diff operations, no syncing
+- All `/api/v2` endpoints require a valid JWT Bearer token (except `/api/v2/auth/login`)
+- Passwords stored as bcrypt hashes in htpasswd format
+- JWT tokens signed with HS256; access and refresh tokens are distinct types (not interchangeable)
+- SSH connections use key-based authentication only
 
-### Readonly Controls
-Prevent SSM from modifying keyfiles by creating control files:
+## License
 
-- **`.ssh/system_readonly`**: Disables updates for all keyfiles on the host
-- **`.ssh/user_readonly`**: Disables updates for specific user keyfiles
-
-Optional: Include a reason in the file that will be displayed in the UI.
-
-## 🤝 Contributing
-
-### Development Guidelines
-
-1. **API-First Development**: Design API endpoints before frontend implementation
-2. **Type Safety**: Use TypeScript for frontend and structured types for backend
-3. **Component Reusability**: Build modular React components
-4. **Error Handling**: Implement comprehensive error handling and user feedback
-5. **Testing**: Write tests for both frontend and backend components
-
-### Code Style
-
-- **Frontend**: ESLint + TypeScript for code quality
-- **Backend**: `cargo fmt` and `cargo clippy` for Rust code
-- **Consistent Naming**: Use clear, descriptive names for variables and functions
-
-### Pull Request Process
-
-1. Fork the repository and create a feature branch
-2. Implement changes with appropriate tests
-3. Ensure both frontend and backend build successfully
-4. Update documentation if needed
-5. Submit pull request with clear description
-
-## 📄 License
-
-This project is licensed under GPL-3.0. See LICENSE.txt for details.
-
-## 🔗 Links
-
-- **Repository**: https://github.com/styliteag/ssm
-- **Issues**: Report bugs and feature requests
-- **Documentation**: Additional documentation in `/docs` (coming soon)
-
----
-
-For technical implementation details, see [CLAUDE.md](CLAUDE.md) for development guidance.
+GPL-3.0 — see [LICENSE.txt](LICENSE.txt).
