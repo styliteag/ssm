@@ -21,7 +21,9 @@ const DashboardPage: React.FC = () => {
  keys: 0,
  authorizations: 0,
  });
- const [version, setVersion] = useState<string>('');
+ const [backendVersion, setBackendVersion] = useState<string>('');
+ const [alembicRevision, setAlembicRevision] = useState<string | null>(null);
+ const frontendVersion = __APP_VERSION__;
  const [isLoading, setIsLoading] = useState(true);
  const [error, setError] = useState<string | null>(null);
 
@@ -52,7 +54,8 @@ const DashboardPage: React.FC = () => {
  setStats(newStats);
 
  if (systemResponse.status === 'fulfilled') {
- setVersion(systemResponse.value.data?.version || '');
+ setBackendVersion(systemResponse.value.data?.version || '');
+ setAlembicRevision(systemResponse.value.data?.alembic_revision ?? null);
  }
  } catch (err: unknown) {
  setError('Failed to load dashboard data');
@@ -89,7 +92,14 @@ const DashboardPage: React.FC = () => {
  <div className="flex items-center space-x-2 bg-white/[0.03] border border-border px-3 py-1 rounded-full">
  <div className="w-1.5 h-1.5 bg-success rounded-full animate-pulse"></div>
  <span className="text-xs font-w510 text-muted-foreground">System Operational</span>
- {version && <span className="text-xs text-muted-foreground/60 border-l border-border pl-2 ml-1 font-mono">v{version}</span>}
+ <span
+ className="text-xs text-muted-foreground/60 border-l border-border pl-2 ml-1 font-mono"
+ title={`frontend v${frontendVersion}\nbackend v${backendVersion || '?'}\nschema ${alembicRevision ?? '?'}`}
+ >
+ fe v{frontendVersion}
+ {backendVersion && <span className="ml-2">be v{backendVersion}</span>}
+ {alembicRevision && <span className="ml-2">db {alembicRevision}</span>}
+ </span>
  </div>
  </div>
 

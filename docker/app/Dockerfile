@@ -16,8 +16,10 @@ COPY frontend/package*.json ./
 RUN npm ci --no-audit --no-fund
 
 COPY frontend/. .
+COPY VERSION /VERSION
 ENV VITE_API_URL=${VITE_API_URL}
-RUN npm run build
+ENV VITE_APP_VERSION_FILE=/VERSION
+RUN VITE_APP_VERSION="$(cat /VERSION)" npm run build
 
 
 # ---- backend builder (resolve venv with uv) ---------------------------------
