@@ -521,15 +521,6 @@ const HostsPage: React.FC = () => {
  const result = await hostsService.updateHost(host.name, hostUpdate as Host);
  results.push(result);
 
- // Invalidate cache for the updated host
- if (result.success) {
- try {
- await hostsService.invalidateCache(host.name);
- } catch (cacheError) {
- // Cache invalidation is best-effort
- // Don't fail the operation if cache invalidation fails
- }
- }
  } catch {
  results.push({ success: false, message: `Failed to update ${host.name}` });
  }

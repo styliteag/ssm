@@ -15,7 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/Card';
 import { cn } from '../../utils/cn';
 
 interface ChartProps {
- data: any[];
+ data: object[];
  type: 'bar' | 'pie';
  title: string;
  dataKey: string;

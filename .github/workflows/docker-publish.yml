@@ -30,7 +30,7 @@ jobs:
       with:
         push: true
         context: .
-        file: docker/app/Dockerfile
+        file: backend/Dockerfile
         #cache-from: type=registry,ref=styliteag/ssm:latest
         #cache-to: type=inline
         cache-from: type=gha

@@ -173,14 +173,7 @@ const DiffPage: React.FC = () => {
  const handleHostUpdated = async (updatedHost: Host) => {
  setEditingHost(null);
 
- try {
- // Invalidate cache for the updated host to ensure fresh data
- await hostsService.invalidateCache(updatedHost.name);
- showSuccess('Host updated', 'Cache has been invalidated for fresh data');
- } catch (cacheError) {
- // Cache invalidation is best-effort
- // Don't fail the update if cache invalidation fails
- }
+ showSuccess('Host updated', `${updatedHost.name} has been updated`);
 
  // Update the host in the list
  setHosts(prev => prev.map(h =>
@@ -277,9 +270,8 @@ const DiffPage: React.FC = () => {
  // Update progress to success
  onProgress({ hostName: host.name, status: 'success' });
 
- // Invalidate cache and refresh host status
+ // Refresh host status after sync
  try {
- await hostsService.invalidateCache(host.name);
  const diffResponse = await diffApi.getHostDiff(host.name, true);
  setHosts(prev => prev.map(h =>
  h.id === host.id ? {
@@ -517,7 +509,7 @@ const DiffPage: React.FC = () => {
  try {
  await authorizationsService.createAuthorization(authData);
  authorizationCreated = true;
- } catch (authError) {
+ } catch {
  // Authorization might already exist, which is fine
  }
 
@@ -698,7 +690,7 @@ const DiffPage: React.FC = () => {
  try {
  await authorizationsService.createAuthorization(authData);
  showSuccess('User created and added to host', `New user "${userData.username}" has been created with the key and added to host "${selectedHost.name}"`);
- } catch (authError) {
+ } catch {
  // This shouldn't happen for new users, but handle gracefully
  showSuccess('User created', `New user "${userData.username}" has been created with the key`);
  }

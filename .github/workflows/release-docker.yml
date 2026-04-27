@@ -80,7 +80,7 @@ jobs:
       with:
         push: true
         context: .
-        file: docker/app/Dockerfile
+        file: backend/Dockerfile
         platforms: ${{ matrix.platform }}
         #cache-from: type=gha,scope=linux-${{ matrix.arch }}
         #cache-to: type=gha,scope=linux-${{ matrix.arch }},mode=max
@@ -92,7 +92,6 @@ jobs:
         build-args: |
           VERSION=${{ steps.version.outputs.version }}
           VCS_REF=${{ github.sha }}
-          VITE_API_URL=/api
         tags: |
           styliteag/ssm:${{ steps.version.outputs.version }}-${{ matrix.arch }}
           ghcr.io/${{ github.repository }}/ssm:${{ steps.version.outputs.version }}-${{ matrix.arch }}

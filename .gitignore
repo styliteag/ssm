@@ -10,8 +10,44 @@ backend/config.toml
 backend/.htpasswd
 backend/server.log
 backend/data*
+backend/keys/
+# Dev artifacts that end up in backend/ from running the server locally.
+backend/ssh_host_*
+backend/known_hosts
 logs/
+
+# Python (interpreters, uv, tests, linters, packaging)
 __pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.egg
+*.egg-info/
+.eggs/
+dist/
+build/
+wheels/
+pip-log.txt
+pip-delete-this-directory.txt
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+.tox/
+.nox/
+
 docker/data/
 cookies.txt
 .DS_Store
@@ -32,3 +68,6 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
+backend-rust/
+.claude/scheduled_tasks.lock
+.htpasswd

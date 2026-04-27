@@ -127,19 +127,6 @@ export const HostEditModal: React.FC<HostEditModalProps> = ({
       });
       
       if (response.success) {
-        // Invalidate cache for the updated host (backend already does this, but we can be explicit)
-        // This is especially important if the host name changed
-        try {
-          await hostsService.invalidateCache(values.name);
-          if (host.name !== values.name) {
-            // Also invalidate old name if host was renamed
-            await hostsService.invalidateCache(host.name);
-          }
-        } catch (error) {
-          console.warn('Failed to invalidate cache:', error);
-          // Don't fail the entire operation if cache invalidation fails
-        }
-        
         onClose();
         showSuccess('Host updated', `${values.name} has been updated successfully`);
         

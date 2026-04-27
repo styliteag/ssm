@@ -4,6 +4,23 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
 import { Input } from '../components/ui';
 import { activitiesService, Activity } from '../services/api/activities';
 
+interface DiffChange {
+  action: 'added' | 'removed' | 'unchanged';
+  username?: string;
+  key_type?: string;
+  key_preview?: string;
+  comment?: string;
+  type?: string;
+  old_options?: string;
+  new_options?: string;
+  error?: string;
+}
+
+interface LoginDiff {
+  login: string;
+  changes: DiffChange[];
+}
+
 const iconMap = {
  key: Key,
  host: Server,
@@ -50,14 +67,14 @@ const ActivitiesPage: React.FC = () => {
  );
 
  // Helper to render detailed diff
- const renderDetailedDiff = (diff: any[]) => {
+ const renderDetailedDiff = (diff: LoginDiff[]) => {
  return (
  <div className="mt-2 border border-border rounded-md p-3 bg-muted/30 space-y-3">
- {diff.map((loginDiff: any, idx: number) => (
+ {diff.map((loginDiff, idx) => (
  <div key={idx} className="space-y-1">
  <div className="text-xs font-w590 text-foreground">Login: {loginDiff.login}</div>
  <div className="space-y-1 pl-2">
- {loginDiff.changes.map((change: any, changeIdx: number) => {
+ {loginDiff.changes.map((change, changeIdx) => {
  const actionColor = change.action === 'added' ? 'text-success dark:text-success' :
  change.action === 'removed' ? 'text-destructive dark:text-destructive' :
  'text-primary dark:text-primary';
@@ -94,7 +111,7 @@ const ActivitiesPage: React.FC = () => {
  };
 
  // Helper to render metadata changes
- const renderChanges = (metadata?: Record<string, any>, activityId?: number) => {
+ const renderChanges = (metadata?: Record<string, unknown>, activityId?: number) => {
  if (!metadata) return null;
 
  // Check if this is a changes metadata (has old/new structure)
@@ -114,51 +131,54 @@ const ActivitiesPage: React.FC = () => {
  <div className="space-y-2">
  <div className="flex flex-wrap gap-2 mt-1">
  {/* Render old/new changes */}
- {changes.map(([field, change]: [string, any]) => (
+ {changes.map(([field, change]) => {
+ const c = change as { old: unknown; new: unknown };
+ return (
  <span key={field} className="text-xs bg-muted px-2 py-0.5 rounded">
  <span className="text-muted-foreground">{field}:</span>{' '}
- <span className="text-destructive line-through">{String(change.old ?? 'null')}</span>
+ <span className="text-destructive line-through">{String(c.old ?? 'null')}</span>
  {' → '}
- <span className="text-success dark:text-success">{String(change.new ?? 'null')}</span>
+ <span className="text-success dark:text-success">{String(c.new ?? 'null')}</span>
  </span>
- ))}
+ );
+ })}
 
  {/* Render sync summary */}
  {isSyncMetadata && (
  <>
- {metadata.missing_keys > 0 && (
+ {(metadata.missing_keys as number) > 0 && (
  <span className="text-xs bg-destructive/10 dark:bg-destructive/20 text-destructive dark:text-destructive px-2 py-0.5 rounded">
  +{metadata.missing_keys} missing
  </span>
  )}
- {metadata.unknown_keys > 0 && (
+ {(metadata.unknown_keys as number) > 0 && (
  <span className="text-xs bg-warning/10 dark:bg-warning/20 text-warning dark:text-warning px-2 py-0.5 rounded">
  -{metadata.unknown_keys} unknown
  </span>
  )}
- {metadata.incorrect_options > 0 && (
+ {(metadata.incorrect_options as number) > 0 && (
  <span className="text-xs bg-primary/10 dark:bg-primary/20 text-primary dark:text-primary px-2 py-0.5 rounded">
  {metadata.incorrect_options} options fixed
  </span>
  )}
- {metadata.unauthorized_keys > 0 && (
+ {(metadata.unauthorized_keys as number) > 0 && (
  <span className="text-xs bg-warning/10 dark:bg-warning/20 text-warning dark:text-warning px-2 py-0.5 rounded">
  {metadata.unauthorized_keys} unauthorized
  </span>
  )}
- {metadata.duplicate_keys > 0 && (
+ {(metadata.duplicate_keys as number) > 0 && (
  <span className="text-xs bg-accent/10 dark:bg-accent/20 text-accent dark:text-accent px-2 py-0.5 rounded">
  {metadata.duplicate_keys} duplicates
  </span>
  )}
- {metadata.faulty_keys > 0 && (
+ {(metadata.faulty_keys as number) > 0 && (
  <span className="text-xs bg-destructive/10 dark:bg-destructive/20 text-destructive dark:text-destructive px-2 py-0.5 rounded">
  {metadata.faulty_keys} faulty
  </span>
  )}
- {metadata.logins_affected > 0 && (
+ {(metadata.logins_affected as number) > 0 && (
  <span className="text-xs bg-muted px-2 py-0.5 rounded text-muted-foreground">
- {metadata.logins_affected} login{metadata.logins_affected !== 1 ? 's' : ''} affected
+ {metadata.logins_affected} login{(metadata.logins_affected as number) !== 1 ? 's' : ''} affected
  </span>
  )}
  </>
@@ -174,7 +194,7 @@ const ActivitiesPage: React.FC = () => {
  </div>
 
  {/* Render detailed diff if expanded */}
- {hasDiff && expandedDiff === activityId && renderDetailedDiff(metadata.diff)}
+ {hasDiff && expandedDiff === activityId && renderDetailedDiff(metadata.diff as LoginDiff[])}
  </div>
  );
  };
@@ -250,8 +270,8 @@ const ActivitiesPage: React.FC = () => {
  <User size={12} />
  <span>{activity.user}</span>
  </div>
- {activity.metadata?.ip && (
- <div className="hidden md:flex items-center gap-1 text-xs bg-muted px-1.5 py-0.5 rounded" title={activity.metadata.via ? `Via: ${activity.metadata.via}` : undefined}>
+ {activity.metadata && typeof activity.metadata.ip === 'string' && (
+ <div className="hidden md:flex items-center gap-1 text-xs bg-muted px-1.5 py-0.5 rounded" title={typeof activity.metadata.via === 'string' ? `Via: ${activity.metadata.via}` : undefined}>
  <span className="font-mono">{activity.metadata.ip}</span>
  </div>
  )}
