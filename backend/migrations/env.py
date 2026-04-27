@@ -68,10 +68,11 @@ def _stamp_legacy_database_if_needed(connection: Connection) -> None:
     * ``alembic_version`` exists but is empty — created by an earlier,
       crashed migration attempt or partial bootstrap.
 
-    Either way a plain ``alembic upgrade head`` would re-run revision
-    0001 and fail with ``table host already exists``. Detect both cases
-    and seed ``alembic_version`` so the upgrade becomes a no-op for
-    revision 0001 and proceeds with any later revisions.
+    The Diesel schema also lacks tables that were introduced after the
+    Python rewrite (e.g. ``activity_log``), so we create any missing
+    revision-0001 tables via ``metadata.create_all(checkfirst=True)``
+    before stamping. This way a plain ``alembic upgrade head`` becomes a
+    no-op for revision 0001 and proceeds with any later revisions.
     """
     inspector = inspect(connection)
     if not inspector.has_table("host"):
@@ -85,13 +86,14 @@ def _stamp_legacy_database_if_needed(connection: Connection) -> None:
             return  # already stamped — nothing to do
         print(
             f"Legacy database detected (host table present, alembic_version "
-            f"empty); stamping as {LEGACY_REVISION}.",
+            f"empty); creating missing tables and stamping as {LEGACY_REVISION}.",
             flush=True,
         )
     else:
         print(
             f"Legacy database detected (host table present, no "
-            f"alembic_version table); stamping as {LEGACY_REVISION}.",
+            f"alembic_version table); creating missing tables and stamping "
+            f"as {LEGACY_REVISION}.",
             flush=True,
         )
         connection.execute(
@@ -101,6 +103,11 @@ def _stamp_legacy_database_if_needed(connection: Connection) -> None:
                 "CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num))"
             )
         )
+
+    # Create any tables that exist in revision 0001 but are missing from
+    # the legacy schema (notably ``activity_log``). ``checkfirst=True``
+    # leaves existing tables untouched.
+    target_metadata.create_all(bind=connection, checkfirst=True)
 
     connection.execute(
         sa.text("INSERT INTO alembic_version (version_num) VALUES (:rev)"),
