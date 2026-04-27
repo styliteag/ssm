@@ -1,6 +1,6 @@
 ---
 name: release
-description: Cut a new SSM release via ./release.sh. Accepts patch|minor|major as $ARGUMENTS. Validates clean tree, bumps VERSION + backend/Cargo.toml, commits, tags, pushes (triggers GitHub Actions build).
+description: Cut a new SSM release via ./release.sh. Accepts patch|minor|major as $ARGUMENTS. Validates clean tree, bumps VERSION + backend/pyproject.toml, commits, tags, pushes (triggers GitHub Actions build).
 disable-model-invocation: true
 ---
 

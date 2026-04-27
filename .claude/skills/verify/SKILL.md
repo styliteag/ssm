@@ -1,6 +1,6 @@
 ---
 name: verify
-description: Run full verification for SSM — backend tests + clippy + frontend lint + type-check. Use before marking work done or pushing changes.
+description: Run full verification for SSM — backend pytest + ruff + mypy + frontend lint + type-check. Use before marking work done or pushing changes.
 ---
 
 Run all checks in parallel where possible. Report pass/fail per step. Do not proceed past failures without surfacing them.
@@ -8,8 +8,9 @@ Run all checks in parallel where possible. Report pass/fail per step. Do not pro
 ## Backend
 
 ```bash
-cd backend && cargo test
-cd backend && cargo clippy -- -D warnings
+cd backend && uv run pytest
+cd backend && uv run ruff check
+cd backend && uv run mypy --strict src
 ```
 
 ## Frontend

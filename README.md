@@ -9,7 +9,7 @@ A web application for managing SSH `authorized_keys` files across multiple hosts
 
 - **Python** 3.12+ with [uv](https://docs.astral.sh/uv/getting-started/installation/)
 - **Node.js** 24+ with npm
-- **just** — `cargo install just` or `brew install just`
+- **just** — `brew install just` (or any installer from https://github.com/casey/just#installation)
 - **Docker** (optional, for production deployment)
 
 ## Quick Start

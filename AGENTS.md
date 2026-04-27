@@ -13,15 +13,18 @@ npm run lint         # ESLint with TypeScript
 npm run type-check   # TypeScript type checking without emit
 ```
 
-### Backend (Rust + Actix Web)
+### Backend (Python + FastAPI)
 ```bash
 cd backend
-cargo run                    # Start development server (http://localhost:8000)
-cargo watch -x run          # Auto-reload development server
-cargo test                  # Run all tests
-cargo test test_name        # Run specific test
-diesel migration run        # Apply database migrations
-diesel migration generate <name>  # Create new migration
+uv sync                                     # Install/update dependencies
+uv run uvicorn ssm.main:app --reload        # Dev server on :8000
+uv run pytest                               # Run all tests
+uv run pytest tests/unit/test_jwt.py        # Run a specific test file
+uv run ruff check                           # Lint
+uv run ruff format --check                  # Format check
+uv run mypy --strict src                    # Type check
+uv run alembic upgrade head                 # Apply migrations
+uv run alembic revision -m "<description>"  # Create new migration
 ```
 
 ### Development Environment
@@ -32,9 +35,14 @@ diesel migration generate <name>  # Create new migration
 ### Database Operations
 ```bash
 cd backend
-diesel setup                # Initialize database
-diesel migration run        # Apply migrations
+uv run alembic upgrade head        # Apply all pending migrations
+uv run alembic history --verbose   # Inspect migration history
+uv run alembic downgrade -1        # Roll back one revision
 ```
+
+A one-shot copier from a Diesel-era SQLite DB into a fresh Alembic-managed
+DB lives at `backend/scripts/migrate_from_rust.py` (also wired up as
+`just migrate-from-rust <source.db>`).
 
 ### Production Deployment
 ```bash
@@ -121,55 +129,62 @@ cd backend
 # Create htpasswd file with bcrypt encryption
 htpasswd -cB .htpasswd admin
 
-# Set session key for production security
-export SESSION_KEY="super-secret-session-key-for-production"
+# Set JWT secret (32+ chars) for production. SESSION_KEY is accepted as
+# a fallback for compatibility with old configs.
+export JWT_SECRET="replace-me-with-a-long-random-string-32+chars"
 ```
 
 ### API Testing with curl
 ```bash
-# Login to establish session
-curl -X POST http://localhost:8000/api/auth/login \
+# Login → returns access + refresh tokens
+TOKEN=$(curl -sX POST http://localhost:8000/api/v2/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username":"admin","password":"your_password"}' \
-  -c cookies.txt
+  | jq -r '.data.access_token')
 
-# Use authenticated session for API calls
-curl -b cookies.txt http://localhost:8000/api/host
-curl -b cookies.txt http://localhost:8000/api/user
-curl -b cookies.txt http://localhost:8000/api/key
+# Use the access token as a Bearer credential
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/v2/hosts
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/v2/users
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/v2/keys
 
-# Logout when done
-curl -X POST http://localhost:8000/api/auth/logout -b cookies.txt
+# Logout
+curl -X POST http://localhost:8000/api/v2/auth/logout \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
 ### Security Implementation Notes
-- All routes except `/api/auth/*` need auth via `require_auth()` func
-- Session middleware check cookies every request
-- No-auth requests get `401 Unauthorized`
-- Set session keys via `SESSION_KEY` env var in prod
+- All routes except `/api/v2/auth/login` and `/api/v2/auth/refresh` require a JWT access token via `Authorization: Bearer <token>`.
+- Tokens are signed HS256 with `JWT_SECRET`; `type` (access/refresh) is in the payload so a refresh token cannot be used as an access token.
+- Unauthenticated requests get `401` with envelope `error.code == "AUTH_REQUIRED"`.
+- `SESSION_KEY` is accepted as a fallback for `JWT_SECRET` so old configs keep working.
 
 ### API Endpoint Structure
-API use singular resource names in URL:
-- Hosts: `/api/host` (not `/api/hosts`)
-- Users: `/api/user` (not `/api/users`)  
-- Keys: `/api/key` (not `/api/keys`)
-- Authentication: `/api/auth/*`
-- Authorization: `/api/authorization/*`
-- Diff: `/api/diff/*`
+All API routes are mounted under `/api/v2/*` and use plural resource names:
+- Hosts: `/api/v2/hosts`
+- Users: `/api/v2/users`
+- Keys: `/api/v2/keys`
+- Authorizations: `/api/v2/authorizations`
+- Activity log: `/api/v2/activity-log`
+- Diffs: `/api/v2/diffs/*`
+- Auth: `/api/v2/auth/{login,refresh,logout,me}`
+- Server info: `/api/v2/info`
+
+Every response uses the `ApiResponse[T]` envelope: `{success, data, error, meta}`. Frontends switch on `error.code` (a stable enum), not `error.message`.
 
 ## Architecture Overview
 
 ### Split Frontend/Backend Architecture
 - **Frontend**: React 19 + TypeScript + Tailwind CSS, port 5173 (dev) / 80 (prod)
-- **Backend**: Rust + Actix Web REST API, port 8000
-- **Database**: SQLite (default), PostgreSQL/MySQL via Diesel ORM
-- **Authentication**: Session-based + htpasswd file
+- **Backend**: Python 3.12 + FastAPI + uvicorn, port 8000
+- **Database**: SQLite (default) via SQLAlchemy 2.0 async + Alembic migrations
+- **Authentication**: JWT (HS256, access + refresh tokens) backed by an htpasswd file
 
 ### Key Backend Components
-- **Routes** (`backend/src/routes/`): RESTful API endpoints by domain (host, user, key, auth, authorization, diff)
-- **Database Models** (`backend/src/db/`): Diesel ORM models for core entities
-- **SSH Client** (`backend/src/ssh/`): Custom SSH client w/ caching (`CachingSshClient`) for remote host ops
-- **Tests**: Inline `#[cfg(test)]` modules (e.g., in `ssh/sshclient.rs`, `main.rs`) — mock SSH client, no real conns
+- **Routers** (`backend/src/ssm/api/v2/`): FastAPI routers per domain (auth, hosts, users, keys, authorizations, diffs, activity_log, info)
+- **Database Models** (`backend/src/ssm/db/models.py`): SQLAlchemy 2.0 declarative models
+- **SSH Client** (`backend/src/ssm/ssh/asyncssh_client.py`): asyncssh-based client with connection caching
+- **Auth** (`backend/src/ssm/auth/`): JWT service + htpasswd store, exposed via `protected_router()`
+- **Tests** (`backend/tests/`): pytest with `unit/` and `e2e/` subdirs; SSH calls hit a mock client so no real connections happen
 
 ### Frontend Architecture
 - **State Management**: Zustand stores + React Context for auth/notifications/theme
@@ -178,11 +193,11 @@ API use singular resource names in URL:
 - **Routing**: React Router w/ protected routes via AuthContext
 
 ### Core Data Flow
-1. Frontend call API to backend REST endpoints
-2. Backend auth via session middleware
-3. Backend do DB ops via Diesel ORM
-4. SSH ops: backend use SSH client connect remote hosts
-5. `authorized_keys` file changes tracked + previewable via diff system
+1. Frontend calls `/api/v2/*` REST endpoints with a Bearer JWT.
+2. FastAPI dependency `get_current_user` verifies the token via `JwtService`.
+3. Handlers run DB ops through SQLAlchemy 2.0 async sessions.
+4. SSH ops go through `asyncssh` (with a connection cache) to remote hosts.
+5. `authorized_keys` changes are tracked and previewable via the diff endpoints.
 
 ### Database Schema
 - **Users**: SSH key owners
@@ -204,46 +219,34 @@ API use singular resource names in URL:
 - **Use Cases**: Maintenance windows, decommissioned servers, temp disconnect
 
 ### SSH Management System
-- Use `russh` library for SSH conns
-- Caching layer (`CachingSshClient`) for many ops
-- Safety controls: `.ssh/system_readonly` + `.ssh/user_readonly` files stop edits
-- Test isolation via mock SSH client stop prod system access in tests
+- Uses `asyncssh` for SSH connections with an in-process connection cache
+- Safety controls: `.ssh/system_readonly` + `.ssh/user_readonly` files on the remote host stop edits
+- Test isolation via a mock SSH client — tests never reach real hosts
 
 ### Testing Infrastructure
-- **Backend**: Inline `#[cfg(test)]` modules w/ mock SSH client — no real SSH conns
-- **Run**: `cargo test` from `backend/`; single test via `cargo test <name>`
+- **Backend**: pytest under `backend/tests/{unit,e2e}/`; SSH calls are mocked
+- **Run**: `cd backend && uv run pytest`; single test via `uv run pytest tests/unit/test_jwt.py::test_name`
 - **Frontend**: No test framework yet
 
 ### Configuration
-- Main config: `config.toml` (optional - DB URL, SSH private key, server settings)
-- Authentication: `.htpasswd` file for user creds (bcrypt, auto-create if missing)
-- Environment variables: `DATABASE_URL`, `HTPASSWD`, `SSH_KEY`, `SESSION_KEY` (override config file), `RUST_LOG`, `CONFIG`, `VITE_API_URL`
-- SSH key need: Server need valid SSH private key file (gives gen instructions if missing, or use `SSH_KEY` env var)
-- Security: All API endpoints need auth except `/api/auth/login` + `/api/auth/logout`
+- Main config: `config.toml` (optional — DB URL, SSH private key, server settings)
+- Authentication: `.htpasswd` file for user creds (bcrypt, auto-created if missing)
+- Environment variables: `DATABASE_URL`, `HTPASSWD`, `SSH_KEY`, `JWT_SECRET` (or legacy `SESSION_KEY`), `LOGLEVEL`, `CONFIG`, `CORS_ORIGINS`, `VITE_API_URL`
+- SSH key requirement: Server needs a valid SSH private key file (prints generation instructions if missing, or use `SSH_KEY` env var)
+- Security: All API endpoints require auth except `/api/v2/auth/login` and `/api/v2/auth/refresh`
 
-## Critical Frontend/Backend Data Type Compatibility Issues
+## Frontend/Backend Wire Format Notes
 
-### Jump Host (jump_via) Field Handling
-**⚠️ CRITICAL**: `jump_via` field need special handling cuz type system differs:
+### `jump_via` field
+`jump_via` travels as `int | null` on the wire. The Pydantic model
+`UpdateHostRequest.jump_via: int | None` accepts JSON numbers or `null`
+directly — there is no string-coercion deserializer (the Rust backend's
+`empty_string_as_none_int` is gone).
 
-- **Backend Expectation**: `UpdateHostRequest.jump_via` field use custom deserializer `empty_string_as_none_int` expect **STRING** parsed to `Option<i32>`
-  - Empty string `""` → `None` (no jump host)
-  - Non-empty string like `"123"` → `Some(123)` (jump host w/ ID 123)
-
-- **Frontend Type System**: `Host.jump_via` typed `number | undefined` in TypeScript
-
-- **Solution Applied**: `hostsService.updateHost()` func in `frontend/src/services/api/hosts.ts` auto-convert `jump_via` to string before send backend:
-  ```typescript
-  const requestData = {
-    ...host,
-    jump_via: host.jump_via !== undefined ? String(host.jump_via) : ''
-  };
-  ```
-
-**No modify jump_via handling w/o keeping compat between:**
-1. Frontend TypeScript types (`Host.jump_via?: number`)
-2. Backend Rust deserializer (`empty_string_as_none_int` expect string)
-3. Conversion logic in `hostsService.updateHost()`
+In `frontend/src/components/HostEditModal.tsx` the form value is
+converted from string to number once on submit; `hostsService.updateHost()`
+sends the resulting `jump_via?: number | null`. Don't reintroduce
+empty-string sentinels.
 
 ## Git Hooks Setup
 

@@ -8,7 +8,7 @@ A modern React-based frontend for the SSH Key Manager application, built with Ty
 - **Responsive Design**: Mobile-first design with Tailwind CSS
 - **Dark Mode**: Automatic dark/light theme switching
 - **Authentication**: Session-based authentication with context management
-- **API Integration**: Full REST API integration with the Rust backend
+- **API Integration**: Full REST API integration with the FastAPI backend (`/api/v2/*`)
 - **Component Library**: Custom UI components with consistent styling
 - **Notifications**: Toast notification system for user feedback
 
@@ -71,7 +71,7 @@ src/
 
 ## API Integration
 
-The frontend communicates with the Rust backend via REST API with automatic proxy configuration in development.
+The frontend communicates with the FastAPI backend (`/api/v2/*`) via REST. Vite proxies `/api/*` to `http://localhost:8000` in development.
 
 ## Components
 

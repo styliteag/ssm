@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Documentation refresh**: `AGENTS.md`/`CLAUDE.md`, `frontend/README.md`, top-level `README.md`, and the `verify`/`release` skills no longer describe the project as a Rust/Actix/Diesel backend. Commands, endpoint paths (`/api/v2/*`), auth scheme (JWT bearer), SSH library (`asyncssh`), and env vars (`JWT_SECRET`) now match the Python/FastAPI reality. Removed obsolete `jump_via` string-coercion section.
+
 ### Added
 - 
 
