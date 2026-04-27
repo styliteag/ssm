@@ -170,7 +170,6 @@ const KeysPage: React.FC = () => {
  }, [loadKeys]);
 
  // Load key details (authorizations and hosts)
- // @ts-ignore - Keeping this for future use
  // eslint-disable-next-line @typescript-eslint/no-unused-vars
  const loadKeyDetails = useCallback(async (keyId: number) => {
  try {

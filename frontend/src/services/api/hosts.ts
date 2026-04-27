@@ -133,7 +133,6 @@ export const hostsService = {
 
   getAllHosts: async (): Promise<ApiResponse<Host[]>> => api.get<Host[]>('/hosts'),
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   getAllowedUsers: async (_id: number): Promise<ApiResponse<AllowedUserOnHost[]>> => {
     throw new Error('getAllowedUsers endpoint not available in v2');
   },
@@ -161,13 +160,11 @@ export const hostsService = {
     }
   },
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   deployKeys: async (id: number): Promise<ApiResponse<{ message: string }>> => {
     await api.post<unknown>(`/diffs/${id}/sync`);
     return { success: true, data: { message: 'synced' } };
   },
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   getKeyDifferences: async (id: number): Promise<ApiResponse<unknown>> => api.get<unknown>(`/diffs/${id}`),
 };
 

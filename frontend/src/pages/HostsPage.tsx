@@ -525,9 +525,8 @@ const HostsPage: React.FC = () => {
  if (result.success) {
  try {
  await hostsService.invalidateCache(host.name);
- } catch (cacheError) {
+ } catch {
  // Cache invalidation is best-effort
- // Don't fail the operation if cache invalidation fails
  }
  }
  } catch {

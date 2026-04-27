@@ -177,9 +177,8 @@ const DiffPage: React.FC = () => {
  // Invalidate cache for the updated host to ensure fresh data
  await hostsService.invalidateCache(updatedHost.name);
  showSuccess('Host updated', 'Cache has been invalidated for fresh data');
- } catch (cacheError) {
+ } catch {
  // Cache invalidation is best-effort
- // Don't fail the update if cache invalidation fails
  }
 
  // Update the host in the list
@@ -517,7 +516,7 @@ const DiffPage: React.FC = () => {
  try {
  await authorizationsService.createAuthorization(authData);
  authorizationCreated = true;
- } catch (authError) {
+ } catch {
  // Authorization might already exist, which is fine
  }
 
@@ -698,7 +697,7 @@ const DiffPage: React.FC = () => {
  try {
  await authorizationsService.createAuthorization(authData);
  showSuccess('User created and added to host', `New user "${userData.username}" has been created with the key and added to host "${selectedHost.name}"`);
- } catch (authError) {
+ } catch {
  // This shouldn't happen for new users, but handle gracefully
  showSuccess('User created', `New user "${userData.username}" has been created with the key`);
  }

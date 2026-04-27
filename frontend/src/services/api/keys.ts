@@ -74,27 +74,22 @@ export const keysService = {
     return api.get<PublicUserKey[]>(`/keys?user_id=${match.id}`);
   },
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   parseKey: async (_keyText: string): Promise<ApiResponse<{ key_type: string; key_base64: string; comment?: string }>> => {
     throw new Error('parseKey not available in v2 — parse client-side.');
   },
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   validateKey: async (_keyText: string): Promise<ApiResponse<{ valid: boolean; message?: string }>> => {
     throw new Error('validateKey not available in v2 — validate client-side.');
   },
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   getKeyFingerprint: async (_keyId: number): Promise<ApiResponse<{ fingerprint: string }>> => {
     throw new Error('getKeyFingerprint not available in v2.');
   },
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   importKeys: async (_userId: number, _keysText: string): Promise<ApiResponse<{ imported: number; failed: number; errors?: string[] }>> => {
     throw new Error('importKeys not available in v2.');
   },
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   exportKeys: async (_userId: number): Promise<ApiResponse<{ keys_text: string }>> => {
     throw new Error('exportKeys not available in v2.');
   },
