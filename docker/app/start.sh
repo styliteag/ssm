@@ -13,6 +13,10 @@ cleanup() {
 }
 trap cleanup TERM INT
 
+# Fix ownership of bind-mounted db directory so the runtime user can write.
+# Picks up bind mounts left behind by the previous uid-1000 backend image.
+chown -R "$(id -u):$(id -g)" /app/db
+
 # Apply database migrations before serving traffic. Idempotent — Alembic
 # stamps applied revisions in the alembic_version table, so re-runs are no-ops.
 # Legacy databases inherited from the Rust/Diesel backend (schema present,
