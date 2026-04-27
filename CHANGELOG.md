@@ -7,36 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-- 
+### Fixed
+- **Docker bind-mount permissions**: Container startup now `chown`s `/app/db` to the runtime user, so SQLite databases written under the previous uid-1000 backend image remain writable after upgrading to the combined image.
 
 ## [1.1.7] - 2026-04-27
 
 ### Added
-- 
+- **Dashboard version pill**: The dashboard now displays the frontend version, backend version, and applied alembic schema revision (`fe v… be v… db <rev>`), with a tooltip showing each on its own line.
+- **`/api/v2/info` endpoint**: New protected endpoint returning `{name, version, alembic_revision}`. Frontend version is injected at build time from the repository `VERSION` file via Vite (`__APP_VERSION__`), and the Docker frontend stage copies `VERSION` so the bundle ships with the correct value.
+
+### Fixed
+- **Legacy DB stamping creates missing tables**: When stamping a Diesel-era database as revision `0001`, also run `metadata.create_all(checkfirst=True)` to create tables that were added after the Python rewrite (notably `activity_log` and its indexes). Without this, the activity-log API crashed with `no such table: activity_log` on first request.
 
 ## [1.1.6] - 2026-04-27
 
-### Added
-- 
+### Fixed
+- **Frontend talking to wrong API base**: The production frontend bundle was being built with `VITE_API_URL=/api`, but the FastAPI backend mounts everything under `/api/v2/*`, so login (and every other call) returned 404. The Dockerfile default and both compose files now use `/api/v2`.
 
 ## [1.1.5] - 2026-04-27
 
-### Added
-- 
+### Fixed
+- **Empty `alembic_version` after fresh upgrade**: SQLite uses non-transactional DDL, so a fresh `alembic upgrade head` would create the schema but the stamp `INSERT` into `alembic_version` was rolled back when the async connection closed. An explicit `connection.commit()` after migrations now persists the revision row.
+- **Legacy DB with empty alembic_version table**: Some inherited databases already had an empty `alembic_version` table (created by a prior crashed bootstrap). The previous fix only handled the missing-table case, so alembic still tried to re-run revision `0001` and crashed with `table host already exists`. The stamp logic now also fires when the table is present but empty.
+
+### Security
+- **postcss XSS advisory**: Bumped postcss to 8.5.12 to address a published XSS advisory.
 
 ## [1.1.4] - 2026-04-27
 
-### Added
-- 
+### Fixed
+- **Legacy DB stamping moved into `migrations/env.py`**: Detection now lives inside alembic's environment, so it runs whenever alembic does — regardless of how it is invoked. The previous standalone preflight script and its hook in `start.sh` are removed.
 
 ## [1.1.3] - 2026-04-27
 
 ### Fixed
 - Container startup no longer crashes on databases inherited from the Rust backend. A preflight step detects legacy databases (schema present, no `alembic_version` table) and stamps them as revision `0001` so `alembic upgrade head` becomes a no-op.
-
-### Added
-- 
 
 ## [1.1.2] - 2026-04-27
 

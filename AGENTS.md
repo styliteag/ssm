@@ -41,13 +41,17 @@ diesel migration run        # Apply migrations
 docker-compose -f docker/compose.prod.yml up --build
 ```
 
-## Release Process
+## CHANGELOG Maintenance — Mandatory
 
-#### CHANGELOG Maintenance
-⚠️ **IMPORTANT**: Always update `CHANGELOG.md` when making commits!
-- Add new changes under `[Unreleased]` section before committing
-- Move to new version section when releasing
-- Use semantic versioning format
+⚠️ **EVERY commit must include a `CHANGELOG.md` update.** This rule is load-bearing — releases 1.1.4 through 1.1.7 shipped with empty entries because commits landed without it, and had to be backfilled by hand.
+
+**Rules:**
+- Stage `CHANGELOG.md` together with the code change in the same commit (not as a follow-up).
+- Add the entry under `[Unreleased]` using a Keep-a-Changelog section: `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, or `Security`.
+- Write user-visible language (what changed and why it matters), not the commit-message phrasing.
+- Pure chore/version-bump commits performed by `release.sh` itself do not need a separate entry — `release.sh` moves `[Unreleased]` to the new version section automatically.
+
+## Release Process
 
 ### Creating a New Release
 Use the automated release script to create new versions:
