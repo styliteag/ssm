@@ -9,7 +9,6 @@ import {
   PaginationQuery,
   ApiResponse,
   Authorization,
-  AllowedUserOnHost,
 } from '../../types';
 
 type IdOrName = number | string;
@@ -105,12 +104,6 @@ export const hostsService = {
     return { success: true, data: logins };
   },
 
-  // Hostkey fingerprint confirmation flow — not in v2; kept as a no-op success.
-  addHostKey: async (
-    _id: number,
-    _keyFingerprint?: string,
-  ): Promise<ApiResponse<unknown>> => ({ success: true, data: null }),
-
   // Get a rendered authorized_keys preview via the v2 diff endpoint.
   generateAuthorizedKeys: async (
     hostName: string,
@@ -132,16 +125,6 @@ export const hostsService = {
   },
 
   getAllHosts: async (): Promise<ApiResponse<Host[]>> => api.get<Host[]>('/hosts'),
-
-  getAllowedUsers: async (_id: number): Promise<ApiResponse<AllowedUserOnHost[]>> => {
-    throw new Error('getAllowedUsers endpoint not available in v2');
-  },
-
-  // v2 CachingSshClient exposes this server-side; no remote trigger today.
-  invalidateCache: async (_hostName: string): Promise<ApiResponse<{ message: string }>> => ({
-    success: true,
-    data: { message: 'cache invalidation is server-side only in v2' },
-  }),
 
   testConnection: async (
     hostName: string,

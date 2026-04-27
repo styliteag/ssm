@@ -16,22 +16,14 @@ interface MeResponse {
 export const authService = {
   login: async (
     credentials: LoginRequest,
-  ): Promise<ApiResponse<{ success: boolean; username: string; message: string; csrf_token: string }>> => {
+  ): Promise<ApiResponse<{ username: string }>> => {
     const resp = await api.post<TokenPair>('/auth/login', credentials);
     const pair = resp.data;
     if (!pair) {
-      return { success: false, message: 'login failed', data: { success: false, username: '', message: 'login failed', csrf_token: '' } };
+      return { success: false, message: 'login failed' };
     }
     tokenStore.setPair(pair.access_token, pair.refresh_token);
-    return {
-      success: true,
-      data: {
-        success: true,
-        username: credentials.username,
-        message: 'ok',
-        csrf_token: '', // unused under JWT
-      },
-    };
+    return { success: true, data: { username: credentials.username } };
   },
 
   logout: async (): Promise<ApiResponse<null>> => {
@@ -79,11 +71,6 @@ export const authService = {
     if (!pair) throw new Error('refresh failed');
     tokenStore.setPair(pair.access_token, pair.refresh_token);
     return { success: true, data: { token: pair.access_token, expires_in: 900 } };
-  },
-
-  getCsrfToken: async (): Promise<ApiResponse<{ csrf_token: string }>> => {
-    // JWT auth has no CSRF token; kept as a no-op for call-site compatibility.
-    return { success: true, data: { csrf_token: '' } };
   },
 };
 

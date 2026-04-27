@@ -44,15 +44,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (response.success && response.data) {
         setIsAuthenticated(response.data.logged_in);
         setUsername(response.data.username || null);
-        
-        // If authenticated, fetch CSRF token
-        if (response.data.logged_in) {
-          try {
-            await authService.getCsrfToken();
-          } catch {
-            // Failed to fetch CSRF token
-          }
-        }
       } else {
         setIsAuthenticated(false);
         setUsername(null);
@@ -74,9 +65,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const response = await authService.login(credentials);
       
       if (response.success && response.data) {
-        // Session-based auth, no token to store
-        
-        // Update auth state
         setIsAuthenticated(true);
         setUsername(response.data.username);
         

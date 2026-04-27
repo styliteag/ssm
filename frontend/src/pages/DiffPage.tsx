@@ -173,13 +173,7 @@ const DiffPage: React.FC = () => {
  const handleHostUpdated = async (updatedHost: Host) => {
  setEditingHost(null);
 
- try {
- // Invalidate cache for the updated host to ensure fresh data
- await hostsService.invalidateCache(updatedHost.name);
- showSuccess('Host updated', 'Cache has been invalidated for fresh data');
- } catch {
- // Cache invalidation is best-effort
- }
+ showSuccess('Host updated', `${updatedHost.name} has been updated`);
 
  // Update the host in the list
  setHosts(prev => prev.map(h =>
@@ -276,9 +270,8 @@ const DiffPage: React.FC = () => {
  // Update progress to success
  onProgress({ hostName: host.name, status: 'success' });
 
- // Invalidate cache and refresh host status
+ // Refresh host status after sync
  try {
- await hostsService.invalidateCache(host.name);
  const diffResponse = await diffApi.getHostDiff(host.name, true);
  setHosts(prev => prev.map(h =>
  h.id === host.id ? {
