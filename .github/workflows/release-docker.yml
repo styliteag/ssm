@@ -79,7 +79,7 @@ jobs:
       uses: docker/build-push-action@v6
       with:
         push: true
-        context: .
+        context: backend
         file: backend/Dockerfile
         platforms: ${{ matrix.platform }}
         #cache-from: type=gha,scope=linux-${{ matrix.arch }}
