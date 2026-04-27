@@ -61,30 +61,47 @@ def _stamp_legacy_database_if_needed(connection: Connection) -> None:
     """Stamp databases inherited from the Rust/Diesel backend as ``0001``.
 
     Those databases already contain the application schema (``host``,
-    ``user``, ...) but lack the ``alembic_version`` table, so a plain
-    ``alembic upgrade head`` would re-run revision 0001 and fail with
-    ``table host already exists``. Detect that case and seed
-    ``alembic_version`` so the upgrade is a no-op for revision 0001 and
-    proceeds with any later revisions.
+    ``user``, ...) but no recorded alembic revision. Two flavours occur in
+    the wild:
+
+    * No ``alembic_version`` table at all — pure Diesel-era database.
+    * ``alembic_version`` exists but is empty — created by an earlier,
+      crashed migration attempt or partial bootstrap.
+
+    Either way a plain ``alembic upgrade head`` would re-run revision
+    0001 and fail with ``table host already exists``. Detect both cases
+    and seed ``alembic_version`` so the upgrade becomes a no-op for
+    revision 0001 and proceeds with any later revisions.
     """
     inspector = inspect(connection)
-    if inspector.has_table("alembic_version"):
-        return
     if not inspector.has_table("host"):
         return  # genuinely fresh DB; let alembic create everything
 
-    print(
-        f"Legacy database detected (host table present, no alembic_version); "
-        f"stamping as {LEGACY_REVISION}.",
-        flush=True,
-    )
-    connection.execute(
-        sa.text(
-            "CREATE TABLE alembic_version ("
-            "version_num VARCHAR(32) NOT NULL, "
-            "CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num))"
+    if inspector.has_table("alembic_version"):
+        existing = connection.execute(
+            sa.text("SELECT version_num FROM alembic_version LIMIT 1")
+        ).first()
+        if existing is not None:
+            return  # already stamped — nothing to do
+        print(
+            f"Legacy database detected (host table present, alembic_version "
+            f"empty); stamping as {LEGACY_REVISION}.",
+            flush=True,
         )
-    )
+    else:
+        print(
+            f"Legacy database detected (host table present, no "
+            f"alembic_version table); stamping as {LEGACY_REVISION}.",
+            flush=True,
+        )
+        connection.execute(
+            sa.text(
+                "CREATE TABLE alembic_version ("
+                "version_num VARCHAR(32) NOT NULL, "
+                "CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num))"
+            )
+        )
+
     connection.execute(
         sa.text("INSERT INTO alembic_version (version_num) VALUES (:rev)"),
         {"rev": LEGACY_REVISION},
@@ -103,6 +120,12 @@ def do_run_migrations(connection: Connection) -> None:
 
     with context.begin_transaction():
         context.run_migrations()
+
+    # SQLite uses non-transactional DDL, so DDL statements auto-commit but
+    # the alembic_version stamp INSERT does not. The async ``connect()``
+    # context manager would otherwise roll back the autobegun transaction
+    # when it closes, leaving the schema created but unstamped.
+    connection.commit()
 
 
 async def run_async_migrations() -> None:
