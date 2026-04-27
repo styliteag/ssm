@@ -9,7 +9,7 @@
 # ---- frontend builder -------------------------------------------------------
 FROM node:24-alpine AS frontend-builder
 
-ARG VITE_API_URL=/api
+ARG VITE_API_URL=/api/v2
 WORKDIR /src
 
 COPY frontend/package*.json ./

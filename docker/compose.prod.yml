@@ -11,7 +11,7 @@ services:
       context: ..
       dockerfile: docker/app/Dockerfile
       args:
-        VITE_API_URL: /api
+        VITE_API_URL: /api/v2
     image: ssm:latest
     ports:
       - "80:80"

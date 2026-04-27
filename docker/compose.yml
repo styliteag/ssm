@@ -5,7 +5,7 @@ services:
       context: ..
       dockerfile: docker/app/Dockerfile
       args:
-        VITE_API_URL: http://localhost/api
+        VITE_API_URL: http://localhost/api/v2
     image: ssm:latest
     ports:
       - "80:80"
