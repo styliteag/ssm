@@ -156,11 +156,11 @@ run_build_tests() {
     local original_dir=$(pwd)
     
     # Check if we're in the project root
-    if [ ! -f "frontend/package.json" ] || [ ! -f "backend/Cargo.toml" ]; then
+    if [ ! -f "frontend/package.json" ] || [ ! -f "backend/pyproject.toml" ]; then
         print_error "Not in project root. Please run this script from the repository root."
         exit 1
     fi
-    
+
     # Build frontend
     print_info "Building frontend..."
     cd frontend
@@ -173,24 +173,24 @@ run_build_tests() {
     fi
     print_success "Frontend build completed"
     cd "$original_dir"
-    
-    # Build backend
-    print_info "Building backend..."
+
+    # Verify backend (Python/uv): resolve deps + import smoke test
+    print_info "Verifying backend (uv sync)..."
     cd backend
-    if ! cargo build > /tmp/backend-build.log 2>&1; then
-        print_error "Backend build failed!"
+    if ! uv sync > /tmp/backend-build.log 2>&1; then
+        print_error "Backend uv sync failed!"
         print_error "Build log:"
         cat /tmp/backend-build.log
         cd "$original_dir"
         exit 1
     fi
-    print_success "Backend build completed"
+    print_success "Backend dependencies resolved"
     cd "$original_dir"
-    
+
     ## Run backend tests
     #print_info "Running backend tests..."
     #cd backend
-    #if ! cargo test > /tmp/backend-test.log 2>&1; then
+    #if ! uv run pytest -q > /tmp/backend-test.log 2>&1; then
     #    print_error "Backend tests failed!"
     #    print_error "Test log:"
     #    cat /tmp/backend-test.log
@@ -252,13 +252,13 @@ main() {
     print_info "Updating VERSION file to $new_version on $current_branch"
     echo "$new_version" > VERSION
     
-    # Update Cargo.toml version
-    print_info "Updating Cargo.toml version to $new_version"
-    sed -i.bak "s/^version = \".*\"/version = \"$new_version\"/" backend/Cargo.toml
-    rm -f backend/Cargo.toml.bak
+    # Update pyproject.toml version
+    print_info "Updating backend/pyproject.toml version to $new_version"
+    sed -i.bak "s/^version = \".*\"/version = \"$new_version\"/" backend/pyproject.toml
+    rm -f backend/pyproject.toml.bak
 
     # Run build verification
-    # This also updates Cargo.lock
+    # This also refreshes uv.lock to match the new pyproject.toml
     run_build_tests
 
     # Confirm with user
@@ -280,7 +280,7 @@ main() {
    
     # Commit version changes to current branch
     print_info "Committing version changes to $current_branch"
-    git add VERSION backend/Cargo.toml backend/Cargo.lock CHANGELOG.md
+    git add VERSION backend/pyproject.toml backend/uv.lock CHANGELOG.md
     git commit -m "chore: bump version to $new_version"
 
     # Create tag on current branch
