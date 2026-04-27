@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guide Claude Code (claude.ai/code) for repo work.
 
 ## Development Commands
 
@@ -43,30 +43,30 @@ docker-compose -f docker/compose.prod.yml up --build
 
 ## Database Changes — Mandatory: use alembic
 
-⚠️ **Every schema change goes through an alembic migration.** Never edit `backend/src/ssm/db/models.py` (or any ORM model) without producing a matching migration in `backend/migrations/versions/`.
+⚠️ **All schema change need alembic migration.** No edit `backend/src/ssm/db/models.py` (or ORM model) w/o matching migration in `backend/migrations/versions/`.
 
 **Rules:**
-- Generate the migration with `cd backend && alembic revision -m "<short description>"` (or `--autogenerate` if model changes are already in place — always review the generated SQL).
-- Run `alembic upgrade head` locally and verify the migration applies cleanly to both a fresh DB and a copy of the prod DB before committing.
-- Provide a working `downgrade()` whenever feasible.
-- If the migration adds new tables, check whether the legacy-stamp path in `backend/migrations/env.py` needs to keep covering legacy (Diesel-era) databases. `metadata.create_all(checkfirst=True)` already creates any tables present in the model metadata; data backfills and non-reflected indexes need explicit handling.
-- Stage the new migration file together with the model change in the same commit, with a `CHANGELOG.md` entry under `Changed`.
-- Never run ad-hoc `metadata.create_all()` or hand-written `CREATE TABLE` against a production-shape database outside of a reviewed alembic revision.
+- Make migration: `cd backend && alembic revision -m "<short description>"` (or `--autogenerate` if model already changed — always review SQL).
+- Run `alembic upgrade head` local; verify clean apply on fresh DB + prod DB copy before commit.
+- Give working `downgrade()` when can.
+- New tables: check legacy-stamp path in `backend/migrations/env.py` still cover legacy (Diesel-era) DBs. `metadata.create_all(checkfirst=True)` make tables in model metadata; data backfills + non-reflected indexes need explicit work.
+- Stage migration file + model change same commit, w/ `CHANGELOG.md` entry under `Changed`.
+- No ad-hoc `metadata.create_all()` or hand `CREATE TABLE` on prod-shape DB outside reviewed alembic revision.
 
 ## CHANGELOG Maintenance — Mandatory
 
-⚠️ **EVERY commit must include a `CHANGELOG.md` update.** This rule is load-bearing — releases 1.1.4 through 1.1.7 shipped with empty entries because commits landed without it, and had to be backfilled by hand.
+⚠️ **Every commit need `CHANGELOG.md` update.** Rule load-bearing — releases 1.1.4 to 1.1.7 ship empty cuz commits skip it, must backfill by hand.
 
 **Rules:**
-- Stage `CHANGELOG.md` together with the code change in the same commit (not as a follow-up).
-- Add the entry under `[Unreleased]` using a Keep-a-Changelog section: `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, or `Security`.
-- Write user-visible language (what changed and why it matters), not the commit-message phrasing.
-- Pure chore/version-bump commits performed by `release.sh` itself do not need a separate entry — `release.sh` moves `[Unreleased]` to the new version section automatically.
+- Stage `CHANGELOG.md` w/ code change same commit (no follow-up).
+- Add entry under `[Unreleased]` w/ Keep-a-Changelog section: `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`.
+- Write user-visible words (what change + why matter), no commit-msg phrasing.
+- Pure chore/version-bump commit by `release.sh` no need entry — `release.sh` move `[Unreleased]` to new version section auto.
 
 ## Release Process
 
 ### Creating a New Release
-Use the automated release script to create new versions:
+Use auto release script for new versions:
 
 ```bash
 # Create a patch release (bug fixes)
@@ -80,20 +80,20 @@ Use the automated release script to create new versions:
 ```
 
 ### Release Workflow
-The release process:
-1. **Validates**: Ensures working directory is clean and builds succeed
-2. **Updates versions**: Updates VERSION file and backend/Cargo.toml
-3. **Commits**: Creates a version commit on current branch (typically main)
-4. **Tags**: Creates a git tag (e.g., `v1.2.3`)
-5. **Pushes**: Pushes branch and tag to origin
-6. **Triggers CI**: Tag push automatically triggers Docker image builds
+Release steps:
+1. **Validates**: Check working dir clean + builds pass
+2. **Updates versions**: Update VERSION file + backend/Cargo.toml
+3. **Commits**: Make version commit on current branch (usually main)
+4. **Tags**: Make git tag (e.g., `v1.2.3`)
+5. **Pushes**: Push branch + tag to origin
+6. **Triggers CI**: Tag push auto trigger Docker builds
 
 ### GitHub Actions Release Pipeline
-- **Trigger**: Git tags matching `v*.*.*` (e.g., `v1.0.0`)
-- **Cache Strategy**: Uses GitHub Actions cache with branch continuity for optimal performance
-- **Multi-arch**: Builds for both AMD64 and ARM64 architectures
-- **Registries**: Publishes to both Docker Hub and GitHub Container Registry
-- **Manifests**: Creates multi-arch manifests with version, latest, and semantic version tags
+- **Trigger**: Git tags match `v*.*.*` (e.g., `v1.0.0`)
+- **Cache Strategy**: GitHub Actions cache w/ branch continuity for best perf
+- **Multi-arch**: Build AMD64 + ARM64
+- **Registries**: Push Docker Hub + GitHub Container Registry
+- **Manifests**: Multi-arch manifests w/ version, latest, semver tags
 
 ### Manual Release (Alternative)
 ```bash
@@ -113,7 +113,7 @@ git push origin v1.2.3
 
 ## Authentication Setup
 
-**🔐 CRITICAL**: This application requires authentication for all API endpoints except login/logout.
+**🔐 CRITICAL**: App need auth for all API endpoints except login/logout.
 
 ### Initial Authentication Setup
 ```bash
@@ -143,13 +143,13 @@ curl -X POST http://localhost:8000/api/auth/logout -b cookies.txt
 ```
 
 ### Security Implementation Notes
-- All routes except `/api/auth/*` require authentication via `require_auth()` function
-- Session middleware validates cookies on every request
-- Unauthenticated requests return `401 Unauthorized`
-- Session keys should be set via `SESSION_KEY` environment variable in production
+- All routes except `/api/auth/*` need auth via `require_auth()` func
+- Session middleware check cookies every request
+- No-auth requests get `401 Unauthorized`
+- Set session keys via `SESSION_KEY` env var in prod
 
 ### API Endpoint Structure
-The API uses singular resource names in the URL paths:
+API use singular resource names in URL:
 - Hosts: `/api/host` (not `/api/hosts`)
 - Users: `/api/user` (not `/api/users`)  
 - Keys: `/api/key` (not `/api/keys`)
@@ -160,79 +160,79 @@ The API uses singular resource names in the URL paths:
 ## Architecture Overview
 
 ### Split Frontend/Backend Architecture
-- **Frontend**: React 19 + TypeScript + Tailwind CSS served on port 5173 (dev) / 80 (prod)
-- **Backend**: Rust + Actix Web REST API on port 8000
-- **Database**: SQLite (default) with PostgreSQL/MySQL support via Diesel ORM
-- **Authentication**: Session-based with htpasswd file integration
+- **Frontend**: React 19 + TypeScript + Tailwind CSS, port 5173 (dev) / 80 (prod)
+- **Backend**: Rust + Actix Web REST API, port 8000
+- **Database**: SQLite (default), PostgreSQL/MySQL via Diesel ORM
+- **Authentication**: Session-based + htpasswd file
 
 ### Key Backend Components
-- **Routes** (`backend/src/routes/`): RESTful API endpoints organized by domain (host, user, key, auth, authorization, diff)
+- **Routes** (`backend/src/routes/`): RESTful API endpoints by domain (host, user, key, auth, authorization, diff)
 - **Database Models** (`backend/src/db/`): Diesel ORM models for core entities
-- **SSH Client** (`backend/src/ssh/`): Custom SSH client with caching (`CachingSshClient`) for remote host operations
-- **Tests**: Inline `#[cfg(test)]` modules (e.g., in `ssh/sshclient.rs`, `main.rs`) — use mock SSH client, no real connections
+- **SSH Client** (`backend/src/ssh/`): Custom SSH client w/ caching (`CachingSshClient`) for remote host ops
+- **Tests**: Inline `#[cfg(test)]` modules (e.g., in `ssh/sshclient.rs`, `main.rs`) — mock SSH client, no real conns
 
 ### Frontend Architecture
 - **State Management**: Zustand stores + React Context for auth/notifications/theme
-- **API Layer** (`frontend/src/services/api/`): Centralized Axios-based API client with base configuration
-- **Component Structure**: Reusable UI components (`ui/`), domain components, and page-level components
-- **Routing**: React Router with protected routes via AuthContext
+- **API Layer** (`frontend/src/services/api/`): Central Axios API client w/ base config
+- **Component Structure**: Reusable UI components (`ui/`), domain components, page-level components
+- **Routing**: React Router w/ protected routes via AuthContext
 
 ### Core Data Flow
-1. Frontend makes API calls to backend REST endpoints
-2. Backend authenticates via session middleware
-3. Backend performs database operations via Diesel ORM
-4. For SSH operations, backend uses SSH client to connect to remote hosts
-5. Changes to `authorized_keys` files are tracked and can be previewed via diff system
+1. Frontend call API to backend REST endpoints
+2. Backend auth via session middleware
+3. Backend do DB ops via Diesel ORM
+4. SSH ops: backend use SSH client connect remote hosts
+5. `authorized_keys` file changes tracked + previewable via diff system
 
 ### Database Schema
 - **Users**: SSH key owners
-- **Hosts**: Remote servers to manage (with `disabled` flag to prevent SSH operations)
-- **Keys**: SSH public keys belonging to users  
-- **Authorizations**: Links users to hosts with specific remote usernames
+- **Hosts**: Remote servers to manage (`disabled` flag stop SSH ops)
+- **Keys**: SSH public keys of users  
+- **Authorizations**: Link users to hosts w/ specific remote usernames
 
 ### Host Disabling Feature
-- **Database**: Hosts table includes `disabled` boolean field (default: false)
+- **Database**: Hosts table has `disabled` bool field (default: false)
 - **Backend Behavior**: 
-  - Disabled hosts skip all SSH connection attempts
-  - `/api/diff/{host}` returns "Host is disabled" without SSH operations
-  - `/api/diff/{host}/sync` blocks sync attempts with error message
-  - Connection status polling skips disabled hosts
+  - Disabled hosts skip all SSH connection tries
+  - `/api/diff/{host}` return "Host is disabled" no SSH ops
+  - `/api/diff/{host}/sync` block sync w/ error msg
+  - Connection status poll skip disabled hosts
 - **Frontend Behavior**:
-  - Shows "Disabled" status with Ban icon in UI
-  - No async loading operations for disabled hosts
-  - All SSH operations (test, sync, refresh) blocked with user feedback
-- **Use Cases**: Maintenance windows, decommissioned servers, temporary disconnection
+  - Show "Disabled" status w/ Ban icon in UI
+  - No async load ops for disabled hosts
+  - All SSH ops (test, sync, refresh) blocked + user feedback
+- **Use Cases**: Maintenance windows, decommissioned servers, temp disconnect
 
 ### SSH Management System
-- Uses `russh` library for SSH connections
-- Caching layer (`CachingSshClient`) to optimize multiple operations
-- Safety controls: `.ssh/system_readonly` and `.ssh/user_readonly` files prevent modifications
-- Test isolation via mock SSH client to prevent production system access during testing
+- Use `russh` library for SSH conns
+- Caching layer (`CachingSshClient`) for many ops
+- Safety controls: `.ssh/system_readonly` + `.ssh/user_readonly` files stop edits
+- Test isolation via mock SSH client stop prod system access in tests
 
 ### Testing Infrastructure
-- **Backend**: Inline `#[cfg(test)]` modules with mock SSH client — no real SSH connections
+- **Backend**: Inline `#[cfg(test)]` modules w/ mock SSH client — no real SSH conns
 - **Run**: `cargo test` from `backend/`; single test via `cargo test <name>`
-- **Frontend**: No test framework configured yet
+- **Frontend**: No test framework yet
 
 ### Configuration
-- Main config: `config.toml` (optional - database URL, SSH private key, server settings)
-- Authentication: `.htpasswd` file for user credentials (bcrypt encrypted, auto-created if missing)
-- Environment variables: `DATABASE_URL`, `HTPASSWD`, `SSH_KEY`, `SESSION_KEY` (take precedence over config file), `RUST_LOG`, `CONFIG`, `VITE_API_URL`
-- SSH key requirement: Server requires valid SSH private key file (provides generation instructions if missing, or use `SSH_KEY` env var)
-- Security: All API endpoints require authentication except `/api/auth/login` and `/api/auth/logout`
+- Main config: `config.toml` (optional - DB URL, SSH private key, server settings)
+- Authentication: `.htpasswd` file for user creds (bcrypt, auto-create if missing)
+- Environment variables: `DATABASE_URL`, `HTPASSWD`, `SSH_KEY`, `SESSION_KEY` (override config file), `RUST_LOG`, `CONFIG`, `VITE_API_URL`
+- SSH key need: Server need valid SSH private key file (gives gen instructions if missing, or use `SSH_KEY` env var)
+- Security: All API endpoints need auth except `/api/auth/login` + `/api/auth/logout`
 
 ## Critical Frontend/Backend Data Type Compatibility Issues
 
 ### Jump Host (jump_via) Field Handling
-**⚠️ CRITICAL**: The `jump_via` field requires special handling due to type system differences:
+**⚠️ CRITICAL**: `jump_via` field need special handling cuz type system differs:
 
-- **Backend Expectation**: `UpdateHostRequest.jump_via` field uses custom deserializer `empty_string_as_none_int` that expects a **STRING** which gets parsed to `Option<i32>`
+- **Backend Expectation**: `UpdateHostRequest.jump_via` field use custom deserializer `empty_string_as_none_int` expect **STRING** parsed to `Option<i32>`
   - Empty string `""` → `None` (no jump host)
-  - Non-empty string like `"123"` → `Some(123)` (jump host with ID 123)
+  - Non-empty string like `"123"` → `Some(123)` (jump host w/ ID 123)
 
-- **Frontend Type System**: `Host.jump_via` is typed as `number | undefined` in TypeScript
+- **Frontend Type System**: `Host.jump_via` typed `number | undefined` in TypeScript
 
-- **Solution Applied**: The `hostsService.updateHost()` function in `frontend/src/services/api/hosts.ts` automatically converts the `jump_via` field to string before sending to backend:
+- **Solution Applied**: `hostsService.updateHost()` func in `frontend/src/services/api/hosts.ts` auto-convert `jump_via` to string before send backend:
   ```typescript
   const requestData = {
     ...host,
@@ -240,14 +240,14 @@ The API uses singular resource names in the URL paths:
   };
   ```
 
-**Never modify the jump_via handling without ensuring compatibility between:**
+**No modify jump_via handling w/o keeping compat between:**
 1. Frontend TypeScript types (`Host.jump_via?: number`)
-2. Backend Rust deserializer (`empty_string_as_none_int` expecting string)
-3. The conversion logic in `hostsService.updateHost()`
+2. Backend Rust deserializer (`empty_string_as_none_int` expect string)
+3. Conversion logic in `hostsService.updateHost()`
 
 ## Git Hooks Setup
 
-**🔒 SECURITY**: This repository includes git hooks to prevent accidental commit of secrets, passwords, and private keys.
+**🔒 SECURITY**: Repo has git hooks to stop accidental commit of secrets, passwords, private keys.
 
 ### Initial Setup (Required for all developers)
 ```bash
@@ -259,13 +259,13 @@ The API uses singular resource names in the URL paths:
 - Private SSH keys (`-----BEGIN PRIVATE KEY-----`)
 - API keys, secret keys, access tokens (20+ chars)
 - Passwords (8+ chars)
-- Session keys and JWT secrets
-- Database URLs with embedded passwords
+- Session keys + JWT secrets
+- Database URLs w/ embedded passwords
 - Bearer tokens
 - Password hashes (bcrypt format)
 
 ### Whitelist Configuration
-The hooks use `.secrets-whitelist` for legitimate exceptions:
+Hooks use `.secrets-whitelist` for valid exceptions:
 
 **File Patterns** (allow entire files):
 ```
@@ -282,10 +282,10 @@ VALUE:ssh-rsa AAAAB3NzaC1yc2EAAAADAQAB... test@example.com
 ```
 
 ### When commits are blocked:
-1. **Remove real secrets** from your staged files
+1. **Remove real secrets** from staged files
 2. **Add test/example files** to `.secrets-whitelist` file patterns
-3. **Add known safe values** to `.secrets-whitelist` with `VALUE:` prefix
-4. **Use environment variables** for production secrets
+3. **Add known safe values** to `.secrets-whitelist` w/ `VALUE:` prefix
+4. **Use env vars** for prod secrets
 
 ### Hook Management:
 ```bash
@@ -301,20 +301,20 @@ cat .git/hooks/pre-commit
 
 ## GitHub Server-Side Secret Protection
 
-**🌐 MULTI-LAYER SECURITY**: The repository includes both local git hooks AND server-side GitHub protection.
+**🌐 MULTI-LAYER SECURITY**: Repo has local git hooks AND server-side GitHub protection.
 
 ### GitHub Secret Scanning Setup
-1. **Enable GitHub Secret Scanning** (Repository Settings > Code security):
+1. **Enable GitHub Secret Scanning** (Repo Settings > Code security):
    - Secret scanning: ✅ Enabled
    - Push protection: ✅ Enabled  
    - Historical scanning: ✅ Enabled
 
 2. **GitHub Actions Workflow** (`.github/workflows/security-scan.yml`):
-   - Runs TruffleHog OSS for secret detection
-   - Runs GitLeaks for additional patterns
-   - Custom pattern matching for project-specific secrets
-   - Dependency vulnerability scanning with Trivy
-   - Verifies git hooks infrastructure
+   - Run TruffleHog OSS for secret detect
+   - Run GitLeaks for more patterns
+   - Custom pattern match for project-specific secrets
+   - Dep vuln scan w/ Trivy
+   - Verify git hooks infra
 
 3. **Branch Protection Rules** (Recommended):
    ```bash
@@ -342,10 +342,10 @@ Developer Commits
 ```
 
 ### When secrets are detected:
-- **Local**: Git hook blocks commit with detailed output
-- **GitHub Push**: Push protection prevents push with secret detected
-- **GitHub Actions**: PR/build fails with security scan results
-- **Branch Protection**: Merge blocked until security checks pass
+- **Local**: Git hook block commit + detailed output
+- **GitHub Push**: Push protection stop push w/ secret detect
+- **GitHub Actions**: PR/build fail w/ security scan results
+- **Branch Protection**: Merge blocked til security checks pass
 
 ### Bypassing Protection (Emergency):
 ```bash
