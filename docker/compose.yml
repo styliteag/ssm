@@ -21,7 +21,7 @@ services:
       # Configuration file path (optional - server works without it)
       #- CONFIG=config/config.toml
       # Database connection string (takes precedence over config file default is sqlite://ssm.db)
-      - DATABASE_URL=sqlite://./db/ssm.db
+      - DATABASE_URL=sqlite:////app/db/ssm.db
       # SSH private key file path (shows generation instructions if missing)
       # - SSH_KEY=keys/id_ssm
       # htpasswd file path (auto-created if missing with admin/random password)

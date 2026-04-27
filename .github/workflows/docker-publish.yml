@@ -29,8 +29,8 @@ jobs:
       uses: docker/build-push-action@v6
       with:
         push: true
-        context: backend
-        file: backend/Dockerfile
+        context: .
+        file: docker/app/Dockerfile
         #cache-from: type=registry,ref=styliteag/ssm:latest
         #cache-to: type=inline
         cache-from: type=gha

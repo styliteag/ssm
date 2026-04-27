@@ -103,9 +103,35 @@ logs:
 ps:
     docker compose -f docker/compose.prod.yml ps
 
-# Build the backend image locally without pushing (mirrors the CI build).
+# Build the combined production image locally (mirrors the CI build).
+# Includes built frontend, FastAPI backend, and nginx — all in one image.
 docker-build:
-    docker build -f backend/Dockerfile -t ssm:dev backend
+    docker build -f docker/app/Dockerfile -t ssm:dev .
+
+# Run the combined image locally on http://localhost:8080.
+# Uses a scratch data dir under /tmp so it doesn't touch your real ./docker/data.
+# Volumes (db/config/keys/logs) are created on first run.
+docker-run: docker-build
+    @mkdir -p /tmp/ssm-dev/data/db /tmp/ssm-dev/data/config /tmp/ssm-dev/data/keys /tmp/ssm-dev/data/logs
+    docker rm -f ssm-dev 2>/dev/null || true
+    docker run -d --name ssm-dev \
+        -p 8080:80 \
+        -v /tmp/ssm-dev/data/db:/app/db \
+        -v /tmp/ssm-dev/data/config:/app/config \
+        -v /tmp/ssm-dev/data/keys:/app/keys \
+        -v /tmp/ssm-dev/data/logs:/app/logs \
+        -e DATABASE_URL=sqlite:////app/db/ssm.db \
+        -e HTPASSWD=config/.htpasswd \
+        -e JWT_SECRET=dev-secret-change-me-dev-secret-change-me \
+        -e LOGLEVEL=debug \
+        ssm:dev
+    @echo "→ http://localhost:8080  (logs: just docker-logs)"
+
+docker-logs:
+    docker logs -f ssm-dev
+
+docker-stop:
+    docker rm -f ssm-dev 2>/dev/null || true
 
 # --- Release ----------------------------------------------------------------
 

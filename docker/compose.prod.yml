@@ -1,28 +1,29 @@
-# Production deployment for the Python/FastAPI backend.
+# Production deployment for the all-in-one image.
 #
-# Build context is the repository root so the Dockerfile can pull ``backend/``
-# straight from the checkout. The frontend is served as static files by any
-# static host (nginx, Caddy, a CDN) in front of this container; only the
-# ``/api/v2`` routes are served here.
+# Build context is the repository root so the multi-stage Dockerfile can pull
+# both ``frontend/`` and ``backend/`` from the checkout. The container serves
+# the React SPA on port 80 and reverse-proxies ``/api/*`` to uvicorn internally.
 
 services:
-  backend:
-    container_name: ssm-backend
+  ssm:
+    container_name: ssm
     build:
       context: ..
-      dockerfile: backend/Dockerfile
-    image: ssm-backend:latest
+      dockerfile: docker/app/Dockerfile
+      args:
+        VITE_API_URL: /api
+    image: ssm:latest
     ports:
-      - "8000:8000"
+      - "80:80"
     volumes:
       - ./data/db:/app/db
-      - ./data/config:/app/config:ro
-      - ./data/keys:/app/keys:ro
+      - ./data/config:/app/config
+      - ./data/keys:/app/keys
+      - ./data/logs:/app/logs
     environment:
-      - CONFIG=/app/config/config.toml
       - DATABASE_URL=sqlite:////app/db/ssm.db
-      - HTPASSWD=/app/config/.htpasswd
-      - SSH_KEY=/app/keys/id_ssm
+      - HTPASSWD=config/.htpasswd
+      - SSH_KEY=keys/id_ssm
       # JWT_SECRET MUST be set; uncomment and supply a 32+ char value:
       # - JWT_SECRET=replace-me-with-a-long-random-string
       - LOGLEVEL=info
@@ -30,18 +31,9 @@ services:
       - ssm-network
     restart: unless-stopped
     healthcheck:
-      test:
-        - "CMD"
-        - "python"
-        - "-c"
-        - >
-          import urllib.request,sys;
-          sys.exit(0 if urllib.request.urlopen(
-            'http://127.0.0.1:8000/api/v2/openapi.json',
-            timeout=3
-          ).status == 200 else 1)
-      start_period: 20s
-      timeout: 5s
+      test: ["CMD", "/app/health-check.sh"]
+      start_period: 30s
+      timeout: 10s
       interval: 30s
       retries: 3
 

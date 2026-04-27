@@ -44,7 +44,7 @@ Run `just` to see all available commands.
 | Auth | htpasswd credential store + JWT (HS256) |
 | SSH | asyncssh |
 
-The production Docker image runs the backend only (port 8000, `/api/v2`). The frontend is served separately (nginx, Caddy, CDN).
+The production Docker image is a single all-in-one container: nginx serves the built React SPA on port 80 and reverse-proxies `/api/*` to uvicorn on `127.0.0.1:8000`. Migrations run automatically on startup.
 
 ## Development Workflow
 
@@ -112,6 +112,8 @@ htpasswd -B backend/.htpasswd user2     # add user
 
 ## Production Deployment
 
+The combined image (`ghcr.io/styliteag/ssm/ssm:latest`) ships nginx + the SPA + the FastAPI backend in one container, listening on port 80.
+
 ```bash
 just up      # docker compose up -d --build
 just down    # docker compose down
@@ -122,13 +124,24 @@ The compose file (`docker/compose.prod.yml`) expects persistent volumes at `dock
 
 ```
 docker/data/
-├── config/config.toml    # main config
+├── config/config.toml    # main config (optional)
 ├── config/.htpasswd      # credentials
 ├── keys/id_ssm           # SSH private key
-└── db/                   # SQLite database
+├── db/                   # SQLite database
+└── logs/                 # nginx + app logs
 ```
 
-`JWT_SECRET` must be set — uncomment the line in `compose.prod.yml` and supply a value.
+`JWT_SECRET` must be set — uncomment the line in `compose.prod.yml` and supply a 32+ character value.
+
+### Local combined-image dev run
+
+To exercise the production image locally on `http://localhost:8080` without affecting prod data:
+
+```bash
+just docker-build     # build docker/app/Dockerfile (frontend + backend + nginx)
+just docker-run       # run it on :8080 with a scratch data dir under /tmp
+just docker-stop      # tear it down
+```
 
 ## Release
 
