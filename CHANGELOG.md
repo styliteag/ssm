@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- 
+
+## [1.1.9] - 2026-04-27
+
 ### Changed
 - **Documentation refresh**: `AGENTS.md`/`CLAUDE.md`, `frontend/README.md`, top-level `README.md`, and the `verify`/`release` skills no longer describe the project as a Rust/Actix/Diesel backend. Commands, endpoint paths (`/api/v2/*`), auth scheme (JWT bearer), SSH library (`asyncssh`), and env vars (`JWT_SECRET`) now match the Python/FastAPI reality. Removed obsolete `jump_via` string-coercion section.
 - **Configuration is env-only**: dropped TOML support. Settings come from environment variables, optionally seeded by a `backend/.env` file loaded on startup via `python-dotenv` (override the path with `DOTENV=…`). `config.toml` / `config.toml.example` / the `CONFIG` env var are gone; `backend/.env.example` is the new template. SSH options moved from a `[ssh]` table to flat env vars: `SSH_TIMEOUT`, `SSH_KEY_PASSPHRASE`, `SSH_CHECK_SCHEDULE`, `SSH_UPDATE_SCHEDULE`. `SSH_KEY` and `JWT_SECRET`/`SESSION_KEY` keep their previous names. `start-dev.sh` and the docker compose/setup files were updated to match.
