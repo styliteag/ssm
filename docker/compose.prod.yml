@@ -20,7 +20,7 @@ services:
       - ./data/keys:/app/keys:ro
     environment:
       - CONFIG=/app/config/config.toml
-      - DATABASE_URL=sqlite:///app/db/ssm.db
+      - DATABASE_URL=sqlite:////app/db/ssm.db
       - HTPASSWD=/app/config/.htpasswd
       - SSH_KEY=/app/keys/id_ssm
       # JWT_SECRET MUST be set; uncomment and supply a 32+ char value:
