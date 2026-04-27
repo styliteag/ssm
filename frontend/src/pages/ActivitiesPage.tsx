@@ -123,7 +123,7 @@ const ActivitiesPage: React.FC = () => {
  const syncFields = ['missing_keys', 'unknown_keys', 'incorrect_options', 'faulty_keys',
  'unauthorized_keys', 'duplicate_keys', 'logins_affected'];
  const isSyncMetadata = syncFields.some(field => field in metadata);
- const hasDiff = metadata.diff && Array.isArray(metadata.diff) && metadata.diff.length > 0;
+ const hasDiff = Array.isArray(metadata.diff) && metadata.diff.length > 0;
 
  if (changes.length === 0 && !isSyncMetadata && !hasDiff) return null;
 
@@ -148,37 +148,37 @@ const ActivitiesPage: React.FC = () => {
  <>
  {(metadata.missing_keys as number) > 0 && (
  <span className="text-xs bg-destructive/10 dark:bg-destructive/20 text-destructive dark:text-destructive px-2 py-0.5 rounded">
- +{metadata.missing_keys} missing
+ +{metadata.missing_keys as number} missing
  </span>
  )}
  {(metadata.unknown_keys as number) > 0 && (
  <span className="text-xs bg-warning/10 dark:bg-warning/20 text-warning dark:text-warning px-2 py-0.5 rounded">
- -{metadata.unknown_keys} unknown
+ -{metadata.unknown_keys as number} unknown
  </span>
  )}
  {(metadata.incorrect_options as number) > 0 && (
  <span className="text-xs bg-primary/10 dark:bg-primary/20 text-primary dark:text-primary px-2 py-0.5 rounded">
- {metadata.incorrect_options} options fixed
+ {metadata.incorrect_options as number} options fixed
  </span>
  )}
  {(metadata.unauthorized_keys as number) > 0 && (
  <span className="text-xs bg-warning/10 dark:bg-warning/20 text-warning dark:text-warning px-2 py-0.5 rounded">
- {metadata.unauthorized_keys} unauthorized
+ {metadata.unauthorized_keys as number} unauthorized
  </span>
  )}
  {(metadata.duplicate_keys as number) > 0 && (
  <span className="text-xs bg-accent/10 dark:bg-accent/20 text-accent dark:text-accent px-2 py-0.5 rounded">
- {metadata.duplicate_keys} duplicates
+ {metadata.duplicate_keys as number} duplicates
  </span>
  )}
  {(metadata.faulty_keys as number) > 0 && (
  <span className="text-xs bg-destructive/10 dark:bg-destructive/20 text-destructive dark:text-destructive px-2 py-0.5 rounded">
- {metadata.faulty_keys} faulty
+ {metadata.faulty_keys as number} faulty
  </span>
  )}
  {(metadata.logins_affected as number) > 0 && (
  <span className="text-xs bg-muted px-2 py-0.5 rounded text-muted-foreground">
- {metadata.logins_affected} login{(metadata.logins_affected as number) !== 1 ? 's' : ''} affected
+ {metadata.logins_affected as number} login{(metadata.logins_affected as number) !== 1 ? 's' : ''} affected
  </span>
  )}
  </>

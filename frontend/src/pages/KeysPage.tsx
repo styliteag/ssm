@@ -74,7 +74,7 @@ const KeysPage: React.FC = () => {
  const [loading, setLoading] = useState(true);
  const [selectedKeys] = useState<number[]>([]);
  const [selectedKey, setSelectedKey] = useState<ExtendedKey | null>(null);
- const [keyDetails, setKeyDetails] = useState<KeyDetails | null>(null);
+ const [keyDetails] = useState<KeyDetails | null>(null);
  const [filters, setFilters] = useState<KeyFilters>({});
  const [editingUser, setEditingUser] = useState<User | null>(null);
  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
@@ -97,7 +97,7 @@ const KeysPage: React.FC = () => {
 
  // Form loading states
  const [submitting, setSubmitting] = useState(false);
- const [loadingDetails, setLoadingDetails] = useState(false);
+ const [loadingDetails] = useState(false);
 
  // SSH key validation regex
  const SSH_KEY_REGEX = /^(ssh-rsa|ssh-dss|ssh-ed25519|ecdsa-sha2-nistp[0-9]+)\s+[A-Za-z0-9+/]+[=]{0,3}(\s+.*)?$/;
@@ -169,30 +169,6 @@ const KeysPage: React.FC = () => {
  loadKeys();
  }, [loadKeys]);
 
- // Load key details (authorizations and hosts)
- // eslint-disable-next-line @typescript-eslint/no-unused-vars
- const loadKeyDetails = useCallback(async (keyId: number) => {
- try {
- setLoadingDetails(true);
- const key = keys.find(k => k.id === keyId);
- if (!key) return;
-
- const authResponse = await authorizationsService.getUserAuthorizations(key.username || '');
- if (authResponse.success && authResponse.data) {
- // Would need to fetch host details in a real implementation
- const hosts: Host[] = []; // Would need to fetch host details
-
- setKeyDetails({
- authorizations: authResponse.data,
- hosts
- });
- }
- } catch {
- showError('Failed to load key details', 'Please try again');
- } finally {
- setLoadingDetails(false);
- }
- }, [keys, showError]);
 
  // Validate SSH key format
  const validateSSHKey = (keyText: string): { valid: boolean; message?: string } => {
