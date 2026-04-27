@@ -229,9 +229,9 @@ Every response uses the `ApiResponse[T]` envelope: `{success, data, error, meta}
 - **Frontend**: No test framework yet
 
 ### Configuration
-- Main config: `config.toml` (optional — DB URL, SSH private key, server settings)
+- Source: env vars only. A `backend/.env` (or path from `$DOTENV`) is loaded by python-dotenv on import; shell vars override `.env` values. There is no TOML loader.
 - Authentication: `.htpasswd` file for user creds (bcrypt, auto-created if missing)
-- Environment variables: `DATABASE_URL`, `HTPASSWD`, `SSH_KEY`, `JWT_SECRET` (or legacy `SESSION_KEY`), `LOGLEVEL`, `CONFIG`, `CORS_ORIGINS`, `VITE_API_URL`
+- Environment variables: `DATABASE_URL`, `HTPASSWD`, `SSH_KEY`, `SSH_KEY_PASSPHRASE`, `SSH_TIMEOUT`, `JWT_SECRET` (or legacy `SESSION_KEY`), `LOGLEVEL`, `PORT`, `LISTEN`, `DOTENV`, `CORS_ORIGINS`, `VITE_API_URL`
 - SSH key requirement: Server needs a valid SSH private key file (prints generation instructions if missing, or use `SSH_KEY` env var)
 - Security: All API endpoints require auth except `/api/v2/auth/login` and `/api/v2/auth/refresh`
 

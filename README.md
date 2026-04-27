@@ -78,18 +78,20 @@ just migrate-history      # show migration history
 
 ## Configuration
 
-Configuration is loaded from `backend/config.toml` (optional). Environment variables take precedence:
+Every setting is read from environment variables. A `backend/.env` file is loaded automatically on startup via `python-dotenv` — copy `backend/.env.example` and edit. Shell variables always win over `.env` values. Set `DOTENV=/path/to/file.env` to load a different file.
 
 | Variable | Default | Description |
 |---|---|---|
-| `CONFIG` | `./config.toml` | Path to config file |
 | `DATABASE_URL` | `sqlite:///ssm.db` | SQLAlchemy database URL |
 | `JWT_SECRET` | — | Required in production (32+ chars) |
 | `SSH_KEY` | `keys/id_ssm` | Path to SSH private key |
+| `SSH_KEY_PASSPHRASE` | — | Passphrase if the SSH key is encrypted |
+| `SSH_TIMEOUT` | `120` | SSH connection timeout in seconds |
 | `HTPASSWD` | `.htpasswd` | Path to htpasswd credential file |
 | `LOGLEVEL` | `info` | Logging level |
 | `PORT` | `8000` | Listen port |
 | `LISTEN` | `::` | Listen address |
+| `DOTENV` | `./.env` | Path to the `.env` file to load |
 
 `SESSION_KEY` is accepted as an alias for `JWT_SECRET`.
 
@@ -124,7 +126,7 @@ The compose file (`docker/compose.prod.yml`) expects persistent volumes at `dock
 
 ```
 docker/data/
-├── config/config.toml    # main config (optional)
+├── config/.env           # main config (optional, env vars)
 ├── config/.htpasswd      # credentials
 ├── keys/id_ssm           # SSH private key
 ├── db/                   # SQLite database

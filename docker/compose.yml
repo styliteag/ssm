@@ -9,27 +9,27 @@ services:
     image: ssm:latest
     ports:
       - "80:80"
-    volumes:      
+    volumes:
       # Database persistence
       - ./data/db:/app/db
-      # Configuration files config.toml and .htpasswd
+      # Auth + optional .env (mounted into the workdir as /app/config)
       - ./data/config:/app/config
       - ./data/keys:/app/keys
       # Logs (optional)
       - ./data/logs:/app/logs
     environment:
-      # Configuration file path (optional - server works without it)
-      #- CONFIG=config/config.toml
-      # Database connection string (takes precedence over config file default is sqlite://ssm.db)
+      # Optional: point python-dotenv at a file under the config volume.
+      #- DOTENV=/app/config/.env
+      # Database connection string (default is sqlite:///ssm.db)
       - DATABASE_URL=sqlite:////app/db/ssm.db
       # SSH private key file path (shows generation instructions if missing)
       # - SSH_KEY=keys/id_ssm
       # htpasswd file path (auto-created if missing with admin/random password)
       #- HTPASSWD=config/.htpasswd
-      # Session key (leave unset for auto-generation)
-      # - SESSION_KEY=your-secure-session-key-here
-      # Logging level (overrides config file)
-      #- RUST_LOG=info
+      # JWT signing secret (leave unset to fail fast in prod; SESSION_KEY also accepted)
+      # - JWT_SECRET=your-32+char-secret-here
+      # Logging level
+      #- LOGLEVEL=info
     networks:
       - ssm-network
     restart: unless-stopped

@@ -34,7 +34,7 @@ Multi-stage build (`docker/app/Dockerfile`):
 | Host path | Container path | Purpose |
 |---|---|---|
 | `./data/db` | `/app/db` | SQLite database (`ssm.db`) |
-| `./data/config` | `/app/config` | `config.toml` (optional), `.htpasswd` |
+| `./data/config` | `/app/config` | `.htpasswd` (auth) and optional `.env` (config) |
 | `./data/keys` | `/app/keys` | SSH private key (`id_ssm`) |
 | `./data/logs` | `/app/logs` | App logs (optional) |
 
@@ -47,7 +47,7 @@ Multi-stage build (`docker/app/Dockerfile`):
 | `HTPASSWD` | `config/.htpasswd` | Relative paths resolve under `/app`. |
 | `SSH_KEY` | `keys/id_ssm` | Server's private key for connecting to managed hosts. |
 | `LOGLEVEL` | `info` | `debug`, `info`, `warning`, `error`. |
-| `CONFIG` | (unset) | Optional path to a `config.toml`. |
+| `DOTENV` | `./.env` | Optional path to a `.env` file loaded on startup via `python-dotenv`. |
 
 ## Health checks
 

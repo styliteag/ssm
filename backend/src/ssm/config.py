@@ -1,20 +1,19 @@
-"""Configuration loading: env overrides config.toml.
+"""Configuration loading from environment variables.
 
-Precedence (highest wins):
-    1. Explicit special-cased env vars: DATABASE_URL, JWT_SECRET, SSH_KEY, HTPASSWD
-    2. Generic env vars: LOGLEVEL, PORT, LISTEN
-    3. Values from the TOML file at ``$CONFIG`` (default: ./config.toml)
-    4. Built-in defaults
+A ``.env`` file in the current working directory (or pointed at by
+``$DOTENV``) is loaded into the environment on import via ``python-dotenv``.
+After that, every setting is read straight from ``os.environ``. Existing
+shell variables always win over values in ``.env`` — nothing else is layered.
 """
 
 from __future__ import annotations
 
 import logging
 import os
-import tomllib
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+
+from dotenv import load_dotenv
 
 DEFAULT_DATABASE_URL = "sqlite:///ssm.db"
 DEFAULT_LISTEN = "::"
@@ -83,64 +82,25 @@ def rust_log_to_python_level(value: str) -> int:
     return lowest if matched else logging.INFO
 
 
-def _read_toml(path: Path) -> dict[str, Any]:
-    if not path.exists():
-        return {}
-    with path.open("rb") as f:
-        data = tomllib.load(f)
-    return data
-
-
-def _apply_toml(base: Configuration, data: dict[str, Any]) -> Configuration:
-    ssh_data = data.get("ssh", {}) or {}
-    ssh = replace(
-        base.ssh,
-        private_key_file=Path(ssh_data.get("private_key_file", base.ssh.private_key_file)),
-        private_key_passphrase=ssh_data.get(
-            "private_key_passphrase", base.ssh.private_key_passphrase
-        ),
-        timeout_seconds=int(ssh_data.get("timeout", base.ssh.timeout_seconds)),
-        check_schedule=ssh_data.get("check_schedule", base.ssh.check_schedule),
-        update_schedule=ssh_data.get("update_schedule", base.ssh.update_schedule),
-    )
-    return replace(
-        base,
-        database_url=str(data.get("database_url", base.database_url)),
-        listen=str(data.get("listen", base.listen)),
-        port=int(data.get("port", base.port)),
-        loglevel=str(data.get("loglevel", base.loglevel)),
-        htpasswd_path=Path(data.get("htpasswd_path", base.htpasswd_path)),
-        jwt_secret=data.get("jwt_secret", base.jwt_secret),
-        ssh=ssh,
-    )
-
-
-def _apply_env(base: Configuration) -> Configuration:
-    env = os.environ
-
-    ssh = replace(
-        base.ssh,
-        private_key_file=(Path(env["SSH_KEY"]) if "SSH_KEY" in env else base.ssh.private_key_file),
-    )
-    jwt_secret = env.get("JWT_SECRET") or env.get("SESSION_KEY") or base.jwt_secret
-    return replace(
-        base,
-        database_url=env.get("DATABASE_URL", base.database_url),
-        listen=env.get("LISTEN", base.listen),
-        port=int(env["PORT"]) if "PORT" in env else base.port,
-        loglevel=env.get("LOGLEVEL", base.loglevel),
-        htpasswd_path=Path(env["HTPASSWD"]) if "HTPASSWD" in env else base.htpasswd_path,
-        jwt_secret=jwt_secret,
-        ssh=ssh,
-    )
-
-
 def load_configuration() -> Configuration:
-    """Load configuration using TOML-then-env precedence."""
-    config_path = Path(os.environ.get("CONFIG", "config.toml"))
-    toml_data = _read_toml(config_path)
+    """Load configuration from a ``.env`` file (if any) plus environment."""
+    dotenv_path = os.environ.get("DOTENV") or str(Path.cwd() / ".env")
+    load_dotenv(dotenv_path=dotenv_path, override=False)
 
-    config = Configuration()
-    config = _apply_toml(config, toml_data)
-    config = _apply_env(config)
-    return config
+    env = os.environ
+    ssh = SshConfig(
+        private_key_file=Path(env.get("SSH_KEY", DEFAULT_PRIVATE_KEY_FILE)),
+        private_key_passphrase=env.get("SSH_KEY_PASSPHRASE"),
+        timeout_seconds=int(env.get("SSH_TIMEOUT", DEFAULT_TIMEOUT_SECONDS)),
+        check_schedule=env.get("SSH_CHECK_SCHEDULE"),
+        update_schedule=env.get("SSH_UPDATE_SCHEDULE"),
+    )
+    return Configuration(
+        database_url=env.get("DATABASE_URL", DEFAULT_DATABASE_URL),
+        listen=env.get("LISTEN", DEFAULT_LISTEN),
+        port=int(env.get("PORT", DEFAULT_PORT)),
+        loglevel=env.get("LOGLEVEL", DEFAULT_LOGLEVEL),
+        jwt_secret=env.get("JWT_SECRET") or env.get("SESSION_KEY"),
+        htpasswd_path=Path(env.get("HTPASSWD", DEFAULT_HTPASSWD_PATH)),
+        ssh=ssh,
+    )

@@ -27,12 +27,12 @@ def _configure_logging(config: Configuration) -> None:
 
 
 def build() -> FastAPI:
-    """Build the production FastAPI app from environment + config.toml."""
+    """Build the production FastAPI app from environment + ``.env``."""
     config = load_configuration()
     _configure_logging(config)
 
     if not config.jwt_secret:
-        msg = "JWT_SECRET (or SESSION_KEY) must be set in the environment or config.toml"
+        msg = "JWT_SECRET (or SESSION_KEY) must be set in the environment or .env file"
         raise RuntimeError(msg)
 
     htpasswd = HtpasswdStore(config.htpasswd_path)

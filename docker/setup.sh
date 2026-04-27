@@ -69,12 +69,12 @@ fi
 
 # Check configuration
 echo -e "${BLUE}⚙️ Checking configuration...${NC}"
-if [ ! -f "data/config/config.toml" ]; then
-    echo -e "${YELLOW}⚠ Configuration file not found${NC}"
-    echo "A default configuration file should have been created during setup."
-    echo "You can customize it by editing: ./data/config/config.toml"
+if [ ! -f "data/config/.env" ]; then
+    echo -e "${YELLOW}⚠ Optional .env not found${NC}"
+    echo "The container reads its config from environment variables (compose"
+    echo "file) and, if present, ./data/config/.env (point at it with DOTENV)."
 else
-    echo -e "${GREEN}✓ Configuration file exists${NC}"
+    echo -e "${GREEN}✓ .env file exists${NC}"
 fi
 
 echo
@@ -83,7 +83,7 @@ echo
 echo -e "${BLUE}🎯 Next Steps:${NC}"
 echo "1. Verify your SSH key is in data/ssh-keys/id_rsa"
 echo "2. Ensure data/auth/.htpasswd contains your user credentials"
-echo "3. Customize data/config/config.toml if needed"
+echo "3. Customize environment in compose.yml (or drop a data/config/.env)"
 echo "4. Run: docker-compose up --build"
 echo "5. Access the application at: http://localhost"
 echo
