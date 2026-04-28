@@ -71,3 +71,5 @@ Thumbs.db
 backend-rust/
 .claude/scheduled_tasks.lock
 .htpasswd
+# Added by code-review-graph
+.code-review-graph/
