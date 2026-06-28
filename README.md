@@ -172,4 +172,12 @@ Both files accept an optional reason string that is displayed in the UI.
 
 ## License
 
-GPL-3.0 — see [LICENSE.txt](LICENSE.txt).
+Secure SSH Manager (SSM) is **source-available** under the **Business Source
+License 1.1 (BSL 1.1)**. You may read, build, modify, and run it for your own
+organization for free; offering it as a hosted/managed service or
+reselling it for a fee needs a commercial license from STYLiTE. Each released
+version converts to **GPL v3.0 or later** four years after publication.
+
+See [LICENSE](LICENSE) for the full legal text and [LICENSING.md](LICENSING.md)
+for a plain-language summary. For commercial / hosting licenses, contact
+office@stylite.de.
