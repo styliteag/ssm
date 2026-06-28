@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **License switched to Business Source License 1.1 (BSL 1.1)**: the project is now source-available rather than GPL-3.0-only. You may read, build, modify, and run SSM for your own organization for free, but offering it as a hosted/managed/multi-tenant service or reselling it for a fee requires a commercial license from STYLiTE (office@stylite.de). Each released version automatically converts to GPL v3.0-or-later four years after publication (Change Date 2030-06-28). Added `LICENSE` (BSL text) and `LICENSING.md` (plain-language summary); removed the standalone GPLv3 `LICENSE.txt`; updated the README License section.
 
+### Security
+- **Patched 46 Dependabot-flagged dependency vulnerabilities** (22 high, 18 moderate, 6 low). Backend: `asyncssh` 2.22.0→2.24.0, `cryptography`→49.0.0, `pyjwt` 2.12.1→2.13.0, `starlette`→1.3.1, `urllib3`→2.7.0, `idna`→3.18, `mako`→1.3.12 (lockfile; direct-dependency floors for `asyncssh`/`pyjwt` raised in `pyproject.toml`). Frontend: `axios`→1.18.1, `react-router`/`react-router-dom`→7.18.0, `vite`→7.3.6, plus transitive `esbuild`/`js-yaml`/`form-data`/`@babel/core`; `npm audit` now reports 0 vulnerabilities (direct floors raised in `package.json`).
+
 ## [1.1.9] - 2026-04-27
 
 ### Changed
