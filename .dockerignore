@@ -55,6 +55,10 @@ LICENSE.txt
 *.md
 docs/
 
+# ...but license attribution and the BSL text must travel in the image.
+!THIRD-PARTY-LICENSES.md
+!LICENSE
+
 # Development scripts and tools
 start-dev.sh
 justfile

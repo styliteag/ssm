@@ -47,6 +47,9 @@ COPY --chown=ssm:ssm src ./src
 COPY --chown=ssm:ssm migrations ./migrations
 COPY --chown=ssm:ssm alembic.ini ./alembic.ini
 COPY --chown=ssm:ssm pyproject.toml uv.lock README.md ./
+# Third-party license attribution + SBOM must travel with the distributed image.
+COPY --chown=ssm:ssm THIRD-PARTY-LICENSES.md ./THIRD-PARTY-LICENSES.md
+COPY --chown=ssm:ssm sbom ./sbom
 
 USER ssm
 EXPOSE 8000

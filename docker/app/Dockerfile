@@ -76,6 +76,11 @@ COPY docker/app/start.sh /app/start.sh
 COPY docker/app/health-check.sh /app/health-check.sh
 COPY VERSION /app/VERSION
 
+# Third-party license attribution + SBOM must travel with the distributed image.
+COPY THIRD-PARTY-LICENSES.md /app/THIRD-PARTY-LICENSES.md
+COPY LICENSE /app/LICENSE
+COPY sbom /app/sbom
+
 RUN mkdir -p /app/db /app/keys /app/config /app/logs \
     && chmod +x /app/start.sh /app/health-check.sh
 
