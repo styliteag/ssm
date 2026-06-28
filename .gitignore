@@ -70,6 +70,7 @@ Thumbs.db
 *.temp
 backend-rust/
 .claude/scheduled_tasks.lock
+.claude/settings.local.json
 .htpasswd
 # Added by code-review-graph
 .code-review-graph/
