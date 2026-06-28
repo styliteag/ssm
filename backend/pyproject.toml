@@ -1,6 +1,6 @@
 [project]
 name = "ssm"
-version = "1.1.9"
+version = "1.1.10"
 description = "SSH key management server (Python/FastAPI)"
 readme = "README.md"
 authors = [{ name = "Wim Bonis", email = "wb@stylite.de" }]

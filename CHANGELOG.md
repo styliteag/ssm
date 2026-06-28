@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - 
 
+## [1.1.10] - 2026-06-28
+
+### Added
+- 
+
 ### Changed
 - **License switched to Business Source License 1.1 (BSL 1.1)**: the project is now source-available rather than GPL-3.0-only. You may read, build, modify, and run SSM for your own organization for free, but offering it as a hosted/managed/multi-tenant service or reselling it for a fee requires a commercial license from STYLiTE (office@stylite.de). Each released version automatically converts to GPL v3.0-or-later four years after publication (Change Date 2030-06-28). Added `LICENSE` (BSL text) and `LICENSING.md` (plain-language summary); removed the standalone GPLv3 `LICENSE.txt`; updated the README License section.
 
