@@ -27,48 +27,56 @@ defmodule SsmWeb.Layouts do
   """
   attr :flash, :map, required: true, doc: "the map of flash messages"
 
-  attr :current_scope, :map,
+  attr :current_user, :map,
     default: nil,
-    doc: "the current [scope](https://phoenix.hexdocs.pm/scopes.html)"
+    doc: "the logged-in web user (%{username: ...}) or nil"
 
   slot :inner_block, required: true
 
   def app(assigns) do
     ~H"""
-    <header class="navbar px-4 sm:px-6 lg:px-8">
-      <div class="flex-1">
-        <a href="/" class="flex-1 flex w-fit items-center gap-2">
-          <img src={~p"/images/logo.svg"} width="36" />
-          <span class="text-sm font-semibold">v{Application.spec(:phoenix, :vsn)}</span>
+    <header class="navbar bg-base-200 px-4 sm:px-6 lg:px-8">
+      <div class="flex-1 items-center gap-6">
+        <a href="/" class="flex w-fit items-center gap-2">
+          <.icon name="hero-key" class="size-5 text-primary" />
+          <span class="font-semibold">SSM</span>
+          <span class="text-xs opacity-60">v{Application.spec(:ssm, :vsn)}</span>
         </a>
+        <nav :if={@current_user} class="flex items-center gap-1 text-sm">
+          <.nav_link navigate={~p"/dashboard"}>Dashboard</.nav_link>
+        </nav>
       </div>
       <div class="flex-none">
-        <ul class="flex flex-column px-1 space-x-4 items-center">
-          <li>
-            <a href="https://phoenixframework.org/" class="btn btn-ghost">Website</a>
-          </li>
-          <li>
-            <a href="https://github.com/phoenixframework/phoenix" class="btn btn-ghost">GitHub</a>
-          </li>
-          <li>
-            <.theme_toggle />
-          </li>
-          <li>
-            <a href="https://phoenix.hexdocs.pm/overview.html" class="btn btn-primary">
-              Get Started <span aria-hidden="true">&rarr;</span>
-            </a>
+        <ul class="flex px-1 space-x-3 items-center">
+          <li><.theme_toggle /></li>
+          <li :if={@current_user} class="text-sm opacity-75">{@current_user.username}</li>
+          <li :if={@current_user}>
+            <.link href={~p"/sign-out"} method="delete" class="btn btn-ghost btn-sm">
+              Sign out
+            </.link>
           </li>
         </ul>
       </div>
     </header>
 
-    <main class="px-4 py-20 sm:px-6 lg:px-8">
-      <div class="mx-auto max-w-2xl space-y-4">
+    <main class="px-4 py-8 sm:px-6 lg:px-8">
+      <div class="mx-auto max-w-7xl space-y-4">
         {render_slot(@inner_block)}
       </div>
     </main>
 
     <.flash_group flash={@flash} />
+    """
+  end
+
+  attr :navigate, :string, required: true
+  slot :inner_block, required: true
+
+  defp nav_link(assigns) do
+    ~H"""
+    <.link navigate={@navigate} class="btn btn-ghost btn-sm font-normal">
+      {render_slot(@inner_block)}
+    </.link>
     """
   end
 
