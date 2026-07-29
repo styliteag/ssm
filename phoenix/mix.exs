@@ -4,7 +4,7 @@ defmodule Ssm.MixProject do
   def project do
     [
       app: :ssm,
-      version: "0.1.0",
+      version: app_version(),
       elixir: "~> 1.17",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
@@ -29,6 +29,22 @@ defmodule Ssm.MixProject do
     [
       preferred_envs: [precommit: :test]
     ]
+  end
+
+  # Single source of truth for the release version: the repo-root VERSION
+  # file, bumped only by ./release.sh. Empty/missing reads (e.g. an empty
+  # bind-mount in the dev container) fall back to a dev version.
+  defp app_version do
+    case File.read(Path.expand("../VERSION", __DIR__)) do
+      {:ok, content} ->
+        case String.trim(content) do
+          "" -> "0.0.0-dev"
+          version -> version
+        end
+
+      {:error, _} ->
+        "0.0.0-dev"
+    end
   end
 
   # Specifies which paths to compile per environment.
