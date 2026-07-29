@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { Users, Server, Shield, UserCheck, AlertTriangle, TrendingUp, Search, Edit2 } from 'lucide-react';
 import { Authorization, User, Host, HostFormData, UserFormData } from '../types';
 import { Card, CardContent, CardHeader, CardTitle, Modal, Form, Button } from './ui';

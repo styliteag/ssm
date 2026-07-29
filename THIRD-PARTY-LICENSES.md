@@ -53,7 +53,7 @@ notice requirements of those licenses.
 | watchfiles | 1.1.1 | MIT |
 | websockets | 16.0 | BSD-3-Clause |
 
-## Frontend (JavaScript) — 93 components
+## Frontend (JavaScript) — 91 components
 
 | Component | Version | License |
 |-----------|---------|---------|
@@ -82,7 +82,7 @@ notice requirements of those licenses.
 | caniuse-lite | 1.0.30001799 | CC-BY-4.0 |
 | clsx | 2.1.1 | MIT |
 | combined-stream | 1.0.8 | MIT |
-| cookie | 1.1.1 | MIT |
+| cookie-es | 3.1.1 | MIT |
 | csstype | 3.2.3 | MIT |
 | d3-array | 3.2.4 | ISC |
 | d3-color | 3.1.0 | ISC |
@@ -125,24 +125,22 @@ notice requirements of those licenses.
 | mime-db | 1.52.0 | MIT |
 | mime-types | 2.1.35 | MIT |
 | ms | 2.1.3 | MIT |
-| nanoid | 3.3.15 | MIT |
+| nanoid | 3.3.16 | MIT |
 | node-releases | 2.0.50 | MIT |
 | picocolors | 1.1.1 | ISC |
-| postcss | 8.5.15 | MIT |
+| postcss | 8.5.25 | MIT |
 | postcss-value-parser | 4.2.0 | MIT |
 | proxy-from-env | 2.1.0 | MIT |
 | react | 19.2.7 | MIT |
 | react-dom | 19.2.7 | MIT |
 | react-is | 19.2.7 | MIT |
 | react-redux | 9.3.0 | MIT |
-| react-router | 7.18.0 | MIT |
-| react-router-dom | 7.18.0 | MIT |
+| react-router | 8.3.0 | MIT |
 | recharts | 3.9.0 | MIT |
 | redux | 5.0.1 | MIT |
 | redux-thunk | 3.1.0 | MIT |
 | reselect | 5.2.0 | MIT |
 | scheduler | 0.27.0 | MIT |
-| set-cookie-parser | 2.7.2 | MIT |
 | source-map-js | 1.2.1 | BSD-3-Clause |
 | tiny-invariant | 1.3.3 | MIT |
 | undici-types | 7.18.2 | MIT |
@@ -3566,32 +3564,37 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-## cookie 1.1.1 (MIT) — Frontend
+## cookie-es 3.1.1 (MIT) — Frontend
 
 ```
-(The MIT License)
+MIT License
 
+Cookie-es copyright (c) Pooya Parsa <pooya@pi0.io>
+
+Cookie parsing based on https://github.com/jshttp/cookie
 Copyright (c) 2012-2014 Roman Shtylman <shtylman@gmail.com>
 Copyright (c) 2015 Douglas Christopher Wilson <doug@somethingdoug.com>
 
-Permission is hereby granted, free of charge, to any person obtaining
-a copy of this software and associated documentation files (the
-'Software'), to deal in the Software without restriction, including
-without limitation the rights to use, copy, modify, merge, publish,
-distribute, sublicense, and/or sell copies of the Software, and to
-permit persons to whom the Software is furnished to do so, subject to
-the following conditions:
+Set-Cookie parsing based on https://github.com/nfriedly/set-cookie-parser
+Copyright (c) 2015 Nathan Friedly <nathan@nfriedly.com> (http://nfriedly.com/)
 
-The above copyright notice and this permission notice shall be
-included in all copies or substantial portions of the Software.
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-THE SOFTWARE IS PROVIDED 'AS IS', WITHOUT WARRANTY OF ANY KIND,
-EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
-IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
-CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
-TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
-SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 ```
 
 ## csstype 3.2.3 (MIT) — Frontend
@@ -4589,7 +4592,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-## nanoid 3.3.15 (MIT) — Frontend
+## nanoid 3.3.16 (MIT) — Frontend
 
 ```
 The MIT License (MIT)
@@ -4660,7 +4663,7 @@ ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 ```
 
-## postcss 8.5.15 (MIT) — Frontend
+## postcss 8.5.25 (MIT) — Frontend
 
 ```
 The MIT License (MIT)
@@ -4841,35 +4844,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-## react-router 7.18.0 (MIT) — Frontend
-
-```
-MIT License
-
-Copyright (c) React Training LLC 2015-2019
-Copyright (c) Remix Software Inc. 2020-2021
-Copyright (c) Shopify Inc. 2022-2023
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-```
-
-## react-router-dom 7.18.0 (MIT) — Frontend
+## react-router 8.3.0 (MIT) — Frontend
 
 ```
 MIT License
@@ -5025,32 +5000,6 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-```
-
-## set-cookie-parser 2.7.2 (MIT) — Frontend
-
-```
-The MIT License (MIT)
-
-Copyright (c) 2015 Nathan Friedly <nathan@nfriedly.com> (http://nfriedly.com/)
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.
 ```
 
 ## source-map-js 1.2.1 (BSD-3-Clause) — Frontend

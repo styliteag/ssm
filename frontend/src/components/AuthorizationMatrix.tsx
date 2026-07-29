@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { Check, X, Loader2, AlertCircle, Eye, EyeOff, Search } from 'lucide-react';
 import { cn } from '../utils/cn';
 import { User, Host, Authorization } from '../types';

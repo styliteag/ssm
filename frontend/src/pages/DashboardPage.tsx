@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { Server, Users, Key, Shield, Activity, AlertCircle, ArrowRight } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, Loading } from '../components/ui';
 import { StatCard } from '../components/dashboard/StatCard';

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/Card';
 import { Key, Server, User, Shield, Loader2, AlertCircle } from 'lucide-react';
 import { activitiesService, Activity } from '../../services/api/activities';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 
 const iconMap = {
  key: Key,
