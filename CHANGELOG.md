@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- 
+
+## [1.1.11] - 2026-07-29
+
 ### Security
 - **Frontend dependency advisories**: upgraded React Router to 8.3.0, PostCSS to 8.5.25, and the frontend lint toolchain so all transitive `brace-expansion` paths resolve to 5.0.8, addressing the high-severity vulnerabilities reported by Dependabot and `npm audit`.
 
