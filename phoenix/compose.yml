@@ -1,0 +1,21 @@
+# SSM Elixir stack — dev environment (no local Elixir needed).
+# Start: docker compose up   →   http://localhost:4000
+# Runs next to the Python stack (:8000/:5173) during the migration.
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    working_dir: /app
+    command: sh -c "mix local.hex --force && mix local.rebar --force && mix setup && mix phx.server"
+    ports:
+      - "4000:4000"
+    environment:
+      # Toolchain caches in ./data instead of the project mount
+      MIX_HOME: /toolchain/mix
+      HEX_HOME: /toolchain/hex
+    volumes:
+      - .:/app
+      - ./data/deps:/app/deps
+      - ./data/build:/app/_build
+      - ./data/toolchain:/toolchain

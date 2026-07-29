@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- 
+- **Elixir/Phoenix rewrite groundwork (branch `elixir-rewrite`)**: rewrite plan at `docs/elixir-phoenix-rewrite.md` and a new `phoenix/` app (Phoenix 1.8 + LiveView, SQLite via `ecto_sqlite3`) scaffolded alongside the existing stack, with a docker-only dev toolchain (`phoenix/compose.yml`, port 4000). No user-visible behavior changes; the Python/React stack remains the production app.
 
 ## [1.1.11] - 2026-07-29
 

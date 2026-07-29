@@ -1,0 +1,9 @@
+# Dev image (docker-only toolchain, like ../link-shortener ADR-0007).
+# cmake: lazy_html/lexbor source build. inotify-tools: live reload.
+FROM elixir:1.20
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends cmake inotify-tools openssh-client \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
