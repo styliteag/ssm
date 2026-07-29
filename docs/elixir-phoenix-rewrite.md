@@ -47,7 +47,11 @@ Non-goals (explicitly out of scope during the port):
 
 ## 2. Database decision: SQLite vs MariaDB, and sequencing
 
-User preference (2026-07-30): move to MariaDB, ideally before the rewrite.
+**DECIDED 2026-07-30 (user): SQLite via `ecto_sqlite3`, no MariaDB, Phase A
+cancelled.** The Elixir stack adopts the existing `ssm.db` in place (§5).
+The analysis below is kept for the record.
+
+Earlier user preference (2026-07-30): move to MariaDB, ideally before the rewrite.
 
 Counterpoints, for the record, before committing:
 - SSM is 5 small tables, one instance, low write volume. `ecto_sqlite3` is

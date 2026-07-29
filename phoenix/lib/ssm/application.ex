@@ -10,8 +10,7 @@ defmodule Ssm.Application do
     children = [
       SsmWeb.Telemetry,
       Ssm.Repo,
-      {Ecto.Migrator,
-       repos: Application.fetch_env!(:ssm, :ecto_repos), skip: skip_migrations?()},
+      {Ecto.Migrator, repos: Application.fetch_env!(:ssm, :ecto_repos), skip: skip_migrations?()},
       {DNSCluster, query: Application.get_env(:ssm, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Ssm.PubSub},
       # Start a worker by calling: Ssm.Worker.start_link(arg)

@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **Elixir/Phoenix rewrite groundwork (branch `elixir-rewrite`)**: rewrite plan at `docs/elixir-phoenix-rewrite.md` and a new `phoenix/` app (Phoenix 1.8 + LiveView, SQLite via `ecto_sqlite3`) scaffolded alongside the existing stack, with a docker-only dev toolchain (`phoenix/compose.yml`, port 4000). The Elixir app reads the same environment variables as the Python stack (`DATABASE_URL`, `HTPASSWD`, `SSH_*`, `JWT_SECRET`/`SESSION_KEY`, `LOGLEVEL`, `PORT`, `LISTEN`) and takes its version from the repo-root `VERSION` file. No user-visible behavior changes; the Python/React stack remains the production app.
+- **Elixir/Phoenix rewrite groundwork (branch `elixir-rewrite`)**: rewrite plan at `docs/elixir-phoenix-rewrite.md` and a new `phoenix/` app (Phoenix 1.8 + LiveView, SQLite via `ecto_sqlite3`) scaffolded alongside the existing stack, with a docker-only dev toolchain (`phoenix/compose.yml`, port 4000). The Elixir app reads the same environment variables as the Python stack (`DATABASE_URL`, `HTPASSWD`, `SSH_*`, `JWT_SECRET`/`SESSION_KEY`, `LOGLEVEL`, `PORT`, `LISTEN`) and takes its version from the repo-root `VERSION` file. No user-visible behavior changes; the Python/React stack remains the production app. The Elixir stack adopts the existing SQLite database in place: a baseline migration recreates the Alembic-head schema idempotently (fresh DBs get the full schema; Diesel-era and Alembic-era DBs are adopted untouched, verified against a verbatim Diesel-era schema dump).
 
 ## [1.1.11] - 2026-07-29
 
