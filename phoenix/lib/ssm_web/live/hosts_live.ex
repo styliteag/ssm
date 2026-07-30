@@ -1,16 +1,27 @@
 defmodule SsmWeb.HostsLive do
   @moduledoc """
-  Hosts page: list, create/edit modal, enable/disable, delete, and an async
-  SSH connection test — parity with the React HostsPage. Every SSH action
-  checks `host.disabled` first (non-negotiable rule #4).
+  Hosts page: list with online/offline badges, status filter pills,
+  create/edit modal, enable/disable, delete, an async SSH connection test,
+  and cross-links (authorization count → authorizations page, diff link per
+  host) — the React HostsPage. Every SSH action checks `host.disabled`
+  first (non-negotiable rule #4).
+
+  Online/offline is fed from two sources: the diff viewer's `StatusCache`
+  (a host whose keys were readable is online) and this page's own
+  connection tests. Rows are a plain assign, not a stream — filtering and
+  status overlays must re-render rows.
   """
 
   use SsmWeb, :live_view
 
   alias Ssm.Activity
+  alias Ssm.Authorizations
+  alias Ssm.Diffs.StatusCache
   alias Ssm.Hosts
   alias Ssm.Hosts.Host
   alias SsmWeb.Layouts
+
+  @filters ~w(active all online offline unknown disabled)
 
   @impl true
   def mount(_params, _session, socket) do
@@ -18,6 +29,7 @@ defmodule SsmWeb.HostsLive do
      socket
      |> assign(page_title: "Hosts")
      |> assign(form: nil, editing: nil, testing_id: nil)
+     |> assign(filter: "active", conn_results: %{})
      |> reload_hosts()}
   end
 
@@ -25,14 +37,61 @@ defmodule SsmWeb.HostsLive do
     hosts = Hosts.list_hosts()
 
     socket
-    |> assign(:host_count, length(hosts))
+    |> assign(:all_hosts, hosts)
     |> assign(:host_names, Map.new(hosts, &{&1.id, &1.name}))
-    |> stream(:hosts, hosts, reset: true)
+    |> assign(
+      :auth_counts,
+      Enum.frequencies_by(Authorizations.list_authorizations(), & &1.host_id)
+    )
+    |> refilter()
+  end
+
+  defp refilter(socket) do
+    %{all_hosts: hosts, conn_results: conn_results, filter: filter} = socket.assigns
+
+    cached = StatusCache.all()
+    statuses = Map.new(hosts, &{&1.id, host_status(&1, conn_results, cached)})
+    rows = Enum.filter(hosts, &matches_filter?(filter, &1, statuses[&1.id]))
+
+    socket
+    |> assign(:statuses, statuses)
+    |> assign(:rows, rows)
+    |> assign(:host_count, length(hosts))
+  end
+
+  # disabled beats everything; an explicit connection test beats the diff
+  # sweep's cached result; no signal at all is "unknown" (React parity).
+  defp host_status(%Host{disabled: true}, _conn_results, _cached), do: :disabled
+
+  defp host_status(host, conn_results, cached) do
+    case {conn_results[host.id], cached[host.id]} do
+      {:online, _} -> :online
+      {{:offline, message}, _} -> {:offline, message}
+      {nil, {:synced, _at}} -> :online
+      {nil, {{:needs_sync, _, _}, _at}} -> :online
+      {nil, {{:error, message}, _at}} -> {:offline, message}
+      _ -> :unknown
+    end
+  end
+
+  defp matches_filter?("active", host, _status), do: not host.disabled
+  defp matches_filter?("all", _host, _status), do: true
+  defp matches_filter?("online", _host, status), do: status == :online
+  defp matches_filter?("offline", _host, status), do: match?({:offline, _}, status)
+  defp matches_filter?("unknown", _host, status), do: status == :unknown
+  defp matches_filter?("disabled", _host, status), do: status == :disabled
+
+  defp pill_count(hosts, statuses, filter) do
+    Enum.count(hosts, &matches_filter?(filter, &1, statuses[&1.id]))
   end
 
   ## Events
 
   @impl true
+  def handle_event("filter", %{"filter" => filter}, socket) when filter in @filters do
+    {:noreply, socket |> assign(:filter, filter) |> refilter()}
+  end
+
   def handle_event("new", _params, socket) do
     {:noreply,
      assign(socket,
@@ -101,6 +160,7 @@ defmodule SsmWeb.HostsLive do
     with %Host{} = host <- Hosts.get_host(String.to_integer(id)),
          {:ok, _} <- Hosts.delete_host(host) do
       log_host_activity(socket, "delete", host)
+      StatusCache.delete(host.id)
 
       {:noreply,
        socket
@@ -149,23 +209,32 @@ defmodule SsmWeb.HostsLive do
         {:noreply,
          socket
          |> assign(:testing_id, host.id)
-         |> start_async(:test_connection, fn -> {host.name, Ssm.Ssh.connect(target)} end)}
+         |> start_async(:test_connection, fn -> {host, Ssm.Ssh.connect(target)} end)}
     end
   end
 
   @impl true
-  def handle_async(:test_connection, {:ok, {name, result}}, socket) do
+  def handle_async(:test_connection, {:ok, {host, result}}, socket) do
     socket = assign(socket, :testing_id, nil)
 
     case result do
       :ok ->
-        {:noreply, put_flash(socket, :info, "Connection to #{name} succeeded.")}
+        {:noreply,
+         socket
+         |> put_conn_result(host.id, :online)
+         |> put_flash(:info, "Connection to #{host.name} succeeded.")}
 
       {:error, {_code, message}} ->
-        {:noreply, put_flash(socket, :error, "Connection to #{name} failed: #{message}")}
+        {:noreply,
+         socket
+         |> put_conn_result(host.id, {:offline, message})
+         |> put_flash(:error, "Connection to #{host.name} failed: #{message}")}
 
       {:error, reason} ->
-        {:noreply, put_flash(socket, :error, "Connection to #{name} failed: #{inspect(reason)}")}
+        {:noreply,
+         socket
+         |> put_conn_result(host.id, {:offline, inspect(reason)})
+         |> put_flash(:error, "Connection to #{host.name} failed: #{inspect(reason)}")}
     end
   end
 
@@ -174,6 +243,12 @@ defmodule SsmWeb.HostsLive do
      socket
      |> assign(:testing_id, nil)
      |> put_flash(:error, "Connection test crashed: #{inspect(reason)}")}
+  end
+
+  defp put_conn_result(socket, host_id, result) do
+    socket
+    |> update(:conn_results, &Map.put(&1, host_id, result))
+    |> refilter()
   end
 
   ## Helpers
@@ -197,6 +272,21 @@ defmodule SsmWeb.HostsLive do
     })
   end
 
+  defp status_label(:online), do: "online"
+  defp status_label({:offline, _message}), do: "offline"
+  defp status_label(:unknown), do: "unknown"
+  defp status_label(:disabled), do: "disabled"
+
+  defp status_class(:online), do: "badge-success"
+  defp status_class({:offline, _message}), do: "badge-error"
+  defp status_class(:unknown), do: "badge-ghost"
+  defp status_class(:disabled), do: "badge-neutral"
+
+  defp status_title({:offline, message}), do: message
+  defp status_title(:online), do: "Reachable (last diff check or connection test)"
+  defp status_title(:unknown), do: "Not checked yet — run the diff viewer or a connection test"
+  defp status_title(:disabled), do: "Disabled — all SSH operations blocked"
+
   ## Render
 
   @impl true
@@ -213,27 +303,76 @@ defmodule SsmWeb.HostsLive do
         </:actions>
       </.header>
 
+      <div id="host-filters" class="flex flex-wrap gap-2">
+        <button
+          :for={
+            {filter, label} <- [
+              {"active", "Active"},
+              {"all", "All"},
+              {"online", "Online"},
+              {"offline", "Offline"},
+              {"unknown", "Unknown"},
+              {"disabled", "Disabled"}
+            ]
+          }
+          id={"filter-#{filter}"}
+          type="button"
+          class={[
+            "btn btn-xs rounded-full",
+            if(@filter == filter, do: "btn-primary", else: "btn-ghost")
+          ]}
+          phx-click="filter"
+          phx-value-filter={filter}
+        >
+          {label} ({pill_count(@all_hosts, @statuses, filter)})
+        </button>
+      </div>
+
       <p :if={@host_count == 0} class="text-sm opacity-60">
         No hosts yet — create the first one.
       </p>
 
-      <div :if={@host_count > 0} class="overflow-x-auto">
-        <.table id="hosts" rows={@streams.hosts}>
-          <:col :let={{_id, host}} label="Name">
+      <p :if={@host_count > 0 and @rows == []} class="text-sm opacity-60">
+        No hosts match this filter.
+      </p>
+
+      <div :if={@rows != []} class="overflow-x-auto">
+        <.table id="hosts" rows={@rows} row_id={&"hosts-#{&1.id}"} row_item={&Function.identity/1}>
+          <:col :let={host} label="Name">
             <span class="font-medium">{host.name}</span>
             <p :if={host.comment} class="text-xs opacity-60">{host.comment}</p>
           </:col>
-          <:col :let={{_id, host}} label="Address">{host.address}:{host.port}</:col>
-          <:col :let={{_id, host}} label="Login">{host.username}</:col>
-          <:col :let={{_id, host}} label="Jump via">
+          <:col :let={host} label="Address">{host.address}:{host.port}</:col>
+          <:col :let={host} label="Login">{host.username}</:col>
+          <:col :let={host} label="Jump via">
             {(host.jump_via && Map.get(@host_names, host.jump_via)) || "—"}
           </:col>
-          <:col :let={{_id, host}} label="Status">
-            <span class={["badge badge-sm", (host.disabled && "badge-error") || "badge-success"]}>
-              {if host.disabled, do: "disabled", else: "enabled"}
+          <:col :let={host} label="Access">
+            <.link
+              navigate={~p"/authorizations?host_id=#{host.id}"}
+              class="link link-hover tabular-nums"
+              title="Authorizations on this host"
+            >
+              {Map.get(@auth_counts, host.id, 0)}
+            </.link>
+          </:col>
+          <:col :let={host} label="Status">
+            <span
+              class={["badge badge-sm", status_class(@statuses[host.id])]}
+              title={status_title(@statuses[host.id])}
+            >
+              {status_label(@statuses[host.id])}
             </span>
           </:col>
-          <:action :let={{_id, host}}>
+          <:action :let={host}>
+            <.link
+              id={"diff-link-#{host.id}"}
+              navigate={~p"/diff?host_id=#{host.id}"}
+              class="btn btn-ghost btn-xs"
+              title="Open in diff viewer"
+            >
+              <.icon name="hero-arrows-right-left" class="size-4" />
+            </.link>
             <button
               id={"test-host-#{host.id}"}
               class="btn btn-ghost btn-xs"

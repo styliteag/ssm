@@ -9,6 +9,11 @@ defmodule SsmWeb.HostsLiveTest do
 
   setup [:setup_htpasswd, :log_in]
 
+  setup do
+    Ssm.Diffs.StatusCache.reset()
+    :ok
+  end
+
   test "redirects anonymous visitors" do
     conn = Phoenix.ConnTest.build_conn()
     assert {:error, {:redirect, %{to: "/sign-in"}}} = live(conn, ~p"/hosts")
@@ -21,10 +26,56 @@ defmodule SsmWeb.HostsLiveTest do
 
     {:ok, view, _html} = live(conn, ~p"/hosts")
 
+    # Default filter hides disabled hosts; "All" shows both.
+    refute has_element?(view, "#hosts-#{host.id}")
+    view |> element("#filter-all") |> render_click()
+
     assert has_element?(view, "#hosts-#{host.id}", "web1")
     assert has_element?(view, "#hosts-#{host.id}", "bastion")
     assert has_element?(view, "#hosts-#{host.id} .badge", "disabled")
-    assert has_element?(view, "#hosts-#{bastion.id} .badge", "enabled")
+    assert has_element?(view, "#hosts-#{bastion.id} .badge", "unknown")
+  end
+
+  test "status badge feeds from the diff status cache; filters narrow rows", %{conn: conn} do
+    up = host_fixture(%{name: "up"})
+    drifted = host_fixture(%{name: "drifted"})
+    down = host_fixture(%{name: "down"})
+    fresh = host_fixture(%{name: "fresh"})
+
+    Ssm.Diffs.StatusCache.put(up.id, :synced)
+    Ssm.Diffs.StatusCache.put(drifted.id, {:needs_sync, 1, 0})
+    Ssm.Diffs.StatusCache.put(down.id, {:error, "boom"})
+
+    {:ok, view, _html} = live(conn, ~p"/hosts")
+
+    assert has_element?(view, "#hosts-#{up.id} .badge", "online")
+    assert has_element?(view, "#hosts-#{drifted.id} .badge", "online")
+    assert has_element?(view, "#hosts-#{down.id} .badge", "offline")
+    assert has_element?(view, "#hosts-#{fresh.id} .badge", "unknown")
+
+    assert has_element?(view, "#filter-online", "Online (2)")
+    assert has_element?(view, "#filter-offline", "Offline (1)")
+
+    view |> element("#filter-offline") |> render_click()
+    assert has_element?(view, "#hosts-#{down.id}")
+    refute has_element?(view, "#hosts-#{up.id}")
+  end
+
+  test "rows cross-link to authorizations and the diff viewer", %{conn: conn} do
+    host = host_fixture(%{name: "web1"})
+    user = user_fixture()
+    authorization_fixture(user, host, %{login: "root"})
+    authorization_fixture(user, host, %{login: "deploy"})
+
+    {:ok, view, _html} = live(conn, ~p"/hosts")
+
+    assert has_element?(
+             view,
+             "#hosts-#{host.id} a[href='/authorizations?host_id=#{host.id}']",
+             "2"
+           )
+
+    assert has_element?(view, "#diff-link-#{host.id}[href='/diff?host_id=#{host.id}']")
   end
 
   test "creates a host through the modal", %{conn: conn} do
@@ -94,6 +145,9 @@ defmodule SsmWeb.HostsLiveTest do
 
     {:ok, view, _html} = live(conn, ~p"/hosts")
 
+    # "All" keeps the row visible across the disable/enable round-trip.
+    view |> element("#filter-all") |> render_click()
+
     view |> element("#toggle-host-#{host.id}") |> render_click()
     assert Hosts.get_host(host.id).disabled
 
@@ -110,16 +164,19 @@ defmodule SsmWeb.HostsLiveTest do
       :ok
     end
 
-    test "reports success", %{conn: conn} do
+    test "reports success and flips the badge to online", %{conn: conn} do
       host = host_fixture(%{name: "web1"})
 
       {:ok, view, _html} = live(conn, ~p"/hosts")
+
+      assert has_element?(view, "#hosts-#{host.id} .badge", "unknown")
 
       view |> element("#test-host-#{host.id}") |> render_click()
       render_async(view)
 
       assert render(view) =~ "Connection to web1 succeeded"
       assert MockClient.calls().connect == [host.id]
+      assert has_element?(view, "#hosts-#{host.id} .badge", "online")
     end
 
     test "reports failure", %{conn: conn} do
@@ -140,6 +197,7 @@ defmodule SsmWeb.HostsLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/hosts")
 
+      view |> element("#filter-disabled") |> render_click()
       view |> element("#test-host-#{host.id}") |> render_click()
 
       assert render(view) =~ "is disabled"
