@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-07-30
+
 ### Removed
 - **The Python/FastAPI backend and React frontend are gone**: the Elixir/Phoenix stack is now the only application. Deleted: `backend/` (FastAPI, SQLAlchemy, Alembic, pytest suite), `frontend/` (React SPA), the combined nginx+uvicorn Docker image (`docker/app/`), the python-era dev scripts (`start-dev.sh`, `kill-ports.sh`), stale docs describing the old stacks (`docs/API.md`, `DESIGN.md`, `IMPROVEMENT_PLAN.md`, the Postman collection), and the old-stack SBOMs. The final snapshot of the python stack's database is kept at `./ssm.db` as the dev-DB import source.
 
