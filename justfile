@@ -57,10 +57,36 @@ frontend-lint:
 frontend-typecheck:
     cd frontend && npm run type-check
 
+# --- Elixir (phoenix/, docker-only toolchain) -------------------------------
+
+# Run a mix task inside the dev container (no local Elixir needed).
+elixir-mix *args:
+    cd phoenix && docker compose run --rm app sh -c "mix local.hex --force >/dev/null 2>&1 && mix local.rebar --force >/dev/null 2>&1 && mix {{args}}"
+
+elixir-test *args:
+    @just elixir-mix test {{args}}
+
+elixir-format:
+    @just elixir-mix format
+
+# compile --warnings-as-errors + format --check-formatted + test
+elixir-verify:
+    @just elixir-mix precommit
+
+# Dev server on http://localhost:4000 (runs next to the python stack).
+elixir-dev:
+    cd phoenix && docker compose up
+
+elixir-dev-detached:
+    cd phoenix && docker compose up -d
+
+elixir-down:
+    cd phoenix && docker compose down
+
 # --- Aggregates ------------------------------------------------------------
 
 # Run every quality gate (matches the /verify skill).
-verify: backend-lint backend-typecheck backend-security backend-test frontend-lint frontend-typecheck
+verify: backend-lint backend-typecheck backend-security backend-test frontend-lint frontend-typecheck elixir-verify
 
 # Format both stacks (frontend has no formatter wired; ruff handles backend).
 fmt: backend-fmt

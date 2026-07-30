@@ -3,6 +3,16 @@ defmodule SsmWeb.Router do
 
   import SsmWeb.UserAuth
 
+  pipeline :api do
+    plug :accepts, ["json"]
+  end
+
+  scope "/api", SsmWeb do
+    pipe_through :api
+
+    get "/health", HealthController, :show
+  end
+
   pipeline :browser do
     plug :accepts, ["html"]
     plug :fetch_session
