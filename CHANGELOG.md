@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Diff viewer showed "checking…" on every host until the slowest one answered**: per-host sync statuses were collected in one all-or-nothing batch, so with a large fleet and a few dead hosts (120s SSH timeout each) no badge appeared for minutes. Results now stream in per host as each check finishes, and up to 8 checks run concurrently (previously 4).
 - **Elixir dev server could not reach any host**: the dev container only mounted `phoenix/`, so the SSH key the app expects at `keys/id_ssm` (living in `backend/keys/`) was invisible and every SSH operation failed with `ssh.key_unreadable`. The compose file now mounts `backend/keys` read-only into the container.
 
 ### Added

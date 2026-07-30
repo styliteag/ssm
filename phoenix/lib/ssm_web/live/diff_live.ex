@@ -76,17 +76,23 @@ defmodule SsmWeb.DiffLive do
 
   ## Async work
 
+  # Each host's result streams back the moment it is known (`{:host_status,
+  # id, status}` messages) instead of one all-or-nothing batch — with dozens
+  # of hosts and a 120s timeout on dead ones, a single batch kept every badge
+  # on "checking…" for minutes.
   defp start_statuses_async(socket, hosts) do
     ids = Enum.map(hosts, & &1.id)
+    parent = self()
 
     start_async(socket, :statuses, fn ->
       ids
-      |> Task.async_stream(&{&1, status_for(&1)},
-        max_concurrency: 4,
+      |> Task.async_stream(
+        fn id -> send(parent, {:host_status, id, status_for(id)}) end,
+        max_concurrency: 8,
+        ordered: false,
         timeout: :infinity
       )
-      |> Enum.map(fn {:ok, pair} -> pair end)
-      |> Map.new()
+      |> Stream.run()
     end)
   end
 
@@ -119,8 +125,8 @@ defmodule SsmWeb.DiffLive do
   end
 
   @impl true
-  def handle_async(:statuses, {:ok, results}, socket) do
-    {:noreply, update(socket, :statuses, &Map.merge(&1, results))}
+  def handle_async(:statuses, {:ok, _done}, socket) do
+    {:noreply, socket}
   end
 
   def handle_async(:statuses, {:exit, reason}, socket) do
@@ -213,6 +219,11 @@ defmodule SsmWeb.DiffLive do
      socket
      |> assign(:syncing, false)
      |> put_flash(:error, "Sync all crashed: #{inspect(reason)}")}
+  end
+
+  @impl true
+  def handle_info({:host_status, host_id, status}, socket) do
+    {:noreply, update(socket, :statuses, &Map.put(&1, host_id, status))}
   end
 
   defp refresh_after_sync(socket, host) do
