@@ -42,6 +42,46 @@ defmodule SsmWeb.AuthorizationsLiveTest do
     assert has_element?(view, "#authorizations-#{auth.id}", "missing host #999999")
   end
 
+  test "list sorts by clicked column and search narrows rows", %{conn: conn} do
+    alice = user_fixture(%{username: "alice"})
+    bob = user_fixture(%{username: "bob"})
+    host = host_fixture(%{name: "web1"})
+    alice_auth = authorization_fixture(alice, host, %{login: "zeta"})
+    bob_auth = authorization_fixture(bob, host, %{login: "alpha"})
+
+    {:ok, view, _html} = live(conn, ~p"/authorizations")
+
+    # id order: zeta first. Sort by login asc: alpha first, desc flips.
+    assert render(view) =~ ~r/zeta.*alpha/s
+    view |> element("th button", "Login") |> render_click()
+    assert render(view) =~ ~r/alpha.*zeta/s
+    view |> element("th button", "Login") |> render_click()
+    assert render(view) =~ ~r/zeta.*alpha/s
+
+    view |> element("#authorizations-search") |> render_change(%{q: "alice"})
+    assert has_element?(view, "#authorizations-#{alice_auth.id}")
+    refute has_element?(view, "#authorizations-#{bob_auth.id}")
+  end
+
+  test "matrix searches narrow users and hosts", %{conn: conn} do
+    alice = user_fixture(%{username: "alice"})
+    bob = user_fixture(%{username: "bob"})
+    web = host_fixture(%{name: "web1"})
+    db = host_fixture(%{name: "db1"})
+    authorization_fixture(alice, web, %{login: "root"})
+    authorization_fixture(bob, db, %{login: "root"})
+
+    {:ok, view, _html} = live(conn, ~p"/authorizations?view=matrix")
+
+    view |> element("#matrix-user-search-form") |> render_change(%{q: "ali"})
+    assert has_element?(view, "#matrix-row-#{alice.id}")
+    refute has_element?(view, "#matrix-row-#{bob.id}")
+
+    view |> element("#matrix-host-search-form") |> render_change(%{q: "db"})
+    assert has_element?(view, "#matrix-cell-#{alice.id}-#{db.id}")
+    refute has_element?(view, "#matrix-cell-#{alice.id}-#{web.id}")
+  end
+
   test "bulk grant creates the cross product and skips existing grants", %{conn: conn} do
     u1 = user_fixture(%{username: "alice"})
     u2 = user_fixture(%{username: "bob"})
@@ -60,7 +100,8 @@ defmodule SsmWeb.AuthorizationsLiveTest do
     |> element("#bulk-grant-form")
     |> render_change(%{bulk: %{login: "root", options: "no-pty"}})
 
-    assert has_element?(view, "#bulk-preview", "3 new grant(s), 1 already exist")
+    assert has_element?(view, "#bulk-preview", "3 new grant(s)")
+    assert has_element?(view, "#bulk-preview", "1 already exist")
 
     view |> element("#bulk-grant-form") |> render_submit()
 
@@ -71,6 +112,30 @@ defmodule SsmWeb.AuthorizationsLiveTest do
              Ssm.Activity.list(),
              &(&1.action == "bulk_grant" and &1.activity_type == "auth")
            )
+  end
+
+  test "bulk grant search narrows the user and host lists", %{conn: conn} do
+    alice = user_fixture(%{username: "alice"})
+    bob = user_fixture(%{username: "bob"})
+    web = host_fixture(%{name: "web1"})
+    db = host_fixture(%{name: "db1"})
+
+    {:ok, view, _html} = live(conn, ~p"/authorizations")
+
+    view |> element("#bulk-grant") |> render_click()
+
+    view |> element("#bulk-user-search") |> render_change(%{q: "ali"})
+    assert has_element?(view, "#bulk-user-#{alice.id}")
+    refute has_element?(view, "#bulk-user-#{bob.id}")
+
+    view |> element("#bulk-host-search") |> render_change(%{q: "db"})
+    assert has_element?(view, "#bulk-host-#{db.id}")
+    refute has_element?(view, "#bulk-host-#{web.id}")
+
+    # Selection survives filtering: select filtered-in, clear filter, still selected.
+    view |> element("#bulk-user-#{alice.id}") |> render_click()
+    view |> element("#bulk-user-search") |> render_change(%{q: ""})
+    assert has_element?(view, "#bulk-user-#{alice.id}[checked]")
   end
 
   test "bulk grant hides disabled users from the selection list", %{conn: conn} do

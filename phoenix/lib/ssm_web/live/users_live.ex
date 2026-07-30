@@ -26,6 +26,7 @@ defmodule SsmWeb.UsersLive do
      |> assign(page_title: "Users")
      |> assign(form: nil, editing: nil)
      |> assign(selected: MapSet.new(), splitting: nil, merging: nil, bulk_deleting: false)
+     |> assign(sort: nil)
      |> reload_users()}
   end
 
@@ -33,6 +34,7 @@ defmodule SsmWeb.UsersLive do
     rows =
       Users.list_users_with_counts()
       |> Enum.map(&Map.put(&1, :id, &1.user.id))
+      |> SsmWeb.TableSort.sort(socket.assigns.sort, user_sorters())
 
     ids = MapSet.new(rows, & &1.id)
 
@@ -42,6 +44,15 @@ defmodule SsmWeb.UsersLive do
     |> update(:selected, &MapSet.intersection(&1, ids))
   end
 
+  defp user_sorters do
+    %{
+      "username" => &SsmWeb.TableSort.string(&1.user.username),
+      "status" => &if(&1.user.enabled, do: 0, else: 1),
+      "keys" => & &1.key_count,
+      "access" => & &1.authorization_count
+    }
+  end
+
   defp selected_rows(socket), do: selected_rows_from_assigns(socket.assigns)
 
   defp usernames(socket), do: Enum.map(socket.assigns.rows, & &1.user.username)
@@ -49,6 +60,11 @@ defmodule SsmWeb.UsersLive do
   ## Events: create/edit/delete/toggle (unchanged behavior)
 
   @impl true
+  def handle_event("sort", %{"key" => key}, socket) do
+    sort = SsmWeb.TableSort.toggle(socket.assigns.sort, key)
+    {:noreply, socket |> assign(:sort, sort) |> reload_users()}
+  end
+
   def handle_event("new", _params, socket) do
     {:noreply, assign(socket, form: to_form(Users.change_user(%User{})), editing: nil)}
   end
@@ -451,7 +467,13 @@ defmodule SsmWeb.UsersLive do
       </div>
 
       <div :if={@user_count > 0} class="overflow-x-auto">
-        <.table id="users" rows={@rows} row_id={&"users-#{&1.id}"} row_item={&Function.identity/1}>
+        <.table
+          id="users"
+          rows={@rows}
+          sort={@sort}
+          row_id={&"users-#{&1.id}"}
+          row_item={&Function.identity/1}
+        >
           <:col :let={row} label="">
             <input
               type="checkbox"
@@ -462,21 +484,21 @@ defmodule SsmWeb.UsersLive do
               phx-value-id={row.id}
             />
           </:col>
-          <:col :let={row} label="Username">
+          <:col :let={row} label="Username" sort="username">
             <span class="font-medium">{row.user.username}</span>
             <p :if={row.user.comment} class="text-xs opacity-60">{row.user.comment}</p>
           </:col>
-          <:col :let={row} label="Status">
+          <:col :let={row} label="Status" sort="status">
             <span class={["badge badge-sm", (row.user.enabled && "badge-success") || "badge-error"]}>
               {if row.user.enabled, do: "enabled", else: "disabled"}
             </span>
           </:col>
-          <:col :let={row} label="SSH keys">
+          <:col :let={row} label="SSH keys" sort="keys">
             <.link navigate={~p"/keys?user_id=#{row.user.id}"} class="link link-hover">
               {row.key_count}
             </.link>
           </:col>
-          <:col :let={row} label="Access">
+          <:col :let={row} label="Access" sort="access">
             <.link navigate={~p"/authorizations?user_id=#{row.user.id}"} class="link link-hover">
               {row.authorization_count}
             </.link>

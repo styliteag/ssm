@@ -33,7 +33,8 @@ defmodule SsmWeb.KeysLive do
        import_text: "",
        import_user_id: nil,
        search: "",
-       type_filter: "all"
+       type_filter: "all",
+       sort: nil
      )}
   end
 
@@ -73,12 +74,26 @@ defmodule SsmWeb.KeysLive do
       end
 
     searched = apply_search(scoped, search)
-    keys = apply_type_filter(searched, type_filter)
+
+    keys =
+      searched
+      |> apply_type_filter(type_filter)
+      |> SsmWeb.TableSort.sort(socket.assigns.sort, key_sorters(socket.assigns.hosts_by_user))
 
     socket
     |> assign(:type_counts, Enum.frequencies_by(searched, &category_id(&1.key_type)))
     |> assign(:key_count, length(keys))
     |> stream(:keys, keys, reset: true)
+  end
+
+  defp key_sorters(hosts_by_user) do
+    %{
+      "user" => &SsmWeb.TableSort.string(&1.user.username),
+      "name" => &SsmWeb.TableSort.string(&1.name),
+      "type" => &SsmWeb.TableSort.string(&1.key_type),
+      "comment" => &SsmWeb.TableSort.string(&1.extra_comment),
+      "access" => &Map.get(hosts_by_user, &1.user_id, 0)
+    }
   end
 
   ## Events
@@ -96,6 +111,11 @@ defmodule SsmWeb.KeysLive do
 
   def handle_event("search", %{"q" => q}, socket) do
     {:noreply, socket |> assign(:search, q) |> refilter()}
+  end
+
+  def handle_event("sort", %{"key" => key}, socket) do
+    sort = SsmWeb.TableSort.toggle(socket.assigns.sort, key)
+    {:noreply, socket |> assign(:sort, sort) |> refilter()}
   end
 
   def handle_event("type-filter", %{"type" => type}, socket) when type in @type_filters do
@@ -503,19 +523,19 @@ defmodule SsmWeb.KeysLive do
       <p :if={@key_count == 0} class="text-sm opacity-60">No keys match the current filters.</p>
 
       <div :if={@key_count > 0} class="overflow-x-auto">
-        <.table id="keys" rows={@streams.keys}>
-          <:col :let={{_id, key}} label="User">{key.user.username}</:col>
-          <:col :let={{_id, key}} label="Name">
+        <.table id="keys" rows={@streams.keys} sort={@sort}>
+          <:col :let={{_id, key}} label="User" sort="user">{key.user.username}</:col>
+          <:col :let={{_id, key}} label="Name" sort="name">
             <span class="font-medium">{key.name || "—"}</span>
             <p class="font-mono text-xs opacity-60">{truncate_key(key.key_base64)}</p>
           </:col>
-          <:col :let={{_id, key}} label="Type">
+          <:col :let={{_id, key}} label="Type" sort="type">
             <span class={["badge badge-sm whitespace-nowrap", key_type_badge_class(key.key_type)]}>
               {key.key_type}
             </span>
           </:col>
-          <:col :let={{_id, key}} label="Comment">{key.extra_comment || "—"}</:col>
-          <:col :let={{_id, key}} label="Host access via owner">
+          <:col :let={{_id, key}} label="Comment" sort="comment">{key.extra_comment || "—"}</:col>
+          <:col :let={{_id, key}} label="Host access via owner" sort="access">
             <span class="tabular-nums" title="Distinct hosts the owner has authorizations for">
               {Map.get(@hosts_by_user, key.user_id, 0)}
             </span>

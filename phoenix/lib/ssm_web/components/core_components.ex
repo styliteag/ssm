@@ -302,6 +302,10 @@ defmodule SsmWeb.CoreComponents do
     """
   end
 
+  defp sort_icon({key, :asc}, key), do: "hero-chevron-up"
+  defp sort_icon({key, :desc}, key), do: "hero-chevron-down"
+  defp sort_icon(_sort, _key), do: "hero-chevron-up-down"
+
   # Helper used by inputs to generate form errors
   defp error(assigns) do
     ~H"""
@@ -349,6 +353,7 @@ defmodule SsmWeb.CoreComponents do
   """
   attr :id, :string, required: true
   attr :on_cancel, JS, default: %JS{}
+  attr :box_class, :string, default: nil, doc: "extra classes for the modal box (e.g. max-w-3xl)"
   slot :title
   slot :inner_block, required: true
 
@@ -356,7 +361,7 @@ defmodule SsmWeb.CoreComponents do
     ~H"""
     <div id={@id} class="modal modal-open" phx-window-keydown={@on_cancel} phx-key="escape">
       <div class="modal-backdrop bg-black/50" phx-click={@on_cancel} aria-hidden="true"></div>
-      <div class="modal-box">
+      <div class={["modal-box", @box_class]}>
         <button
           type="button"
           class="btn btn-circle btn-ghost btn-sm absolute top-2 right-2"
@@ -387,12 +392,21 @@ defmodule SsmWeb.CoreComponents do
   attr :row_id, :any, default: nil, doc: "the function for generating the row id"
   attr :row_click, :any, default: nil, doc: "the function for handling phx-click on each row"
 
+  attr :sort, :any,
+    default: nil,
+    doc: "current sort as {key, :asc | :desc}; enables sort buttons on cols with a sort key"
+
+  attr :sort_event, :string,
+    default: "sort",
+    doc: "event pushed when a sortable header is clicked"
+
   attr :row_item, :any,
     default: &Function.identity/1,
     doc: "the function for mapping each row before calling the :col and :action slots"
 
   slot :col, required: true do
     attr :label, :string
+    attr :sort, :string, doc: "sort key for this column; omit for unsortable columns"
   end
 
   slot :action, doc: "the slot for showing user actions in the last table column"
@@ -407,7 +421,19 @@ defmodule SsmWeb.CoreComponents do
     <table class="table table-zebra">
       <thead>
         <tr>
-          <th :for={col <- @col}>{col[:label]}</th>
+          <th :for={col <- @col}>
+            <button
+              :if={col[:sort]}
+              type="button"
+              class="inline-flex cursor-pointer select-none items-center gap-1"
+              phx-click={@sort_event}
+              phx-value-key={col[:sort]}
+            >
+              {col[:label]}
+              <.icon name={sort_icon(@sort, col[:sort])} class="size-3 opacity-60" />
+            </button>
+            <span :if={!col[:sort]}>{col[:label]}</span>
+          </th>
           <th :if={@action != []}>
             <span class="sr-only">{gettext("Actions")}</span>
           </th>

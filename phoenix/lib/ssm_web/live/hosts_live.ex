@@ -29,7 +29,7 @@ defmodule SsmWeb.HostsLive do
      socket
      |> assign(page_title: "Hosts")
      |> assign(form: nil, editing: nil, testing_id: nil)
-     |> assign(filter: "active", conn_results: %{})
+     |> assign(filter: "active", conn_results: %{}, sort: nil)
      |> reload_hosts()}
   end
 
@@ -51,13 +51,33 @@ defmodule SsmWeb.HostsLive do
 
     cached = StatusCache.all()
     statuses = Map.new(hosts, &{&1.id, host_status(&1, conn_results, cached)})
-    rows = Enum.filter(hosts, &matches_filter?(filter, &1, statuses[&1.id]))
+
+    rows =
+      hosts
+      |> Enum.filter(&matches_filter?(filter, &1, statuses[&1.id]))
+      |> SsmWeb.TableSort.sort(socket.assigns.sort, host_sorters(socket.assigns, statuses))
 
     socket
     |> assign(:statuses, statuses)
     |> assign(:rows, rows)
     |> assign(:host_count, length(hosts))
   end
+
+  defp host_sorters(assigns, statuses) do
+    %{
+      "name" => &SsmWeb.TableSort.string(&1.name),
+      "address" => &{SsmWeb.TableSort.string(&1.address), &1.port},
+      "login" => &SsmWeb.TableSort.string(&1.username),
+      "jump" => &SsmWeb.TableSort.string(&1.jump_via && assigns.host_names[&1.jump_via]),
+      "access" => &Map.get(assigns.auth_counts, &1.id, 0),
+      "status" => &status_rank(statuses[&1.id])
+    }
+  end
+
+  defp status_rank(:online), do: 0
+  defp status_rank({:offline, _message}), do: 1
+  defp status_rank(:unknown), do: 2
+  defp status_rank(:disabled), do: 3
 
   # disabled beats everything; an explicit connection test beats the diff
   # sweep's cached result; no signal at all is "unknown" (React parity).
@@ -90,6 +110,11 @@ defmodule SsmWeb.HostsLive do
   @impl true
   def handle_event("filter", %{"filter" => filter}, socket) when filter in @filters do
     {:noreply, socket |> assign(:filter, filter) |> refilter()}
+  end
+
+  def handle_event("sort", %{"key" => key}, socket) do
+    sort = SsmWeb.TableSort.toggle(socket.assigns.sort, key)
+    {:noreply, socket |> assign(:sort, sort) |> refilter()}
   end
 
   def handle_event("new", _params, socket) do
@@ -337,17 +362,23 @@ defmodule SsmWeb.HostsLive do
       </p>
 
       <div :if={@rows != []} class="overflow-x-auto">
-        <.table id="hosts" rows={@rows} row_id={&"hosts-#{&1.id}"} row_item={&Function.identity/1}>
-          <:col :let={host} label="Name">
+        <.table
+          id="hosts"
+          rows={@rows}
+          sort={@sort}
+          row_id={&"hosts-#{&1.id}"}
+          row_item={&Function.identity/1}
+        >
+          <:col :let={host} label="Name" sort="name">
             <span class="font-medium">{host.name}</span>
             <p :if={host.comment} class="text-xs opacity-60">{host.comment}</p>
           </:col>
-          <:col :let={host} label="Address">{host.address}:{host.port}</:col>
-          <:col :let={host} label="Login">{host.username}</:col>
-          <:col :let={host} label="Jump via">
+          <:col :let={host} label="Address" sort="address">{host.address}:{host.port}</:col>
+          <:col :let={host} label="Login" sort="login">{host.username}</:col>
+          <:col :let={host} label="Jump via" sort="jump">
             {(host.jump_via && Map.get(@host_names, host.jump_via)) || "—"}
           </:col>
-          <:col :let={host} label="Access">
+          <:col :let={host} label="Access" sort="access">
             <.link
               navigate={~p"/authorizations?host_id=#{host.id}"}
               class="link link-hover tabular-nums"
@@ -356,7 +387,7 @@ defmodule SsmWeb.HostsLive do
               {Map.get(@auth_counts, host.id, 0)}
             </.link>
           </:col>
-          <:col :let={host} label="Status">
+          <:col :let={host} label="Status" sort="status">
             <span
               class={["badge badge-sm", status_class(@statuses[host.id])]}
               title={status_title(@statuses[host.id])}

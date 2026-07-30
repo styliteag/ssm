@@ -24,7 +24,17 @@ defmodule SsmWeb.AuthorizationsLive do
 
   @impl true
   def mount(_params, _session, socket) do
-    {:ok, assign(socket, page_title: "Authorizations", form: nil, editing: nil, bulk: nil)}
+    {:ok,
+     assign(socket,
+       page_title: "Authorizations",
+       form: nil,
+       editing: nil,
+       bulk: nil,
+       matrix_user_search: "",
+       matrix_host_search: "",
+       auth_sort: nil,
+       auth_search: ""
+     )}
   end
 
   @view_modes ~w(list matrix stats)
@@ -61,12 +71,39 @@ defmodule SsmWeb.AuthorizationsLive do
         fn {_k, v} -> is_nil(v) end
       )
 
-    authorizations = Authorizations.list_authorizations(opts)
+    authorizations =
+      opts
+      |> Authorizations.list_authorizations()
+      |> search_authorizations(socket.assigns.auth_search)
+      |> SsmWeb.TableSort.sort(socket.assigns.auth_sort, auth_sorters())
 
     socket
     |> assign(:authorization_count, length(authorizations))
     |> stream(:authorizations, authorizations, reset: true)
     |> reload_matrix()
+  end
+
+  defp search_authorizations(authorizations, search) do
+    case search |> String.trim() |> String.downcase() do
+      "" ->
+        authorizations
+
+      needle ->
+        Enum.filter(authorizations, fn auth ->
+          [user_label(auth), host_label(auth), auth.login, auth.options, auth.comment]
+          |> Enum.any?(&(is_binary(&1) and String.contains?(String.downcase(&1), needle)))
+        end)
+    end
+  end
+
+  defp auth_sorters do
+    %{
+      "user" => &SsmWeb.TableSort.string(user_label(&1)),
+      "host" => &SsmWeb.TableSort.string(host_label(&1)),
+      "login" => &SsmWeb.TableSort.string(&1.login),
+      "options" => &SsmWeb.TableSort.string(&1.options),
+      "comment" => &SsmWeb.TableSort.string(&1.comment)
+    }
   end
 
   defp reload_matrix(socket) do
@@ -107,7 +144,7 @@ defmodule SsmWeb.AuthorizationsLive do
     %{
       mode: :all,
       cells: counts,
-      hosts: Enum.sort_by(assigns.hosts, & &1.name),
+      hosts: matrix_hosts(assigns, assigns.hosts),
       users: matrix_users(assigns, authorized_users)
     }
   end
@@ -121,10 +158,15 @@ defmodule SsmWeb.AuthorizationsLive do
     %{
       mode: :login,
       cells: pairs,
-      hosts:
-        assigns.hosts |> Enum.filter(&MapSet.member?(host_ids, &1.id)) |> Enum.sort_by(& &1.name),
+      hosts: matrix_hosts(assigns, Enum.filter(assigns.hosts, &MapSet.member?(host_ids, &1.id))),
       users: matrix_users(assigns, authorized_users)
     }
+  end
+
+  defp matrix_hosts(assigns, hosts) do
+    hosts
+    |> filter_by_name(assigns.matrix_host_search, &"#{&1.name} #{&1.address}")
+    |> Enum.sort_by(& &1.name)
   end
 
   defp matrix_users(assigns, authorized_users) do
@@ -132,7 +174,16 @@ defmodule SsmWeb.AuthorizationsLive do
     |> Enum.filter(fn user ->
       not assigns.show_authorized_only or MapSet.member?(authorized_users, user.id)
     end)
+    |> filter_by_name(assigns.matrix_user_search, & &1.username)
     |> Enum.sort_by(& &1.username)
+  end
+
+  defp rebuild_matrix(socket) do
+    assign(
+      socket,
+      :matrix,
+      build_matrix(socket.assigns, socket.assigns.all_authorizations, socket.assigns.matrix_login)
+    )
   end
 
   ## Events
@@ -236,6 +287,23 @@ defmodule SsmWeb.AuthorizationsLive do
     {:noreply, push_patch(socket, to: ~p"/authorizations?#{query}")}
   end
 
+  def handle_event("sort", %{"key" => key}, socket) do
+    sort = SsmWeb.TableSort.toggle(socket.assigns.auth_sort, key)
+    {:noreply, socket |> assign(:auth_sort, sort) |> reload_authorizations()}
+  end
+
+  def handle_event("list-search", %{"q" => q}, socket) do
+    {:noreply, socket |> assign(:auth_search, q) |> reload_authorizations()}
+  end
+
+  def handle_event("matrix-user-search", %{"q" => q}, socket) do
+    {:noreply, socket |> assign(:matrix_user_search, q) |> rebuild_matrix()}
+  end
+
+  def handle_event("matrix-host-search", %{"q" => q}, socket) do
+    {:noreply, socket |> assign(:matrix_host_search, q) |> rebuild_matrix()}
+  end
+
   def handle_event("matrix-toggle", %{"user-id" => user_id, "host-id" => host_id}, socket) do
     case socket.assigns.matrix_login do
       "all" -> {:noreply, socket}
@@ -253,9 +321,19 @@ defmodule SsmWeb.AuthorizationsLive do
        host_ids: MapSet.new(),
        login: "",
        options: "",
+       user_search: "",
+       host_search: "",
        new_count: 0,
        existing_count: 0
      })}
+  end
+
+  def handle_event("bulk-user-search", %{"q" => q}, socket) do
+    {:noreply, update_bulk(socket, &%{&1 | user_search: q})}
+  end
+
+  def handle_event("bulk-host-search", %{"q" => q}, socket) do
+    {:noreply, update_bulk(socket, &%{&1 | host_search: q})}
   end
 
   def handle_event("bulk-toggle-user", %{"id" => id}, socket) do
@@ -513,6 +591,8 @@ defmodule SsmWeb.AuthorizationsLive do
         matrix_login={@matrix_login}
         login_accounts={@login_accounts}
         show_authorized_only={@show_authorized_only}
+        matrix_user_search={@matrix_user_search}
+        matrix_host_search={@matrix_host_search}
       />
 
       <.stats_view
@@ -522,53 +602,97 @@ defmodule SsmWeb.AuthorizationsLive do
         hosts={@hosts}
       />
 
-      <form
+      <.list_stats
         :if={@view == "list"}
-        id="authorizations-filter"
-        phx-change="filter"
-        class="flex max-w-xl gap-3"
-      >
-        <div class="flex-1">
+        all_authorizations={@all_authorizations}
+      />
+
+      <div :if={@view == "list"} class="flex flex-wrap items-end gap-3">
+        <form id="authorizations-filter" phx-change="filter" class="flex max-w-xl flex-1 gap-3">
+          <div class="flex-1">
+            <.input
+              type="select"
+              name="user_id"
+              value={@filter_user_id}
+              label="Filter by user"
+              prompt="All users"
+              options={Enum.map(@users, &{&1.username, &1.id})}
+            />
+          </div>
+          <div class="flex-1">
+            <.input
+              type="select"
+              name="host_id"
+              value={@filter_host_id}
+              label="Filter by host"
+              prompt="All hosts"
+              options={Enum.map(@hosts, &{&1.name, &1.id})}
+            />
+          </div>
+        </form>
+        <form id="authorizations-search" phx-change="list-search" class="w-72">
           <.input
-            type="select"
-            name="user_id"
-            value={@filter_user_id}
-            label="Filter by user"
-            prompt="All users"
-            options={Enum.map(@users, &{&1.username, &1.id})}
+            type="search"
+            name="q"
+            value={@auth_search}
+            label="Search"
+            placeholder="User, host, login, options, comment"
+            phx-debounce="200"
           />
-        </div>
-        <div class="flex-1">
-          <.input
-            type="select"
-            name="host_id"
-            value={@filter_host_id}
-            label="Filter by host"
-            prompt="All hosts"
-            options={Enum.map(@hosts, &{&1.name, &1.id})}
-          />
-        </div>
-      </form>
+        </form>
+      </div>
 
       <p :if={@view == "list" and @authorization_count == 0} class="text-sm opacity-60">
         No authorizations found.
       </p>
 
       <div :if={@view == "list" and @authorization_count > 0} class="overflow-x-auto">
-        <.table id="authorizations" rows={@streams.authorizations}>
-          <:col :let={{_id, auth}} label="User">
-            <span class={is_nil(auth.user) && "text-error italic"}>{user_label(auth)}</span>
+        <.table id="authorizations" rows={@streams.authorizations} sort={@auth_sort}>
+          <:col :let={{_id, auth}} label="User" sort="user">
+            <span :if={is_nil(auth.user)} class="text-error italic">{user_label(auth)}</span>
+            <span :if={auth.user} class="inline-flex items-center gap-1">
+              <.link
+                patch={~p"/authorizations?user_id=#{auth.user_id}"}
+                class="link link-hover"
+                title={"Filter this list by #{user_label(auth)}"}
+              >
+                {user_label(auth)}
+              </.link>
+              <.link
+                navigate={~p"/keys?user_id=#{auth.user_id}"}
+                class="opacity-40 hover:opacity-100"
+                title={"Keys of #{user_label(auth)}"}
+              >
+                <.icon name="hero-key" class="size-3.5" />
+              </.link>
+            </span>
           </:col>
-          <:col :let={{_id, auth}} label="Host">
-            <span class={is_nil(auth.host) && "text-error italic"}>{host_label(auth)}</span>
+          <:col :let={{_id, auth}} label="Host" sort="host">
+            <span :if={is_nil(auth.host)} class="text-error italic">{host_label(auth)}</span>
+            <span :if={auth.host} class="inline-flex items-center gap-1">
+              <.link
+                patch={~p"/authorizations?host_id=#{auth.host_id}"}
+                class="link link-hover"
+                title={"Filter this list by #{host_label(auth)}"}
+              >
+                {host_label(auth)}
+              </.link>
+              <.link
+                navigate={~p"/diff?host_id=#{auth.host_id}"}
+                class="opacity-40 hover:opacity-100"
+                title={"Open #{host_label(auth)} in the diff viewer"}
+              >
+                <.icon name="hero-arrows-right-left" class="size-3.5" />
+              </.link>
+            </span>
           </:col>
-          <:col :let={{_id, auth}} label="Login">
+          <:col :let={{_id, auth}} label="Login" sort="login">
             <span class="font-mono text-sm">{auth.login}</span>
           </:col>
-          <:col :let={{_id, auth}} label="Options">
+          <:col :let={{_id, auth}} label="Options" sort="options">
             <span class="font-mono text-xs">{auth.options || "—"}</span>
           </:col>
-          <:col :let={{_id, auth}} label="Comment">{auth.comment || "—"}</:col>
+          <:col :let={{_id, auth}} label="Comment" sort="comment">{auth.comment || "—"}</:col>
           <:action :let={{_id, auth}}>
             <button
               id={"edit-authorization-#{auth.id}"}
@@ -657,12 +781,42 @@ defmodule SsmWeb.AuthorizationsLive do
   attr :matrix_login, :string, required: true
   attr :login_accounts, :list, required: true
   attr :show_authorized_only, :boolean, required: true
+  attr :matrix_user_search, :string, required: true
+  attr :matrix_host_search, :string, required: true
 
   defp matrix_view(assigns) do
     ~H"""
     <div id="matrix" class="space-y-3">
       <div class="flex flex-wrap items-end gap-3">
-        <form id="matrix-login-form" phx-change="matrix-login" class="w-64">
+        <form id="matrix-user-search-form" phx-change="matrix-user-search" class="w-56">
+          <label class="fieldset mb-2">
+            <span class="label mb-1">Search users</span>
+            <input
+              type="search"
+              name="q"
+              value={@matrix_user_search}
+              placeholder="Username…"
+              class="input input-sm w-full"
+              phx-debounce="150"
+              autocomplete="off"
+            />
+          </label>
+        </form>
+        <form id="matrix-host-search-form" phx-change="matrix-host-search" class="w-56">
+          <label class="fieldset mb-2">
+            <span class="label mb-1">Search hosts</span>
+            <input
+              type="search"
+              name="q"
+              value={@matrix_host_search}
+              placeholder="Name or address…"
+              class="input input-sm w-full"
+              phx-debounce="150"
+              autocomplete="off"
+            />
+          </label>
+        </form>
+        <form id="matrix-login-form" phx-change="matrix-login" class="w-56">
           <.input
             type="select"
             name="login"
@@ -680,7 +834,7 @@ defmodule SsmWeb.AuthorizationsLive do
           class={["btn btn-sm mb-2", @show_authorized_only && "btn-primary"]}
           phx-click="matrix-authorized"
         >
-          Show authorized only
+          <.icon name="hero-eye" class="size-4" /> Show authorized only
         </button>
       </div>
 
@@ -688,20 +842,37 @@ defmodule SsmWeb.AuthorizationsLive do
         No hosts hold a grant for this login yet.
       </p>
 
-      <div :if={@matrix.hosts != []} class="overflow-x-auto">
-        <table class="table table-xs w-auto">
+      <div :if={@matrix.hosts != []} class="overflow-x-auto rounded-box border border-base-300">
+        <table class="table table-xs w-auto border-collapse">
           <thead>
             <tr>
-              <th class="bg-base-200">User</th>
-              <th :for={host <- @matrix.hosts} class="bg-base-200 text-center">
-                {host.name}
+              <th class="sticky left-0 z-10 bg-base-200 align-bottom">Users / Hosts</th>
+              <th :for={host <- @matrix.hosts} class="bg-base-200 px-1 pb-2 align-bottom">
+                <.link
+                  navigate={~p"/diff?host_id=#{host.id}"}
+                  class="link link-hover inline-block max-h-36 truncate whitespace-nowrap [writing-mode:vertical-rl] rotate-180"
+                  title={"#{host.name} (#{host.address}) — open in the diff viewer"}
+                >
+                  {host.name}
+                </.link>
               </th>
             </tr>
           </thead>
           <tbody>
-            <tr :for={user <- @matrix.users} id={"matrix-row-#{user.id}"}>
-              <th class="whitespace-nowrap font-medium">{user.username}</th>
-              <td :for={host <- @matrix.hosts} class="text-center">
+            <tr :for={user <- @matrix.users} id={"matrix-row-#{user.id}"} class="hover:bg-base-200">
+              <th class="sticky left-0 z-10 max-w-56 bg-base-100 font-medium">
+                <.link
+                  patch={~p"/authorizations?user_id=#{user.id}"}
+                  class="link link-hover block truncate"
+                  title={"#{user.username}#{if(user.enabled, do: "", else: " (disabled)")} — list this user's grants"}
+                >
+                  {user.username}
+                </.link>
+              </th>
+              <td
+                :for={host <- @matrix.hosts}
+                class="border border-base-300/50 p-0.5 text-center"
+              >
                 <.matrix_cell
                   matrix={@matrix}
                   matrix_login={@matrix_login}
@@ -756,15 +927,19 @@ defmodule SsmWeb.AuthorizationsLive do
     <button
       id={"matrix-cell-#{@user.id}-#{@host.id}"}
       type="button"
-      class={["btn btn-xs", (@authorized && "btn-success") || "btn-ghost opacity-50"]}
+      class={[
+        "btn btn-square btn-xs border-0",
+        (@authorized && "btn-success bg-success/20 text-success hover:bg-success/40") ||
+          "btn-ghost text-base-content/25 hover:text-error"
+      ]}
       phx-click="matrix-toggle"
       phx-value-user-id={@user.id}
       phx-value-host-id={@host.id}
       title={"#{@user.username} on #{@host.name} as #{@matrix_login}: " <>
         if(@authorized, do: "authorized — click to revoke", else: "not authorized — click to grant")}
     >
-      <.icon :if={@authorized} name="hero-check" class="size-3" />
-      <span :if={!@authorized} class="inline-block size-3"></span>
+      <.icon :if={@authorized} name="hero-check" class="size-3.5" />
+      <.icon :if={!@authorized} name="hero-x-mark" class="size-3.5" />
     </button>
     """
   end
@@ -858,75 +1033,167 @@ defmodule SsmWeb.AuthorizationsLive do
     |> Enum.take(5)
   end
 
+  attr :all_authorizations, :list, required: true
+
+  defp list_stats(assigns) do
+    auths = assigns.all_authorizations
+
+    active =
+      Enum.count(auths, fn auth ->
+        auth.user != nil and auth.user.enabled and auth.host != nil and not auth.host.disabled
+      end)
+
+    assigns =
+      assign(assigns,
+        total: length(auths),
+        active: active,
+        inactive: length(auths) - active,
+        user_count: auths |> Enum.map(& &1.user_id) |> Enum.uniq() |> length(),
+        host_count: auths |> Enum.map(& &1.host_id) |> Enum.uniq() |> length()
+      )
+
+    ~H"""
+    <div id="list-stats" class="stats stats-vertical sm:stats-horizontal w-full bg-base-200 shadow-sm">
+      <div class="stat py-2">
+        <div class="stat-title">Total</div>
+        <div class="stat-value text-2xl">{@total}</div>
+      </div>
+      <div class="stat py-2">
+        <div class="stat-title">Active</div>
+        <div class="stat-value text-2xl text-success">{@active}</div>
+        <div class="stat-desc">user enabled, host not disabled</div>
+      </div>
+      <div class="stat py-2">
+        <div class="stat-title">Inactive</div>
+        <div class="stat-value text-2xl text-warning">{@inactive}</div>
+      </div>
+      <div class="stat py-2">
+        <div class="stat-title">Users</div>
+        <div class="stat-value text-2xl">{@user_count}</div>
+      </div>
+      <div class="stat py-2">
+        <div class="stat-title">Hosts</div>
+        <div class="stat-value text-2xl">{@host_count}</div>
+      </div>
+    </div>
+    """
+  end
+
   attr :bulk, :map, required: true
   attr :users, :list, required: true
   attr :hosts, :list, required: true
 
   defp bulk_modal(assigns) do
+    assigns =
+      assigns
+      |> assign(
+        :visible_users,
+        assigns.users
+        |> Enum.filter(& &1.enabled)
+        |> filter_by_name(assigns.bulk.user_search, & &1.username)
+      )
+      |> assign(
+        :visible_hosts,
+        filter_by_name(assigns.hosts, assigns.bulk.host_search, & &1.name)
+      )
+
     ~H"""
-    <.modal id="bulk-grant-modal" on_cancel={JS.push("cancel")}>
+    <.modal id="bulk-grant-modal" box_class="max-w-3xl" on_cancel={JS.push("cancel")}>
       <:title>Bulk grant access</:title>
 
-      <p class="mb-2 text-sm opacity-70">
+      <p class="mb-3 text-sm opacity-70">
         Grants the login to every selected user on every selected host.
         Pairs that already hold this grant are skipped.
       </p>
 
       <div class="grid gap-4 sm:grid-cols-2">
         <div>
-          <div class="mb-1 flex items-center gap-2">
-            <span class="label text-sm">Users</span>
-            <button type="button" class="btn btn-ghost btn-xs" phx-click="bulk-all-users">
-              All enabled
-            </button>
-            <button type="button" class="btn btn-ghost btn-xs" phx-click="bulk-no-users">
-              None
-            </button>
+          <div class="mb-1 flex items-center justify-between">
+            <span class="text-sm font-medium">
+              Users <span class="ml-1 opacity-60">{MapSet.size(@bulk.user_ids)} selected</span>
+            </span>
+            <div class="join">
+              <button type="button" class="btn btn-ghost btn-xs join-item" phx-click="bulk-all-users">
+                All enabled
+              </button>
+              <button type="button" class="btn btn-ghost btn-xs join-item" phx-click="bulk-no-users">
+                None
+              </button>
+            </div>
           </div>
-          <div class="max-h-48 space-y-0.5 overflow-auto rounded bg-base-200 p-2">
+          <form id="bulk-user-search" phx-change="bulk-user-search" class="mb-1">
+            <input
+              type="search"
+              name="q"
+              value={@bulk.user_search}
+              placeholder="Filter users…"
+              class="input input-sm w-full"
+              phx-debounce="150"
+              autocomplete="off"
+            />
+          </form>
+          <div class="h-56 overflow-y-auto overflow-x-hidden rounded-box border border-base-300 bg-base-200 p-1">
+            <p :if={@visible_users == []} class="px-2 py-1 text-sm opacity-60">No matching users.</p>
             <label
-              :for={user <- @users}
-              :if={user.enabled}
-              class="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 hover:bg-base-300"
+              :for={user <- @visible_users}
+              class="flex cursor-pointer items-center gap-2 rounded px-2 py-1 hover:bg-base-300"
             >
               <input
                 type="checkbox"
                 id={"bulk-user-#{user.id}"}
-                class="checkbox checkbox-sm"
+                class="checkbox checkbox-sm flex-none"
                 checked={MapSet.member?(@bulk.user_ids, user.id)}
                 phx-click="bulk-toggle-user"
                 phx-value-id={user.id}
               />
-              <span class="text-sm">{user.username}</span>
+              <span class="truncate text-sm" title={user.username}>{user.username}</span>
             </label>
           </div>
         </div>
 
         <div>
-          <div class="mb-1 flex items-center gap-2">
-            <span class="label text-sm">Hosts</span>
-            <button type="button" class="btn btn-ghost btn-xs" phx-click="bulk-all-hosts">
-              All
-            </button>
-            <button type="button" class="btn btn-ghost btn-xs" phx-click="bulk-no-hosts">
-              None
-            </button>
+          <div class="mb-1 flex items-center justify-between">
+            <span class="text-sm font-medium">
+              Hosts <span class="ml-1 opacity-60">{MapSet.size(@bulk.host_ids)} selected</span>
+            </span>
+            <div class="join">
+              <button type="button" class="btn btn-ghost btn-xs join-item" phx-click="bulk-all-hosts">
+                All
+              </button>
+              <button type="button" class="btn btn-ghost btn-xs join-item" phx-click="bulk-no-hosts">
+                None
+              </button>
+            </div>
           </div>
-          <div class="max-h-48 space-y-0.5 overflow-auto rounded bg-base-200 p-2">
+          <form id="bulk-host-search" phx-change="bulk-host-search" class="mb-1">
+            <input
+              type="search"
+              name="q"
+              value={@bulk.host_search}
+              placeholder="Filter hosts…"
+              class="input input-sm w-full"
+              phx-debounce="150"
+              autocomplete="off"
+            />
+          </form>
+          <div class="h-56 overflow-y-auto overflow-x-hidden rounded-box border border-base-300 bg-base-200 p-1">
+            <p :if={@visible_hosts == []} class="px-2 py-1 text-sm opacity-60">No matching hosts.</p>
             <label
-              :for={host <- @hosts}
-              class="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 hover:bg-base-300"
+              :for={host <- @visible_hosts}
+              class="flex cursor-pointer items-center gap-2 rounded px-2 py-1 hover:bg-base-300"
             >
               <input
                 type="checkbox"
                 id={"bulk-host-#{host.id}"}
-                class="checkbox checkbox-sm"
+                class="checkbox checkbox-sm flex-none"
                 checked={MapSet.member?(@bulk.host_ids, host.id)}
                 phx-click="bulk-toggle-host"
                 phx-value-id={host.id}
               />
-              <span class="text-sm">{host.name}</span>
-              <span :if={host.disabled} class="badge badge-warning badge-xs">disabled</span>
+              <span class="truncate text-sm" title={host.name}>{host.name}</span>
+              <span :if={host.disabled} class="badge badge-warning badge-xs flex-none">
+                disabled
+              </span>
             </label>
           </div>
         </div>
@@ -938,25 +1205,36 @@ defmodule SsmWeb.AuthorizationsLive do
         phx-submit="bulk-save"
         class="mt-3 space-y-2"
       >
-        <.input
-          type="text"
-          name="bulk[login]"
-          value={@bulk.login}
-          label="Remote login"
-          placeholder="e.g. deploy"
-          required
-        />
-        <.input
-          type="text"
-          name="bulk[options]"
-          value={@bulk.options}
-          label="authorized_keys options"
-          placeholder={~s(e.g. no-pty,from="10.0.0.0/8")}
-        />
+        <div class="grid gap-3 sm:grid-cols-2">
+          <.input
+            type="text"
+            name="bulk[login]"
+            value={@bulk.login}
+            label="Remote login"
+            placeholder="e.g. deploy"
+            required
+          />
+          <.input
+            type="text"
+            name="bulk[options]"
+            value={@bulk.options}
+            label="authorized_keys options"
+            placeholder={~s(e.g. no-pty,from="10.0.0.0/8")}
+          />
+        </div>
 
-        <p id="bulk-preview" class="text-sm opacity-70">
-          {@bulk.new_count} new grant(s), {@bulk.existing_count} already exist.
-        </p>
+        <div
+          id="bulk-preview"
+          class="flex items-center gap-2 rounded-box bg-base-200 px-3 py-2 text-sm"
+        >
+          <span class={["badge", (@bulk.new_count > 0 && "badge-success") || "badge-ghost"]}>
+            {@bulk.new_count} new grant(s)
+          </span>
+          <span class="badge badge-ghost">{@bulk.existing_count} already exist</span>
+          <span class="opacity-60">
+            {MapSet.size(@bulk.user_ids)} user(s) × {MapSet.size(@bulk.host_ids)} host(s)
+          </span>
+        </div>
 
         <div class="modal-action">
           <button type="button" class="btn btn-ghost" phx-click="cancel">Cancel</button>
@@ -967,5 +1245,15 @@ defmodule SsmWeb.AuthorizationsLive do
       </form>
     </.modal>
     """
+  end
+
+  defp filter_by_name(items, search, name_fun) do
+    case search |> String.trim() |> String.downcase() do
+      "" ->
+        items
+
+      needle ->
+        Enum.filter(items, &String.contains?(String.downcase(name_fun.(&1)), needle))
+    end
   end
 end

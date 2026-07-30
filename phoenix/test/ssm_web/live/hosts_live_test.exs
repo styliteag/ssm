@@ -61,6 +61,19 @@ defmodule SsmWeb.HostsLiveTest do
     refute has_element?(view, "#hosts-#{up.id}")
   end
 
+  test "columns sort on click", %{conn: conn} do
+    host_fixture(%{name: "zebra"})
+    host_fixture(%{name: "alpha"})
+
+    {:ok, view, _html} = live(conn, ~p"/hosts")
+
+    assert render(view) =~ ~r/zebra.*alpha/s
+    view |> element("th button", "Name") |> render_click()
+    assert render(view) =~ ~r/alpha.*zebra/s
+    view |> element("th button", "Name") |> render_click()
+    assert render(view) =~ ~r/zebra.*alpha/s
+  end
+
   test "rows cross-link to authorizations and the diff viewer", %{conn: conn} do
     host = host_fixture(%{name: "web1"})
     user = user_fixture()
