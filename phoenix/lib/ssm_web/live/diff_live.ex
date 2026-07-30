@@ -19,6 +19,7 @@ defmodule SsmWeb.DiffLive do
   alias Ssm.Authorizations
   alias Ssm.Diffs
   alias Ssm.Diffs.HostDiff
+  alias Ssm.Diffs.StatusCache
   alias Ssm.Hosts
   alias Ssm.Hosts.Host
   alias Ssm.Users
@@ -26,13 +27,23 @@ defmodule SsmWeb.DiffLive do
   alias Ssm.Users.UserKey
   alias SsmWeb.Layouts
 
+  # Cached statuses older than this are re-checked on mount.
+  @status_ttl_ms 5 * 60 * 1000
+
   @impl true
   def mount(_params, _session, socket) do
     hosts = Hosts.list_hosts()
+    cached = StatusCache.all()
 
+    # Last known result shows immediately (the React app kept these in
+    # browser state); only missing or stale hosts get re-checked.
     statuses =
       Map.new(hosts, fn host ->
-        {host.id, if(host.disabled, do: :disabled, else: :loading)}
+        cond do
+          host.disabled -> {host.id, :disabled}
+          match?({_status, _at}, cached[host.id]) -> {host.id, elem(cached[host.id], 0)}
+          true -> {host.id, :loading}
+        end
       end)
 
     socket =
@@ -44,13 +55,19 @@ defmodule SsmWeb.DiffLive do
 
     socket =
       if connected?(socket) do
-        start_statuses_async(socket, Enum.reject(hosts, & &1.disabled))
+        to_check = Enum.reject(hosts, fn host -> host.disabled or fresh?(cached[host.id]) end)
+        start_statuses_async(socket, to_check)
       else
         socket
       end
 
     {:ok, socket}
   end
+
+  defp fresh?({_status, cached_at}),
+    do: System.monotonic_time(:millisecond) - cached_at < @status_ttl_ms
+
+  defp fresh?(nil), do: false
 
   @impl true
   def handle_params(params, _uri, socket) do
@@ -84,16 +101,24 @@ defmodule SsmWeb.DiffLive do
     ids = Enum.map(hosts, & &1.id)
     parent = self()
 
+    concurrency = check_concurrency()
+
     start_async(socket, :statuses, fn ->
       ids
       |> Task.async_stream(
         fn id -> send(parent, {:host_status, id, status_for(id)}) end,
-        max_concurrency: 8,
+        max_concurrency: concurrency,
         ordered: false,
         timeout: :infinity
       )
       |> Stream.run()
     end)
+  end
+
+  # SSH_CONCURRENCY (default 32) — how many hosts are checked in parallel.
+  defp check_concurrency do
+    Application.get_env(:ssm, :ssh, [])
+    |> Keyword.get(:check_concurrency, 32)
   end
 
   defp start_detail_async(socket, %Host{id: id}) do
@@ -223,6 +248,7 @@ defmodule SsmWeb.DiffLive do
 
   @impl true
   def handle_info({:host_status, host_id, status}, socket) do
+    StatusCache.put(host_id, status)
     {:noreply, update(socket, :statuses, &Map.put(&1, host_id, status))}
   end
 
@@ -250,6 +276,18 @@ defmodule SsmWeb.DiffLive do
       %Host{disabled: false} = host -> {:noreply, start_detail_async(socket, host)}
       _ -> {:noreply, socket}
     end
+  end
+
+  def handle_event("recheck", _params, socket) do
+    hosts = Enum.reject(socket.assigns.hosts, & &1.disabled)
+
+    statuses =
+      Enum.reduce(hosts, socket.assigns.statuses, &Map.put(&2, &1.id, :loading))
+
+    {:noreply,
+     socket
+     |> assign(:statuses, statuses)
+     |> start_statuses_async(hosts)}
   end
 
   def handle_event("sync", _params, socket) do
@@ -491,9 +529,14 @@ defmodule SsmWeb.DiffLive do
         Diff Viewer
         <:subtitle>Expected authorized_keys (database) vs actual (host)</:subtitle>
         <:actions>
+          <.button id="recheck-all" phx-click="recheck" disabled={@syncing}>
+            <.icon name="hero-arrow-path" class="size-4" /> Re-check all
+          </.button>
           <.button id="sync-all" phx-click="sync_all" disabled={@syncing}>
-            <.icon name="hero-arrow-path" class={["size-4", @syncing && "motion-safe:animate-spin"]} />
-            Sync all
+            <.icon
+              name="hero-cloud-arrow-up"
+              class={["size-4", @syncing && "motion-safe:animate-spin"]}
+            /> Sync all
           </.button>
         </:actions>
       </.header>

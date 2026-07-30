@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Diff viewer remembers results and dead hosts fail fast**: sync statuses are cached server-side — revisiting the page shows the last known badges instantly (parity with the React app, which kept them in browser state) and only missing or stale results (older than 5 minutes) are re-checked; a new "Re-check all" button forces a full sweep. Connects also got their own budget: `SSH_CONNECT_TIMEOUT` (default 10s) bounds TCP+handshake, so dead or firewalled hosts no longer hold a check slot for the full `SSH_TIMEOUT` (120s).
+- **Host checks run massively parallel and the fan-out is configurable**: the diff viewer's status sweep now checks up to `SSH_CONCURRENCY` hosts at once (new env var, default 32). To make that parallelism real, the SSH connection registry no longer performs handshakes itself — connects (and jump-host forwarder readiness waits) moved into the calling process, so one dead host timing out (up to `SSH_TIMEOUT`, default 120s) no longer stalls every other connection behind it. When two operations race to connect the same host, one connection wins and the other is closed.
+
 ### Fixed
 - **Diff viewer showed "checking…" on every host until the slowest one answered**: per-host sync statuses were collected in one all-or-nothing batch, so with a large fleet and a few dead hosts (120s SSH timeout each) no badge appeared for minutes. Results now stream in per host as each check finishes, and up to 8 checks run concurrently (previously 4).
 - **Elixir dev server could not reach any host**: the dev container only mounted `phoenix/`, so the SSH key the app expects at `keys/id_ssm` (living in `backend/keys/`) was invisible and every SSH operation failed with `ssh.key_unreadable`. The compose file now mounts `backend/keys` read-only into the container.

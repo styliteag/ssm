@@ -21,6 +21,11 @@ config :ssm, :ssh,
   key_file: System.get_env("SSH_KEY", "keys/id_ssm"),
   key_passphrase: System.get_env("SSH_KEY_PASSPHRASE"),
   timeout_seconds: String.to_integer(System.get_env("SSH_TIMEOUT", "120")),
+  # TCP+handshake budget per connect — much shorter than SSH_TIMEOUT (which
+  # governs exec/sftp), so dead or firewalled hosts fail fast.
+  connect_timeout_seconds: String.to_integer(System.get_env("SSH_CONNECT_TIMEOUT", "10")),
+  # Parallel host checks in the diff viewer (status sweep fan-out).
+  check_concurrency: String.to_integer(System.get_env("SSH_CONCURRENCY", "32")),
   check_schedule: System.get_env("SSH_CHECK_SCHEDULE"),
   update_schedule: System.get_env("SSH_UPDATE_SCHEDULE")
 

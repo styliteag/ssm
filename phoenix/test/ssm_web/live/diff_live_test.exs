@@ -13,6 +13,7 @@ defmodule SsmWeb.DiffLiveTest do
 
   setup do
     start_supervised!(MockClient)
+    Ssm.Diffs.StatusCache.reset()
     :ok
   end
 
@@ -72,6 +73,33 @@ defmodule SsmWeb.DiffLiveTest do
     assert has_element?(view, "#diff-host-#{synced_host.id} .badge", "synchronized")
     assert has_element?(view, "#diff-host-#{drifted.id} .badge", "needs sync (+1/−1)")
     assert has_element?(view, "#diff-host-#{disabled.id} .badge", "disabled")
+  end
+
+  test "a fresh cached status renders immediately without any SSH", %{conn: conn} do
+    host = host_fixture(%{name: "warm"})
+    Ssm.Diffs.StatusCache.put(host.id, :synced)
+
+    {:ok, view, _html} = live(conn, ~p"/diff")
+    render_async(view)
+
+    assert has_element?(view, "#diff-host-#{host.id} .badge", "synchronized")
+    assert MockClient.calls().exec == []
+  end
+
+  test "re-check all ignores the cache and sweeps again", %{conn: conn} do
+    host = synced_setup()
+    Ssm.Diffs.StatusCache.put(host.id, {:needs_sync, 1, 1})
+
+    {:ok, view, _html} = live(conn, ~p"/diff")
+    render_async(view)
+
+    assert has_element?(view, "#diff-host-#{host.id} .badge", "needs sync")
+
+    view |> element("#recheck-all") |> render_click()
+    render_async(view)
+
+    assert has_element?(view, "#diff-host-#{host.id} .badge", "synchronized")
+    refute MockClient.calls().exec == []
   end
 
   test "selecting a host shows the per-login diff detail", %{conn: conn} do

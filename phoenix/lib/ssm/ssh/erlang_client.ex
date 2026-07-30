@@ -17,10 +17,12 @@ defmodule Ssm.Ssh.ErlangClient do
   asyncssh with `known_hosts=None`.
 
   The GenServer owns only the connection/forwarder registry; channel work
-  (exec/sftp) runs in the caller's process against the checked-out
-  connection, so concurrent operations against different hosts don't
-  serialize. Connects DO serialize through the registry — acceptable for
-  SSM's fleet sizes and the price of a race-free cache.
+  (exec/sftp) AND the connect handshakes run in the caller's process, so
+  neither operations nor connects serialize across hosts — a dead host
+  timing out (up to SSH_TIMEOUT) must not stall the whole status sweep.
+  The registry only answers lookups, spawns forwarder ports (cheap), and
+  registers finished connections; when two callers race to connect the same
+  host, the second registration loses and its connection is closed.
   """
 
   @behaviour Ssm.Ssh.Client
@@ -97,12 +99,49 @@ defmodule Ssm.Ssh.ErlangClient do
     GenServer.call(__MODULE__, {:invalidate, host_id}, :infinity)
   end
 
+  # Fast registry round-trips; the actual handshake happens in this process.
   defp checkout(target) do
-    GenServer.call(__MODULE__, {:checkout, target}, checkout_timeout())
+    case GenServer.call(__MODULE__, {:lookup, target}, registry_timeout()) do
+      {:ok, conn} ->
+        {:ok, conn}
+
+      {:connect, key_dir, address, port, mode} ->
+        connect_in_caller(target, key_dir, address, port, mode)
+
+      {:error, reason} ->
+        {:error, connect_error(target, reason)}
+    end
   catch
     :exit, reason ->
       {:error, {:ssh_connect_failed, "ssh registry unavailable: #{inspect(reason)}"}}
   end
+
+  defp connect_in_caller(target, key_dir, address, port, mode) do
+    with :ok <- maybe_await_forwarder(mode, port),
+         {:ok, conn} <- ssh_connect(address, port, target.username, key_dir) do
+      GenServer.call(__MODULE__, {:register, target.host_id, conn}, registry_timeout())
+    else
+      {:error, reason} ->
+        # Drop any half-started forwarder so the next attempt starts clean.
+        GenServer.cast(__MODULE__, {:drop, target.host_id})
+        {:error, connect_error(target, reason)}
+    end
+  catch
+    :exit, reason ->
+      {:error, {:ssh_connect_failed, "ssh registry unavailable: #{inspect(reason)}"}}
+  end
+
+  defp maybe_await_forwarder(:direct, _port), do: :ok
+
+  defp maybe_await_forwarder(:forwarded, local_port) do
+    case await_forwarder(local_port, connect_timeout_ms()) do
+      :ok -> :ok
+      {:error, reason} -> {:error, {:forwarder_not_ready, reason}}
+    end
+  end
+
+  defp connect_error(target, reason),
+    do: {:ssh_connect_failed, "ssh connect failed for #{target.name}: #{inspect(reason)}"}
 
   defp with_sftp(target, fun) do
     with {:ok, conn} <- checkout(target) do
@@ -155,22 +194,25 @@ defmodule Ssm.Ssh.ErlangClient do
   end
 
   @impl GenServer
-  def handle_call({:checkout, target}, _from, state) do
+  def handle_call({:lookup, target}, _from, state) do
     case fetch_live(state.conns, target.host_id) do
       {:ok, conn} ->
         {:reply, {:ok, conn}, state}
 
       :error ->
-        case open_connection(target, state) do
-          {:ok, conn, state} ->
-            {:reply, {:ok, conn}, put_in(state.conns[target.host_id], conn)}
+        connect_spec(target, state)
+    end
+  end
 
-          {:error, reason, state} ->
-            {:reply,
-             {:error,
-              {:ssh_connect_failed, "ssh connect failed for #{target.name}: #{inspect(reason)}"}},
-             state}
-        end
+  def handle_call({:register, host_id, conn}, _from, state) do
+    case fetch_live(state.conns, host_id) do
+      {:ok, existing} ->
+        # Lost a connect race — keep the registered connection.
+        catch_all(fn -> :ssh.close(conn) end)
+        {:reply, {:ok, existing}, state}
+
+      :error ->
+        {:reply, {:ok, conn}, put_in(state.conns[host_id], conn)}
     end
   end
 
@@ -185,6 +227,11 @@ defmodule Ssm.Ssh.ErlangClient do
       |> Enum.reduce(state, &drop_host(&2, &1))
 
     {:reply, :ok, state}
+  end
+
+  @impl GenServer
+  def handle_cast({:drop, host_id}, state) do
+    {:noreply, drop_host(state, host_id)}
   end
 
   # Forwarder OS processes report exits here; drop their host entry.
@@ -217,20 +264,20 @@ defmodule Ssm.Ssh.ErlangClient do
     _kind, _reason -> false
   end
 
-  defp open_connection(%Target{jump_target: nil} = target, state) do
-    case ssh_connect(target.address, target.port, target.username, state.key_dir) do
-      {:ok, conn} -> {:ok, conn, state}
-      {:error, reason} -> {:error, reason, state}
-    end
+  # What the caller must do to obtain a connection: direct handshake, or
+  # handshake against a local forwarder port (spawned here — cheap; the
+  # caller awaits its readiness and performs the handshake itself).
+  defp connect_spec(%Target{jump_target: nil} = target, state) do
+    {:reply, {:connect, state.key_dir, target.address, target.port, :direct}, state}
   end
 
-  defp open_connection(%Target{} = target, state) do
-    with {:ok, local_port, state} <- ensure_forwarder(target, state),
-         {:ok, conn} <- ssh_connect("127.0.0.1", local_port, target.username, state.key_dir) do
-      {:ok, conn, state}
-    else
-      {:error, reason} -> {:error, reason, drop_host(state, target.host_id)}
-      {:error, reason, state} -> {:error, reason, state}
+  defp connect_spec(%Target{} = target, state) do
+    case ensure_forwarder(target, state) do
+      {:ok, local_port, state} ->
+        {:reply, {:connect, state.key_dir, "127.0.0.1", local_port, :forwarded}, state}
+
+      {:error, reason, state} ->
+        {:reply, {:error, reason}, state}
     end
   end
 
@@ -244,9 +291,9 @@ defmodule Ssm.Ssh.ErlangClient do
         silently_accept_hosts: true,
         user_interaction: false,
         auth_methods: ~c"publickey",
-        connect_timeout: timeout_ms()
+        connect_timeout: connect_timeout_ms()
       ],
-      timeout_ms()
+      connect_timeout_ms()
     )
   catch
     kind, reason -> {:error, {kind, reason}}
@@ -311,17 +358,11 @@ defmodule Ssm.Ssh.ErlangClient do
           "ConnectTimeout=#{max(div(timeout_ms(), 1000), 1)}"
         ] ++ jump_args ++ ["#{innermost.username}@#{innermost.address}"]
 
+      # Spawn only — readiness is awaited by the caller (await_forwarder),
+      # so a slow jump host cannot stall the registry.
       port = Port.open({:spawn_executable, ssh_bin}, [:binary, :exit_status, args: args])
-
-      case await_forwarder(local_port, timeout_ms()) do
-        :ok ->
-          state = put_in(state.forwarders[target.host_id], %{port: port, local_port: local_port})
-          {:ok, local_port, state}
-
-        {:error, reason} ->
-          safe_port_close(port)
-          {:error, {:forwarder_not_ready, reason}, state}
-      end
+      state = put_in(state.forwarders[target.host_id], %{port: port, local_port: local_port})
+      {:ok, local_port, state}
     else
       {:error, reason} -> {:error, reason, state}
     end
@@ -565,5 +606,16 @@ defmodule Ssm.Ssh.ErlangClient do
     seconds * 1000
   end
 
-  defp checkout_timeout, do: timeout_ms() + 5_000
+  # SSH_CONNECT_TIMEOUT (default 10s): TCP + handshake budget. Dead or
+  # firewalled hosts must fail fast; only exec/sftp get the long SSH_TIMEOUT.
+  defp connect_timeout_ms do
+    seconds =
+      Application.get_env(:ssm, :ssh, [])
+      |> Keyword.get(:connect_timeout_seconds, 10)
+
+    seconds * 1000
+  end
+
+  # Registry calls are bookkeeping only (no IO beyond a port spawn).
+  defp registry_timeout, do: 15_000
 end

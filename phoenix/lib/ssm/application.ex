@@ -17,7 +17,9 @@ defmodule Ssm.Application do
         {Phoenix.PubSub, name: Ssm.PubSub},
         # SSH read cache (always) + the real client (not in tests — tests use
         # Ssm.Ssh.MockClient via config :ssm, :ssh_client).
-        Ssm.Ssh.Cache
+        Ssm.Ssh.Cache,
+        # Last known per-host sync status for the diff viewer.
+        Ssm.Diffs.StatusCache
       ] ++
         ssh_children() ++
         [
