@@ -102,6 +102,8 @@ machine is the only quality gate that exists. Treat it as mandatory, not advisor
   `ssm_web/table_sort.ex`, list/card toggles, theme-aware semantic classes (four
   themes × light/dark — check both when touching UI).
 - `mix format` is enforced by `just verify`; run `just format` before committing.
+- Runtime dependency changed (with user approval, rule #9) → `just notices`
+  regenerates `THIRD-PARTY-LICENSES.md` + `sbom.cdx.json` in the same commit.
 - Prefer extending an existing pattern over introducing a new abstraction. One
   precedent file is worth more than a better idea.
 - Document what **is**, not what is planned. When you fix a stale doc statement, note
@@ -262,8 +264,7 @@ creates a GitHub release. The image applies migrations on start.
 CHANGELOG.md has leaked AI-tool artifacts near the end (`</xai:function_call...`);
 scheduler sweeps (`SSH_CHECK_SCHEDULE`/`SSH_UPDATE_SCHEDULE`) are read but not wired
 to jobs — restoring them needs explicit sign-off (rewrite plan §8);
-`THIRD-PARTY-LICENSES.md` still lists the deleted python/react dependencies and needs
-regeneration for the hex deps; `.secrets-whitelist` still carries Rust- and Python-era
+`.secrets-whitelist` still carries Rust- and Python-era
 path entries (harmless, narrow — cleaning it needs user approval per rule #6);
 `./ssm.db` at the repo root is the final snapshot of the python stack's data, kept as
 the dev-DB import source (`just import-db`).

@@ -40,3 +40,6 @@ Thumbs.db
 
 # Private per-machine agent instructions
 CLAUDE.local.md
+
+# Checkout-local just recipes (justfile `import?` hook)
+local.just

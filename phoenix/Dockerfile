@@ -73,12 +73,18 @@ RUN mkdir -p /app/db /app/keys /app/config /app/logs
 
 EXPOSE 80
 
-ARG VERSION
-ARG VCS_REF
-LABEL org.opencontainers.image.title="ssm" \
+# Update notifiers (ouroboros) read `org.opencontainers.image.version` to
+# report a real release number. Defaults keep local builds label-complete.
+ARG VERSION=0.0.0-dev
+ARG VCS_REF=unknown
+LABEL org.opencontainers.image.title="SSM" \
+      org.opencontainers.image.description="Secure SSH Manager — manages authorized_keys across many hosts" \
       org.opencontainers.image.version=$VERSION \
       org.opencontainers.image.revision=$VCS_REF \
-      org.opencontainers.image.source="https://github.com/styliteag/ssm"
+      org.opencontainers.image.source="https://github.com/styliteag/ssm" \
+      org.opencontainers.image.url="https://github.com/styliteag/ssm" \
+      org.opencontainers.image.licenses="BUSL-1.1" \
+      org.opencontainers.image.vendor="STYLiTE AG"
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s \
     CMD /app/bin/health-check.sh || exit 1

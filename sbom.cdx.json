@@ -1,0 +1,475 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "version": 1,
+  "metadata": {
+    "component": {
+      "type": "application",
+      "bom-ref": "stylite-ssm",
+      "name": "stylite-ssm",
+      "version": "1.1.11"
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "bom-ref": "pkg:hex/bandit@1.12.4",
+      "name": "bandit",
+      "version": "1.12.4",
+      "purl": "pkg:hex/bandit@1.12.4",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:hex/bcrypt_elixir@3.3.2",
+      "name": "bcrypt_elixir",
+      "version": "3.3.2",
+      "purl": "pkg:hex/bcrypt_elixir@3.3.2",
+      "licenses": [
+        {
+          "expression": "BSD-3-Clause AND ISC AND BSD-4-Clause"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:hex/comeonin@5.5.1",
+      "name": "comeonin",
+      "version": "5.5.1",
+      "purl": "pkg:hex/comeonin@5.5.1",
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-3-Clause"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:github/saadeghi/daisyui@22ecff57f2c3",
+      "name": "daisyui",
+      "version": "22ecff57f2c3",
+      "purl": "pkg:github/saadeghi/daisyui@22ecff57f2c3",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:hex/db_connection@2.10.2",
+      "name": "db_connection",
+      "version": "2.10.2",
+      "purl": "pkg:hex/db_connection@2.10.2",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:hex/decimal@3.1.1",
+      "name": "decimal",
+      "version": "3.1.1",
+      "purl": "pkg:hex/decimal@3.1.1",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:hex/dns_cluster@0.2.0",
+      "name": "dns_cluster",
+      "version": "0.2.0",
+      "purl": "pkg:hex/dns_cluster@0.2.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:hex/ecto@3.14.1",
+      "name": "ecto",
+      "version": "3.14.1",
+      "purl": "pkg:hex/ecto@3.14.1",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:hex/ecto_sql@3.14.0",
+      "name": "ecto_sql",
+      "version": "3.14.0",
+      "purl": "pkg:hex/ecto_sql@3.14.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:hex/ecto_sqlite3@0.24.1",
+      "name": "ecto_sqlite3",
+      "version": "0.24.1",
+      "purl": "pkg:hex/ecto_sqlite3@0.24.1",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:hex/expo@1.1.1",
+      "name": "expo",
+      "version": "1.1.1",
+      "purl": "pkg:hex/expo@1.1.1",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:hex/exqlite@0.39.0",
+      "name": "exqlite",
+      "version": "0.39.0",
+      "purl": "pkg:hex/exqlite@0.39.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:hex/gettext@1.0.2",
+      "name": "gettext",
+      "version": "1.0.2",
+      "purl": "pkg:hex/gettext@1.0.2",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:github/tailwindlabs/heroicons@0435d4ca364a",
+      "name": "heroicons",
+      "version": "0435d4ca364a",
+      "purl": "pkg:github/tailwindlabs/heroicons@0435d4ca364a",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:hex/hpax@1.0.4",
+      "name": "hpax",
+      "version": "1.0.4",
+      "purl": "pkg:hex/hpax@1.0.4",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:hex/jason@1.4.5",
+      "name": "jason",
+      "version": "1.4.5",
+      "purl": "pkg:hex/jason@1.4.5",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:hex/mime@2.0.7",
+      "name": "mime",
+      "version": "2.0.7",
+      "purl": "pkg:hex/mime@2.0.7",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:hex/phoenix@1.8.9",
+      "name": "phoenix",
+      "version": "1.8.9",
+      "purl": "pkg:hex/phoenix@1.8.9",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:hex/phoenix_ecto@4.7.0",
+      "name": "phoenix_ecto",
+      "version": "4.7.0",
+      "purl": "pkg:hex/phoenix_ecto@4.7.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:hex/phoenix_html@4.3.0",
+      "name": "phoenix_html",
+      "version": "4.3.0",
+      "purl": "pkg:hex/phoenix_html@4.3.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:hex/phoenix_live_dashboard@0.8.7",
+      "name": "phoenix_live_dashboard",
+      "version": "0.8.7",
+      "purl": "pkg:hex/phoenix_live_dashboard@0.8.7",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:hex/phoenix_live_view@1.2.8",
+      "name": "phoenix_live_view",
+      "version": "1.2.8",
+      "purl": "pkg:hex/phoenix_live_view@1.2.8",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:hex/phoenix_pubsub@2.2.0",
+      "name": "phoenix_pubsub",
+      "version": "2.2.0",
+      "purl": "pkg:hex/phoenix_pubsub@2.2.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:hex/phoenix_template@1.0.4",
+      "name": "phoenix_template",
+      "version": "1.0.4",
+      "purl": "pkg:hex/phoenix_template@1.0.4",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:hex/plug@1.20.3",
+      "name": "plug",
+      "version": "1.20.3",
+      "purl": "pkg:hex/plug@1.20.3",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:hex/plug_crypto@2.2.0",
+      "name": "plug_crypto",
+      "version": "2.2.0",
+      "purl": "pkg:hex/plug_crypto@2.2.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:hex/telemetry@1.4.2",
+      "name": "telemetry",
+      "version": "1.4.2",
+      "purl": "pkg:hex/telemetry@1.4.2",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:hex/telemetry_metrics@1.1.0",
+      "name": "telemetry_metrics",
+      "version": "1.1.0",
+      "purl": "pkg:hex/telemetry_metrics@1.1.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:hex/telemetry_poller@1.3.0",
+      "name": "telemetry_poller",
+      "version": "1.3.0",
+      "purl": "pkg:hex/telemetry_poller@1.3.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:hex/thousand_island@1.5.0",
+      "name": "thousand_island",
+      "version": "1.5.0",
+      "purl": "pkg:hex/thousand_island@1.5.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:hex/websock@0.5.3",
+      "name": "websock",
+      "version": "0.5.3",
+      "purl": "pkg:hex/websock@0.5.3",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:hex/websock_adapter@0.6.0",
+      "name": "websock_adapter",
+      "version": "0.6.0",
+      "purl": "pkg:hex/websock_adapter@0.6.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:generic/topbar@3.0.0",
+      "name": "topbar",
+      "version": "3.0.0",
+      "purl": "pkg:generic/topbar@3.0.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    }
+  ]
+}

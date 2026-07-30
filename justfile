@@ -20,6 +20,13 @@ format:
 verify:
     @just mix precommit
 
+# Shell / IEx inside the dev container
+sh:
+    cd phoenix && docker compose run --rm app bash
+
+iex:
+    cd phoenix && docker compose run --rm app iex -S mix
+
 # --- Dev environment --------------------------------------------------------
 
 # Dev server on http://localhost:4000.
@@ -50,6 +57,20 @@ _maybe-import-db:
       hosts=$(sqlite3 phoenix/ssm_dev.db "select count(*) from host" 2>/dev/null || echo 0)
       if [ "${hosts:-0}" = "0" ]; then just import-db; fi
     fi
+
+# Daily migration workflow:
+#   just migration add_widget_flag   # scaffold priv/repo/migrations/NNN_*.exs
+#   # edit the migration, then apply it:
+#   just migrate                     # mix ecto.migrate (also runs at app boot)
+#   just rollback                    # mix ecto.rollback (last migration)
+migration name:
+    @just mix ecto.gen.migration {{name}}
+
+migrate:
+    @just mix ecto.migrate
+
+rollback *args:
+    @just mix ecto.rollback {{args}}
 
 # --- Stack (production) ------------------------------------------------------
 
@@ -102,8 +123,27 @@ docker-stop:
 release type="patch":
     ./release.sh {{type}}
 
+# --- Licenses / SBOM --------------------------------------------------------
+
+# Regenerate THIRD-PARTY-LICENSES.md AND sbom.cdx.json (CycloneDX 1.6) from the
+# shipped runtime deps of the phoenix release. Needs the hex deps fetched
+# (`just mix deps.get`). Run after changing any runtime dependency. Covers app
+# dependencies only — for an SBOM that also includes base-image OS packages,
+# scan the built image with syft.
+notices:
+    python3 scripts/gen_licenses.py
+
+# Alias: same generator, emphasises the SBOM artifact.
+sbom: notices
+
 # --- Cleanup ---------------------------------------------------------------
 
 # Drop build caches. Leaves DBs, keys, and config alone.
 clean:
     rm -rf phoenix/data/build phoenix/data/deps phoenix/data/toolchain
+
+# Optional local extension hook: ADDITIONAL checkout-specific recipes in a
+# `local.just` next to this file (gitignored). Note just's precedence: recipes
+# in THIS file always beat imported ones — a local.just can add recipes, never
+# override these. Missing file = no-op.
+import? 'local.just'

@@ -25,7 +25,10 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
+      with:
+        # Manual re-runs build the given tag, not the default branch.
+        ref: ${{ inputs.version && format('v{0}', inputs.version) || github.ref }}
 
     - name: Extract version from VERSION file
       id: version
@@ -60,23 +63,23 @@ jobs:
         echo "Tag: $TAG_NAME"
         
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3    
+      uses: docker/setup-buildx-action@v4    
       
     - name: Login to GitHub Container Registry
-      uses: docker/login-action@v3
+      uses: docker/login-action@v4
       with:
         registry: ghcr.io
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
         
     - name: Login to Docker Hub
-      uses: docker/login-action@v3
+      uses: docker/login-action@v4
       with:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_TOKEN }}
         
     - name: Build and push release Docker images
-      uses: docker/build-push-action@v6
+      uses: docker/build-push-action@v7
       with:
         push: true
         context: .
@@ -101,7 +104,11 @@ jobs:
     needs: build
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
+      with:
+        # Manual re-runs build the given tag, not the default branch — and the
+        # release-notes step below needs the tag's CHANGELOG.md.
+        ref: ${{ inputs.version && format('v{0}', inputs.version) || github.ref }}
 
     - name: Extract version from VERSION file
       id: version
@@ -136,13 +143,13 @@ jobs:
         echo "Tag: $TAG_NAME"
       
     - name: Login to Docker Hub
-      uses: docker/login-action@v3
+      uses: docker/login-action@v4
       with:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_TOKEN }}
         
     - name: Login to GitHub Container Registry
-      uses: docker/login-action@v3
+      uses: docker/login-action@v4
       with:
         registry: ghcr.io
         username: ${{ github.actor }}
@@ -192,17 +199,45 @@ jobs:
           ghcr.io/${{ github.repository }}/ssm:${{ steps.version.outputs.version }}-amd64 \
           ghcr.io/${{ github.repository }}/ssm:${{ steps.version.outputs.version }}-arm64
 
+    # Release body = the version's CHANGELOG section (the same text release.sh
+    # rotated out of [Unreleased]), so the notes discipline reaches the release
+    # page instead of a boilerplate stub.
+    - name: Extract release notes from CHANGELOG
+      run: |
+        python3 << 'EOF' > /tmp/release_notes.md
+        import re
+
+        version = "${{ steps.version.outputs.version }}"
+
+        with open('CHANGELOG.md', 'r') as f:
+            content = f.read()
+
+        version_escaped = re.escape(version)
+        pattern = rf'^## \[{version_escaped}\][^\n]*\n(.*?)(?=^## \[|\Z)'
+
+        match = re.search(pattern, content, re.MULTILINE | re.DOTALL)
+
+        if match:
+            notes = match.group(1).strip()
+            print(notes if notes else f"Release {version}")
+        else:
+            print(f"Release {version}")
+        EOF
+
+        cat >> /tmp/release_notes.md << 'EOF'
+
+        ---
+
+        Docker Images:
+        - `styliteag/ssm:${{ steps.version.outputs.version }}`
+        - `ghcr.io/${{ github.repository }}/ssm:${{ steps.version.outputs.version }}`
+        EOF
+
     - name: Create GitHub release
       run: |
         gh release create v${{ steps.version.outputs.version }} \
           --title "Release v${{ steps.version.outputs.version }}" \
-          --notes "Release v${{ steps.version.outputs.version }}
-
-        Built from tag: ${{ steps.tag.outputs.tag }}
-
-        Docker Images:
-        - \`styliteag/ssm:${{ steps.version.outputs.version }}\`
-        - \`ghcr.io/${{ github.repository }}/ssm:${{ steps.version.outputs.version }}\`" \
+          --notes-file /tmp/release_notes.md \
           --latest
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

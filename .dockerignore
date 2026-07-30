@@ -53,7 +53,8 @@ LICENSE.txt
 justfile
 release.sh
 install-hooks.sh
-sbom/
+scripts/
+sbom.cdx.json
 
 # Docker and compose files (avoid recursive copying)
 docker/

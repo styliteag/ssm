@@ -133,10 +133,9 @@ update_changelog() {
     echo "The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)," >> "$temp_changelog"
     echo "and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)." >> "$temp_changelog"
     echo "" >> "$temp_changelog"
+    # Bare [Unreleased] — the next feature commit adds its own section header;
+    # a pre-seeded empty "- " bullet would leak into the following release.
     echo "## [Unreleased]" >> "$temp_changelog"
-    echo "" >> "$temp_changelog"
-    echo "### Added" >> "$temp_changelog"
-    echo "- " >> "$temp_changelog"
     echo "" >> "$temp_changelog"
 
     # Copy the rest of the changelog starting from the version we just updated
