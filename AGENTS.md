@@ -1,8 +1,9 @@
 # SSM — Operating Manual for Coding Agents
 
-`CLAUDE.md` is a symlink to this file. This is not a project description — it is the
-operating manual. Follow it literally. When this file and the code disagree, the code
-wins; fix this file in the same commit and say so.
+`CLAUDE.md` imports this file (`@AGENTS.md` — Claude Code's include syntax); edit
+only AGENTS.md. This is not a project description — it is the operating manual.
+Follow it literally. When this file and the code disagree, the code wins; fix this
+file in the same commit and say so.
 
 **Product**: Secure SSH Manager — a web app that manages `authorized_keys` files across
 many hosts. Elixir/Phoenix LiveView UI + a wire-compatible `/api/v2` JSON API, SQLite
@@ -140,10 +141,11 @@ machine is the only quality gate that exists. Treat it as mandatory, not advisor
    `backend/`/`frontend/` paths, v1 API shapes, `config.toml`. *Rule: the app is
    Elixir under `phoenix/`, the API is `/api/v2`, config is env vars
    (`config/runtime.exs`). Stale references get fixed or ignored, never obeyed.*
-10. **The Whitelist Symlink Gap.** Assuming this file is exempt from the secrets hook.
-    `.secrets-whitelist` lists `CLAUDE.md`, but what gets staged is `AGENTS.md` — which
-    is **not** whitelisted. *Rule: keep secret-shaped strings out of this file; reuse
-    the exact example values already present in the repo when documenting.*
+10. **The Whitelist Name Gap.** Assuming this file is exempt from the secrets hook.
+    `.secrets-whitelist` lists `CLAUDE.md`, but what you actually edit and stage is
+    `AGENTS.md` (CLAUDE.md is just the one-line import) — and AGENTS.md is **not**
+    whitelisted. *Rule: keep secret-shaped strings out of this file; reuse the exact
+    example values already present in the repo when documenting.*
 11. **The Local-Toolchain Assumption.** Running `mix` on the host and hitting version
     drift (or missing Elixir entirely). *Rule: the toolchain is docker-only — always
     `just mix <task>` / `just test` / `just verify`.*
