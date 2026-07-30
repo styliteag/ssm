@@ -49,16 +49,43 @@ defmodule SsmWeb.ActivitiesLiveTest do
     refute has_element?(view, "#activities-#{host_entry.id}")
   end
 
-  test "toggle shows the decoded details JSON", %{conn: conn} do
-    entry = log_entry(%{details: %{address: "10.0.0.1"}})
+  test "renders flat scalar details as summary chips", %{conn: conn} do
+    entry = log_entry(%{details: %{address: "10.0.0.1", port: 2222}})
 
     {:ok, view, _html} = live(conn, ~p"/activities")
 
-    view
-    |> element("#activities-#{entry.id} button")
-    |> render_click()
+    chips = "#activities-#{entry.id} [data-details=summary]"
+    assert has_element?(view, chips, "address: 10.0.0.1")
+    assert has_element?(view, chips, "port: 2222")
+  end
 
-    assert has_element?(view, "#activities-#{entry.id} pre", "10.0.0.1")
+  test "renders old/new maps as field-change chips", %{conn: conn} do
+    entry = log_entry(%{details: %{name: %{old: "web1", new: "web2"}}})
+
+    {:ok, view, _html} = live(conn, ~p"/activities")
+
+    chips = "#activities-#{entry.id} [data-details=changes]"
+    assert has_element?(view, chips, "name:")
+    assert has_element?(view, "#{chips} s", "web1")
+    assert has_element?(view, chips, "web2")
+  end
+
+  test "renders nested details as a collapsible JSON block", %{conn: conn} do
+    entry = log_entry(%{details: %{nested: %{deep: "value"}, flag: true}})
+
+    {:ok, view, _html} = live(conn, ~p"/activities")
+
+    assert has_element?(view, "#activities-#{entry.id} details[data-details=raw] pre", "value")
+  end
+
+  test "search narrows by action, target, or actor", %{conn: conn} do
+    hit = log_entry(%{target: "prod-web1"})
+    miss = log_entry(%{target: "db-box"})
+
+    {:ok, view, _html} = live(conn, ~p"/activities?q=prod-web")
+
+    assert has_element?(view, "#activities-#{hit.id}")
+    refute has_element?(view, "#activities-#{miss.id}")
   end
 
   test "load more extends the visible window", %{conn: conn} do

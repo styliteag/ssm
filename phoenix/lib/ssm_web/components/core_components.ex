@@ -539,4 +539,42 @@ defmodule SsmWeb.CoreComponents do
   def translate_errors(errors, field) when is_list(errors) do
     for {^field, {msg, opts}} <- errors, do: translate_error({msg, opts})
   end
+
+  @doc """
+  Renders a UTC timestamp that the browser rewrites into the viewer's local
+  zone (app.js rewrites the text of `time[data-localtime]` elements; the
+  `datetime` attribute is never mutated — it stays the canonical value the
+  next LiveView patch re-reads). With JS disabled the UTC text stays visible.
+
+  Accepts a `DateTime`, `NaiveDateTime` (assumed UTC), or unix seconds
+  (the activity_log timestamp column).
+  """
+  attr :at, :any, required: true, doc: "DateTime | NaiveDateTime | unix seconds"
+  attr :fmt, :string, default: "datetime", values: ~w(datetime datetime-sec time-sec date)
+  attr :class, :string, default: nil
+
+  def local_time(assigns) do
+    datetime = to_utc_datetime(assigns.at)
+    assigns = assign(assigns, :datetime, datetime)
+
+    ~H"""
+    <time
+      :if={@datetime}
+      datetime={DateTime.to_iso8601(@datetime)}
+      data-localtime
+      data-fmt={@fmt}
+      class={@class}
+    >{utc_text(@datetime, @fmt)}</time>
+    """
+  end
+
+  defp to_utc_datetime(%DateTime{} = dt), do: dt
+  defp to_utc_datetime(%NaiveDateTime{} = ndt), do: DateTime.from_naive!(ndt, "Etc/UTC")
+  defp to_utc_datetime(unix) when is_integer(unix), do: DateTime.from_unix!(unix)
+  defp to_utc_datetime(_), do: nil
+
+  defp utc_text(dt, "date"), do: Calendar.strftime(dt, "%Y-%m-%d")
+  defp utc_text(dt, "time-sec"), do: Calendar.strftime(dt, "%H:%M:%S UTC")
+  defp utc_text(dt, "datetime-sec"), do: Calendar.strftime(dt, "%Y-%m-%d %H:%M:%S UTC")
+  defp utc_text(dt, _), do: Calendar.strftime(dt, "%Y-%m-%d %H:%M UTC")
 end

@@ -152,6 +152,107 @@ defmodule SsmWeb.DiffLiveTest do
     assert MockClient.calls().exec == []
   end
 
+  # KeyParser-valid material: base64 blob opening with the declared type.
+  defp valid_material(payload) do
+    Base.encode64(<<11::32, "ssh-ed25519", payload::binary>>)
+  end
+
+  test "an extra key of a known user gets an Allow button that grants the login", %{conn: conn} do
+    authorized = user_fixture(%{username: "expected"})
+    roamer = user_fixture(%{username: "roamer"})
+    host = host_fixture(%{name: "web1"})
+
+    key_fixture(authorized, %{key_type: "ssh-ed25519", key_base64: "SYNCED", name: "laptop"})
+    authorization_fixture(authorized, host, %{login: "deploy"})
+
+    roam_material = valid_material(<<1>>)
+    key_fixture(roamer, %{key_type: "ssh-ed25519", key_base64: roam_material, name: "roam"})
+
+    stub_keyfiles(host.id, [
+      %{
+        login: "deploy",
+        has_pragma: true,
+        readonly_condition: nil,
+        keyfile: "ssh-ed25519 SYNCED laptop\nssh-ed25519 #{roam_material} roam"
+      }
+    ])
+
+    {:ok, view, _html} = live(conn, ~p"/diff?host_id=#{host.id}")
+    render_async(view)
+
+    assert has_element?(view, "[id^='allow-key-deploy-']", "Allow (roamer)")
+
+    view |> element("[id^='allow-key-deploy-']") |> render_click()
+    render_async(view)
+
+    assert Ssm.Authorizations.exists?(roamer.id, host.id, "deploy")
+    assert render(view) =~ "Authorized roamer for deploy on web1."
+
+    assert Enum.any?(Ssm.Activity.list(), fn entry ->
+             entry.activity_type == "auth" and entry.target == "roamer@web1:deploy"
+           end)
+  end
+
+  test "an unknown extra key can be assigned to a user, granting the login too", %{conn: conn} do
+    authorized = user_fixture(%{username: "expected"})
+    adopter = user_fixture(%{username: "adopter"})
+    host = host_fixture(%{name: "web1"})
+
+    key_fixture(authorized, %{key_type: "ssh-ed25519", key_base64: "SYNCED", name: "laptop"})
+    authorization_fixture(authorized, host, %{login: "deploy"})
+
+    stray_material = valid_material(<<2>>)
+
+    stub_keyfiles(host.id, [
+      %{
+        login: "deploy",
+        has_pragma: true,
+        readonly_condition: nil,
+        keyfile: "ssh-ed25519 SYNCED laptop\nssh-ed25519 #{stray_material} stray@box"
+      }
+    ])
+
+    {:ok, view, _html} = live(conn, ~p"/diff?host_id=#{host.id}")
+    render_async(view)
+
+    view |> element("[id^='assign-key-deploy-']") |> render_click()
+    assert has_element?(view, "#unknown-key-modal", "stray@box")
+
+    view
+    |> form("#unknown-key-form", assign: %{user_id: adopter.id})
+    |> render_submit()
+
+    render_async(view)
+
+    key = Ssm.Users.get_key_by_base64(stray_material)
+    assert key.user_id == adopter.id
+    assert key.name == "stray@box"
+    assert Ssm.Authorizations.exists?(adopter.id, host.id, "deploy")
+  end
+
+  test "unparseable extra keys get no action button", %{conn: conn} do
+    user = user_fixture()
+    host = host_fixture(%{name: "web1"})
+    key_fixture(user, %{key_type: "ssh-ed25519", key_base64: "SYNCED", name: "laptop"})
+    authorization_fixture(user, host, %{login: "deploy"})
+
+    stub_keyfiles(host.id, [
+      %{
+        login: "deploy",
+        has_pragma: true,
+        readonly_condition: nil,
+        keyfile: "ssh-ed25519 SYNCED laptop\nssh-rsa NOTBASE64! junk"
+      }
+    ])
+
+    {:ok, view, _html} = live(conn, ~p"/diff?host_id=#{host.id}")
+    render_async(view)
+
+    assert has_element?(view, "#diff-detail", "not authorized")
+    refute has_element?(view, "[id^='allow-key-']")
+    refute has_element?(view, "[id^='assign-key-']")
+  end
+
   test "sync all only touches hosts that need it", %{conn: conn} do
     synced_host = synced_setup()
 

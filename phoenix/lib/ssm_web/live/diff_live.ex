@@ -2,18 +2,28 @@ defmodule SsmWeb.DiffLive do
   @moduledoc """
   Diff viewer: per-host comparison of the DB's expected authorized_keys
   against what is on the host, with single-host sync and sync-all — the
-  React DiffPage core. Disabled hosts are marked and never touched
+  React DiffPage. Disabled hosts are marked and never touched
   (non-negotiable rule #4); readonly logins surface as badges and sync
   refusals, never partial writes (`Ssm.Diffs.sync_host/2` semantics).
+
+  Unauthorized keys found on a host can be legitimized in place (database
+  writes only, the host itself is untouched until the next sync): a key
+  belonging to a known user gets an "Allow" button that grants that user the
+  login; an unknown key can be assigned to a user, which also grants the
+  login if missing.
   """
 
   use SsmWeb, :live_view
 
   alias Ssm.Activity
+  alias Ssm.Authorizations
   alias Ssm.Diffs
   alias Ssm.Diffs.HostDiff
   alias Ssm.Hosts
   alias Ssm.Hosts.Host
+  alias Ssm.Users
+  alias Ssm.Users.KeyParser
+  alias Ssm.Users.UserKey
   alias SsmWeb.Layouts
 
   @impl true
@@ -30,6 +40,7 @@ defmodule SsmWeb.DiffLive do
       |> assign(page_title: "Diff Viewer")
       |> assign(hosts: hosts, statuses: statuses, syncing: false)
       |> assign(detail: nil, detail_error: nil, detail_loading: false)
+      |> assign(key_owners: %{}, unknown_key: nil)
 
     socket =
       if connected?(socket) do
@@ -122,7 +133,10 @@ defmodule SsmWeb.DiffLive do
     case result do
       {:ok, %HostDiff{} = diff} ->
         statuses = Map.put(socket.assigns.statuses, diff.host_id, summarize(diff))
-        {:noreply, assign(socket, detail: diff, detail_error: nil, statuses: statuses)}
+        owners = Map.new(Users.list_keys(), &{&1.key_base64, &1.user})
+
+        {:noreply,
+         assign(socket, detail: diff, detail_error: nil, statuses: statuses, key_owners: owners)}
 
       {:error, reason} ->
         {:noreply, assign(socket, detail: nil, detail_error: format_reason(reason))}
@@ -243,6 +257,47 @@ defmodule SsmWeb.DiffLive do
     end
   end
 
+  def handle_event("allow-key", %{"login" => login, "index" => index}, socket) do
+    with %Host{disabled: false} = host <- socket.assigns.selected,
+         {:ok, item} <- find_extra_item(socket, login, index),
+         {:ok, parsed} <- KeyParser.parse(item.line),
+         %UserKey{} = key <- Users.get_key_by_base64(parsed.key_base64) do
+      allow_grant(socket, host, key.user, login)
+    else
+      _ -> {:noreply, put_flash(socket, :error, "Cannot authorize this key.")}
+    end
+  end
+
+  def handle_event("unknown-key-open", %{"login" => login, "index" => index}, socket) do
+    with %Host{disabled: false} <- socket.assigns.selected,
+         {:ok, item} <- find_extra_item(socket, login, index),
+         {:ok, parsed} <- KeyParser.parse(item.line) do
+      {:noreply,
+       assign(socket, :unknown_key, %{
+         login: login,
+         line: item.line,
+         parsed: parsed,
+         users: Users.list_users()
+       })}
+    else
+      _ -> {:noreply, put_flash(socket, :error, "Cannot assign this key.")}
+    end
+  end
+
+  def handle_event("unknown-key-cancel", _params, socket) do
+    {:noreply, assign(socket, :unknown_key, nil)}
+  end
+
+  def handle_event("unknown-key-assign", %{"assign" => %{"user_id" => user_id}}, socket) do
+    with %Host{disabled: false} = host <- socket.assigns.selected,
+         %{} = unknown <- socket.assigns.unknown_key,
+         user when user != nil <- Users.get_user(String.to_integer(user_id)) do
+      assign_unknown_key(socket, host, user, unknown)
+    else
+      _ -> {:noreply, put_flash(socket, :error, "Cannot assign this key.")}
+    end
+  end
+
   def handle_event("sync_all", _params, socket) do
     to_sync =
       socket.assigns.hosts
@@ -260,6 +315,110 @@ defmodule SsmWeb.DiffLive do
        |> start_async(:sync_all, fn ->
          Enum.map(to_sync, fn host -> {host, Diffs.sync_host(host.id)} end)
        end)}
+    end
+  end
+
+  ## Allow / assign helpers (database-only; the host is untouched until sync)
+
+  defp find_extra_item(socket, login_name, index) do
+    with %HostDiff{} = detail <- socket.assigns.detail,
+         %{items: items} <- Enum.find(detail.logins, &(&1.login == login_name)),
+         %{status: :extra_on_host} = item <- Enum.at(items, String.to_integer(index)) do
+      {:ok, item}
+    else
+      _ -> :error
+    end
+  end
+
+  defp allow_grant(socket, host, user, login) do
+    if Authorizations.exists?(user.id, host.id, login) do
+      {:noreply, put_flash(socket, :info, "#{user.username} already holds this grant.")}
+    else
+      case Authorizations.create_authorization(%{
+             user_id: user.id,
+             host_id: host.id,
+             login: login
+           }) do
+        {:ok, _auth} ->
+          log_allow(socket, user, host, login)
+
+          {:noreply,
+           socket
+           |> put_flash(:info, "Authorized #{user.username} for #{login} on #{host.name}.")
+           |> start_detail_async(host)}
+
+        {:error, _changeset} ->
+          {:noreply, put_flash(socket, :error, "Could not create the authorization.")}
+      end
+    end
+  end
+
+  defp assign_unknown_key(socket, host, user, unknown) do
+    case create_or_adopt_key(user, unknown.parsed) do
+      {:ok, key} ->
+        log_key_assign(socket, user, key)
+        {_reply, socket} = allow_grant(socket, host, user, unknown.login)
+        {:noreply, assign(socket, :unknown_key, nil)}
+
+      {:error, message} ->
+        {:noreply, put_flash(socket, :error, message)}
+    end
+  end
+
+  # The key may already exist in the DB (assigned to someone) — then it is
+  # adopted as-is instead of failing, mirroring the React DiffPage.
+  defp create_or_adopt_key(user, parsed) do
+    attrs = %{
+      user_id: user.id,
+      key_type: parsed.key_type,
+      key_base64: parsed.key_base64,
+      name: parsed.name
+    }
+
+    case Users.create_key(attrs) do
+      {:ok, key} ->
+        {:ok, key}
+
+      {:error, changeset} ->
+        case {changeset.errors[:key_base64], Users.get_key_by_base64(parsed.key_base64)} do
+          {{"has already been taken", _}, %UserKey{} = key} -> {:ok, key}
+          _ -> {:error, "Could not save the key — check the key line."}
+        end
+    end
+  end
+
+  defp log_allow(socket, user, host, login) do
+    Activity.log(%{
+      activity_type: "auth",
+      action: "create",
+      target: "#{user.username}@#{host.name}:#{login}",
+      actor_username: socket.assigns.current_user.username,
+      user_id: user.id
+    })
+  end
+
+  defp log_key_assign(socket, user, key) do
+    Activity.log(%{
+      activity_type: "key",
+      action: "create",
+      target: key.name || key.key_type,
+      actor_username: socket.assigns.current_user.username,
+      user_id: user.id,
+      details: %{key_type: key.key_type}
+    })
+  end
+
+  # {:known, user} | :unknown | :invalid for an extra_on_host line.
+  defp extra_key_info(line, owners) do
+    case KeyParser.parse(line) do
+      {:ok, parsed} ->
+        case Map.get(owners, parsed.key_base64) do
+          nil -> :unknown
+          user -> {:known, user}
+        end
+
+      {:error, _reason} ->
+        :invalid
     end
   end
 
@@ -413,17 +572,90 @@ defmodule SsmWeb.DiffLive do
 
             <ul class="space-y-1">
               <li
-                :for={item <- login.items}
+                :for={{item, index} <- Enum.with_index(login.items)}
                 class="flex items-center gap-2 rounded bg-base-100 px-2 py-1"
               >
                 <.item_badge status={item.status} />
                 <code class="truncate font-mono text-xs" title={item.line}>{item.line}</code>
+                <.extra_key_actions
+                  :if={item.status == :extra_on_host and not @selected.disabled}
+                  info={extra_key_info(item.line, @key_owners)}
+                  login={login.login}
+                  index={index}
+                />
               </li>
             </ul>
           </div>
         </div>
       </section>
+
+      <.modal :if={@unknown_key} id="unknown-key-modal" on_cancel={JS.push("unknown-key-cancel")}>
+        <:title>Assign unknown key</:title>
+
+        <p class="mb-2 text-sm opacity-70">
+          This key is not in the database. Assign it to a user; the user is also
+          granted login <span class="font-mono">{@unknown_key.login}</span>
+          on this host if missing. The host itself is only changed by a later sync.
+        </p>
+
+        <pre class="mb-2 max-h-24 overflow-auto whitespace-pre-wrap break-all rounded bg-base-300 p-2 font-mono text-xs">{@unknown_key.line}</pre>
+
+        <form id="unknown-key-form" phx-submit="unknown-key-assign" class="space-y-2">
+          <.input
+            type="select"
+            name="assign[user_id]"
+            value={nil}
+            label="Assign to user"
+            prompt="Select a user"
+            options={Enum.map(@unknown_key.users, &{&1.username, &1.id})}
+            required
+          />
+
+          <div class="modal-action">
+            <button type="button" class="btn btn-ghost" phx-click="unknown-key-cancel">
+              Cancel
+            </button>
+            <button type="submit" class="btn btn-primary">Assign key</button>
+          </div>
+        </form>
+      </.modal>
     </Layouts.app>
     """
   end
+
+  attr :info, :any, required: true
+  attr :login, :string, required: true
+  attr :index, :integer, required: true
+
+  defp extra_key_actions(%{info: {:known, _user}} = assigns) do
+    ~H"""
+    <button
+      id={"allow-key-#{@login}-#{@index}"}
+      class="btn btn-ghost btn-xs ml-auto flex-none text-success"
+      phx-click="allow-key"
+      phx-value-login={@login}
+      phx-value-index={@index}
+      title={"Authorize #{elem(@info, 1).username} for #{@login} (database only)"}
+    >
+      <.icon name="hero-check-circle" class="size-4" /> Allow ({elem(@info, 1).username})
+    </button>
+    """
+  end
+
+  defp extra_key_actions(%{info: :unknown} = assigns) do
+    ~H"""
+    <button
+      id={"assign-key-#{@login}-#{@index}"}
+      class="btn btn-ghost btn-xs ml-auto flex-none"
+      phx-click="unknown-key-open"
+      phx-value-login={@login}
+      phx-value-index={@index}
+      title="Key is unknown — assign it to a user"
+    >
+      <.icon name="hero-user-plus" class="size-4" /> Add key…
+    </button>
+    """
+  end
+
+  defp extra_key_actions(assigns), do: ~H""
 end

@@ -102,18 +102,39 @@ if config_env() == :prod do
 
   # SECRET_KEY_BASE wins; otherwise derive deterministic key material from the
   # python stack's JWT_SECRET / SESSION_KEY so operators need no new secret.
+  # Length is checked at boot: a too-short value boots fine and keeps the
+  # health endpoint green while every real page 500s on the session store
+  # ("cookie store expects at least 64 bytes") — fail loudly instead.
   secret_key_base =
-    System.get_env("SECRET_KEY_BASE") ||
-      case System.get_env("JWT_SECRET") || System.get_env("SESSION_KEY") do
-        nil ->
-          raise """
-          environment variable SECRET_KEY_BASE (or JWT_SECRET / SESSION_KEY)
-          is missing. Generate one with: mix phx.gen.secret
-          """
+    case System.get_env("SECRET_KEY_BASE") do
+      nil ->
+        case System.get_env("JWT_SECRET") || System.get_env("SESSION_KEY") do
+          nil ->
+            raise """
+            environment variable SECRET_KEY_BASE (or JWT_SECRET / SESSION_KEY)
+            is missing. Generate one with: openssl rand -base64 48
+            """
 
-        jwt_secret ->
-          :crypto.hash(:sha512, "ssm-secret-key-base:" <> jwt_secret) |> Base.encode64()
-      end
+          jwt_secret ->
+            :crypto.hash(:sha512, "ssm-secret-key-base:" <> jwt_secret) |> Base.encode64()
+        end
+
+      explicit when byte_size(explicit) < 64 ->
+        raise """
+        SECRET_KEY_BASE must be at least 64 bytes, got #{byte_size(explicit)}.
+        Generate one with: openssl rand -base64 48
+        """
+
+      explicit ->
+        explicit
+    end
+
+  # API bearer tokens sign with the same secret as the python stack so
+  # existing clients keep working; SECRET_KEY_BASE-only deployments still get
+  # a working (but python-incompatible) signing key.
+  config :ssm,
+         :jwt_secret,
+         System.get_env("JWT_SECRET") || System.get_env("SESSION_KEY") || secret_key_base
 
   host = System.get_env("PHX_HOST") || "localhost"
 
@@ -128,6 +149,10 @@ if config_env() == :prod do
 
   config :ssm, SsmWeb.Endpoint,
     url: [host: host, port: 443, scheme: "https"],
+    # Operators reach the app by IP or arbitrary hostname (no PHX_HOST set in
+    # the usual LAN deployment). :conn checks the WebSocket origin against the
+    # request's own host header instead of a fixed allowlist.
+    check_origin: :conn,
     http: [
       ip: listen_ip,
       port: String.to_integer(System.get_env("PORT", "8000"))

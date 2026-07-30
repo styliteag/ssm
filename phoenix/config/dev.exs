@@ -54,6 +54,9 @@ config :ssm, SsmWeb.Endpoint,
 # Enable dev routes for dashboard and mailbox
 config :ssm, dev_routes: true
 
+# Dev-only, deliberately low-entropy (secret scanner + not a secret).
+config :ssm, jwt_secret: "ssm-dev-only-jwt-secret-0000000000-1111111111"
+
 # Do not include metadata nor timestamps in development logs
 config :logger, :default_formatter, format: "[$level] $message\n"
 

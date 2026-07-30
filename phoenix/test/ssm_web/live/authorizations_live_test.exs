@@ -25,6 +25,161 @@ defmodule SsmWeb.AuthorizationsLiveTest do
     assert has_element?(view, "#authorizations-#{auth.id}", "deploy")
   end
 
+  test "renders grants whose user or host row is gone instead of crashing", %{conn: conn} do
+    user = user_fixture(%{username: "alice"})
+    host = host_fixture(%{name: "web1"})
+    auth = authorization_fixture(user, host, %{login: "root"})
+
+    # Legacy Diesel-era DBs contain orphaned grants (host deleted while FK
+    # enforcement was off). defer_foreign_keys pushes the FK check past the
+    # sandbox rollback so we can recreate that shape here.
+    Ssm.Repo.query!("PRAGMA defer_foreign_keys = ON")
+    Ssm.Repo.query!(~s(UPDATE "authorization" SET host_id = 999999 WHERE id = ?), [auth.id])
+
+    {:ok, view, _html} = live(conn, ~p"/authorizations")
+
+    assert has_element?(view, "#authorizations-#{auth.id}", "alice")
+    assert has_element?(view, "#authorizations-#{auth.id}", "missing host #999999")
+  end
+
+  test "bulk grant creates the cross product and skips existing grants", %{conn: conn} do
+    u1 = user_fixture(%{username: "alice"})
+    u2 = user_fixture(%{username: "bob"})
+    h1 = host_fixture(%{name: "web1"})
+    h2 = host_fixture(%{name: "web2"})
+    _existing = authorization_fixture(u1, h1, %{login: "root"})
+
+    {:ok, view, _html} = live(conn, ~p"/authorizations")
+
+    view |> element("#bulk-grant") |> render_click()
+
+    for user <- [u1, u2], do: view |> element("#bulk-user-#{user.id}") |> render_click()
+    for host <- [h1, h2], do: view |> element("#bulk-host-#{host.id}") |> render_click()
+
+    view
+    |> element("#bulk-grant-form")
+    |> render_change(%{bulk: %{login: "root", options: "no-pty"}})
+
+    assert has_element?(view, "#bulk-preview", "3 new grant(s), 1 already exist")
+
+    view |> element("#bulk-grant-form") |> render_submit()
+
+    assert Ssm.Authorizations.count_authorizations() == 4
+    assert Ssm.Authorizations.exists?(u2.id, h2.id, "root")
+
+    assert Enum.any?(
+             Ssm.Activity.list(),
+             &(&1.action == "bulk_grant" and &1.activity_type == "auth")
+           )
+  end
+
+  test "bulk grant hides disabled users from the selection list", %{conn: conn} do
+    _enabled = user_fixture(%{username: "on"})
+    {:ok, disabled} = Ssm.Users.create_user(%{username: "off", enabled: false})
+
+    {:ok, view, _html} = live(conn, ~p"/authorizations")
+
+    view |> element("#bulk-grant") |> render_click()
+
+    assert has_element?(view, "#bulk-grant-modal", "on")
+    refute has_element?(view, "#bulk-user-#{disabled.id}")
+  end
+
+  describe "matrix view" do
+    test "defaults to root, sorts logins by usage, hides hosts without the login", %{conn: conn} do
+      alice = user_fixture(%{username: "alice"})
+      bob = user_fixture(%{username: "bob"})
+      web = host_fixture(%{name: "web1"})
+      db = host_fixture(%{name: "db1"})
+
+      authorization_fixture(alice, web, %{login: "deploy"})
+      authorization_fixture(bob, web, %{login: "deploy"})
+      authorization_fixture(alice, db, %{login: "root"})
+
+      {:ok, view, _html} = live(conn, ~p"/authorizations?view=matrix")
+
+      selector = view |> element("#matrix-login-form select") |> render()
+      assert selector =~ "deploy (2)"
+      assert selector =~ "root (1)"
+      assert selector =~ ~s(<option selected="" value="root">)
+
+      # root grants exist only on db1 — web1 is not a column.
+      assert has_element?(view, "#matrix-cell-#{alice.id}-#{db.id}.btn-success")
+      refute has_element?(view, "#matrix-cell-#{alice.id}-#{web.id}")
+    end
+
+    test "cell click grants and revokes under the selected login", %{conn: conn} do
+      alice = user_fixture(%{username: "alice"})
+      host = host_fixture(%{name: "web1"})
+      bob = user_fixture(%{username: "bob"})
+      authorization_fixture(bob, host, %{login: "deploy"})
+
+      {:ok, view, _html} = live(conn, ~p"/authorizations?view=matrix&login=deploy")
+
+      view |> element("#matrix-cell-#{alice.id}-#{host.id}") |> render_click()
+      assert Ssm.Authorizations.exists?(alice.id, host.id, "deploy")
+
+      view |> element("#matrix-cell-#{alice.id}-#{host.id}") |> render_click()
+      refute Ssm.Authorizations.exists?(alice.id, host.id, "deploy")
+
+      actions = Enum.map(Ssm.Activity.list(), & &1.action)
+      assert "create" in actions
+      assert "delete" in actions
+    end
+
+    test "the all login is view-only counts", %{conn: conn} do
+      alice = user_fixture(%{username: "alice"})
+      host = host_fixture(%{name: "web1"})
+      authorization_fixture(alice, host, %{login: "root"})
+      authorization_fixture(alice, host, %{login: "deploy"})
+
+      {:ok, view, _html} = live(conn, ~p"/authorizations?view=matrix&login=all")
+
+      assert has_element?(view, "span#matrix-cell-#{alice.id}-#{host.id}", "2")
+      refute has_element?(view, "button#matrix-cell-#{alice.id}-#{host.id}")
+    end
+
+    test "show authorized only hides users without a grant", %{conn: conn} do
+      alice = user_fixture(%{username: "alice"})
+      idle = user_fixture(%{username: "idle"})
+      host = host_fixture(%{name: "web1"})
+      authorization_fixture(alice, host, %{login: "root"})
+
+      {:ok, view, _html} = live(conn, ~p"/authorizations?view=matrix&login=root")
+
+      assert has_element?(view, "#matrix-row-#{idle.id}")
+
+      view |> element("#matrix-authorized-toggle") |> render_click()
+
+      assert has_element?(view, "#matrix-row-#{alice.id}")
+      refute has_element?(view, "#matrix-row-#{idle.id}")
+    end
+  end
+
+  test "stats view shows totals and access rankings", %{conn: conn} do
+    alice = user_fixture(%{username: "alice"})
+    bob = user_fixture(%{username: "bob"})
+    {:ok, off} = Ssm.Users.create_user(%{username: "off", enabled: false})
+    web = host_fixture(%{name: "web1"})
+    db = host_fixture(%{name: "db1"})
+
+    authorization_fixture(alice, web, %{login: "root"})
+    authorization_fixture(bob, web, %{login: "root"})
+    authorization_fixture(alice, db, %{login: "deploy"})
+    authorization_fixture(off, db, %{login: "root"})
+
+    {:ok, view, _html} = live(conn, ~p"/authorizations?view=stats")
+
+    assert has_element?(view, "#stat-auth-total", "4")
+    assert has_element?(view, "#stat-auth-active", "3")
+    assert has_element?(view, "#stat-auth-inactive", "1")
+    assert has_element?(view, "#stat-auth-logins", "2")
+
+    assert has_element?(view, "#auth-stats", "web1")
+    assert has_element?(view, "#auth-stats", "2 user(s)")
+    assert has_element?(view, "#auth-stats", "2 host(s)")
+  end
+
   test "filters by host via query param", %{conn: conn} do
     user = user_fixture()
     host_a = host_fixture(%{name: "a"})

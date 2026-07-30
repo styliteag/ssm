@@ -1,21 +1,30 @@
 defmodule SsmWeb.ActivitiesLive do
   @moduledoc """
   Activity log page: newest-first audit trail with a type filter
-  (`?type=key|host|user|auth`) and expandable detail rows — the React
+  (`?type=key|host|user|auth`), free-text search (`?q=`) across
+  action/target/actor, and structured metadata rendering — the React
   ActivitiesPage core.
+
+  Metadata renders as chips for field-change maps (`old → new`) and flat
+  summary maps (sync counters, host address/port, key type); anything else
+  falls back to pretty JSON inside a native `<details>` element.
+
+  Deliberate deviation from the React page: there is no IP badge — the
+  `activity_log` schema has no IP column, so the React `metadata.ip` badge
+  has nothing to read here.
   """
 
   use SsmWeb, :live_view
 
   alias Ssm.Activity
-  alias Ssm.Activity.ActivityLog
+
   alias SsmWeb.Layouts
 
   @page_size 50
 
   @impl true
   def mount(_params, _session, socket) do
-    {:ok, assign(socket, page_title: "Activities", expanded_id: nil)}
+    {:ok, assign(socket, page_title: "Activities")}
   end
 
   @impl true
@@ -26,22 +35,28 @@ defmodule SsmWeb.ActivitiesLive do
         _ -> nil
       end
 
+    search =
+      case params["q"] do
+        q when is_binary(q) -> if String.trim(q) == "", do: nil, else: q
+        _ -> nil
+      end
+
     {:noreply,
      socket
      |> assign(:filter_type, filter_type)
+     |> assign(:search, search)
      |> assign(:limit, @page_size)
      |> reload_entries()}
   end
 
   defp reload_entries(socket) do
-    opts =
-      [limit: socket.assigns.limit + 1] ++
-        case socket.assigns.filter_type do
-          nil -> []
-          type -> [activity_type: type]
-        end
+    entries =
+      Activity.list(
+        limit: socket.assigns.limit + 1,
+        activity_type: socket.assigns.filter_type,
+        search: socket.assigns.search
+      )
 
-    entries = Activity.list(opts)
     {visible, more} = Enum.split(entries, socket.assigns.limit)
 
     socket
@@ -53,12 +68,13 @@ defmodule SsmWeb.ActivitiesLive do
   ## Events
 
   @impl true
-  def handle_event("filter", %{"type" => value}, socket) do
-    to =
-      case value do
-        "" -> ~p"/activities"
-        type -> ~p"/activities?type=#{type}"
-      end
+  def handle_event("filter", params, socket) do
+    query =
+      [{"type", params["type"]}, {"q", params["q"]}]
+      |> Enum.reject(fn {_key, value} -> value in [nil, ""] end)
+      |> Map.new()
+
+    to = if query == %{}, do: ~p"/activities", else: ~p"/activities?#{query}"
 
     {:noreply, push_patch(socket, to: to)}
   end
@@ -68,27 +84,6 @@ defmodule SsmWeb.ActivitiesLive do
      socket
      |> update(:limit, &(&1 + @page_size))
      |> reload_entries()}
-  end
-
-  def handle_event("toggle_details", %{"id" => id}, socket) do
-    id = String.to_integer(id)
-    expanded_id = if socket.assigns.expanded_id == id, do: nil, else: id
-
-    socket = assign(socket, :expanded_id, expanded_id)
-
-    # Re-stream the toggled rows so the expansion state change renders.
-    socket =
-      [socket.assigns.expanded_id, expanded_id, id]
-      |> Enum.reject(&is_nil/1)
-      |> Enum.uniq()
-      |> Enum.reduce(socket, fn entry_id, acc ->
-        case Ssm.Repo.get(ActivityLog, entry_id) do
-          nil -> acc
-          entry -> stream_insert(acc, :activities, Ssm.Repo.preload(entry, :user))
-        end
-      end)
-
-    {:noreply, socket}
   end
 
   ## Helpers
@@ -107,12 +102,10 @@ defmodule SsmWeb.ActivitiesLive do
   defp type_badge_class("auth"), do: "badge-secondary"
   defp type_badge_class(_), do: "badge-ghost"
 
-  defp details_json(entry) do
-    case Activity.details(entry) do
-      nil -> nil
-      map -> Jason.encode!(map, pretty: true)
-    end
-  end
+  defp display(nil), do: "null"
+  defp display(value) when is_binary(value), do: value
+  defp display(value) when is_number(value) or is_boolean(value), do: to_string(value)
+  defp display(value), do: Jason.encode!(value)
 
   ## Render
 
@@ -125,18 +118,32 @@ defmodule SsmWeb.ActivitiesLive do
         <:subtitle>Audit trail, newest first</:subtitle>
       </.header>
 
-      <form id="activities-filter" phx-change="filter" class="max-w-xs">
-        <.input
-          type="select"
-          name="type"
-          value={@filter_type}
-          label="Filter by type"
-          prompt="All types"
-          options={[{"Host", "host"}, {"User", "user"}, {"Key", "key"}, {"Authorization", "auth"}]}
-        />
+      <form id="activities-filter" phx-change="filter" class="flex max-w-xl gap-3">
+        <div class="flex-1">
+          <.input
+            type="search"
+            name="q"
+            value={@search}
+            label="Search"
+            placeholder="Action, target, or actor…"
+            phx-debounce="300"
+          />
+        </div>
+        <div class="flex-1">
+          <.input
+            type="select"
+            name="type"
+            value={@filter_type}
+            label="Filter by type"
+            prompt="All types"
+            options={[{"Host", "host"}, {"User", "user"}, {"Key", "key"}, {"Authorization", "auth"}]}
+          />
+        </div>
       </form>
 
-      <p :if={@entry_count == 0} class="text-sm opacity-60">No activity recorded.</p>
+      <p :if={@entry_count == 0} class="text-sm opacity-60">
+        {if @search || @filter_type, do: "No matching activity.", else: "No activity recorded."}
+      </p>
 
       <ul :if={@entry_count > 0} id="activities" phx-update="stream" class="space-y-1">
         <li
@@ -144,11 +151,7 @@ defmodule SsmWeb.ActivitiesLive do
           id={id}
           class="rounded-box bg-base-200 px-3 py-2 text-sm"
         >
-          <button
-            class="flex w-full items-center gap-3 text-left"
-            phx-click="toggle_details"
-            phx-value-id={entry.id}
-          >
+          <div class="flex items-center gap-3">
             <span class={["badge badge-sm flex-none", type_badge_class(entry.activity_type)]}>
               {entry.activity_type}
             </span>
@@ -157,15 +160,9 @@ defmodule SsmWeb.ActivitiesLive do
             <span class="ml-auto flex-none text-xs opacity-60">
               {format_timestamp(entry.timestamp)} · {entry.actor_username}
             </span>
-          </button>
+          </div>
 
-          <pre
-            :if={@expanded_id == entry.id && details_json(entry)}
-            class="mt-2 overflow-x-auto rounded bg-base-300 p-2 font-mono text-xs"
-          >{details_json(entry)}</pre>
-          <p :if={@expanded_id == entry.id && !details_json(entry)} class="mt-2 text-xs opacity-60">
-            No details recorded.
-          </p>
+          <.entry_details entry={entry} />
         </li>
       </ul>
 
@@ -175,6 +172,59 @@ defmodule SsmWeb.ActivitiesLive do
         </button>
       </div>
     </Layouts.app>
+    """
+  end
+
+  attr :entry, Ssm.Activity.ActivityLog, required: true
+
+  defp entry_details(assigns) do
+    shape = assigns.entry |> Activity.details() |> Activity.classify_details()
+    assigns = assign(assigns, :shape, shape)
+
+    ~H"""
+    <.details_body shape={@shape} />
+    """
+  end
+
+  attr :shape, :any, required: true
+
+  defp details_body(%{shape: :none} = assigns), do: ~H""
+
+  defp details_body(%{shape: {:field_changes, changes}} = assigns) do
+    assigns = assign(assigns, :changes, changes)
+
+    ~H"""
+    <div class="mt-1.5 flex flex-wrap gap-1.5" data-details="changes">
+      <span :for={{field, old, new} <- @changes} class="badge badge-ghost badge-sm font-mono">
+        <span class="opacity-70">{field}:</span>
+        <s class="text-error">{display(old)}</s>
+        <span aria-hidden="true">→</span>
+        <span class="text-success">{display(new)}</span>
+      </span>
+    </div>
+    """
+  end
+
+  defp details_body(%{shape: {:summary, pairs}} = assigns) do
+    assigns = assign(assigns, :pairs, pairs)
+
+    ~H"""
+    <div class="mt-1.5 flex flex-wrap gap-1.5" data-details="summary">
+      <span :for={{key, value} <- @pairs} class="badge badge-ghost badge-sm font-mono">
+        {key}: {display(value)}
+      </span>
+    </div>
+    """
+  end
+
+  defp details_body(%{shape: {:raw, map}} = assigns) do
+    assigns = assign(assigns, :json, Jason.encode!(map, pretty: true))
+
+    ~H"""
+    <details class="mt-1.5" data-details="raw">
+      <summary class="cursor-pointer text-xs opacity-60">Details</summary>
+      <pre class="mt-1 overflow-x-auto rounded bg-base-300 p-2 font-mono text-xs">{@json}</pre>
+    </details>
     """
   end
 end

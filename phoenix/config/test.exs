@@ -18,6 +18,9 @@ config :ssm, SsmWeb.Endpoint,
   secret_key_base: "ssm-test-only-secret-key-base-0000000000-1111111111-2222222222-33333333",
   server: false
 
+# Test-only, deliberately low-entropy (secret scanner + not a secret).
+config :ssm, jwt_secret: "ssm-test-only-jwt-secret-0000000000-1111111111"
+
 # Print only warnings and errors during test
 config :logger, level: :warning
 

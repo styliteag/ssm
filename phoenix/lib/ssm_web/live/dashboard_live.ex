@@ -15,7 +15,18 @@ defmodule SsmWeb.DashboardLive do
      socket
      |> assign(page_title: "Dashboard")
      |> assign(stats())
+     |> assign(:version, to_string(Application.spec(:ssm, :vsn)))
+     |> assign(:schema_version, schema_version())
      |> assign(:recent_activity, Activity.list(limit: 10))}
+  end
+
+  # Latest applied Ecto migration — the dashboard version pill's "db" part
+  # (React showed the alembic revision there).
+  defp schema_version do
+    case Ecto.Migrator.migrated_versions(Ssm.Repo) do
+      [] -> "none"
+      versions -> versions |> Enum.max() |> to_string()
+    end
   end
 
   defp stats do
@@ -35,6 +46,15 @@ defmodule SsmWeb.DashboardLive do
       <.header>
         Dashboard
         <:subtitle>Signed in as {@current_user.username}</:subtitle>
+        <:actions>
+          <span
+            id="version-pill"
+            class="badge badge-ghost font-mono text-xs"
+            title={"App v#{@version} · schema revision #{@schema_version}"}
+          >
+            v{@version} · db {@schema_version}
+          </span>
+        </:actions>
       </.header>
 
       <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">

@@ -42,7 +42,14 @@ defmodule Ssm.Activity do
 
   defp encode_details(attrs), do: Map.delete(attrs, "details")
 
-  @doc "List entries newest-first, optionally filtered by `activity_type`."
+  @doc """
+  List entries newest-first. Options:
+
+    * `:limit` — max rows (default 200)
+    * `:activity_type` — one of `key`, `host`, `user`, `auth`
+    * `:search` — case-insensitive substring match against action, target,
+      or actor_username (LIKE wildcards in the term are escaped)
+  """
   @spec list(keyword()) :: [ActivityLog.t()]
   def list(opts \\ []) do
     limit = Keyword.get(opts, :limit, 200)
@@ -53,13 +60,36 @@ defmodule Ssm.Activity do
         limit: ^limit,
         preload: [:user]
 
-    query =
-      case Keyword.get(opts, :activity_type) do
-        type when type in @activity_types -> where(query, [l], l.activity_type == ^type)
-        _ -> query
-      end
+    query
+    |> filter_type(Keyword.get(opts, :activity_type))
+    |> filter_search(Keyword.get(opts, :search))
+    |> Repo.all()
+  end
 
-    Repo.all(query)
+  defp filter_type(query, type) when type in @activity_types,
+    do: where(query, [l], l.activity_type == ^type)
+
+  defp filter_type(query, _type), do: query
+
+  defp filter_search(query, term) when is_binary(term) and term != "" do
+    pattern = "%" <> escape_like(String.downcase(term)) <> "%"
+
+    where(
+      query,
+      [l],
+      fragment("lower(?) LIKE ? ESCAPE '\\'", l.action, ^pattern) or
+        fragment("lower(?) LIKE ? ESCAPE '\\'", l.target, ^pattern) or
+        fragment("lower(?) LIKE ? ESCAPE '\\'", l.actor_username, ^pattern)
+    )
+  end
+
+  defp filter_search(query, _term), do: query
+
+  defp escape_like(term) do
+    term
+    |> String.replace("\\", "\\\\")
+    |> String.replace("%", "\\%")
+    |> String.replace("_", "\\_")
   end
 
   @doc "Decode an entry's `meta` JSON back into a map (or nil)."
@@ -72,4 +102,49 @@ defmodule Ssm.Activity do
       _ -> nil
     end
   end
+
+  @doc """
+  Classify decoded details (string-keyed, as returned by `details/1`) for
+  structured rendering:
+
+    * `{:field_changes, [{field, old, new}]}` — every value is a map with
+      `"old"` and `"new"` keys (update-style change sets, sorted by field)
+    * `{:summary, [{key, value}]}` — flat map of scalars, sorted by key;
+      covers everything written today: host `address`/`port`, key
+      `key_type`, and the sync counters `logins`/`keys`
+    * `{:raw, map}` — anything nested or mixed; render as pretty JSON
+    * `:none` — nil or empty
+  """
+  @spec classify_details(map() | nil) ::
+          :none
+          | {:field_changes, [{String.t(), term(), term()}]}
+          | {:summary, [{String.t(), term()}]}
+          | {:raw, map()}
+  def classify_details(nil), do: :none
+  def classify_details(map) when map == %{}, do: :none
+
+  def classify_details(map) when is_map(map) do
+    cond do
+      Enum.all?(map, &field_change?/1) ->
+        {:field_changes,
+         map
+         |> Enum.sort()
+         |> Enum.map(fn {field, %{"old" => old, "new" => new}} -> {field, old, new} end)}
+
+      Enum.all?(map, fn {_key, value} -> scalar?(value) end) ->
+        {:summary, Enum.sort(map)}
+
+      true ->
+        {:raw, map}
+    end
+  end
+
+  defp field_change?({_field, %{"old" => _, "new" => _}}), do: true
+  defp field_change?(_entry), do: false
+
+  defp scalar?(value)
+       when is_binary(value) or is_number(value) or is_boolean(value) or is_nil(value),
+       do: true
+
+  defp scalar?(_value), do: false
 end

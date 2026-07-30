@@ -36,7 +36,7 @@ defmodule SsmWeb.KeysLiveTest do
     refute has_element?(view, "#keys-#{bob_key.id}")
   end
 
-  test "creates a key through the modal and logs it", %{conn: conn} do
+  test "creates a key from a pasted line, comment becomes the name", %{conn: conn} do
     user = user_fixture(%{username: "alice"})
 
     {:ok, view, _html} = live(conn, ~p"/keys")
@@ -47,15 +47,16 @@ defmodule SsmWeb.KeysLiveTest do
     |> form("#key-form",
       user_key: %{
         user_id: user.id,
-        key_type: "ssh-ed25519",
-        key_base64: "AAAAC3NzaC1lZDI1NTE5AAAAINEW",
-        name: "new-laptop"
+        public_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINEW new-laptop",
+        name: ""
       }
     )
     |> render_submit()
 
     assert has_element?(view, "#keys", "new-laptop")
-    assert [_] = Users.list_keys(user_id: user.id)
+    assert [key] = Users.list_keys(user_id: user.id)
+    assert key.key_type == "ssh-ed25519"
+    assert key.key_base64 == "AAAAC3NzaC1lZDI1NTE5AAAAINEW"
 
     assert [entry] = Ssm.Activity.list()
     assert entry.activity_type == "key"
@@ -63,7 +64,28 @@ defmodule SsmWeb.KeysLiveTest do
     assert entry.target == "new-laptop"
   end
 
-  test "rejects key material with a type prefix", %{conn: conn} do
+  test "an explicit name overrides the pasted comment", %{conn: conn} do
+    user = user_fixture()
+
+    {:ok, view, _html} = live(conn, ~p"/keys")
+
+    view |> element("#new-key") |> render_click()
+
+    view
+    |> form("#key-form",
+      user_key: %{
+        user_id: user.id,
+        public_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINEW pasted-comment",
+        name: "chosen-name"
+      }
+    )
+    |> render_submit()
+
+    assert [key] = Users.list_keys(user_id: user.id)
+    assert key.name == "chosen-name"
+  end
+
+  test "rejects a paste whose material does not match the declared type", %{conn: conn} do
     user = user_fixture()
 
     {:ok, view, _html} = live(conn, ~p"/keys")
@@ -73,16 +95,37 @@ defmodule SsmWeb.KeysLiveTest do
     html =
       view
       |> form("#key-form",
-        user_key: %{
-          user_id: user.id,
-          key_type: "ssh-ed25519",
-          key_base64: "ssh-ed25519 AAAA laptop"
-        }
+        user_key: %{user_id: user.id, public_key: "ssh-ed25519 AAAA laptop"}
       )
       |> render_submit()
 
-    assert html =~ "must be base64 key material"
+    assert html =~ "Invalid key"
+    assert html =~ "does not match declared type"
     assert Users.count_keys() == 0
+  end
+
+  test "bulk import reports one result per line", %{conn: conn} do
+    user = user_fixture(%{username: "alice"})
+
+    {:ok, view, _html} = live(conn, ~p"/keys")
+
+    view |> element("#import-keys") |> render_click()
+
+    view
+    |> form("#key-import-form",
+      import: %{
+        user_id: user.id,
+        keys_text: """
+        ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINEW laptop
+        not-a-key AAAA junk
+        """
+      }
+    )
+    |> render_submit()
+
+    assert has_element?(view, "#import-results", "Line 1: imported")
+    assert has_element?(view, "#import-results", "Line 2: unsupported key type")
+    assert [_] = Users.list_keys(user_id: user.id)
   end
 
   test "edits only name and comment", %{conn: conn} do

@@ -13,82 +13,402 @@
    The heroicons installation itself is managed by your mix.exs */
 @plugin "../vendor/heroicons";
 
-/* daisyUI Tailwind Plugin. */
+/* daisyUI Tailwind Plugin — all built-in themes disabled; only the
+   hand-written design blocks below exist. */
 @plugin "daisyui/packages/bundle/daisyui" {
   themes: false;
 }
 
-/* daisyUI theme plugin.
-  We ship with two themes, a light one inspired on Phoenix colors and a dark one inspired
-  on Elixir colors. Build your own at: https://daisyui.com/theme-generator/ */
+/* daisyUI themes — four designs x light/dark (../dashboard & ../link-shortener
+   pattern, SsmWeb.Design). Semantic anchors hold across ALL designs: primary
+   and success stay green-family, error red, warning amber, info blue — in an
+   ops tool `primary` paints OK badges and confirm buttons, so a theme may
+   never repurpose it. */
+
+/* Orbit — the classic dashboard look: slate surfaces, emerald primary. */
 @plugin "daisyui/packages/bundle/daisyui-theme" {
-  name: "dark";
-  default: false;
+  name: "orbit-dark";
+  default: true;
   prefersdark: true;
   color-scheme: "dark";
-  --color-base-100: oklch(30.33% 0.016 252.42);
-  --color-base-200: oklch(25.26% 0.014 253.1);
-  --color-base-300: oklch(20.15% 0.012 254.09);
-  --color-base-content: oklch(97.807% 0.029 256.847);
-  --color-primary: oklch(58% 0.233 277.117);
-  --color-primary-content: oklch(96% 0.018 272.314);
-  --color-secondary: oklch(58% 0.233 277.117);
-  --color-secondary-content: oklch(96% 0.018 272.314);
-  --color-accent: oklch(60% 0.25 292.717);
-  --color-accent-content: oklch(96% 0.016 293.756);
-  --color-neutral: oklch(37% 0.044 257.287);
-  --color-neutral-content: oklch(98% 0.003 247.858);
-  --color-info: oklch(58% 0.158 241.966);
-  --color-info-content: oklch(97% 0.013 236.62);
-  --color-success: oklch(60% 0.118 184.704);
-  --color-success-content: oklch(98% 0.014 180.72);
-  --color-warning: oklch(66% 0.179 58.318);
-  --color-warning-content: oklch(98% 0.022 95.277);
-  --color-error: oklch(58% 0.253 17.585);
-  --color-error-content: oklch(96% 0.015 12.422);
-  --radius-selector: 0.25rem;
-  --radius-field: 0.25rem;
-  --radius-box: 0.5rem;
+  --color-base-100: oklch(12.9% 0.042 264.695);
+  --color-base-200: oklch(20.8% 0.042 265.755);
+  --color-base-300: oklch(27.9% 0.041 260.031);
+  --color-base-content: oklch(96.8% 0.007 247.896);
+  --color-primary: oklch(69.6% 0.17 162.48);
+  --color-primary-content: oklch(26.2% 0.051 172.552);
+  --color-secondary: oklch(70.4% 0.04 256.788);
+  --color-secondary-content: oklch(20.8% 0.042 265.755);
+  --color-accent: oklch(71.4% 0.203 305.504);
+  --color-accent-content: oklch(29.1% 0.149 302.717);
+  --color-neutral: oklch(37.2% 0.044 257.287);
+  --color-neutral-content: oklch(96.8% 0.007 247.896);
+  --color-info: oklch(68.5% 0.169 237.323);
+  --color-info-content: oklch(29.3% 0.066 243.157);
+  --color-success: oklch(69.6% 0.17 162.48);
+  --color-success-content: oklch(26.2% 0.051 172.552);
+  --color-warning: oklch(76.9% 0.188 70.08);
+  --color-warning-content: oklch(27.9% 0.077 45.635);
+  --color-error: oklch(63.7% 0.237 25.331);
+  --color-error-content: oklch(97.1% 0.013 17.38);
+  --radius-selector: 0.5rem;
+  --radius-field: 0.5rem;
+  --radius-box: 0.75rem;
   --size-selector: 0.21875rem;
   --size-field: 0.21875rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
+/* Orbit in daylight — cool paper, slate ink, deepened emerald. */
+@plugin "daisyui/packages/bundle/daisyui-theme" {
+  name: "orbit-light";
+  default: false;
+  prefersdark: false;
+  color-scheme: "light";
+  --color-base-100: oklch(98.4% 0.003 247.858);
+  --color-base-200: oklch(94% 0.006 247.9);
+  --color-base-300: oklch(88% 0.01 248);
+  --color-base-content: oklch(20.8% 0.042 265.755);
+  --color-primary: oklch(50.8% 0.118 165.612);
+  --color-primary-content: oklch(97.9% 0.021 166.113);
+  --color-secondary: oklch(44.6% 0.043 257.281);
+  --color-secondary-content: oklch(98.4% 0.003 247.858);
+  --color-accent: oklch(49.6% 0.265 301.924);
+  --color-accent-content: oklch(97.7% 0.014 308.299);
+  --color-neutral: oklch(27.9% 0.041 260.031);
+  --color-neutral-content: oklch(98.4% 0.003 247.858);
+  --color-info: oklch(50% 0.134 242.749);
+  --color-info-content: oklch(97.7% 0.013 236.62);
+  --color-success: oklch(50.8% 0.118 165.612);
+  --color-success-content: oklch(97.9% 0.021 166.113);
+  --color-warning: oklch(55.5% 0.163 48.998);
+  --color-warning-content: oklch(98.7% 0.022 95.277);
+  --color-error: oklch(51.4% 0.222 16.935);
+  --color-error-content: oklch(97.1% 0.013 17.38);
+  --radius-selector: 0.5rem;
+  --radius-field: 0.5rem;
+  --radius-box: 0.75rem;
+  --size-selector: 0.21875rem;
+  --size-field: 0.21875rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
+/* Bench — ink on paper, stamp green, square corners. */
+@plugin "daisyui/packages/bundle/daisyui-theme" {
+  name: "bench-light";
+  default: false;
+  prefersdark: false;
+  color-scheme: "light";
+  --color-base-100: oklch(99% 0.002 100);
+  --color-base-200: oklch(96.5% 0.003 100);
+  --color-base-300: oklch(92% 0.004 100);
+  --color-base-content: oklch(18% 0.01 260);
+  --color-primary: oklch(45% 0.12 165);
+  --color-primary-content: oklch(98% 0.01 165);
+  --color-secondary: oklch(35% 0.02 260);
+  --color-secondary-content: oklch(98% 0 0);
+  --color-accent: oklch(55% 0.18 40);
+  --color-accent-content: oklch(98% 0.01 40);
+  --color-neutral: oklch(25% 0.01 260);
+  --color-neutral-content: oklch(98% 0 0);
+  --color-info: oklch(55% 0.15 240);
+  --color-info-content: oklch(98% 0.01 240);
+  --color-success: oklch(50% 0.13 160);
+  --color-success-content: oklch(98% 0.01 160);
+  --color-warning: oklch(62% 0.16 70);
+  --color-warning-content: oklch(20% 0.05 70);
+  --color-error: oklch(52% 0.2 25);
+  --color-error-content: oklch(97% 0.014 25);
+  --radius-selector: 0rem;
+  --radius-field: 0rem;
+  --radius-box: 0rem;
+  --size-selector: 0.21875rem;
+  --size-field: 0.21875rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
+/* Bench after dark — terminal: phosphor green on near-black. */
+@plugin "daisyui/packages/bundle/daisyui-theme" {
+  name: "bench-dark";
+  default: false;
+  prefersdark: false;
+  color-scheme: "dark";
+  --color-base-100: oklch(13% 0.004 160);
+  --color-base-200: oklch(16.5% 0.005 160);
+  --color-base-300: oklch(22% 0.006 160);
+  --color-base-content: oklch(90% 0.02 150);
+  --color-primary: oklch(75% 0.16 150);
+  --color-primary-content: oklch(18% 0.05 150);
+  --color-secondary: oklch(80% 0.01 260);
+  --color-secondary-content: oklch(18% 0.01 260);
+  --color-accent: oklch(75% 0.15 70);
+  --color-accent-content: oklch(20% 0.05 70);
+  --color-neutral: oklch(28% 0.008 160);
+  --color-neutral-content: oklch(90% 0.02 150);
+  --color-info: oklch(70% 0.12 235);
+  --color-info-content: oklch(20% 0.04 235);
+  --color-success: oklch(72% 0.14 155);
+  --color-success-content: oklch(18% 0.05 155);
+  --color-warning: oklch(78% 0.15 80);
+  --color-warning-content: oklch(24% 0.06 80);
+  --color-error: oklch(65% 0.19 25);
+  --color-error-content: oklch(97% 0.014 25);
+  --radius-selector: 0rem;
+  --radius-field: 0rem;
+  --radius-box: 0rem;
+  --size-selector: 0.21875rem;
+  --size-field: 0.21875rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
+/* Soft — warm white, friendly green + coral, pill shapes. */
+@plugin "daisyui/packages/bundle/daisyui-theme" {
+  name: "soft-light";
+  default: false;
+  prefersdark: false;
+  color-scheme: "light";
+  --color-base-100: oklch(99% 0.004 90);
+  --color-base-200: oklch(96% 0.01 85);
+  --color-base-300: oklch(92% 0.015 85);
+  --color-base-content: oklch(27% 0.02 60);
+  --color-primary: oklch(50% 0.13 165);
+  --color-primary-content: oklch(97% 0.01 165);
+  --color-secondary: oklch(66% 0.16 20);
+  --color-secondary-content: oklch(98% 0.01 20);
+  --color-accent: oklch(76% 0.11 160);
+  --color-accent-content: oklch(22% 0.05 160);
+  --color-neutral: oklch(40% 0.02 60);
+  --color-neutral-content: oklch(98% 0 0);
+  --color-info: oklch(62% 0.14 240);
+  --color-info-content: oklch(97% 0.01 240);
+  --color-success: oklch(64% 0.13 165);
+  --color-success-content: oklch(98% 0.01 165);
+  --color-warning: oklch(75% 0.14 80);
+  --color-warning-content: oklch(25% 0.05 80);
+  --color-error: oklch(60% 0.2 20);
+  --color-error-content: oklch(97% 0.014 20);
+  --radius-selector: 2rem;
+  --radius-field: 1rem;
+  --radius-box: 1rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
   --border: 1.5px;
   --depth: 1;
   --noise: 0;
 }
 
+/* Soft at night — warm dark, brighter green + coral, pill shapes. */
 @plugin "daisyui/packages/bundle/daisyui-theme" {
-  name: "light";
-  default: true;
+  name: "soft-dark";
+  default: false;
   prefersdark: false;
-  color-scheme: "light";
-  --color-base-100: oklch(98% 0 0);
-  --color-base-200: oklch(96% 0.001 286.375);
-  --color-base-300: oklch(92% 0.004 286.32);
-  --color-base-content: oklch(21% 0.006 285.885);
-  --color-primary: oklch(70% 0.213 47.604);
-  --color-primary-content: oklch(98% 0.016 73.684);
-  --color-secondary: oklch(55% 0.027 264.364);
-  --color-secondary-content: oklch(98% 0.002 247.839);
-  --color-accent: oklch(0% 0 0);
-  --color-accent-content: oklch(100% 0 0);
-  --color-neutral: oklch(44% 0.017 285.786);
-  --color-neutral-content: oklch(98% 0 0);
-  --color-info: oklch(62% 0.214 259.815);
-  --color-info-content: oklch(97% 0.014 254.604);
-  --color-success: oklch(70% 0.14 182.503);
-  --color-success-content: oklch(98% 0.014 180.72);
-  --color-warning: oklch(66% 0.179 58.318);
-  --color-warning-content: oklch(98% 0.022 95.277);
-  --color-error: oklch(58% 0.253 17.585);
-  --color-error-content: oklch(96% 0.015 12.422);
+  color-scheme: "dark";
+  --color-base-100: oklch(18% 0.012 60);
+  --color-base-200: oklch(22% 0.014 60);
+  --color-base-300: oklch(28% 0.016 60);
+  --color-base-content: oklch(93% 0.01 85);
+  --color-primary: oklch(72% 0.13 165);
+  --color-primary-content: oklch(20% 0.05 165);
+  --color-secondary: oklch(72% 0.14 20);
+  --color-secondary-content: oklch(20% 0.05 20);
+  --color-accent: oklch(76% 0.11 160);
+  --color-accent-content: oklch(22% 0.05 160);
+  --color-neutral: oklch(34% 0.018 60);
+  --color-neutral-content: oklch(93% 0.01 85);
+  --color-info: oklch(70% 0.12 240);
+  --color-info-content: oklch(20% 0.04 240);
+  --color-success: oklch(72% 0.13 165);
+  --color-success-content: oklch(20% 0.05 165);
+  --color-warning: oklch(78% 0.14 80);
+  --color-warning-content: oklch(24% 0.05 80);
+  --color-error: oklch(68% 0.18 20);
+  --color-error-content: oklch(97% 0.014 20);
+  --radius-selector: 2rem;
+  --radius-field: 1rem;
+  --radius-box: 1rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1.5px;
+  --depth: 1;
+  --noise: 0;
+}
+
+/* Rainbow — colourful multi-hue design (from ../dashboard pro). The semantic
+   anchors stay put — primary/success are GREEN, error RED, warning amber,
+   info blue — the rainbow lives in the violet-tinted base plus purple
+   secondary and magenta accent. */
+@plugin "daisyui/packages/bundle/daisyui-theme" {
+  name: "rainbow-dark";
+  default: false;
+  prefersdark: false;
+  color-scheme: "dark";
+  --color-base-100: oklch(17% 0.035 290);
+  --color-base-200: oklch(22% 0.045 290);
+  --color-base-300: oklch(28% 0.055 290);
+  --color-base-content: oklch(96% 0.012 290);
+  --color-primary: oklch(72% 0.19 160);
+  --color-primary-content: oklch(22% 0.06 160);
+  --color-secondary: oklch(70% 0.22 300);
+  --color-secondary-content: oklch(20% 0.06 300);
+  --color-accent: oklch(72% 0.22 350);
+  --color-accent-content: oklch(22% 0.07 350);
+  --color-neutral: oklch(36% 0.05 290);
+  --color-neutral-content: oklch(96% 0.012 290);
+  --color-info: oklch(72% 0.15 230);
+  --color-info-content: oklch(22% 0.06 230);
+  --color-success: oklch(72% 0.17 160);
+  --color-success-content: oklch(22% 0.06 160);
+  --color-warning: oklch(80% 0.16 80);
+  --color-warning-content: oklch(28% 0.07 60);
+  --color-error: oklch(63.7% 0.237 25.331);
+  --color-error-content: oklch(97.1% 0.013 17.38);
   --radius-selector: 0.25rem;
   --radius-field: 0.25rem;
   --radius-box: 0.5rem;
   --size-selector: 0.21875rem;
   --size-field: 0.21875rem;
-  --border: 1.5px;
+  --border: 1px;
   --depth: 1;
   --noise: 0;
+}
+
+@plugin "daisyui/packages/bundle/daisyui-theme" {
+  name: "rainbow-light";
+  default: false;
+  prefersdark: false;
+  color-scheme: "light";
+  --color-base-100: oklch(98% 0.012 300);
+  --color-base-200: oklch(94% 0.022 300);
+  --color-base-300: oklch(88% 0.032 300);
+  --color-base-content: oklch(22% 0.03 285);
+  --color-primary: oklch(55% 0.15 160);
+  --color-primary-content: oklch(98% 0.02 160);
+  --color-secondary: oklch(50% 0.18 300);
+  --color-secondary-content: oklch(98% 0.01 300);
+  --color-accent: oklch(55% 0.2 350);
+  --color-accent-content: oklch(98% 0.01 350);
+  --color-neutral: oklch(32% 0.03 285);
+  --color-neutral-content: oklch(98% 0.008 300);
+  --color-info: oklch(52% 0.14 235);
+  --color-info-content: oklch(97.7% 0.013 236.62);
+  --color-success: oklch(50.8% 0.118 165.612);
+  --color-success-content: oklch(97.9% 0.021 166.113);
+  --color-warning: oklch(60% 0.15 70);
+  --color-warning-content: oklch(98.7% 0.022 95.277);
+  --color-error: oklch(51.4% 0.222 16.935);
+  --color-error-content: oklch(97.1% 0.013 17.38);
+  --radius-selector: 0.25rem;
+  --radius-field: 0.25rem;
+  --radius-box: 0.5rem;
+  --size-selector: 0.21875rem;
+  --size-field: 0.21875rem;
+  --border: 1px;
+  --depth: 1;
+  --noise: 0;
+}
+
+/* Rainbow flourish — decorative only, scoped to the rainbow themes: a
+   spectrum ribbon under the header and soft multi-hue glows behind the page.
+   Status colours (green up / red down / amber warn) come from the theme
+   variables above and stay untouched. */
+[data-theme^="rainbow-"] header {
+  position: relative;
+  border-bottom-color: transparent;
+}
+
+[data-theme^="rainbow-"] header::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 -2px 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    oklch(63.7% 0.237 25.331),
+    oklch(80% 0.16 80),
+    oklch(72% 0.19 160),
+    oklch(72% 0.15 230),
+    oklch(70% 0.22 300),
+    oklch(72% 0.22 350)
+  );
+}
+
+[data-theme="rainbow-dark"] main {
+  background-image:
+    radial-gradient(60rem 40rem at 12% -10%, oklch(40% 0.14 300 / 0.22), transparent 60%),
+    radial-gradient(50rem 35rem at 108% 12%, oklch(45% 0.13 230 / 0.18), transparent 60%),
+    radial-gradient(40rem 30rem at 88% 68%, oklch(45% 0.12 160 / 0.12), transparent 60%),
+    radial-gradient(36rem 28rem at -6% 62%, oklch(50% 0.11 80 / 0.1), transparent 60%),
+    radial-gradient(45rem 40rem at 55% 115%, oklch(45% 0.12 350 / 0.16), transparent 60%);
+  background-attachment: fixed;
+}
+
+[data-theme="rainbow-light"] main {
+  background-image:
+    radial-gradient(60rem 40rem at 12% -10%, oklch(75% 0.09 300 / 0.28), transparent 60%),
+    radial-gradient(50rem 35rem at 108% 12%, oklch(78% 0.08 230 / 0.24), transparent 60%),
+    radial-gradient(40rem 30rem at 88% 68%, oklch(80% 0.08 160 / 0.18), transparent 60%),
+    radial-gradient(36rem 28rem at -6% 62%, oklch(84% 0.08 85 / 0.16), transparent 60%),
+    radial-gradient(45rem 40rem at 55% 115%, oklch(78% 0.08 350 / 0.2), transparent 60%);
+  background-attachment: fixed;
+}
+
+/* Boxes: SSM's tile idioms are daisyUI .card plus bordered rounded wrappers.
+   One recognizable full-spectrum diagonal; alphas capped ~0.2 so text
+   contrast and semantic status colours survive. */
+[data-theme="rainbow-dark"]
+  :is(.card, :is(.rounded-lg, .rounded-xl).border:is(.bg-base-200, .border-base-300)) {
+  background-image: linear-gradient(
+    135deg,
+    oklch(55% 0.16 300 / 0.2) 0%,
+    oklch(55% 0.14 230 / 0.13) 28%,
+    oklch(58% 0.13 160 / 0.09) 52%,
+    oklch(65% 0.13 80 / 0.09) 74%,
+    oklch(55% 0.17 350 / 0.17) 100%
+  );
+}
+
+[data-theme="rainbow-light"]
+  :is(.card, :is(.rounded-lg, .rounded-xl).border:is(.bg-base-200, .border-base-300)) {
+  background-image: linear-gradient(
+    135deg,
+    oklch(72% 0.1 300 / 0.26) 0%,
+    oklch(76% 0.09 230 / 0.16) 28%,
+    oklch(80% 0.1 160 / 0.12) 52%,
+    oklch(84% 0.1 85 / 0.12) 74%,
+    oklch(74% 0.11 350 / 0.22) 100%
+  );
+}
+
+/* Rainbow zebra: even body rows carry a faint spectrum wash; row hover
+   colours sit underneath as background-color and still work. */
+[data-theme="rainbow-dark"] tbody tr:nth-child(even) {
+  background-image: linear-gradient(
+    90deg,
+    oklch(55% 0.16 300 / 0.09),
+    oklch(55% 0.14 230 / 0.06) 30%,
+    oklch(58% 0.13 160 / 0.05) 55%,
+    oklch(65% 0.13 80 / 0.05) 75%,
+    oklch(55% 0.17 350 / 0.08)
+  );
+}
+
+[data-theme="rainbow-light"] tbody tr:nth-child(even) {
+  background-image: linear-gradient(
+    90deg,
+    oklch(72% 0.1 300 / 0.14),
+    oklch(76% 0.09 230 / 0.09) 30%,
+    oklch(80% 0.1 160 / 0.07) 55%,
+    oklch(84% 0.1 85 / 0.07) 75%,
+    oklch(74% 0.11 350 / 0.12)
+  );
 }
 
 /* Add variants based on LiveView classes */
@@ -96,10 +416,38 @@
 @custom-variant phx-submit-loading (.phx-submit-loading&, .phx-submit-loading &);
 @custom-variant phx-change-loading (.phx-change-loading&, .phx-change-loading &);
 
-/* Use the data attribute for dark mode  */
-@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+/* Tailwind's dark: variant follows the active theme's mode suffix, not
+   prefers-color-scheme. */
+@custom-variant dark (&:where([data-theme$="-dark"], [data-theme$="-dark"] *));
 
 /* Make LiveView wrapper divs transparent for layout */
 [data-phx-session], [data-phx-teleported-src] { display: contents }
 
-/* This file is for your main application CSS */
+/* Base polish (from ../dashboard): Tailwind v4 preflight leaves buttons
+   cursor:default; give interactive elements a gentle colour transition and
+   keyboard users a visible focus ring. */
+@layer base {
+  button:not(:disabled),
+  summary {
+    cursor: pointer;
+  }
+
+  a, button, summary, select, input[type="checkbox"] {
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 1px;
+  }
+
+  tbody tr:hover {
+    background-color: color-mix(in oklab, var(--color-base-300) 45%, transparent);
+  }
+}
+
+/* Form fields may carry `focus:outline-none`; box-shadow is not `outline`,
+   so keyboard focus stays visible regardless. */
+input:focus-visible, select:focus-visible, textarea:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--color-primary) 65%, transparent);
+}

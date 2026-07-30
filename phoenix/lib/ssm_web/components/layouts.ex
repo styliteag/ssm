@@ -66,7 +66,20 @@ defmodule SsmWeb.Layouts do
 
       <div class="flex min-w-0 flex-1 flex-col">
         <header class="navbar border-b border-base-300 bg-base-100 px-4 sm:px-6">
-          <div class="flex-1">
+          <div class="flex flex-1 items-center gap-2">
+            <details :if={@current_user} data-popover class="relative sm:hidden">
+              <summary class="btn btn-ghost btn-sm list-none" aria-label="Navigation">
+                <.icon name="hero-bars-3" class="size-5" />
+              </summary>
+              <ul class="menu absolute left-0 z-30 mt-2 w-52 rounded-box border border-base-300 bg-base-100 p-2 shadow-lg">
+                <li :for={{label, path, icon, _key} <- nav_items()}>
+                  <.link navigate={path} class="flex items-center gap-2">
+                    <.icon name={icon} class="size-4" />
+                    {label}
+                  </.link>
+                </li>
+              </ul>
+            </details>
             <a :if={!@current_user} href="/" class="flex w-fit items-center gap-2">
               <.icon name="hero-key" class="size-5 text-primary" />
               <span class="font-semibold">SSM</span>
@@ -74,7 +87,7 @@ defmodule SsmWeb.Layouts do
           </div>
           <div class="flex-none">
             <ul class="flex items-center gap-3 px-1">
-              <li><.theme_toggle /></li>
+              <li><.theme_switcher /></li>
               <li :if={@current_user} class="text-sm opacity-75">{@current_user.username}</li>
               <li :if={@current_user}>
                 <.link href={~p"/sign-out"} method="delete" class="btn btn-ghost btn-sm">
@@ -159,39 +172,45 @@ defmodule SsmWeb.Layouts do
   end
 
   @doc """
-  Provides dark vs light theme toggle based on themes defined in app.css.
-
-  See <head> in root.html.heex which applies the theme before page load.
+  Design × mode theme switcher (SsmWeb.Design). Plain POST forms — no JS
+  needed to switch; app.js only marks the active buttons client-side from
+  the html element's data-theme (LiveViews don't carry the design assigns,
+  and the DOM attribute is the single truth anyway).
   """
-  def theme_toggle(assigns) do
+  def theme_switcher(assigns) do
     ~H"""
-    <div class="card relative flex flex-row items-center border-2 border-base-300 bg-base-300 rounded-full">
-      <div class="absolute w-1/3 h-full rounded-full border-1 border-base-200 bg-base-100 brightness-200 left-0 [[data-theme=light]_&]:left-1/3 [[data-theme=dark]_&]:left-2/3 [[data-theme-source=system]_&]:!left-0 transition-[left]" />
-
-      <button
-        class="flex p-2 cursor-pointer w-1/3"
-        phx-click={JS.dispatch("phx:set-theme")}
-        data-phx-theme="system"
-      >
-        <.icon name="hero-computer-desktop-micro" class="size-4 opacity-75 hover:opacity-100" />
-      </button>
-
-      <button
-        class="flex p-2 cursor-pointer w-1/3"
-        phx-click={JS.dispatch("phx:set-theme")}
-        data-phx-theme="light"
-      >
-        <.icon name="hero-sun-micro" class="size-4 opacity-75 hover:opacity-100" />
-      </button>
-
-      <button
-        class="flex p-2 cursor-pointer w-1/3"
-        phx-click={JS.dispatch("phx:set-theme")}
-        data-phx-theme="dark"
-      >
-        <.icon name="hero-moon-micro" class="size-4 opacity-75 hover:opacity-100" />
-      </button>
-    </div>
+    <details data-popover class="relative">
+      <summary class="btn btn-ghost btn-sm list-none" title="Theme">
+        <.icon name="hero-swatch" class="size-4" />
+        <span class="hidden sm:inline">Theme</span>
+      </summary>
+      <div class="absolute right-0 z-30 mt-2 w-60 rounded-box border border-base-300 bg-base-100 p-3 shadow-lg">
+        <div class="mb-1 text-xs font-semibold uppercase tracking-wide opacity-60">Design</div>
+        <div class="grid grid-cols-2 gap-1">
+          <form :for={design <- SsmWeb.Design.all()} method="post" action={~p"/design"}>
+            <input type="hidden" name="_csrf_token" value={Phoenix.Controller.get_csrf_token()} />
+            <input type="hidden" name="design" value={design.id} />
+            <button data-theme-design={design.id} class="btn btn-ghost btn-sm w-full justify-start">
+              {design.name}
+            </button>
+          </form>
+        </div>
+        <div class="mt-3 mb-1 text-xs font-semibold uppercase tracking-wide opacity-60">Mode</div>
+        <div class="grid grid-cols-3 gap-1">
+          <form
+            :for={{label, value} <- [{"Auto", ""}, {"Light", "light"}, {"Dark", "dark"}]}
+            method="post"
+            action={~p"/design/mode"}
+          >
+            <input type="hidden" name="_csrf_token" value={Phoenix.Controller.get_csrf_token()} />
+            <input type="hidden" name="mode" value={value} />
+            <button data-theme-mode={value} class="btn btn-ghost btn-sm w-full">
+              {label}
+            </button>
+          </form>
+        </div>
+      </div>
+    </details>
     """
   end
 end

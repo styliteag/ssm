@@ -77,6 +77,12 @@ defmodule Ssm.Users do
   @spec get_key(integer()) :: UserKey.t() | nil
   def get_key(id), do: UserKey |> Repo.get(id) |> Repo.preload(:user)
 
+  @doc "Look a key up by its base64 material (unique) — diff owner resolution."
+  @spec get_key_by_base64(String.t()) :: UserKey.t() | nil
+  def get_key_by_base64(base64) do
+    UserKey |> Repo.get_by(key_base64: base64) |> Repo.preload(:user)
+  end
+
   @spec create_key(map()) :: {:ok, UserKey.t()} | {:error, Ecto.Changeset.t()}
   def create_key(attrs), do: %UserKey{} |> UserKey.changeset(attrs) |> Repo.insert()
 

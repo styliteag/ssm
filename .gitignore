@@ -74,3 +74,6 @@ backend-rust/
 .htpasswd
 # Added by code-review-graph
 .code-review-graph/
+
+# Private per-machine agent instructions
+CLAUDE.local.md

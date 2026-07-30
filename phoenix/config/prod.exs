@@ -7,17 +7,9 @@ import Config
 # before starting your production server.
 config :ssm, SsmWeb.Endpoint, cache_static_manifest: "priv/static/cache_manifest.json"
 
-# Force using SSL in production. This also sets the "strict-security-transport" header,
-# known as HSTS. If you have a health check endpoint, you may want to exclude it below.
-# Note `:force_ssl` is required to be set at compile-time.
-config :ssm, SsmWeb.Endpoint,
-  force_ssl: [
-    rewrite_on: [:x_forwarded_proto],
-    exclude: [
-      # paths: ["/health"],
-      hosts: ["localhost", "127.0.0.1"]
-    ]
-  ]
+# No force_ssl: the container serves plain HTTP on :80 like the python/react
+# image did — TLS termination (and HSTS) belongs to the operator's fronting
+# proxy. Forcing https here would redirect-loop plain-HTTP LAN deployments.
 
 # Do not print debug messages in production
 config :logger, level: :info

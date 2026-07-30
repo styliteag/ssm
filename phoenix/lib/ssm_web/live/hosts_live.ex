@@ -36,7 +36,9 @@ defmodule SsmWeb.HostsLive do
   def handle_event("new", _params, socket) do
     {:noreply,
      assign(socket,
-       form: to_form(Hosts.change_host(%Host{})),
+       # SSH login pre-filled with root — the overwhelmingly common case
+       # (React HostsPage default since 1.1.0).
+       form: to_form(Hosts.change_host(%Host{}, %{"username" => "root"})),
        editing: nil,
        jump_candidates: Hosts.jump_candidates(nil)
      )}
