@@ -52,6 +52,7 @@ defmodule SsmWeb.DiffLive do
       |> assign(hosts: hosts, statuses: statuses, syncing: false)
       |> assign(detail: nil, detail_error: nil, detail_loading: false)
       |> assign(key_owners: %{}, unknown_key: nil)
+      |> assign(diff_search: "", diff_sort: nil)
 
     socket =
       if connected?(socket) do
@@ -79,7 +80,10 @@ defmodule SsmWeb.DiffLive do
         _ -> nil
       end
 
-    socket = assign(socket, selected: selected, detail: nil, detail_error: nil)
+    view = if params["view"] == "list", do: "list", else: "cards"
+
+    socket =
+      assign(socket, selected: selected, detail: nil, detail_error: nil, diff_view: view)
 
     socket =
       if (connected?(socket) and selected) && !selected.disabled do
@@ -264,17 +268,63 @@ defmodule SsmWeb.DiffLive do
 
   @impl true
   def handle_event("select", %{"id" => id}, socket) do
-    {:noreply, push_patch(socket, to: ~p"/diff?host_id=#{id}")}
+    {:noreply, push_patch(socket, to: ~p"/diff?#{[view: socket.assigns.diff_view, host_id: id]}")}
   end
 
   def handle_event("deselect", _params, socket) do
-    {:noreply, push_patch(socket, to: ~p"/diff")}
+    {:noreply, push_patch(socket, to: ~p"/diff?#{[view: socket.assigns.diff_view]}")}
   end
 
   def handle_event("refresh", _params, socket) do
     case socket.assigns.selected do
       %Host{disabled: false} = host -> {:noreply, start_detail_async(socket, host)}
       _ -> {:noreply, socket}
+    end
+  end
+
+  def handle_event("diff-view", %{"view" => view}, socket) when view in ~w(cards list) do
+    query =
+      if socket.assigns.selected,
+        do: [view: view, host_id: socket.assigns.selected.id],
+        else: [view: view]
+
+    {:noreply, push_patch(socket, to: ~p"/diff?#{query}")}
+  end
+
+  def handle_event("diff-search", %{"q" => q}, socket) do
+    {:noreply, assign(socket, :diff_search, q)}
+  end
+
+  def handle_event("sort", %{"key" => key}, socket) do
+    {:noreply, update(socket, :diff_sort, &SsmWeb.TableSort.toggle(&1, key))}
+  end
+
+  def handle_event("recheck-row", %{"id" => id}, socket) do
+    case Enum.find(socket.assigns.hosts, &(&1.id == String.to_integer(id))) do
+      %Host{disabled: false} = host ->
+        {:noreply,
+         socket
+         |> update(:statuses, &Map.put(&1, host.id, :loading))
+         |> start_statuses_async([host])}
+
+      _ ->
+        {:noreply, socket}
+    end
+  end
+
+  def handle_event("sync-row", %{"id" => id}, socket) do
+    case Enum.find(socket.assigns.hosts, &(&1.id == String.to_integer(id))) do
+      %Host{disabled: false} = host ->
+        {:noreply,
+         socket
+         |> assign(:syncing, true)
+         |> start_async(:sync, fn -> {host, Diffs.sync_host(host.id)} end)}
+
+      %Host{disabled: true} = host ->
+        {:noreply, put_flash(socket, :error, "Host #{host.name} is disabled.")}
+
+      nil ->
+        {:noreply, socket}
     end
   end
 
@@ -487,6 +537,44 @@ defmodule SsmWeb.DiffLive do
   defp format_reason(:not_found), do: "host not found"
   defp format_reason(other), do: inspect(other)
 
+  # Hosts for the list view: searched (name/address) and sorted.
+  defp list_rows(assigns) do
+    assigns.hosts
+    |> filter_hosts(assigns.diff_search)
+    |> SsmWeb.TableSort.sort(assigns.diff_sort, diff_sorters(assigns.statuses))
+  end
+
+  defp filter_hosts(hosts, search) do
+    case search |> String.trim() |> String.downcase() do
+      "" ->
+        hosts
+
+      needle ->
+        Enum.filter(hosts, fn host ->
+          String.contains?(String.downcase("#{host.name} #{host.address}"), needle)
+        end)
+    end
+  end
+
+  defp diff_sorters(statuses) do
+    %{
+      "name" => &SsmWeb.TableSort.string(&1.name),
+      "address" => &{SsmWeb.TableSort.string(&1.address), &1.port},
+      "status" => &diff_status_rank(statuses[&1.id]),
+      "differences" => &(-(diff_count(statuses[&1.id]) || -1))
+    }
+  end
+
+  defp diff_status_rank({:error, _}), do: 0
+  defp diff_status_rank({:needs_sync, _, _}), do: 1
+  defp diff_status_rank(:synced), do: 2
+  defp diff_status_rank(:loading), do: 3
+  defp diff_status_rank(:disabled), do: 4
+
+  defp diff_count({:needs_sync, missing, extra}), do: missing + extra
+  defp diff_count(:synced), do: 0
+  defp diff_count(_status), do: nil
+
   defp status_badge(assigns) do
     ~H"""
     <span class={["badge badge-sm", status_class(@status)]}>{status_text(@status)}</span>
@@ -543,7 +631,103 @@ defmodule SsmWeb.DiffLive do
 
       <p :if={@hosts == []} class="text-sm opacity-60">No hosts configured.</p>
 
-      <ul id="diff-hosts" class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+      <div class="flex flex-wrap items-center gap-3">
+        <div id="diff-view-switcher" class="join">
+          <button
+            id="diff-view-cards"
+            class={["btn btn-sm join-item", @diff_view == "cards" && "btn-primary"]}
+            phx-click="diff-view"
+            phx-value-view="cards"
+          >
+            <.icon name="hero-squares-2x2" class="size-4" /> Cards
+          </button>
+          <button
+            id="diff-view-list"
+            class={["btn btn-sm join-item", @diff_view == "list" && "btn-primary"]}
+            phx-click="diff-view"
+            phx-value-view="list"
+          >
+            <.icon name="hero-bars-3" class="size-4" /> List
+          </button>
+        </div>
+        <form
+          :if={@diff_view == "list"}
+          id="diff-search"
+          phx-change="diff-search"
+          class="w-64"
+        >
+          <input
+            type="search"
+            name="q"
+            value={@diff_search}
+            placeholder="Search hosts by name or address…"
+            class="input input-sm w-full"
+            phx-debounce="200"
+            autocomplete="off"
+          />
+        </form>
+      </div>
+
+      <div :if={@diff_view == "list" and @hosts != []} class="overflow-x-auto">
+        <.table
+          id="diff-list"
+          rows={list_rows(assigns)}
+          sort={@diff_sort}
+          row_id={&"diff-row-#{&1.id}"}
+          row_item={&Function.identity/1}
+          row_click={&JS.push("select", value: %{id: &1.id})}
+        >
+          <:col :let={host} label="Name" sort="name">
+            <span class="font-medium">{host.name}</span>
+            <p :if={host.comment} class="text-xs opacity-60">{host.comment}</p>
+          </:col>
+          <:col :let={host} label="Address" sort="address">{host.address}:{host.port}</:col>
+          <:col :let={host} label="Status" sort="status">
+            <.status_badge status={@statuses[host.id]} />
+          </:col>
+          <:col :let={host} label="Differences" sort="differences">
+            <span
+              :if={diff_count(@statuses[host.id])}
+              class={[
+                "tabular-nums",
+                (diff_count(@statuses[host.id]) > 0 && "font-medium text-warning") || "opacity-60"
+              ]}
+            >
+              {diff_count(@statuses[host.id])} difference(s)
+            </span>
+            <span :if={is_nil(diff_count(@statuses[host.id]))} class="opacity-40">—</span>
+          </:col>
+          <:action :let={host}>
+            <button
+              id={"recheck-row-#{host.id}"}
+              class="btn btn-ghost btn-xs"
+              phx-click="recheck-row"
+              phx-value-id={host.id}
+              disabled={host.disabled}
+              title="Re-check this host"
+            >
+              <.icon name="hero-arrow-path" class="size-4" />
+            </button>
+            <button
+              id={"sync-row-#{host.id}"}
+              class="btn btn-ghost btn-xs"
+              phx-click="sync-row"
+              phx-value-id={host.id}
+              disabled={host.disabled || @syncing}
+              data-confirm={"Sync #{host.name}? This writes the expected authorized_keys to the host."}
+              title="Sync this host"
+            >
+              <.icon name="hero-cloud-arrow-up" class="size-4" />
+            </button>
+          </:action>
+        </.table>
+      </div>
+
+      <ul
+        :if={@diff_view == "cards"}
+        id="diff-hosts"
+        class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3"
+      >
         <li :for={host <- @hosts}>
           <button
             id={"diff-host-#{host.id}"}

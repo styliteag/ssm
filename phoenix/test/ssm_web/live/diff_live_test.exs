@@ -281,6 +281,55 @@ defmodule SsmWeb.DiffLiveTest do
     refute has_element?(view, "[id^='assign-key-']")
   end
 
+  describe "list view" do
+    test "shows status and difference counts, searchable", %{conn: conn} do
+      drifted = host_fixture(%{name: "drifted", address: "10.0.0.7"})
+      clean = host_fixture(%{name: "clean", address: "10.0.0.8"})
+      Ssm.Diffs.StatusCache.put(drifted.id, {:needs_sync, 2, 1})
+      Ssm.Diffs.StatusCache.put(clean.id, :synced)
+
+      {:ok, view, _html} = live(conn, ~p"/diff?view=list")
+
+      assert has_element?(view, "#diff-row-#{drifted.id}", "3 difference(s)")
+      assert has_element?(view, "#diff-row-#{drifted.id} .badge", "needs sync")
+      assert has_element?(view, "#diff-row-#{clean.id}", "0 difference(s)")
+
+      view |> element("#diff-search") |> render_change(%{q: "drift"})
+      assert has_element?(view, "#diff-row-#{drifted.id}")
+      refute has_element?(view, "#diff-row-#{clean.id}")
+    end
+
+    test "per-row sync writes the host and logs", %{conn: conn} do
+      host = synced_setup()
+      Ssm.Diffs.StatusCache.put(host.id, :synced)
+      MockClient.set_default_exec(%Result{exit_code: 0})
+
+      {:ok, view, _html} = live(conn, ~p"/diff?view=list")
+
+      view |> element("#sync-row-#{host.id}") |> render_click()
+      render_async(view)
+
+      assert render(view) =~ "Synced web1"
+
+      assert Enum.any?(MockClient.calls().exec_inputs, fn {_id, cmd, _input} ->
+               String.contains?(cmd, "set_authorized_keyfile deploy")
+             end)
+    end
+
+    test "per-row recheck refreshes one host", %{conn: conn} do
+      host = synced_setup()
+      Ssm.Diffs.StatusCache.put(host.id, {:needs_sync, 5, 5})
+
+      {:ok, view, _html} = live(conn, ~p"/diff?view=list")
+      assert has_element?(view, "#diff-row-#{host.id}", "10 difference(s)")
+
+      view |> element("#recheck-row-#{host.id}") |> render_click()
+      render_async(view)
+
+      assert has_element?(view, "#diff-row-#{host.id} .badge", "synchronized")
+    end
+  end
+
   test "sync all only touches hosts that need it", %{conn: conn} do
     synced_host = synced_setup()
 
