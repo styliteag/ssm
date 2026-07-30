@@ -1,14 +1,12 @@
 # GitLeaks config for the CI full-history scan (security-scan.yml).
-# Allowlists cover KNOWN FAKE fixtures only — deliberately reviewed one by one.
-# The real historical finding (backend/keys/id_ssm in commit 3f1a856, the
-# retired "ssm-dev" dev key) is NOT allowlisted: it stays visible in every
-# scan until the key is confirmed dead everywhere.
+# Allowlists are deliberately reviewed one by one — fake fixtures and retired
+# material only. Nothing live is suppressed here.
 
 [extend]
 useDefault = true
 
 [allowlist]
-description = "Reviewed test fixtures and documented example values"
+description = "Reviewed test fixtures, documented example values, retired material"
 paths = [
   # Rust-era test suites (deleted from the tree, still in history): fake
   # passwords/keys constructed inline for HTTP auth tests.
@@ -28,4 +26,10 @@ paths = [
 # ExUnit fixtures use the bare ssh key-type prefix as key material — not a secret.
 regexes = [
   '''AAAAC3NzaC1lZDI1NTE5"?,?$''',
+]
+# Retired key material from one historical commit, confirmed no longer accepted
+# anywhere. The path never returns: that directory was deleted with the python
+# stack, so a re-added key would land elsewhere and still fail the scan.
+commits = [
+  "3f1a8562be7f455320736f86eb159b384eef1f2d",
 ]

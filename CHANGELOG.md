@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- **The GitLeaks CI scan is green again**: the reviewed allowlist now also covers retired material still present in repository history, so the job no longer carries a permanent error annotation and a genuinely new finding stands out instead of drowning in a known one.
+
 ## [2.0.1] - 2026-07-30
 
 ### Fixed
@@ -19,7 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`CLAUDE.md` is now a one-line `@AGENTS.md` import instead of a symlink** — the officially recommended, Windows-friendly way to share one agent-instruction file; editors no longer show two identical full files.
 
 ### Security
-- **GitLeaks in CI actually scans now**: the `gitleaks-action` wrapper had errored softly on every run for lack of an organization license — replaced with the plain (MIT) gitleaks CLI, pinned, full-history. A reviewed `.gitleaks.toml` allowlists known fake test fixtures and documented example values; one real historical finding (a retired dev SSH key briefly committed in April 2026) is deliberately left visible until confirmed dead. Also bumped the workflow's deprecated actions (checkout@v5, codeql upload-sarif@v4).
+- **GitLeaks in CI actually scans now**: the `gitleaks-action` wrapper had errored softly on every run for lack of an organization license — replaced with the plain (MIT) gitleaks CLI, pinned, full-history. A reviewed `.gitleaks.toml` allowlists known fake test fixtures and documented example values. Also bumped the workflow's deprecated actions (checkout@v5, codeql upload-sarif@v4).
 
 ## [2.0.0] - 2026-07-30
 
