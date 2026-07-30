@@ -29,6 +29,12 @@ defmodule Ssm.Users do
   @spec change_user(User.t(), map()) :: Ecto.Changeset.t()
   def change_user(%User{} = user, attrs \\ %{}), do: User.changeset(user, attrs)
 
+  @spec count_users() :: non_neg_integer()
+  def count_users, do: Repo.aggregate(User, :count)
+
+  @spec count_keys() :: non_neg_integer()
+  def count_keys, do: Repo.aggregate(UserKey, :count)
+
   ## Keys
 
   @spec list_keys(keyword()) :: [UserKey.t()]

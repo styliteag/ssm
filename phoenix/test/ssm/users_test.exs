@@ -21,6 +21,20 @@ defmodule Ssm.UsersTest do
     end
   end
 
+  describe "counts" do
+    test "count_users/0 and count_keys/0" do
+      assert Users.count_users() == 0
+      assert Users.count_keys() == 0
+
+      user = user_fixture()
+      _ = key_fixture(user)
+      _ = key_fixture(user)
+
+      assert Users.count_users() == 1
+      assert Users.count_keys() == 2
+    end
+  end
+
   describe "keys" do
     test "create key under a user and list by user" do
       user = user_fixture()

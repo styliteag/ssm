@@ -23,6 +23,9 @@ defmodule Ssm.Authorizations do
     Repo.all(query)
   end
 
+  @spec count_authorizations() :: non_neg_integer()
+  def count_authorizations, do: Repo.aggregate(Authorization, :count)
+
   @spec get_authorization(integer()) :: Authorization.t() | nil
   def get_authorization(id), do: Repo.get(Authorization, id)
 

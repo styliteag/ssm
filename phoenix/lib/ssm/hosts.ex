@@ -41,6 +41,13 @@ defmodule Ssm.Hosts do
   @spec change_host(Host.t(), map()) :: Ecto.Changeset.t()
   def change_host(%Host{} = host, attrs \\ %{}), do: Host.changeset(host, attrs)
 
+  @spec count_hosts() :: non_neg_integer()
+  def count_hosts, do: Repo.aggregate(Host, :count)
+
+  @spec count_disabled_hosts() :: non_neg_integer()
+  def count_disabled_hosts,
+    do: Repo.aggregate(from(h in Host, where: h.disabled == true), :count)
+
   @doc "Hosts eligible to be a jump host for `host` (any other host)."
   @spec jump_candidates(Host.t() | nil) :: [Host.t()]
   def jump_candidates(nil), do: list_hosts()

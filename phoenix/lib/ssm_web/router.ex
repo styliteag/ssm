@@ -26,6 +26,12 @@ defmodule SsmWeb.Router do
 
     live_session :authenticated, on_mount: [{SsmWeb.UserAuth, :live_user_required}] do
       live "/dashboard", DashboardLive
+      live "/hosts", HostsLive
+      live "/users", UsersLive
+      live "/keys", KeysLive
+      live "/authorizations", AuthorizationsLive
+      live "/diff", DiffLive
+      live "/activities", ActivitiesLive
     end
   end
 

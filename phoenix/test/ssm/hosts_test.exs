@@ -47,6 +47,20 @@ defmodule Ssm.HostsTest do
     end
   end
 
+  describe "counts" do
+    test "count_hosts/0 and count_disabled_hosts/0" do
+      assert Hosts.count_hosts() == 0
+      assert Hosts.count_disabled_hosts() == 0
+
+      _ = host_fixture()
+      disabled = host_fixture()
+      {:ok, _} = Hosts.update_host(disabled, %{disabled: true})
+
+      assert Hosts.count_hosts() == 2
+      assert Hosts.count_disabled_hosts() == 1
+    end
+  end
+
   describe "jump chains" do
     test "target_for resolves a two-level jump chain" do
       bastion = host_fixture(%{name: "bastion", address: "1.1.1.1"})
@@ -68,7 +82,7 @@ defmodule Ssm.HostsTest do
 
     test "jump_candidates excludes the host itself" do
       a = host_fixture(%{name: "a"})
-      b = host_fixture(%{name: "b"})
+      _b = host_fixture(%{name: "b"})
 
       names = a |> Hosts.jump_candidates() |> Enum.map(& &1.name)
       assert "b" in names

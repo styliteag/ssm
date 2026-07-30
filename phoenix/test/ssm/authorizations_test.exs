@@ -45,6 +45,16 @@ defmodule Ssm.AuthorizationsTest do
     assert length(Authorizations.list_authorizations(host_id: host.id)) == 2
   end
 
+  test "count_authorizations/0" do
+    assert Authorizations.count_authorizations() == 0
+
+    user = user_fixture()
+    host = host_fixture()
+    _ = authorization_fixture(user, host)
+
+    assert Authorizations.count_authorizations() == 1
+  end
+
   test "update and delete" do
     user = user_fixture()
     host = host_fixture()

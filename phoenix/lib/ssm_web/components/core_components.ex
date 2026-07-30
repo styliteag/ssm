@@ -336,6 +336,43 @@ defmodule SsmWeb.CoreComponents do
   end
 
   @doc """
+  Renders a modal dialog. Render it conditionally (`:if={@form}`); it is
+  always open while mounted. `on_cancel` fires on backdrop click, Esc, and
+  the ✕ button.
+
+  ## Examples
+
+      <.modal :if={@form} id="host-modal" on_cancel={JS.push("cancel")}>
+        <:title>Edit host</:title>
+        ...
+      </.modal>
+  """
+  attr :id, :string, required: true
+  attr :on_cancel, JS, default: %JS{}
+  slot :title
+  slot :inner_block, required: true
+
+  def modal(assigns) do
+    ~H"""
+    <div id={@id} class="modal modal-open" phx-window-keydown={@on_cancel} phx-key="escape">
+      <div class="modal-backdrop bg-black/50" phx-click={@on_cancel} aria-hidden="true"></div>
+      <div class="modal-box">
+        <button
+          type="button"
+          class="btn btn-circle btn-ghost btn-sm absolute top-2 right-2"
+          phx-click={@on_cancel}
+          aria-label={gettext("close")}
+        >
+          <.icon name="hero-x-mark" class="size-4" />
+        </button>
+        <h3 :if={@title != []} class="mb-4 text-lg font-semibold">{render_slot(@title)}</h3>
+        {render_slot(@inner_block)}
+      </div>
+    </div>
+    """
+  end
+
+  @doc """
   Renders a table with generic styling.
 
   ## Examples

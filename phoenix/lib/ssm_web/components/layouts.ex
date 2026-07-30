@@ -31,53 +31,82 @@ defmodule SsmWeb.Layouts do
     default: nil,
     doc: "the logged-in web user (%{username: ...}) or nil"
 
+  attr :active, :atom,
+    default: nil,
+    doc: "which sidebar entry to highlight (:dashboard, :hosts, ...)"
+
   slot :inner_block, required: true
 
   def app(assigns) do
     ~H"""
-    <header class="navbar bg-base-200 px-4 sm:px-6 lg:px-8">
-      <div class="flex-1 items-center gap-6">
-        <a href="/" class="flex w-fit items-center gap-2">
+    <div class="flex min-h-screen">
+      <aside
+        :if={@current_user}
+        class="hidden w-56 flex-none flex-col border-r border-base-300 bg-base-200 sm:flex"
+      >
+        <a href="/" class="flex items-center gap-2 px-4 py-4">
           <.icon name="hero-key" class="size-5 text-primary" />
           <span class="font-semibold">SSM</span>
           <span class="text-xs opacity-60">v{Application.spec(:ssm, :vsn)}</span>
         </a>
-        <nav :if={@current_user} class="flex items-center gap-1 text-sm">
-          <.nav_link navigate={~p"/dashboard"}>Dashboard</.nav_link>
-        </nav>
-      </div>
-      <div class="flex-none">
-        <ul class="flex px-1 space-x-3 items-center">
-          <li><.theme_toggle /></li>
-          <li :if={@current_user} class="text-sm opacity-75">{@current_user.username}</li>
-          <li :if={@current_user}>
-            <.link href={~p"/sign-out"} method="delete" class="btn btn-ghost btn-sm">
-              Sign out
+
+        <ul class="menu w-full flex-1 gap-1 px-2" id="sidebar-nav">
+          <li :for={{label, path, icon, key} <- nav_items()}>
+            <.link
+              navigate={path}
+              class={["flex items-center gap-2", @active == key && "menu-active"]}
+              aria-current={@active == key && "page"}
+            >
+              <.icon name={icon} class="size-4" />
+              {label}
             </.link>
           </li>
         </ul>
-      </div>
-    </header>
+      </aside>
 
-    <main class="px-4 py-8 sm:px-6 lg:px-8">
-      <div class="mx-auto max-w-7xl space-y-4">
-        {render_slot(@inner_block)}
+      <div class="flex min-w-0 flex-1 flex-col">
+        <header class="navbar border-b border-base-300 bg-base-100 px-4 sm:px-6">
+          <div class="flex-1">
+            <a :if={!@current_user} href="/" class="flex w-fit items-center gap-2">
+              <.icon name="hero-key" class="size-5 text-primary" />
+              <span class="font-semibold">SSM</span>
+            </a>
+          </div>
+          <div class="flex-none">
+            <ul class="flex items-center gap-3 px-1">
+              <li><.theme_toggle /></li>
+              <li :if={@current_user} class="text-sm opacity-75">{@current_user.username}</li>
+              <li :if={@current_user}>
+                <.link href={~p"/sign-out"} method="delete" class="btn btn-ghost btn-sm">
+                  Sign out
+                </.link>
+              </li>
+            </ul>
+          </div>
+        </header>
+
+        <main class="flex-1 px-4 py-6 sm:px-6 lg:px-8">
+          <div class="mx-auto max-w-7xl space-y-4">
+            {render_slot(@inner_block)}
+          </div>
+        </main>
       </div>
-    </main>
+    </div>
 
     <.flash_group flash={@flash} />
     """
   end
 
-  attr :navigate, :string, required: true
-  slot :inner_block, required: true
-
-  defp nav_link(assigns) do
-    ~H"""
-    <.link navigate={@navigate} class="btn btn-ghost btn-sm font-normal">
-      {render_slot(@inner_block)}
-    </.link>
-    """
+  defp nav_items do
+    [
+      {"Dashboard", ~p"/dashboard", "hero-squares-2x2", :dashboard},
+      {"Hosts", ~p"/hosts", "hero-server", :hosts},
+      {"Users", ~p"/users", "hero-users", :users},
+      {"SSH Keys", ~p"/keys", "hero-key", :keys},
+      {"Authorizations", ~p"/authorizations", "hero-shield-check", :authorizations},
+      {"Diff Viewer", ~p"/diff", "hero-arrows-right-left", :diff},
+      {"Activities", ~p"/activities", "hero-clock", :activities}
+    ]
   end
 
   @doc """
