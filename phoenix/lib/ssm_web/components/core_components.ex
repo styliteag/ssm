@@ -306,6 +306,39 @@ defmodule SsmWeb.CoreComponents do
   defp sort_icon({key, :desc}, key), do: "hero-chevron-down"
   defp sort_icon(_sort, _key), do: "hero-chevron-up-down"
 
+  @doc """
+  List/cards view switcher. Pushes a `view-mode` event with the chosen view.
+
+      <.view_toggle id="hosts-view" view={@view} />
+  """
+  attr :id, :string, required: true
+  attr :view, :string, required: true, doc: ~s(current view: "list" or "cards")
+
+  def view_toggle(assigns) do
+    ~H"""
+    <div id={@id} class="join">
+      <button
+        id={"#{@id}-list"}
+        type="button"
+        class={["btn btn-sm join-item", @view == "list" && "btn-primary"]}
+        phx-click="view-mode"
+        phx-value-view="list"
+      >
+        <.icon name="hero-bars-3" class="size-4" /> List
+      </button>
+      <button
+        id={"#{@id}-cards"}
+        type="button"
+        class={["btn btn-sm join-item", @view == "cards" && "btn-primary"]}
+        phx-click="view-mode"
+        phx-value-view="cards"
+      >
+        <.icon name="hero-squares-2x2" class="size-4" /> Cards
+      </button>
+    </div>
+    """
+  end
+
   # Helper used by inputs to generate form errors
   defp error(assigns) do
     ~H"""

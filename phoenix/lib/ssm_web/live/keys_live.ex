@@ -34,7 +34,8 @@ defmodule SsmWeb.KeysLive do
        import_user_id: nil,
        search: "",
        type_filter: "all",
-       sort: nil
+       sort: nil,
+       view: "list"
      )}
   end
 
@@ -116,6 +117,11 @@ defmodule SsmWeb.KeysLive do
   def handle_event("sort", %{"key" => key}, socket) do
     sort = SsmWeb.TableSort.toggle(socket.assigns.sort, key)
     {:noreply, socket |> assign(:sort, sort) |> refilter()}
+  end
+
+  # Re-stream on toggle so the freshly shown container gets its rows.
+  def handle_event("view-mode", %{"view" => view}, socket) when view in ~w(list cards) do
+    {:noreply, socket |> assign(:view, view) |> refilter()}
   end
 
   def handle_event("type-filter", %{"type" => type}, socket) when type in @type_filters do
@@ -520,9 +526,49 @@ defmodule SsmWeb.KeysLive do
         </button>
       </div>
 
+      <.view_toggle id="keys-view" view={@view} />
+
       <p :if={@key_count == 0} class="text-sm opacity-60">No keys match the current filters.</p>
 
-      <div :if={@key_count > 0} class="overflow-x-auto">
+      <ul
+        :if={@view == "cards" and @key_count > 0}
+        id="keys-cards"
+        phx-update="stream"
+        class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3"
+      >
+        <li
+          :for={{id, key} <- @streams.keys}
+          id={id}
+          class="rounded-box bg-base-200 px-4 py-3"
+        >
+          <div class="flex items-center gap-2">
+            <span class="min-w-0 flex-1 truncate font-medium">{key.name || "—"}</span>
+            <span class={[
+              "badge badge-sm flex-none whitespace-nowrap",
+              key_type_badge_class(key.key_type)
+            ]}>
+              {key.key_type}
+            </span>
+          </div>
+          <div class="mt-1 flex flex-wrap gap-x-3 text-xs opacity-70">
+            <.link navigate={~p"/keys?user_id=#{key.user_id}"} class="link link-hover">
+              {key.user.username}
+            </.link>
+            <span title="Distinct hosts the owner has authorizations for">
+              {Map.get(@hosts_by_user, key.user_id, 0)} host(s)
+            </span>
+          </div>
+          <p class="mt-1 truncate font-mono text-xs opacity-60">{truncate_key(key.key_base64)}</p>
+          <p :if={key.extra_comment} class="mt-1 truncate text-xs opacity-60">
+            {key.extra_comment}
+          </p>
+          <div class="mt-2 flex gap-1">
+            <.key_actions key={key} />
+          </div>
+        </li>
+      </ul>
+
+      <div :if={@view == "list" and @key_count > 0} class="overflow-x-auto">
         <.table id="keys" rows={@streams.keys} sort={@sort}>
           <:col :let={{_id, key}} label="User" sort="user">{key.user.username}</:col>
           <:col :let={{_id, key}} label="Name" sort="name">
@@ -541,35 +587,7 @@ defmodule SsmWeb.KeysLive do
             </span>
           </:col>
           <:action :let={{_id, key}}>
-            <.copy_button id={"copy-key-#{key.id}"} line={full_key_line(key)} />
-            <button
-              id={"view-key-#{key.id}"}
-              class="btn btn-ghost btn-xs"
-              phx-click="view"
-              phx-value-id={key.id}
-              title="View full key"
-            >
-              <.icon name="hero-eye" class="size-4" />
-            </button>
-            <button
-              id={"edit-key-#{key.id}"}
-              class="btn btn-ghost btn-xs"
-              phx-click="edit"
-              phx-value-id={key.id}
-              title="Edit key"
-            >
-              <.icon name="hero-pencil-square" class="size-4" />
-            </button>
-            <button
-              id={"delete-key-#{key.id}"}
-              class="btn btn-ghost btn-xs text-error"
-              phx-click="delete"
-              phx-value-id={key.id}
-              data-confirm={"Delete key #{key_label(key)} of #{key.user.username}?"}
-              title="Delete key"
-            >
-              <.icon name="hero-trash" class="size-4" />
-            </button>
+            <.key_actions key={key} />
           </:action>
         </.table>
       </div>
@@ -626,6 +644,42 @@ defmodule SsmWeb.KeysLive do
         <div class="stat-desc text-sm" id="stat-types">{type_summary(@stats.by_type)}</div>
       </div>
     </div>
+    """
+  end
+
+  attr :key, :any, required: true
+
+  defp key_actions(assigns) do
+    ~H"""
+    <.copy_button id={"copy-key-#{@key.id}"} line={full_key_line(@key)} />
+    <button
+      id={"view-key-#{@key.id}"}
+      class="btn btn-ghost btn-xs"
+      phx-click="view"
+      phx-value-id={@key.id}
+      title="View full key"
+    >
+      <.icon name="hero-eye" class="size-4" />
+    </button>
+    <button
+      id={"edit-key-#{@key.id}"}
+      class="btn btn-ghost btn-xs"
+      phx-click="edit"
+      phx-value-id={@key.id}
+      title="Edit key"
+    >
+      <.icon name="hero-pencil-square" class="size-4" />
+    </button>
+    <button
+      id={"delete-key-#{@key.id}"}
+      class="btn btn-ghost btn-xs text-error"
+      phx-click="delete"
+      phx-value-id={@key.id}
+      data-confirm={"Delete key #{key_label(@key)} of #{@key.user.username}?"}
+      title="Delete key"
+    >
+      <.icon name="hero-trash" class="size-4" />
+    </button>
     """
   end
 

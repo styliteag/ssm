@@ -26,7 +26,7 @@ defmodule SsmWeb.UsersLive do
      |> assign(page_title: "Users")
      |> assign(form: nil, editing: nil)
      |> assign(selected: MapSet.new(), splitting: nil, merging: nil, bulk_deleting: false)
-     |> assign(sort: nil)
+     |> assign(sort: nil, view: "list")
      |> reload_users()}
   end
 
@@ -63,6 +63,10 @@ defmodule SsmWeb.UsersLive do
   def handle_event("sort", %{"key" => key}, socket) do
     sort = SsmWeb.TableSort.toggle(socket.assigns.sort, key)
     {:noreply, socket |> assign(:sort, sort) |> reload_users()}
+  end
+
+  def handle_event("view-mode", %{"view" => view}, socket) when view in ~w(list cards) do
+    {:noreply, assign(socket, :view, view)}
   end
 
   def handle_event("new", _params, socket) do
@@ -466,7 +470,50 @@ defmodule SsmWeb.UsersLive do
         <button class="btn btn-ghost btn-sm" phx-click="clear-selection">Clear</button>
       </div>
 
-      <div :if={@user_count > 0} class="overflow-x-auto">
+      <.view_toggle id="users-view" view={@view} />
+
+      <ul
+        :if={@view == "cards" and @user_count > 0}
+        class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3"
+      >
+        <li
+          :for={row <- @rows}
+          id={"user-card-#{row.id}"}
+          class="rounded-box bg-base-200 px-4 py-3"
+        >
+          <div class="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id={"select-user-#{row.id}"}
+              class="checkbox checkbox-sm flex-none"
+              checked={MapSet.member?(@selected, row.id)}
+              phx-click="toggle-select"
+              phx-value-id={row.id}
+            />
+            <span class="min-w-0 flex-1 truncate font-medium">{row.user.username}</span>
+            <span class={[
+              "badge badge-sm flex-none",
+              (row.user.enabled && "badge-success") || "badge-error"
+            ]}>
+              {if row.user.enabled, do: "enabled", else: "disabled"}
+            </span>
+          </div>
+          <div class="mt-1 flex flex-wrap gap-x-3 text-xs opacity-70">
+            <.link navigate={~p"/keys?user_id=#{row.id}"} class="link link-hover">
+              {row.key_count} key(s)
+            </.link>
+            <.link navigate={~p"/authorizations?user_id=#{row.id}"} class="link link-hover">
+              {row.authorization_count} grant(s)
+            </.link>
+          </div>
+          <p :if={row.user.comment} class="mt-1 truncate text-xs opacity-60">{row.user.comment}</p>
+          <div class="mt-2 flex gap-1">
+            <.user_actions row={row} />
+          </div>
+        </li>
+      </ul>
+
+      <div :if={@view == "list" and @user_count > 0} class="overflow-x-auto">
         <.table
           id="users"
           rows={@rows}
@@ -504,44 +551,7 @@ defmodule SsmWeb.UsersLive do
             </.link>
           </:col>
           <:action :let={row}>
-            <button
-              :if={row.key_count > 1}
-              id={"split-user-#{row.id}"}
-              class="btn btn-ghost btn-xs"
-              phx-click="split-open"
-              phx-value-id={row.id}
-              title="Split keys to a new user"
-            >
-              <.icon name="hero-scissors" class="size-4" />
-            </button>
-            <button
-              id={"toggle-user-#{row.id}"}
-              class="btn btn-ghost btn-xs"
-              phx-click="toggle_enabled"
-              phx-value-id={row.id}
-              title={if row.user.enabled, do: "Disable user", else: "Enable user"}
-            >
-              <.icon name={if row.user.enabled, do: "hero-pause", else: "hero-play"} class="size-4" />
-            </button>
-            <button
-              id={"edit-user-#{row.id}"}
-              class="btn btn-ghost btn-xs"
-              phx-click="edit"
-              phx-value-id={row.id}
-              title="Edit user"
-            >
-              <.icon name="hero-pencil-square" class="size-4" />
-            </button>
-            <button
-              id={"delete-user-#{row.id}"}
-              class="btn btn-ghost btn-xs text-error"
-              phx-click="delete"
-              phx-value-id={row.id}
-              data-confirm={"Delete user #{row.user.username}? Their keys and authorizations go with them."}
-              title="Delete user"
-            >
-              <.icon name="hero-trash" class="size-4" />
-            </button>
+            <.user_actions row={row} />
           </:action>
         </.table>
       </div>
@@ -567,6 +577,51 @@ defmodule SsmWeb.UsersLive do
       <.merge_modal :if={@merging} merging={@merging} />
       <.bulk_delete_modal :if={@bulk_deleting} rows={selected_rows_from_assigns(assigns)} />
     </Layouts.app>
+    """
+  end
+
+  attr :row, :map, required: true
+
+  defp user_actions(assigns) do
+    ~H"""
+    <button
+      :if={@row.key_count > 1}
+      id={"split-user-#{@row.id}"}
+      class="btn btn-ghost btn-xs"
+      phx-click="split-open"
+      phx-value-id={@row.id}
+      title="Split keys to a new user"
+    >
+      <.icon name="hero-scissors" class="size-4" />
+    </button>
+    <button
+      id={"toggle-user-#{@row.id}"}
+      class="btn btn-ghost btn-xs"
+      phx-click="toggle_enabled"
+      phx-value-id={@row.id}
+      title={if @row.user.enabled, do: "Disable user", else: "Enable user"}
+    >
+      <.icon name={if @row.user.enabled, do: "hero-pause", else: "hero-play"} class="size-4" />
+    </button>
+    <button
+      id={"edit-user-#{@row.id}"}
+      class="btn btn-ghost btn-xs"
+      phx-click="edit"
+      phx-value-id={@row.id}
+      title="Edit user"
+    >
+      <.icon name="hero-pencil-square" class="size-4" />
+    </button>
+    <button
+      id={"delete-user-#{@row.id}"}
+      class="btn btn-ghost btn-xs text-error"
+      phx-click="delete"
+      phx-value-id={@row.id}
+      data-confirm={"Delete user #{@row.user.username}? Their keys and authorizations go with them."}
+      title="Delete user"
+    >
+      <.icon name="hero-trash" class="size-4" />
+    </button>
     """
   end
 

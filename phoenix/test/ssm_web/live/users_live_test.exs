@@ -223,6 +223,18 @@ defmodule SsmWeb.UsersLiveTest do
     assert length(deletes) == 2
   end
 
+  test "cards view renders user cards with selection", %{conn: conn} do
+    user = user_fixture(%{username: "alice"})
+
+    {:ok, view, _html} = live(conn, ~p"/users")
+
+    view |> element("#users-view-cards") |> render_click()
+
+    assert has_element?(view, "#user-card-#{user.id}", "alice")
+    view |> element("#select-user-#{user.id}") |> render_click()
+    assert has_element?(view, "#bulk-toolbar", "1 selected")
+  end
+
   test "deletes a user with keys (cascade)", %{conn: conn} do
     user = user_fixture()
     key = key_fixture(user)

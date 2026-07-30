@@ -74,6 +74,20 @@ defmodule SsmWeb.HostsLiveTest do
     assert render(view) =~ ~r/zebra.*alpha/s
   end
 
+  test "cards view renders host cards with status and actions", %{conn: conn} do
+    host = host_fixture(%{name: "web1"})
+    Ssm.Diffs.StatusCache.put(host.id, :synced)
+
+    {:ok, view, _html} = live(conn, ~p"/hosts")
+
+    view |> element("#hosts-view-cards") |> render_click()
+
+    assert has_element?(view, "#host-card-#{host.id}", "web1")
+    assert has_element?(view, "#host-card-#{host.id} .badge", "online")
+    assert has_element?(view, "#host-card-#{host.id} #edit-host-#{host.id}")
+    refute has_element?(view, "#hosts-#{host.id}")
+  end
+
   test "rows cross-link to authorizations and the diff viewer", %{conn: conn} do
     host = host_fixture(%{name: "web1"})
     user = user_fixture()

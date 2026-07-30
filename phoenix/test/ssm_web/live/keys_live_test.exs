@@ -157,6 +157,19 @@ defmodule SsmWeb.KeysLiveTest do
     assert has_element?(view, "#key-view-line", "ssh-ed25519 FULLKEYMATERIAL laptop")
   end
 
+  test "cards view renders key cards", %{conn: conn} do
+    user = user_fixture(%{username: "alice"})
+    key = key_fixture(user, %{name: "laptop"})
+
+    {:ok, view, _html} = live(conn, ~p"/keys")
+
+    view |> element("#keys-view-cards") |> render_click()
+
+    assert has_element?(view, "#keys-#{key.id}", "laptop")
+    assert has_element?(view, "#keys-#{key.id}", "alice")
+    assert has_element?(view, "#keys-#{key.id} #view-key-#{key.id}")
+  end
+
   test "deletes a key", %{conn: conn} do
     user = user_fixture()
     key = key_fixture(user)

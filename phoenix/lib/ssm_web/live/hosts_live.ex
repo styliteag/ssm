@@ -29,7 +29,7 @@ defmodule SsmWeb.HostsLive do
      socket
      |> assign(page_title: "Hosts")
      |> assign(form: nil, editing: nil, testing_id: nil)
-     |> assign(filter: "active", conn_results: %{}, sort: nil)
+     |> assign(filter: "active", conn_results: %{}, sort: nil, view: "list")
      |> reload_hosts()}
   end
 
@@ -115,6 +115,10 @@ defmodule SsmWeb.HostsLive do
   def handle_event("sort", %{"key" => key}, socket) do
     sort = SsmWeb.TableSort.toggle(socket.assigns.sort, key)
     {:noreply, socket |> assign(:sort, sort) |> refilter()}
+  end
+
+  def handle_event("view-mode", %{"view" => view}, socket) when view in ~w(list cards) do
+    {:noreply, assign(socket, :view, view)}
   end
 
   def handle_event("new", _params, socket) do
@@ -357,11 +361,49 @@ defmodule SsmWeb.HostsLive do
         No hosts yet — create the first one.
       </p>
 
+      <.view_toggle id="hosts-view" view={@view} />
+
       <p :if={@host_count > 0 and @rows == []} class="text-sm opacity-60">
         No hosts match this filter.
       </p>
 
-      <div :if={@rows != []} class="overflow-x-auto">
+      <ul :if={@view == "cards" and @rows != []} class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        <li
+          :for={host <- @rows}
+          id={"host-card-#{host.id}"}
+          class="rounded-box bg-base-200 px-4 py-3"
+        >
+          <div class="flex items-center justify-between gap-2">
+            <span class="min-w-0">
+              <span class="block truncate font-medium">{host.name}</span>
+              <span class="block truncate text-xs opacity-60">{host.address}:{host.port}</span>
+            </span>
+            <span
+              class={["badge badge-sm flex-none", status_class(@statuses[host.id])]}
+              title={status_title(@statuses[host.id])}
+            >
+              {status_label(@statuses[host.id])}
+            </span>
+          </div>
+          <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs opacity-70">
+            <span>login {host.username}</span>
+            <span :if={host.jump_via}>via {Map.get(@host_names, host.jump_via)}</span>
+            <.link
+              navigate={~p"/authorizations?host_id=#{host.id}"}
+              class="link link-hover"
+              title="Authorizations on this host"
+            >
+              {Map.get(@auth_counts, host.id, 0)} grant(s)
+            </.link>
+          </div>
+          <p :if={host.comment} class="mt-1 truncate text-xs opacity-60">{host.comment}</p>
+          <div class="mt-2 flex gap-1">
+            <.host_actions host={host} testing_id={@testing_id} />
+          </div>
+        </li>
+      </ul>
+
+      <div :if={@view == "list" and @rows != []} class="overflow-x-auto">
         <.table
           id="hosts"
           rows={@rows}
@@ -396,94 +438,114 @@ defmodule SsmWeb.HostsLive do
             </span>
           </:col>
           <:action :let={host}>
-            <.link
-              id={"diff-link-#{host.id}"}
-              navigate={~p"/diff?host_id=#{host.id}"}
-              class="btn btn-ghost btn-xs"
-              title="Open in diff viewer"
-            >
-              <.icon name="hero-arrows-right-left" class="size-4" />
-            </.link>
-            <button
-              id={"test-host-#{host.id}"}
-              class="btn btn-ghost btn-xs"
-              phx-click="test_connection"
-              phx-value-id={host.id}
-              disabled={@testing_id != nil}
-              title="Test SSH connection"
-            >
-              <.icon
-                name={
-                  if @testing_id == host.id,
-                    do: "hero-arrow-path",
-                    else: "hero-signal"
-                }
-                class={["size-4", @testing_id == host.id && "motion-safe:animate-spin"]}
-              />
-            </button>
-            <button
-              id={"toggle-host-#{host.id}"}
-              class="btn btn-ghost btn-xs"
-              phx-click="toggle_disabled"
-              phx-value-id={host.id}
-              title={if host.disabled, do: "Enable host", else: "Disable host"}
-            >
-              <.icon name={if host.disabled, do: "hero-play", else: "hero-pause"} class="size-4" />
-            </button>
-            <button
-              id={"edit-host-#{host.id}"}
-              class="btn btn-ghost btn-xs"
-              phx-click="edit"
-              phx-value-id={host.id}
-              title="Edit host"
-            >
-              <.icon name="hero-pencil-square" class="size-4" />
-            </button>
-            <button
-              id={"delete-host-#{host.id}"}
-              class="btn btn-ghost btn-xs text-error"
-              phx-click="delete"
-              phx-value-id={host.id}
-              data-confirm={"Delete host #{host.name}? Its authorizations go with it."}
-              title="Delete host"
-            >
-              <.icon name="hero-trash" class="size-4" />
-            </button>
+            <.host_actions host={host} testing_id={@testing_id} />
           </:action>
         </.table>
       </div>
 
       <.modal :if={@form} id="host-modal" on_cancel={JS.push("cancel")}>
         <:title>{if @editing, do: "Edit host", else: "New host"}</:title>
-
-        <.form for={@form} id="host-form" phx-change="validate" phx-submit="save" class="space-y-2">
-          <.input field={@form[:name]} type="text" label="Name" required />
-          <div class="grid grid-cols-3 gap-3">
-            <div class="col-span-2">
-              <.input field={@form[:address]} type="text" label="Address" required />
-            </div>
-            <.input field={@form[:port]} type="number" label="Port" required />
-          </div>
-          <.input field={@form[:username]} type="text" label="SSH login user" required />
-          <.input
-            field={@form[:jump_via]}
-            type="select"
-            label="Jump via"
-            prompt="None (direct connection)"
-            options={Enum.map(@jump_candidates, &{&1.name, &1.id})}
-          />
-          <.input field={@form[:comment]} type="text" label="Comment" />
-          <.input field={@form[:disabled]} type="checkbox" label="Disabled (blocks all SSH)" />
-
-          <div class="modal-action">
-            <button type="button" class="btn btn-ghost" phx-click="cancel">Cancel</button>
-            <button type="submit" class="btn btn-primary">
-              {if @editing, do: "Save changes", else: "Create host"}
-            </button>
-          </div>
-        </.form>
+        <.host_modal_body form={@form} editing={@editing} jump_candidates={@jump_candidates} />
       </.modal>
     </Layouts.app>
+    """
+  end
+
+  attr :host, :any, required: true
+  attr :testing_id, :any, required: true
+
+  defp host_actions(assigns) do
+    ~H"""
+    <.link
+      id={"diff-link-#{@host.id}"}
+      navigate={~p"/diff?host_id=#{@host.id}"}
+      class="btn btn-ghost btn-xs"
+      title="Open in diff viewer"
+    >
+      <.icon name="hero-arrows-right-left" class="size-4" />
+    </.link>
+    <button
+      id={"test-host-#{@host.id}"}
+      class="btn btn-ghost btn-xs"
+      phx-click="test_connection"
+      phx-value-id={@host.id}
+      disabled={@testing_id != nil}
+      title="Test SSH connection"
+    >
+      <.icon
+        name={
+          if @testing_id == @host.id,
+            do: "hero-arrow-path",
+            else: "hero-signal"
+        }
+        class={["size-4", @testing_id == @host.id && "motion-safe:animate-spin"]}
+      />
+    </button>
+    <button
+      id={"toggle-host-#{@host.id}"}
+      class="btn btn-ghost btn-xs"
+      phx-click="toggle_disabled"
+      phx-value-id={@host.id}
+      title={if @host.disabled, do: "Enable host", else: "Disable host"}
+    >
+      <.icon name={if @host.disabled, do: "hero-play", else: "hero-pause"} class="size-4" />
+    </button>
+    <button
+      id={"edit-host-#{@host.id}"}
+      class="btn btn-ghost btn-xs"
+      phx-click="edit"
+      phx-value-id={@host.id}
+      title="Edit host"
+    >
+      <.icon name="hero-pencil-square" class="size-4" />
+    </button>
+    <button
+      id={"delete-host-#{@host.id}"}
+      class="btn btn-ghost btn-xs text-error"
+      phx-click="delete"
+      phx-value-id={@host.id}
+      data-confirm={"Delete host #{@host.name}? Its authorizations go with it."}
+      title="Delete host"
+    >
+      <.icon name="hero-trash" class="size-4" />
+    </button>
+    """
+  end
+
+  attr :form, :any, required: true
+  attr :editing, :any, required: true
+  attr :jump_candidates, :list, required: true
+
+  defp host_modal_body(assigns) do
+    ~H"""
+    <div>
+      <.form for={@form} id="host-form" phx-change="validate" phx-submit="save" class="space-y-2">
+        <.input field={@form[:name]} type="text" label="Name" required />
+        <div class="grid grid-cols-3 gap-3">
+          <div class="col-span-2">
+            <.input field={@form[:address]} type="text" label="Address" required />
+          </div>
+          <.input field={@form[:port]} type="number" label="Port" required />
+        </div>
+        <.input field={@form[:username]} type="text" label="SSH login user" required />
+        <.input
+          field={@form[:jump_via]}
+          type="select"
+          label="Jump via"
+          prompt="None (direct connection)"
+          options={Enum.map(@jump_candidates, &{&1.name, &1.id})}
+        />
+        <.input field={@form[:comment]} type="text" label="Comment" />
+        <.input field={@form[:disabled]} type="checkbox" label="Disabled (blocks all SSH)" />
+
+        <div class="modal-action">
+          <button type="button" class="btn btn-ghost" phx-click="cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary">
+            {if @editing, do: "Save changes", else: "Create host"}
+          </button>
+        </div>
+      </.form>
+    </div>
     """
   end
 end
