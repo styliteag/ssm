@@ -42,7 +42,7 @@ jobs:
         SECRETS_FOUND=0
         
         # Define exclusions for test directories and files
-        EXCLUDE_DIRS="--exclude-dir=.git --exclude-dir=.github --exclude-dir=.githooks --exclude-dir=backend/src/tests --exclude-dir=frontend/src/test --exclude-dir=tests"
+        EXCLUDE_DIRS="--exclude-dir=.git --exclude-dir=.github --exclude-dir=.githooks --exclude-dir=phoenix/test --exclude-dir=tests"
         EXCLUDE_FILES="--exclude=*.test.* --exclude=*.spec.* --exclude=*test*.rs --exclude=*test*.js --exclude=*test*.ts --exclude=.secrets-whitelist"
         
         # Private keys (fixed grep syntax)

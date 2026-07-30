@@ -88,10 +88,6 @@ else
 fi
 echo ""
 
-# Set the external URL for the app so the container will be able to access the API behind a reverse proxy
-EXTERNAL_URL=/api
-export EXTERNAL_URL
-
 # Create and use a multi-platform builder if it doesn't exist
 BUILDER_NAME="ssm-builder"
 if ! docker buildx inspect $BUILDER_NAME >/dev/null 2>&1; then
@@ -146,7 +142,9 @@ docker buildx build \
     --platform $PLATFORMS \
     --tag ${REGISTRY_URL}/${NAMESPACE}/ssm:${VERSION_TAG} \
     --tag ${REGISTRY_URL}/${NAMESPACE}/ssm:latest \
-    --file app/Dockerfile \
+    --file ../phoenix/Dockerfile \
+    --build-arg VERSION=${VERSION_TAG#v} \
+    --build-arg VCS_REF=$(git rev-parse HEAD) \
     ${OUTPUT_FLAG} \
     ..
 

@@ -1,13 +1,13 @@
-# SSH Key Manager — Docker
+# Secure SSH Manager — Docker
 
-Single all-in-one image: nginx serves the React SPA on port 80 and reverse-proxies `/api/*` to a FastAPI backend running on `127.0.0.1:8000` inside the same container. Database migrations run automatically on startup.
+Single all-in-one image: an Elixir/Phoenix release serves the LiveView UI and the `/api/v2` JSON API on port 80. Database migrations run automatically on startup — the ecto baseline migration adopts databases created by the earlier Diesel (Rust) and Alembic (Python) stacks in place, so existing data volumes keep working unchanged.
 
 ## Quick start
 
 ```bash
 mkdir -p data/{db,config,keys,logs}
 
-# Required: JWT signing secret (32+ chars).
+# Required: signing secret (32+ chars) for API tokens + session cookies.
 echo "JWT_SECRET=$(openssl rand -hex 32)" > .env
 
 # Authentication file — password is bcrypt-hashed.
@@ -16,57 +16,52 @@ htpasswd -cB data/config/.htpasswd admin
 # SSH key the server uses to connect to managed hosts.
 ssh-keygen -t ed25519 -f data/keys/id_ssm -C ssm-server -N ''
 
-docker compose -f compose.prod.yml up -d --build
+docker compose up -d --build
 ```
 
 Access the UI at `http://localhost/`.
 
 ## Image layout
 
-Multi-stage build (`docker/app/Dockerfile`):
+Multi-stage build (`phoenix/Dockerfile`, build context = repository root):
 
-1. **frontend-builder** — `node:24-alpine`, runs `npm ci && npm run build` to produce `frontend/dist/`.
-2. **backend-builder** — `python:3.12-slim` with [`uv`](https://docs.astral.sh/uv/), resolves the locked venv from `backend/pyproject.toml` + `backend/uv.lock`.
-3. **runtime** — `python:3.12-slim` + nginx + tini. Frontend assets land at `/usr/share/nginx/html`, the venv at `/app/.venv`, source at `/app/src`. `start.sh` runs `alembic upgrade head` then launches uvicorn (loopback) and nginx (port 80) under tini.
+1. **builder** — `elixir:1.20`, fetches locked deps, compiles, builds assets (`mix assets.deploy`), and assembles a `mix release`.
+2. **runtime** — `debian:trixie-slim` + `openssh-client` (jump-host chains, boot-time key decryption) + tini. `start.sh` fixes bind-mount ownership, runs `/app/bin/migrate`, then execs the release on port 80.
 
 ## Volumes
 
 | Host path | Container path | Purpose |
 |---|---|---|
 | `./data/db` | `/app/db` | SQLite database (`ssm.db`) |
-| `./data/config` | `/app/config` | `.htpasswd` (auth) and optional `.env` (config) |
+| `./data/config` | `/app/config` | `.htpasswd` (auth) |
 | `./data/keys` | `/app/keys` | SSH private key (`id_ssm`) |
-| `./data/logs` | `/app/logs` | App logs (optional) |
+| `./data/logs` | `/app/logs` | Logs (optional) |
+
+These are the same host paths and container paths as the previous python/react image — no data migration needed.
 
 ## Environment
 
 | Variable | Default | Notes |
 |---|---|---|
-| `JWT_SECRET` | — | **Required**, 32+ random chars. `SESSION_KEY` is accepted as alias. |
-| `DATABASE_URL` | `sqlite:////app/db/ssm.db` | Note: 4 slashes = absolute path. |
-| `HTPASSWD` | `config/.htpasswd` | Relative paths resolve under `/app`. |
+| `JWT_SECRET` | — | **Required**, 32+ random chars. `SESSION_KEY` is accepted as alias. Signs API bearer tokens and derives the session cookie secret. |
+| `SECRET_KEY_BASE` | derived from `JWT_SECRET` | Optional explicit Phoenix secret (64+ bytes). |
+| `DATABASE_URL` | `sqlite:///ssm.db` | Note: 4 slashes = absolute path. `DATABASE_PATH` (plain path) wins when set. |
+| `HTPASSWD` | `.htpasswd` | Relative paths resolve under `/app`. |
 | `SSH_KEY` | `keys/id_ssm` | Server's private key for connecting to managed hosts. |
-| `LOGLEVEL` | `info` | `debug`, `info`, `warning`, `error`. |
-| `DOTENV` | `./.env` | Optional path to a `.env` file loaded on startup via `python-dotenv`. |
+| `SSH_KEY_PASSPHRASE` | — | Decrypts an encrypted key at boot (`ssh-keygen -p` into a temp copy). |
+| `SSH_TIMEOUT` | `120` | Seconds budget for exec/sftp operations. |
+| `SSH_CONNECT_TIMEOUT` | `10` | Seconds budget for TCP+handshake per connect. |
+| `SSH_CONCURRENCY` | `32` | Parallel host checks in the diff viewer status sweep. |
+| `LOGLEVEL` | `info` | Accepts RUST_LOG-style directives; most verbose level wins. |
+| `PORT` / `LISTEN` | `80` / `::` | Listen port and interface. |
 
 ## Health checks
 
-`/app/health-check.sh` verifies nginx (port 80) and uvicorn (port 8000 internal) both respond.
-
-## Routing
-
-nginx routes inside the container:
-
-| Path | Target |
-|---|---|
-| `/` | SPA (`/usr/share/nginx/html`, with `try_files … /index.html` fallback for client-side routes) |
-| `/api/v2/auth/*` | uvicorn, with strict rate limit (login zone) |
-| `/api/v2/(hosts\|diffs)/.*(logins\|sync\|...)` | uvicorn, longer read timeout for SSH ops |
-| `/api/*` | uvicorn (catch-all) |
+`/app/bin/health-check.sh` probes the unauthenticated `/api/health` endpoint (version + database check).
 
 ## CI
 
-Tag pushes (`v*.*.*`) trigger `.github/workflows/release-docker.yml`, which builds this Dockerfile for `linux/amd64` + `linux/arm64`, publishes per-arch tags, and assembles multi-arch manifests at:
+Tag pushes (`v*.*.*`) trigger `.github/workflows/release-docker.yml`, which builds `phoenix/Dockerfile` for `linux/amd64` + `linux/arm64`, publishes per-arch tags, and assembles multi-arch manifests at:
 
 - `ghcr.io/styliteag/ssm/ssm:<version>` and `:latest`
 - `styliteag/ssm:<version>` and `:latest`
@@ -74,6 +69,6 @@ Tag pushes (`v*.*.*`) trigger `.github/workflows/release-docker.yml`, which buil
 ## Troubleshooting
 
 - **Port 80 already in use** — change the host-side mapping: `ports: ["8080:80"]`.
-- **First-run permission errors on Linux** — the image runs as root, so bind-mounted `data/` directories don't need a uid match. If you previously deployed the backend-only image (which ran as uid 1000), `chown -R root:root data/` once.
-- **Login fails after editing `.htpasswd`** — the htpasswd store loads at startup; restart the container to pick up new entries: `docker compose restart`.
+- **Editing `.htpasswd`** — the file is read per login attempt; new users and password changes take effect immediately, no restart needed.
 - **Inspect runtime files** — `docker compose exec ssm sh` then look at `/app/db/`, `/app/config/`, `/app/keys/`.
+- **Database browser** — `docker compose -f docker-compose.adminer.yml up` serves sqlite-web on `:8080` (read-only mount of `data/db/ssm.db`).

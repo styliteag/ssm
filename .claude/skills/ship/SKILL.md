@@ -1,6 +1,6 @@
 ---
 name: ship
-description: Package the current work into a correct SSM commit — pairing guards (model↔migration, backend↔frontend types), CHANGELOG entry, full verification, secrets hygiene, Conventional Commit message. Use whenever committing changes in this repo.
+description: Package the current work into a correct SSM commit — pairing guards (schema↔migration), CHANGELOG entry, full verification, secrets hygiene, Conventional Commit message. Use whenever committing changes in this repo.
 ---
 
 A commit here is correct only if it satisfies the repo's hard rules (see AGENTS.md §3/§6).
@@ -20,22 +20,22 @@ commits (each with its own CHANGELOG entry).
 ## Step 2 — Pairing guards (STOP if any fails)
 
 ```bash
-# Model change without migration? → STOP, run the db-migration skill first
-git diff --staged --name-only | grep -q 'db/models.py' && \
-  { git diff --staged --name-only | grep -q 'migrations/versions/' || echo 'GUARD FAIL: models.py staged without a migration'; }
+# Ecto schema change without migration? → STOP, write the migration first
+git diff --staged --name-only | grep -qE 'phoenix/lib/ssm/.*/(host|user|user_key|authorization|activity_log)\.ex' && \
+  { git diff --staged --name-only | grep -q 'priv/repo/migrations/' || echo 'GUARD FAIL: schema module staged without a migration'; }
 
 # Version fields are release.sh territory → STOP if present
 git diff --staged --name-only | grep -qx 'VERSION' && echo 'GUARD FAIL: VERSION is bumped only by release.sh'
-git diff --staged -- backend/pyproject.toml | grep -q '^\+version = ' && echo 'GUARD FAIL: pyproject version is bumped only by release.sh'
 
-# New console/print in production code? → remove or justify
-git diff --staged -- backend/src frontend/src | grep -E '^\+.*(console\.(log|warn|error)|print\()' | grep -v test && echo 'GUARD FAIL: new console/print in src'
+# New IO.puts/IO.inspect in production code? → remove or justify
+git diff --staged -- phoenix/lib | grep -E '^\+.*IO\.(puts|inspect)' && echo 'GUARD FAIL: new IO.puts/IO.inspect in lib'
 ```
 
 Manual guards:
-- Backend request/response model changed → `frontend/src/types/index.ts` and the
-  affected service must be in this commit (or explicitly deferred with the user's OK).
-- New `ErrorCode` → frontend catch-paths that should branch on it are updated.
+- Migration staged → it was verified against BOTH a fresh DB and a legacy snapshot
+  (see AGENTS.md §6).
+- `/api/v2` wire format untouched (field names, envelope, error codes) — changing it
+  needs explicit user sign-off first.
 - No secret-shaped strings in the diff. Test fixtures needing one go into
   `.secrets-whitelist` as a `VALUE:` entry — and that edit requires user approval.
 
@@ -51,15 +51,15 @@ section (`Added` / `Changed` / `Deprecated` / `Removed` / `Fixed` / `Security`):
 
 ## Step 4 — Verify
 
-Run the `verify` skill (equivalent to `just verify`): backend ruff + mypy --strict +
-bandit + pytest, frontend eslint (0 warnings) + tsc. All six gates must pass.
+Run the `verify` skill (equivalent to `just verify`): compile with warnings-as-errors,
+`mix format --check-formatted`, ExUnit suite. All stages must pass.
 CI will NOT catch failures — it has no test gate. A red gate means no commit.
 
 ## Step 5 — Commit
 
 Message format: `<type>(<scope>): <imperative subject>` — types feat, fix, refactor,
-docs, test, chore, perf, ci; scope like `(docker)`, `(migrations)`, `(dashboard)` when
-it sharpens the message. Body only when the "why" isn't obvious from the subject.
+docs, test, chore, perf, ci; scope like `(docker)`, `(elixir)`, `(diffs)` when it
+sharpens the message. Body only when the "why" isn't obvious from the subject.
 No co-author trailers.
 
 ```bash
@@ -73,4 +73,4 @@ git commit -m "fix(diffs): skip disabled hosts during scheduled sync"
 ## Step 6 — Report
 
 State: what was committed (hash + subject), the CHANGELOG section used, and the verify
-result per gate. If any guard was overridden at the user's request, say so explicitly.
+result per stage. If any guard was overridden at the user's request, say so explicitly.

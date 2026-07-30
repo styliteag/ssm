@@ -43,6 +43,9 @@ npm-debug.log
 # Docker dev caches (compose.yml)
 /data/
 
+# Real SSH keys mounted into the dev container — never commit.
+/keys/
+
 # SQLite dev/test databases
 *.db
 *.db-shm

@@ -5,7 +5,7 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ./backend/ssm.db:/data/database.db:ro
+      - ./data/db/ssm.db:/data/database.db:ro
     command: sqlite_web -H 0.0.0.0 -x /data/database.db
     networks:
       - ssm-network

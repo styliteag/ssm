@@ -1,6 +1,5 @@
 # SSM Elixir stack — dev environment (no local Elixir needed).
 # Start: docker compose up   →   http://localhost:4000
-# Runs next to the Python stack (:8000/:5173) during the migration.
 services:
   app:
     build:
@@ -19,6 +18,6 @@ services:
       - ./data/deps:/app/deps
       - ./data/build:/app/_build
       - ./data/toolchain:/toolchain
-      # SSH key of the python stack (SSH_KEY default keys/id_ssm), read-only —
-      # the dev DB import brings real hosts, so the same key must be visible.
-      - ../backend/keys:/app/keys:ro
+      # SSH key (SSH_KEY default keys/id_ssm), read-only overlay — the dev DB
+      # import brings real hosts, so the key must be visible but never writable.
+      - ./keys:/app/keys:ro

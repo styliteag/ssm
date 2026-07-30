@@ -1,18 +1,16 @@
-# Ssm
+# SSM — Elixir/Phoenix stack
 
-To start your Phoenix server:
+The application itself. See the repository root [README](../README.md) for the full
+picture and [AGENTS.md](../AGENTS.md) for the operating manual.
 
-* Run `mix setup` to install and setup dependencies
-* Start Phoenix endpoint with `mix phx.server` or inside IEx with `iex -S mix phx.server`
+The toolchain is docker-only — no local Elixir needed:
 
-Now you can visit [`localhost:4000`](http://localhost:4000) from your browser.
+```bash
+just dev       # dev server on http://localhost:4000 (docker compose up)
+just test      # ExUnit suite
+just verify    # compile --warnings-as-errors + format check + tests
+just mix ...   # any mix task inside the dev container
+```
 
-Ready to run in production? Please [check our deployment guides](https://phoenix.hexdocs.pm/deployment.html).
-
-## Learn more
-
-* Official website: https://www.phoenixframework.org/
-* Guides: https://phoenix.hexdocs.pm/overview.html
-* Docs: https://phoenix.hexdocs.pm
-* Forum: https://elixirforum.com/c/phoenix-forum
-* Source: https://github.com/phoenixframework/phoenix
+Production image: `Dockerfile` (build context = repository root), deployed via
+`../docker/compose.yml`.

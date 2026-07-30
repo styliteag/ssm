@@ -4,156 +4,75 @@ set shell := ["bash", "-cu"]
 default:
     @just --list
 
-# --- Setup -----------------------------------------------------------------
-
-install: backend-install frontend-install
-
-# --- Backend ---------------------------------------------------------------
-
-backend-install:
-    cd backend && uv sync
-
-backend-run:
-    cd backend && uv run uvicorn ssm.main:app --reload --host 0.0.0.0 --port 8000
-
-backend-test *args:
-    cd backend && uv run pytest -q {{args}}
-
-backend-test-cov:
-    cd backend && uv run pytest --cov=ssm --cov-report=term-missing -q
-
-backend-lint:
-    cd backend && uv run ruff check src tests
-
-backend-fmt:
-    cd backend && uv run ruff format src tests
-
-backend-typecheck:
-    cd backend && uv run mypy src
-
-backend-security:
-    cd backend && uv run bandit -r src -q
-
-# --- Frontend --------------------------------------------------------------
-
-frontend-install:
-    cd frontend && npm install
-
-frontend-dev:
-    cd frontend && npm run dev
-
-frontend-build:
-    cd frontend && npm run build
-
-frontend-build-prod:
-    cd frontend && npm run build:prod
-
-frontend-preview:
-    cd frontend && npm run preview
-
-frontend-lint:
-    cd frontend && npm run lint
-
-frontend-typecheck:
-    cd frontend && npm run type-check
-
 # --- Elixir (phoenix/, docker-only toolchain) -------------------------------
 
 # Run a mix task inside the dev container (no local Elixir needed).
-elixir-mix *args:
+mix *args:
     cd phoenix && docker compose run --rm app sh -c "mix local.hex --force >/dev/null 2>&1 && mix local.rebar --force >/dev/null 2>&1 && mix {{args}}"
 
-elixir-test *args:
-    @just elixir-mix test {{args}}
+test *args:
+    @just mix test {{args}}
 
-elixir-format:
-    @just elixir-mix format
+format:
+    @just mix format
 
 # compile --warnings-as-errors + format --check-formatted + test
-elixir-verify:
-    @just elixir-mix precommit
+verify:
+    @just mix precommit
+
+# --- Dev environment --------------------------------------------------------
+
+# Dev server on http://localhost:4000.
+dev: _maybe-import-db
+    cd phoenix && docker compose up
+
+dev-detached: _maybe-import-db
+    cd phoenix && docker compose up -d
+
+dev-down:
+    cd phoenix && docker compose down
+
+# --- Database ----------------------------------------------------------------
 
 # Snapshot the legacy python-stack DB (./ssm.db) into the elixir dev DB.
 # sqlite3 .backup is transaction-safe and only reads the source; the ecto
 # baseline migration adopts the snapshot (fills gaps, stamps) on next boot.
-elixir-import-db:
+import-db:
     sqlite3 ssm.db ".backup 'phoenix/ssm_dev.db'"
     rm -f phoenix/ssm_dev.db-shm phoenix/ssm_dev.db-wal
     @echo "Imported ssm.db -> phoenix/ssm_dev.db ($(sqlite3 phoenix/ssm_dev.db 'select count(*) from host') hosts)"
 
 # Import automatically when the dev DB has no data yet but ./ssm.db does.
-_elixir-maybe-import:
+_maybe-import-db:
     #!/usr/bin/env bash
     set -u
     if [ -s ssm.db ]; then
       hosts=$(sqlite3 phoenix/ssm_dev.db "select count(*) from host" 2>/dev/null || echo 0)
-      if [ "${hosts:-0}" = "0" ]; then just elixir-import-db; fi
+      if [ "${hosts:-0}" = "0" ]; then just import-db; fi
     fi
 
-# Dev server on http://localhost:4000 (runs next to the python stack).
-elixir-dev: _elixir-maybe-import
-    cd phoenix && docker compose up
-
-elixir-dev-detached:
-    cd phoenix && docker compose up -d
-
-elixir-down:
-    cd phoenix && docker compose down
-
-# --- Aggregates ------------------------------------------------------------
-
-# Run every quality gate (matches the /verify skill).
-verify: backend-lint backend-typecheck backend-security backend-test frontend-lint frontend-typecheck elixir-verify
-
-# Format both stacks (frontend has no formatter wired; ruff handles backend).
-fmt: backend-fmt
-
-# --- Database / Migrations -------------------------------------------------
-
-migrate:
-    cd backend && uv run alembic upgrade head
-
-migrate-new name:
-    cd backend && uv run alembic revision --autogenerate -m "{{name}}"
-
-migrate-history:
-    cd backend && uv run alembic history --verbose
-
-migrate-down:
-    cd backend && uv run alembic downgrade -1
-
-# One-shot copy from a Rust-Diesel SQLite DB into a freshly-Alembic-migrated DB.
-# Usage: just migrate-from-rust ../path/to/old.db
-migrate-from-rust source dest="./ssm.db":
-    cd backend && uv run python scripts/migrate_from_rust.py --source {{source}} --dest {{dest}}
-
-# --- Dev environment -------------------------------------------------------
-
-dev:
-    ./start-dev.sh
-
-# --- Stack (production) ----------------------------------------------------
+# --- Stack (production) ------------------------------------------------------
 
 up:
-    docker compose -f docker/compose.prod.yml up -d --build
+    docker compose -f docker/compose.yml up -d --build
 
 down:
-    docker compose -f docker/compose.prod.yml down
+    docker compose -f docker/compose.yml down
 
 logs:
-    docker compose -f docker/compose.prod.yml logs -f --tail=200
+    docker compose -f docker/compose.yml logs -f --tail=200
 
 ps:
-    docker compose -f docker/compose.prod.yml ps
+    docker compose -f docker/compose.yml ps
 
-# Build the combined production image locally (mirrors the CI build).
-# Includes built frontend, FastAPI backend, and nginx — all in one image.
+# Build the production image locally (mirrors the CI build).
 docker-build:
-    docker build -f docker/app/Dockerfile -t ssm:dev .
+    docker build -f phoenix/Dockerfile -t ssm:dev \
+        --build-arg VERSION=$(cat VERSION) \
+        --build-arg VCS_REF=$(git rev-parse HEAD) .
 
-# Run the combined image locally on http://localhost:8080.
+# Run the locally built image on http://localhost:8080.
 # Uses a scratch data dir under /tmp so it doesn't touch your real ./docker/data.
-# Volumes (db/config/keys/logs) are created on first run.
 docker-run: docker-build
     @mkdir -p /tmp/ssm-dev/data/db /tmp/ssm-dev/data/config /tmp/ssm-dev/data/keys /tmp/ssm-dev/data/logs
     docker rm -f ssm-dev 2>/dev/null || true
@@ -164,7 +83,7 @@ docker-run: docker-build
         -v /tmp/ssm-dev/data/keys:/app/keys \
         -v /tmp/ssm-dev/data/logs:/app/logs \
         -e DATABASE_URL=sqlite:////app/db/ssm.db \
-        -e HTPASSWD=config/.htpasswd \
+        -e HTPASSWD=/app/config/.htpasswd \
         -e JWT_SECRET=dev-secret-change-me-dev-secret-change-me \
         -e LOGLEVEL=debug \
         ssm:dev
@@ -185,7 +104,6 @@ release type="patch":
 
 # --- Cleanup ---------------------------------------------------------------
 
-# Drop venvs, build artifacts, caches. Leaves DBs and config alone.
+# Drop build caches. Leaves DBs, keys, and config alone.
 clean:
-    rm -rf backend/.venv backend/.pytest_cache backend/.mypy_cache backend/.ruff_cache backend/htmlcov backend/.coverage*
-    rm -rf frontend/node_modules frontend/dist
+    rm -rf phoenix/data/build phoenix/data/deps phoenix/data/toolchain

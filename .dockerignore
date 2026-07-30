@@ -1,98 +1,65 @@
-# Backend Rust build artifacts
-backend/target/
-target/
-backend/config.toml
-backend/.htpasswd
-backend/ssm.db
-backend/data/
-backend/target/
+# Build context is the repository root; the image needs phoenix/ sources,
+# VERSION, LICENSE, and THIRD-PARTY-LICENSES.md — everything else stays out.
+
+# Databases — never bake data into the image
 *.db
 *.db-*
 ssm.db*
 
-# Frontend Node.js artifacts
-frontend/node_modules/
-frontend/dist/
-frontend/npm-debug.log*
-frontend/.npm
-node_modules/
-
-# Common development files
-.git/
-.gitignore
-.vscode/
-.idea/
-*.log
-*.pid
-*.seed
-*.tar
-*.tar.gz
-*.zip
-
-# Development configuration
-.env
-.env.local
-.env.development
-.env.production
-config.toml
-.htpasswd
-.htuploaders
+# Elixir build caches and dev artifacts (docker-only dev toolchain)
+phoenix/data/
+phoenix/deps/
+phoenix/_build/
+phoenix/tmp/
+phoenix/.htpasswd
 
 # SSH keys and sensitive data
+phoenix/keys/
 *.pem
 *.key
 *.crt
 *.p12
 id_rsa*
 id_ed25519*
+id_ssm*
 known_hosts
 authorized_keys
+.env
+.env.*
+.htpasswd
+.htuploaders
 
-# Documentation and metadata
-README.md
-WHAT-IT-DOES.md
-LICENSE.txt
-*.md
-docs/
-
-# ...but license attribution and the BSL text must travel in the image.
-!THIRD-PARTY-LICENSES.md
-!LICENSE
-
-# Development scripts and tools
-start-dev.sh
-justfile
-flake.*
-*.nix
-
-# Python artifacts (if any)
-__pycache__/
-*.pyc
-*.pyo
-venv/
-.venv/
-
-# OS artifacts
-.DS_Store
-Thumbs.db
+# VCS, editors, CI
+.git/
+.gitignore
+.github/
+.githooks/
+.vscode/
+.idea/
+*.log
 *.swp
 *.swo
 *~
 
-# Docker and compose files (to avoid recursive copying)
-docker/data/
-docker/compose*.yml
+# Docs and metadata (license attribution must travel in the image)
+README.md
+*.md
+docs/
+!THIRD-PARTY-LICENSES.md
+LICENSE.txt
+!LICENSE
+
+# Dev tooling
+justfile
+release.sh
+install-hooks.sh
+sbom/
+
+# Docker and compose files (avoid recursive copying)
+docker/
 docker-compose*.yml
 compose*.yml
-!docker/app/
 
-# Build and CI artifacts
-.github/
-.gitlab-ci.yml
-.travis.yml
-# Elixir stack build caches (docker-only dev toolchain)
-phoenix/data/
-phoenix/deps/
-phoenix/_build/
-phoenix/tmp/
-phoenix/.htpasswd
+# OS artifacts
+.DS_Store
+Thumbs.db

@@ -80,7 +80,7 @@ jobs:
       with:
         push: true
         context: .
-        file: docker/app/Dockerfile
+        file: phoenix/Dockerfile
         platforms: ${{ matrix.platform }}
         #cache-from: type=gha,scope=linux-${{ matrix.arch }}
         #cache-to: type=gha,scope=linux-${{ matrix.arch }},mode=max

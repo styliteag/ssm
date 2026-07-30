@@ -151,55 +151,24 @@ update_changelog() {
 # Function to run build tests
 run_build_tests() {
     print_info "Running build verification..."
-    
-    # Store current directory to return to it
-    local original_dir=$(pwd)
-    
+
     # Check if we're in the project root
-    if [ ! -f "frontend/package.json" ] || [ ! -f "backend/pyproject.toml" ]; then
+    if [ ! -f "phoenix/mix.exs" ]; then
         print_error "Not in project root. Please run this script from the repository root."
         exit 1
     fi
 
-    # Build frontend
-    print_info "Building frontend..."
-    cd frontend
-    if ! npm run build > /tmp/frontend-build.log 2>&1; then
-        print_error "Frontend build failed!"
-        print_error "Build log:"
-        cat /tmp/frontend-build.log
-        cd "$original_dir"
+    # Compile (warnings-as-errors), check formatting, run the test suite —
+    # inside the dev container, no local Elixir needed.
+    print_info "Verifying elixir stack (just verify)..."
+    if ! just verify > /tmp/elixir-verify.log 2>&1; then
+        print_error "Elixir verification failed!"
+        print_error "Log:"
+        cat /tmp/elixir-verify.log
         exit 1
     fi
-    print_success "Frontend build completed"
-    cd "$original_dir"
+    print_success "Elixir verification passed"
 
-    # Verify backend (Python/uv): resolve deps + import smoke test
-    print_info "Verifying backend (uv sync)..."
-    cd backend
-    if ! uv sync > /tmp/backend-build.log 2>&1; then
-        print_error "Backend uv sync failed!"
-        print_error "Build log:"
-        cat /tmp/backend-build.log
-        cd "$original_dir"
-        exit 1
-    fi
-    print_success "Backend dependencies resolved"
-    cd "$original_dir"
-
-    ## Run backend tests
-    #print_info "Running backend tests..."
-    #cd backend
-    #if ! uv run pytest -q > /tmp/backend-test.log 2>&1; then
-    #    print_error "Backend tests failed!"
-    #    print_error "Test log:"
-    #    cat /tmp/backend-test.log
-    #    cd "$original_dir"
-    #    exit 1
-    #fi
-    #print_success "Backend tests passed"
-    #cd "$original_dir"
-    
     print_success "All builds and tests completed successfully"
 }
 
@@ -251,14 +220,10 @@ main() {
     local current_branch=$(git branch --show-current)
     print_info "Updating VERSION file to $new_version on $current_branch"
     echo "$new_version" > VERSION
-    
-    # Update pyproject.toml version
-    print_info "Updating backend/pyproject.toml version to $new_version"
-    sed -i.bak "s/^version = \".*\"/version = \"$new_version\"/" backend/pyproject.toml
-    rm -f backend/pyproject.toml.bak
+
+    # mix.exs reads ../VERSION at compile time — no per-file version bump needed.
 
     # Run build verification
-    # This also refreshes uv.lock to match the new pyproject.toml
     run_build_tests
 
     # Confirm with user
@@ -280,7 +245,7 @@ main() {
    
     # Commit version changes to current branch
     print_info "Committing version changes to $current_branch"
-    git add VERSION backend/pyproject.toml backend/uv.lock CHANGELOG.md
+    git add VERSION CHANGELOG.md
     git commit -m "chore: bump version to $new_version"
 
     # Create tag on current branch
