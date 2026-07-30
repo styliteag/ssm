@@ -73,8 +73,25 @@ elixir-format:
 elixir-verify:
     @just elixir-mix precommit
 
+# Snapshot the legacy python-stack DB (./ssm.db) into the elixir dev DB.
+# sqlite3 .backup is transaction-safe and only reads the source; the ecto
+# baseline migration adopts the snapshot (fills gaps, stamps) on next boot.
+elixir-import-db:
+    sqlite3 ssm.db ".backup 'phoenix/ssm_dev.db'"
+    rm -f phoenix/ssm_dev.db-shm phoenix/ssm_dev.db-wal
+    @echo "Imported ssm.db -> phoenix/ssm_dev.db ($(sqlite3 phoenix/ssm_dev.db 'select count(*) from host') hosts)"
+
+# Import automatically when the dev DB has no data yet but ./ssm.db does.
+_elixir-maybe-import:
+    #!/usr/bin/env bash
+    set -u
+    if [ -s ssm.db ]; then
+      hosts=$(sqlite3 phoenix/ssm_dev.db "select count(*) from host" 2>/dev/null || echo 0)
+      if [ "${hosts:-0}" = "0" ]; then just elixir-import-db; fi
+    fi
+
 # Dev server on http://localhost:4000 (runs next to the python stack).
-elixir-dev:
+elixir-dev: _elixir-maybe-import
     cd phoenix && docker compose up
 
 elixir-dev-detached:
