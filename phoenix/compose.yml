@@ -19,3 +19,6 @@ services:
       - ./data/deps:/app/deps
       - ./data/build:/app/_build
       - ./data/toolchain:/toolchain
+      # SSH key of the python stack (SSH_KEY default keys/id_ssm), read-only —
+      # the dev DB import brings real hosts, so the same key must be visible.
+      - ../backend/keys:/app/keys:ro
