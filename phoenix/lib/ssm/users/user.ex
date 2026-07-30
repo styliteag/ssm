@@ -21,6 +21,7 @@ defmodule Ssm.Users.User do
     |> cast(attrs, [:username, :enabled, :comment])
     |> validate_required([:username])
     |> validate_length(:username, min: 1, max: 255)
-    |> unique_constraint(:username, name: :uq_user_username)
+    # ecto_sqlite3 derives the name as <table>_<col>_index (see Ssm.Hosts.Host).
+    |> unique_constraint(:username)
   end
 end

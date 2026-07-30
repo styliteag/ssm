@@ -22,8 +22,9 @@ defmodule Ssm.Authorizations.Authorization do
     |> cast(attrs, [:host_id, :user_id, :login, :options, :comment])
     |> validate_required([:host_id, :user_id, :login])
     |> validate_length(:login, min: 1, max: 255)
-    |> unique_constraint([:user_id, :host_id, :login], name: :unique_user_host_login)
-    |> foreign_key_constraint(:host_id, name: :fk_authorization_host_id)
-    |> foreign_key_constraint(:user_id, name: :fk_authorization_user_id)
+    # ecto_sqlite3 derives the name as <table>_<cols>_index (see Ssm.Hosts.Host).
+    |> unique_constraint([:user_id, :host_id, :login])
+    |> foreign_key_constraint(:host_id)
+    |> foreign_key_constraint(:user_id)
   end
 end

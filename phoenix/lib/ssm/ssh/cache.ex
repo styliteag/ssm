@@ -59,13 +59,6 @@ defmodule Ssm.Ssh.Cache do
     inner().close()
   end
 
-  @doc "Drop every cache entry (tests; the cache runs in the app tree)."
-  @spec reset() :: :ok
-  def reset do
-    :ets.delete_all_objects(@table)
-    :ok
-  end
-
   @doc "Empty the entire cache (used by tests between cases)."
   @spec reset() :: :ok
   def reset do

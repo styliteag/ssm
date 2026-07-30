@@ -29,7 +29,8 @@ defmodule Ssm.Users.UserKey do
     |> validate_format(:key_base64, ~r/^[A-Za-z0-9+\/]+={0,2}$/,
       message: "must be base64 key material without type prefix or comment"
     )
-    |> unique_constraint(:key_base64, name: :uq_user_key_key_base64)
-    |> foreign_key_constraint(:user_id, name: :fk_user_key_user_id)
+    # ecto_sqlite3 derives the name as <table>_<col>_index (see Ssm.Hosts.Host).
+    |> unique_constraint(:key_base64)
+    |> foreign_key_constraint(:user_id)
   end
 end

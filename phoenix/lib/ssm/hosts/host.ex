@@ -39,8 +39,11 @@ defmodule Ssm.Hosts.Host do
     |> validate_required([:name, :username, :address, :port])
     |> validate_length(:name, min: 1, max: 255)
     |> validate_number(:port, greater_than: 0, less_than: 65_536)
-    |> unique_constraint(:name, name: :uq_host_name)
-    |> unique_constraint([:address, :port], name: :unique_address_port)
-    |> foreign_key_constraint(:jump_via, name: :fk_host_jump_via)
+    # ecto_sqlite3 derives the constraint name as <table>_<cols>_index from
+    # SQLite's error text (the CONSTRAINT name is not reported), so we rely on
+    # Ecto's default naming rather than the DDL constraint names.
+    |> unique_constraint(:name)
+    |> unique_constraint([:address, :port])
+    |> foreign_key_constraint(:jump_via)
   end
 end
