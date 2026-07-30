@@ -34,3 +34,7 @@ config :phoenix,
 
 # Fast bcrypt in tests (never in prod)
 config :bcrypt_elixir, log_rounds: 1
+
+# SSH: never start the real client in tests; the facade resolves to the mock
+config :ssm, start_ssh_client: false
+config :ssm, :ssh_client, Ssm.Ssh.MockClient

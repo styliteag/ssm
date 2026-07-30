@@ -7,17 +7,23 @@ defmodule Ssm.Application do
 
   @impl true
   def start(_type, _args) do
-    children = [
-      SsmWeb.Telemetry,
-      Ssm.Repo,
-      {Ecto.Migrator, repos: Application.fetch_env!(:ssm, :ecto_repos), skip: skip_migrations?()},
-      {DNSCluster, query: Application.get_env(:ssm, :dns_cluster_query) || :ignore},
-      {Phoenix.PubSub, name: Ssm.PubSub},
-      # Start a worker by calling: Ssm.Worker.start_link(arg)
-      # {Ssm.Worker, arg},
-      # Start to serve requests, typically the last entry
-      SsmWeb.Endpoint
-    ]
+    children =
+      [
+        SsmWeb.Telemetry,
+        Ssm.Repo,
+        {Ecto.Migrator,
+         repos: Application.fetch_env!(:ssm, :ecto_repos), skip: skip_migrations?()},
+        {DNSCluster, query: Application.get_env(:ssm, :dns_cluster_query) || :ignore},
+        {Phoenix.PubSub, name: Ssm.PubSub},
+        # SSH read cache (always) + the real client (not in tests — tests use
+        # Ssm.Ssh.MockClient via config :ssm, :ssh_client).
+        Ssm.Ssh.Cache
+      ] ++
+        ssh_children() ++
+        [
+          # Start to serve requests, typically the last entry
+          SsmWeb.Endpoint
+        ]
 
     # See https://elixir.hexdocs.pm/Supervisor.html
     # for other strategies and supported options
@@ -36,5 +42,13 @@ defmodule Ssm.Application do
   defp skip_migrations?() do
     # By default, sqlite migrations are run when using a release
     System.get_env("RELEASE_NAME") == nil
+  end
+
+  defp ssh_children do
+    if Application.get_env(:ssm, :start_ssh_client, true) do
+      [Ssm.Ssh.ErlangClient]
+    else
+      []
+    end
   end
 end
