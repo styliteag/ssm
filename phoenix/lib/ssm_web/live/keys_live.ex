@@ -510,7 +510,7 @@ defmodule SsmWeb.KeysLive do
             <p class="font-mono text-xs opacity-60">{truncate_key(key.key_base64)}</p>
           </:col>
           <:col :let={{_id, key}} label="Type">
-            <span class={["badge badge-sm", key_type_badge_class(key.key_type)]}>
+            <span class={["badge badge-sm whitespace-nowrap", key_type_badge_class(key.key_type)]}>
               {key.key_type}
             </span>
           </:col>
