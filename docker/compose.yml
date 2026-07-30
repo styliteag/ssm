@@ -27,6 +27,10 @@ services:
       # JWT_SECRET MUST be set (32+ chars); SESSION_KEY is accepted as alias.
       # It signs API bearer tokens and derives the session cookie secret.
       # - JWT_SECRET=replace-me-with-a-long-random-string
+      # Behind a TLS-terminating reverse proxy, set PHX_HOST to the public
+      # hostname — otherwise the LiveView socket origin check rejects the
+      # browser and every page degrades to longpoll with endless reconnects.
+      # - PHX_HOST=ssm.example.net
       - LOGLEVEL=info
     networks:
       - ssm-network

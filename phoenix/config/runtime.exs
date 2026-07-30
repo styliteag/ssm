@@ -141,7 +141,18 @@ if config_env() == :prod do
          :jwt_secret,
          System.get_env("JWT_SECRET") || System.get_env("SESSION_KEY") || secret_key_base
 
-  host = System.get_env("PHX_HOST") || "localhost"
+  phx_host = System.get_env("PHX_HOST")
+  host = phx_host || "localhost"
+
+  # LiveView socket origin check. Without PHX_HOST operators reach the app by
+  # IP or an arbitrary hostname, so :conn compares the Origin header against
+  # the request's own host, scheme AND port. Behind a TLS-terminating reverse
+  # proxy that always fails: the browser sends "https://name:443" while the
+  # container only ever sees http on its listen port, so every LiveView falls
+  # back to longpoll and reconnects forever. Once PHX_HOST names the public
+  # hostname, compare against that instead — Phoenix matches the host only,
+  # which is exactly what survives a proxy hop.
+  check_origin = if phx_host, do: true, else: :conn
 
   # LISTEN mirrors the python stack (default "::" = all interfaces, v4+v6).
   listen_ip =
@@ -154,10 +165,7 @@ if config_env() == :prod do
 
   config :ssm, SsmWeb.Endpoint,
     url: [host: host, port: 443, scheme: "https"],
-    # Operators reach the app by IP or arbitrary hostname (no PHX_HOST set in
-    # the usual LAN deployment). :conn checks the WebSocket origin against the
-    # request's own host header instead of a fixed allowlist.
-    check_origin: :conn,
+    check_origin: check_origin,
     http: [
       ip: listen_ip,
       port: String.to_integer(System.get_env("PORT", "8000"))
