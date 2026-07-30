@@ -269,10 +269,10 @@ path entries (harmless, narrow — cleaning it needs user approval per rule #6);
 `./ssm.db` at the repo root is the final snapshot of the python stack's data, kept as
 the dev-DB import source (`just import-db`).
 
-**Knowledge graph**: the `code-review-graph` MCP tools are available and auto-update via
-hooks. Use `semantic_search_nodes` / `query_graph` / `get_impact_radius` for cheap
-exploration and impact tracing; fall back to Grep/Glob/Read when the graph doesn't
-cover what you need, and trust files over the graph on any disagreement.
+**Knowledge graph**: `.claude/settings.json` hooks keep a `code-review-graph` index
+(`.code-review-graph/`, gitignored) updated on every edit. The MCP server entry was
+removed with `.mcp.json` — explore with Grep/Glob/Read; if graph output surfaces
+anywhere, trust files over the graph on any disagreement.
 
 **Skills**: `verify` (run the gate), `ship` (package a correct commit), `release`
 (user-invoked only). The python-era `db-migration` and `add-endpoint` skills were
