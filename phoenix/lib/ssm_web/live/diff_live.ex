@@ -80,7 +80,7 @@ defmodule SsmWeb.DiffLive do
         _ -> nil
       end
 
-    view = if params["view"] == "list", do: "list", else: "cards"
+    view = if params["view"] == "cards", do: "cards", else: "list"
 
     socket =
       assign(socket, selected: selected, detail: nil, detail_error: nil, diff_view: view)

@@ -67,7 +67,7 @@ defmodule SsmWeb.DiffLiveTest do
 
     disabled = host_fixture(%{name: "off", disabled: true})
 
-    {:ok, view, _html} = live(conn, ~p"/diff")
+    {:ok, view, _html} = live(conn, ~p"/diff?view=cards")
     render_async(view)
 
     assert has_element?(view, "#diff-host-#{synced_host.id} .badge", "synchronized")
@@ -79,7 +79,7 @@ defmodule SsmWeb.DiffLiveTest do
     host = host_fixture(%{name: "warm"})
     Ssm.Diffs.StatusCache.put(host.id, :synced)
 
-    {:ok, view, _html} = live(conn, ~p"/diff")
+    {:ok, view, _html} = live(conn, ~p"/diff?view=cards")
     render_async(view)
 
     assert has_element?(view, "#diff-host-#{host.id} .badge", "synchronized")
@@ -90,7 +90,7 @@ defmodule SsmWeb.DiffLiveTest do
     host = synced_setup()
     Ssm.Diffs.StatusCache.put(host.id, {:needs_sync, 1, 1})
 
-    {:ok, view, _html} = live(conn, ~p"/diff")
+    {:ok, view, _html} = live(conn, ~p"/diff?view=cards")
     render_async(view)
 
     assert has_element?(view, "#diff-host-#{host.id} .badge", "needs sync")
@@ -344,7 +344,7 @@ defmodule SsmWeb.DiffLiveTest do
 
     MockClient.set_default_exec(%Result{exit_code: 0})
 
-    {:ok, view, _html} = live(conn, ~p"/diff")
+    {:ok, view, _html} = live(conn, ~p"/diff?view=cards")
     render_async(view)
 
     view |> element("#sync-all") |> render_click()
