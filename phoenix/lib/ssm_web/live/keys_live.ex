@@ -404,8 +404,11 @@ defmodule SsmWeb.KeysLive do
     do: Enum.map_join(by_type, " · ", fn {label, count} -> "#{count} #{label}" end)
 
   # Distinct hosts each owner can reach through their authorizations.
+  # Orphaned grants (host row deleted in the Diesel era) are skipped so the
+  # count never includes a host that no longer exists.
   defp hosts_per_owner do
     Authorizations.list_authorizations()
+    |> Enum.reject(&is_nil(&1.host))
     |> Enum.group_by(& &1.user_id, & &1.host_id)
     |> Map.new(fn {user_id, host_ids} -> {user_id, host_ids |> Enum.uniq() |> length()} end)
   end

@@ -390,10 +390,11 @@ defmodule SsmWeb.DiffLive do
   def handle_event("unknown-key-assign", %{"assign" => %{"user_id" => user_id}}, socket) do
     with %Host{disabled: false} = host <- socket.assigns.selected,
          %{} = unknown <- socket.assigns.unknown_key,
-         user when user != nil <- Users.get_user(String.to_integer(user_id)) do
+         {:ok, id} <- parse_id(user_id),
+         user when user != nil <- Users.get_user(id) do
       assign_unknown_key(socket, host, user, unknown)
     else
-      _ -> {:noreply, put_flash(socket, :error, "Cannot assign this key.")}
+      _ -> {:noreply, put_flash(socket, :error, "Select a user to assign this key to.")}
     end
   end
 
@@ -421,13 +422,25 @@ defmodule SsmWeb.DiffLive do
 
   defp find_extra_item(socket, login_name, index) do
     with %HostDiff{} = detail <- socket.assigns.detail,
+         {:ok, position} <- parse_id(index),
          %{items: items} <- Enum.find(detail.logins, &(&1.login == login_name)),
-         %{status: :extra_on_host} = item <- Enum.at(items, String.to_integer(index)) do
+         %{status: :extra_on_host} = item <- Enum.at(items, position) do
       {:ok, item}
     else
       _ -> :error
     end
   end
+
+  # Event params are integers in our own markup; a malformed value must yield
+  # a flash, not a crashed LiveView.
+  defp parse_id(value) when is_binary(value) do
+    case Integer.parse(value) do
+      {id, ""} -> {:ok, id}
+      _ -> :error
+    end
+  end
+
+  defp parse_id(_value), do: :error
 
   defp allow_grant(socket, host, user, login) do
     if Authorizations.exists?(user.id, host.id, login) do
