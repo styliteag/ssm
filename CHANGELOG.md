@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- **GitLeaks in CI actually scans now**: the `gitleaks-action` wrapper had errored softly on every run for lack of an organization license — replaced with the plain (MIT) gitleaks CLI, pinned, full-history. A reviewed `.gitleaks.toml` allowlists known fake test fixtures and documented example values; one real historical finding (a retired dev SSH key briefly committed in April 2026) is deliberately left visible until confirmed dead. Also bumped the workflow's deprecated actions (checkout@v5, codeql upload-sarif@v4).
+
 ## [2.0.0] - 2026-07-30
 
 ### Removed

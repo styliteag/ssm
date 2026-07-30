@@ -1,0 +1,31 @@
+# GitLeaks config for the CI full-history scan (security-scan.yml).
+# Allowlists cover KNOWN FAKE fixtures only — deliberately reviewed one by one.
+# The real historical finding (backend/keys/id_ssm in commit 3f1a856, the
+# retired "ssm-dev" dev key) is NOT allowlisted: it stays visible in every
+# scan until the key is confirmed dead everywhere.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Reviewed test fixtures and documented example values"
+paths = [
+  # Rust-era test suites (deleted from the tree, still in history): fake
+  # passwords/keys constructed inline for HTTP auth tests.
+  '''backend/src/tests/.*''',
+  # Python-era contract tests (deleted): fake JWT secrets / dummy credentials.
+  '''backend/tests/.*''',
+  # Old API doc (deleted): example request bodies with placeholder passwords.
+  '''docs/API\.md''',
+  # Secret-scanner fixtures: files that exist to hold fake secret-shaped
+  # strings for testing the pre-commit hook and its whitelist.
+  '''test-allowlisted\.txt''',
+  '''\.secrets-whitelist''',
+  # Operating manual documents the whitelist example values verbatim.
+  '''AGENTS\.md''',
+  '''CLAUDE\.md''',
+]
+# ExUnit fixtures use the bare ssh key-type prefix as key material — not a secret.
+regexes = [
+  '''AAAAC3NzaC1lZDI1NTE5"?,?$''',
+]
