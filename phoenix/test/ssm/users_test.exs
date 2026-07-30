@@ -22,6 +22,23 @@ defmodule Ssm.UsersTest do
   end
 
   describe "counts" do
+    test "list_users_with_counts/0 returns key and authorization counts" do
+      user = user_fixture()
+      bare = user_fixture()
+      host = host_fixture()
+      _ = key_fixture(user)
+      _ = key_fixture(user)
+      _ = authorization_fixture(user, host)
+
+      rows = Users.list_users_with_counts()
+      by_id = Map.new(rows, &{&1.user.id, &1})
+
+      assert by_id[user.id].key_count == 2
+      assert by_id[user.id].authorization_count == 1
+      assert by_id[bare.id].key_count == 0
+      assert by_id[bare.id].authorization_count == 0
+    end
+
     test "count_users/0 and count_keys/0" do
       assert Users.count_users() == 0
       assert Users.count_keys() == 0

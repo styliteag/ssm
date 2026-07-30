@@ -6,6 +6,7 @@ defmodule Ssm.Users do
 
   import Ecto.Query
 
+  alias Ssm.Authorizations.Authorization
   alias Ssm.Repo
   alias Ssm.Users.{User, UserKey}
 
@@ -29,6 +30,29 @@ defmodule Ssm.Users do
   @spec change_user(User.t(), map()) :: Ecto.Changeset.t()
   def change_user(%User{} = user, attrs \\ %{}), do: User.changeset(user, attrs)
 
+  @doc "Every user with their key and authorization counts (Users page rows)."
+  @spec list_users_with_counts() :: [
+          %{user: User.t(), key_count: non_neg_integer(), authorization_count: non_neg_integer()}
+        ]
+  def list_users_with_counts do
+    key_counts = per_user_counts(UserKey)
+    auth_counts = per_user_counts(Authorization)
+
+    Enum.map(list_users(), fn user ->
+      %{
+        user: user,
+        key_count: Map.get(key_counts, user.id, 0),
+        authorization_count: Map.get(auth_counts, user.id, 0)
+      }
+    end)
+  end
+
+  defp per_user_counts(schema) do
+    from(r in schema, group_by: r.user_id, select: {r.user_id, count(r.id)})
+    |> Repo.all()
+    |> Map.new()
+  end
+
   @spec count_users() :: non_neg_integer()
   def count_users, do: Repo.aggregate(User, :count)
 
@@ -39,7 +63,7 @@ defmodule Ssm.Users do
 
   @spec list_keys(keyword()) :: [UserKey.t()]
   def list_keys(opts \\ []) do
-    query = from k in UserKey, order_by: k.id
+    query = from k in UserKey, order_by: k.id, preload: [:user]
 
     query =
       case Keyword.get(opts, :user_id) do
@@ -51,7 +75,7 @@ defmodule Ssm.Users do
   end
 
   @spec get_key(integer()) :: UserKey.t() | nil
-  def get_key(id), do: Repo.get(UserKey, id)
+  def get_key(id), do: UserKey |> Repo.get(id) |> Repo.preload(:user)
 
   @spec create_key(map()) :: {:ok, UserKey.t()} | {:error, Ecto.Changeset.t()}
   def create_key(attrs), do: %UserKey{} |> UserKey.changeset(attrs) |> Repo.insert()
