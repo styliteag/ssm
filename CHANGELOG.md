@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-07-30
+
 ### Fixed
 - **LiveView pages work behind a TLS-terminating reverse proxy**: the socket origin check compared the browser's `Origin` against the container's own scheme and port, which never match once a proxy terminates HTTPS — the log filled with `Could not check origin for Phoenix.Socket transport`, the UI silently degraded to long-polling and reconnected in a loop. Setting `PHX_HOST` to the public hostname now switches the check to a hostname comparison; deployments without `PHX_HOST` (reached by IP or LAN name) keep the previous behaviour. Reverse-proxy operators must set `PHX_HOST` — see the commented example in `docker/compose.yml`.
 
