@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **The changelog no longer ends in leftover tool output**: the file's tail carried a stray XML fragment and a "Note to self" session recap from the era it was first written. Since the release workflow lifts each version's section straight into the GitHub release body, that residue was operator-visible — it is gone, together with the empty `### Added` stubs the old release script seeded into releases that recorded nothing. The maintenance notes now name `./release.sh` as what rotates `[Unreleased]`, instead of describing the manual edit it replaced, and the three `2025-09-XX` placeholder dates (0.2.10–0.2.12) are the actual release dates recovered from their git tags.
+
 ### Security
 - **The GitLeaks CI scan is green again**: the reviewed allowlist now also covers retired material still present in repository history, so the job no longer carries a permanent error annotation and a genuinely new finding stands out instead of drowning in a known one.
 
@@ -72,9 +75,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.1.10] - 2026-06-28
 
-### Added
-- 
-
 ### Changed
 - **License switched to Business Source License 1.1 (BSL 1.1)**: the project is now source-available rather than GPL-3.0-only. You may read, build, modify, and run SSM for your own organization for free, but offering it as a hosted/managed/multi-tenant service or reselling it for a fee requires a commercial license from STYLiTE (office@stylite.de). Each released version automatically converts to GPL v3.0-or-later four years after publication (Change Date 2030-06-28). Added `LICENSE` (BSL text) and `LICENSING.md` (plain-language summary); removed the standalone GPLv3 `LICENSE.txt`; updated the README License section.
 
@@ -86,9 +86,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Documentation refresh**: `AGENTS.md`/`CLAUDE.md`, `frontend/README.md`, top-level `README.md`, and the `verify`/`release` skills no longer describe the project as a Rust/Actix/Diesel backend. Commands, endpoint paths (`/api/v2/*`), auth scheme (JWT bearer), SSH library (`asyncssh`), and env vars (`JWT_SECRET`) now match the Python/FastAPI reality. Removed obsolete `jump_via` string-coercion section.
 - **Configuration is env-only**: dropped TOML support. Settings come from environment variables, optionally seeded by a `backend/.env` file loaded on startup via `python-dotenv` (override the path with `DOTENV=…`). `config.toml` / `config.toml.example` / the `CONFIG` env var are gone; `backend/.env.example` is the new template. SSH options moved from a `[ssh]` table to flat env vars: `SSH_TIMEOUT`, `SSH_KEY_PASSPHRASE`, `SSH_CHECK_SCHEDULE`, `SSH_UPDATE_SCHEDULE`. `SSH_KEY` and `JWT_SECRET`/`SESSION_KEY` keep their previous names. `start-dev.sh` and the docker compose/setup files were updated to match.
-
-### Added
-- 
 
 ## [1.1.8] - 2026-04-27
 
@@ -133,13 +130,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.1.2] - 2026-04-27
 
-### Added
-- 
-
 ## [1.1.1] - 2026-04-27
-
-### Added
-- 
 
 ## [1.1.0] - 2026-04-27
 
@@ -154,12 +145,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Authorization Matrix Layout**: Moved "Show Authorized Only" button to be positioned after the login account selector for better workflow
 - **Authorization Matrix Selector Order**: Login accounts sorted by usage count in descending order, with "all (view only)" shown first
 - **Authorization Matrix Default**: Smart default selection - prefers "root" if available, otherwise defaults to most-used login account
-- **Host Add Form**: SSH Username field now defaults to "root" for convenience 
+- **Host Add Form**: SSH Username field now defaults to "root" for convenience
 
 ## [1.0.1] - 2025-10-06
-
-### Added
--
 
 ## [1.0.0] - 2025-10-06
 
@@ -185,9 +173,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.2.21] - 2025-10-06
 
-### Added
-- 
-
 ## [0.2.20] - 2025-10-06
 
 ### Added
@@ -195,9 +180,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Allow empty comments in user edit modal
 
 ## [0.2.19] - 2025-10-06
-
-### Added
-- 
 
 ## [0.2.18] - 2025-10-06
 
@@ -263,11 +245,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Remove git-secure wrapper script that enforced SSH commit signing
 - Enforce SSH commit signing and update dependencies
 
-## [0.2.12] - 2025-09-XX
+## [0.2.12] - 2025-09-08
 
-## [0.2.11] - 2025-09-XX
+## [0.2.11] - 2025-09-08
 
-## [0.2.10] - 2025-09-XX
+## [0.2.10] - 2025-09-07
 
 ---
 
@@ -276,7 +258,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### How to Update This Changelog
 
 1. **Before committing**: Add new changes under `[Unreleased]` section
-2. **When releasing**: Move `[Unreleased]` items to new version section with date
+2. **When releasing**: `./release.sh patch|minor|major` rotates `[Unreleased]` into a new version section with the release date
 3. **Version format**: Use semantic versioning (MAJOR.MINOR.PATCH)
 4. **Categories**:
    - `Added` for new features
@@ -285,15 +267,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
    - `Removed` for now removed features
    - `Fixed` for any bug fixes
    - `Security` for vulnerability fixes
-
-### Recent Changes Made (2025-09-13 Session)
-
-This changelog was created as part of a major enhancement session that included:
-- Environment variable configuration system
-- Auto-generation of credentials
-- Improved error handling and user experience
-- Docker configuration improvements
-- Comprehensive documentation updates
-
-**Note to self**: Always update CHANGELOG.md when making significant changes. Use the git history to reconstruct changes if needed.</contents>
-</xai:function_call">Create CHANGELOG.md with comprehensive documentation of all changes.
