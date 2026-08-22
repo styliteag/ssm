@@ -263,7 +263,6 @@ for amd64+arm64, pushes to Docker Hub + GHCR with `latest`/semver manifests and
 creates a GitHub release. The image applies migrations on start.
 
 **Known open wounds** (documented so you don't re-discover them; fix only when asked):
-CHANGELOG.md has leaked AI-tool artifacts near the end (`</xai:function_call...`);
 scheduler sweeps (`SSH_CHECK_SCHEDULE`/`SSH_UPDATE_SCHEDULE`) are read but not wired
 to jobs — restoring them needs explicit sign-off (rewrite plan §8);
 `.secrets-whitelist` still carries Rust- and Python-era
