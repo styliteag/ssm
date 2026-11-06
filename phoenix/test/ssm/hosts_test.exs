@@ -5,6 +5,19 @@ defmodule Ssm.HostsTest do
 
   alias Ssm.Hosts
 
+  describe "limited login" do
+    test "only root sees every user's authorized_keys; other logins are limited" do
+      root = host_fixture(%{name: "r", username: "root"})
+      deploy = host_fixture(%{name: "d", username: "deploy"})
+
+      refute Hosts.limited?(root)
+      assert Hosts.limited_reason(root) == nil
+      assert Hosts.limited?(deploy)
+      assert Hosts.limited_reason(deploy) =~ "deploy"
+      assert Hosts.limited_reason(deploy) =~ "root"
+    end
+  end
+
   describe "CRUD" do
     test "create/get/list/update/delete round-trip" do
       {:ok, host} =

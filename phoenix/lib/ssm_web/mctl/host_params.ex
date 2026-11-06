@@ -11,9 +11,12 @@ defmodule SsmWeb.Mctl.HostParams do
       `jump_via` (an existing ssm host, by id or by name), `disabled`, `comment`, `key_fingerprint`
       (pre-seeds the host-key pin, ADR-0008: the create job then verifies
       instead of trusting on first use).
+    * read-only `limited` / `limited_reason` — the login is not `root`, so
+      ssm sees only the `authorized_keys` that user can access.
   """
 
   @attribute_keys ~w(username port jump_via disabled comment key_fingerprint)
+  @read_only_keys ~w(limited limited_reason)
 
   @doc "JSON schema of the host `attributes` (embedded in the OpenAPI document)."
   def attributes_schema do
@@ -32,6 +35,17 @@ defmodule SsmWeb.Mctl.HostParams do
         "key_fingerprint" => %{
           "type" => ["string", "null"],
           "description" => "pinned SSH host key, `<type> SHA256:<base64>`"
+        },
+        "limited" => %{
+          "type" => "boolean",
+          "readOnly" => true,
+          "description" =>
+            "login is not root: ssm only sees the authorized_keys this user can access"
+        },
+        "limited_reason" => %{
+          "type" => ["string", "null"],
+          "readOnly" => true,
+          "description" => "one sentence for the UI when `limited`"
         }
       }
     }
@@ -105,6 +119,7 @@ defmodule SsmWeb.Mctl.HostParams do
     end
   end
 
+  defp check_attribute(key, _v) when key in @read_only_keys, do: {:error, "is read-only"}
   defp check_attribute(key, _v) when key in @attribute_keys, do: {:error, "has an invalid value"}
   defp check_attribute(_key, _v), do: {:error, "is not a known ssm attribute"}
 

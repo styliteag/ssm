@@ -362,6 +362,22 @@ defmodule SsmWeb.HostsLive do
   defp status_title(:unknown), do: "Not checked yet — run the diff viewer or a connection test"
   defp status_title(:disabled), do: "Disabled — all SSH operations blocked"
 
+  # Non-root login: reduced functionality, explained in the tooltip.
+  attr :host, Host, required: true
+
+  defp limited_badge(assigns) do
+    ~H"""
+    <span
+      :if={Hosts.limited?(@host)}
+      data-limited
+      class="badge badge-warning badge-xs align-middle"
+      title={Hosts.limited_reason(@host)}
+    >
+      limited
+    </span>
+    """
+  end
+
   ## Render
 
   @impl true
@@ -445,6 +461,7 @@ defmodule SsmWeb.HostsLive do
           </div>
           <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs opacity-70">
             <span>login {host.username}</span>
+            <.limited_badge host={host} />
             <span :if={host.jump_via}>via {Map.get(@host_names, host.jump_via)}</span>
             <.link
               navigate={~p"/authorizations?host_id=#{host.id}"}
@@ -481,7 +498,9 @@ defmodule SsmWeb.HostsLive do
             <p :if={host.comment} class="text-xs opacity-60">{host.comment}</p>
           </:col>
           <:col :let={host} label="Address" sort="address">{host.address}:{host.port}</:col>
-          <:col :let={host} label="Login" sort="login">{host.username}</:col>
+          <:col :let={host} label="Login" sort="login">
+            {host.username} <.limited_badge host={host} />
+          </:col>
           <:col :let={host} label="Jump via" sort="jump">
             {(host.jump_via && Map.get(@host_names, host.jump_via)) || "—"}
           </:col>
@@ -593,6 +612,13 @@ defmodule SsmWeb.HostsLive do
           <.input field={@form[:port]} type="number" label="Port" required />
         </div>
         <.input field={@form[:username]} type="text" label="SSH login user" required />
+        <p
+          :if={@form[:username].value not in [nil, "", "root"]}
+          id="host-form-limited-hint"
+          class="-mt-1 text-xs opacity-70"
+        >
+          Not root: ssm will only see and manage the authorized_keys files this user can access.
+        </p>
         <.input
           field={@form[:jump_via]}
           type="select"

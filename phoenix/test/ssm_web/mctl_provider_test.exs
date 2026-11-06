@@ -88,8 +88,49 @@ defmodule SsmWeb.MctlProviderTest do
                "port" => 2222,
                "jump_via" => to_string(bastion.id),
                "disabled" => false,
-               "comment" => nil
+               "comment" => nil,
+               "limited" => false,
+               "limited_reason" => nil
              }
+    end
+
+    test "attributes.limited flags a non-root login, with the reason" do
+      root = host_fixture(%{name: "r", username: "root"})
+      deploy = host_fixture(%{name: "d", username: "deploy"})
+
+      assert {:ok, %{attributes: %{"limited" => false, "limited_reason" => nil}}} =
+               MctlProvider.get_host(@p, to_string(root.id))
+
+      assert {:ok, %{attributes: %{"limited" => true, "limited_reason" => reason}}} =
+               MctlProvider.get_host(@p, to_string(deploy.id))
+
+      assert reason =~ "deploy"
+    end
+
+    test "limited and limited_reason are read-only attributes" do
+      assert {:error, {:validation, %{"attributes.limited" => ["is read-only"]}}} =
+               MctlProvider.create_host(
+                 @p,
+                 create_params(%{"attributes" => %{"limited" => true}})
+               )
+
+      schema = MctlProvider.attributes_schema()
+      assert schema["properties"]["limited"]["readOnly"] == true
+    end
+
+    test "a non-root create job reports limited: true" do
+      MockClient.set_default_host_keys([@ed])
+
+      assert {:ok, job} =
+               MctlProvider.create_host(
+                 @p,
+                 create_params(%{"attributes" => %{"username" => "deploy"}})
+               )
+
+      await_jobs()
+
+      assert {:ok, %{state: "succeeded", result: %{"limited" => true, "username" => "deploy"}}} =
+               MctlProvider.get_job(@p, job.id)
     end
 
     test "an unpinned host has no ssh_host_keys" do
@@ -278,7 +319,8 @@ defmodule SsmWeb.MctlProviderTest do
                "ssh_host_key" => @ed_fp,
                "pin" => "pinned",
                "ssm_public_key" => Ssm.Test.OwnKeyStub.default(),
-               "username" => "root"
+               "username" => "root",
+               "limited" => false
              }
 
       assert Hosts.get_host(String.to_integer(job.host_id)).key_fingerprint == @ed_fp
@@ -474,7 +516,8 @@ defmodule SsmWeb.MctlProviderTest do
 
       assert running.result == %{
                "ssm_public_key" => Ssm.Test.OwnKeyStub.default(),
-               "username" => "root"
+               "username" => "root",
+               "limited" => false
              }
 
       assert running.progress =~ "root"

@@ -41,6 +41,23 @@ defmodule Ssm.Hosts do
 
   def resolve_host_ref(_ref), do: :error
 
+  @doc """
+  True when ssm logs in as a user other than `root`: ssm (no sudo) then
+  sees and manages only the `authorized_keys` files that user can read and
+  write, usually just its own (onboarding v2 §4, "reduced functionality").
+  """
+  @spec limited?(Host.t()) :: boolean()
+  def limited?(%Host{username: username}), do: username != "root"
+
+  @doc "Why a host is `limited?/1` (one sentence for UI and API), or nil."
+  @spec limited_reason(Host.t()) :: String.t() | nil
+  def limited_reason(%Host{} = host) do
+    if limited?(host) do
+      "ssm logs in as #{host.username}, not root: it can only read and manage the " <>
+        "authorized_keys files this user can access (usually only its own)"
+    end
+  end
+
   @spec fetch_host(integer()) :: {:ok, Host.t()} | {:error, :not_found}
   def fetch_host(id) do
     case Repo.get(Host, id) do

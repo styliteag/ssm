@@ -36,6 +36,23 @@ defmodule SsmWeb.HostsLiveTest do
     assert has_element?(view, "#hosts-#{bastion.id} .badge", "unknown")
   end
 
+  test "a non-root login is marked limited with a hint, in list and cards", %{conn: conn} do
+    root = host_fixture(%{name: "r1", username: "root"})
+    deploy = host_fixture(%{name: "d1", username: "deploy"})
+
+    {:ok, view, _html} = live(conn, ~p"/hosts")
+
+    assert has_element?(view, "#hosts-#{deploy.id} [data-limited]", "limited")
+    refute has_element?(view, "#hosts-#{root.id} [data-limited]")
+
+    assert view |> element("#hosts-#{deploy.id} [data-limited]") |> render() =~
+             "only read and manage"
+
+    view |> element("#hosts-view-cards") |> render_click()
+    assert has_element?(view, "#host-card-#{deploy.id} [data-limited]")
+    refute has_element?(view, "#host-card-#{root.id} [data-limited]")
+  end
+
   test "status badge feeds from the diff status cache; filters narrow rows", %{conn: conn} do
     up = host_fixture(%{name: "up"})
     drifted = host_fixture(%{name: "drifted"})

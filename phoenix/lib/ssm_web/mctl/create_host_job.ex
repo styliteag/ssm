@@ -2,8 +2,8 @@ defmodule SsmWeb.Mctl.CreateHostJob do
   @moduledoc """
   The work of a `create_host` job (onboarding v2 §4, ADR-0008):
 
-    1. Put `ssm_public_key` (the key ssm logs in with) and `username` into
-       the job result at once, while the job is `running` — mctl then
+    1. Put `ssm_public_key` (the key ssm logs in with), `username` and
+       `limited` (not root, `Ssm.Hosts.limited?/1`) into the job result at once, while the job is `running` — mctl then
        authorizes the key on the host through the dashboard.
     2. Probe the host key and log in (`Ssm.Hosts.HostKeys.pin/2`; the probe
        authenticates). A pre-seeded `key_fingerprint` is verified, never
@@ -53,7 +53,12 @@ defmodule SsmWeb.Mctl.CreateHostJob do
 
   defp onboard(host, principal, job_id) do
     with {:ok, public_key} <- own_key() do
-      base = %{"ssm_public_key" => public_key, "username" => host.username}
+      base = %{
+        "ssm_public_key" => public_key,
+        "username" => host.username,
+        "limited" => Hosts.limited?(host)
+      }
+
       :ok = JobResult.put(job_id, base)
 
       ctx = %{

@@ -26,7 +26,9 @@ defmodule SsmWeb.Mctl.HostView do
         "port" => host.port,
         "jump_via" => host.jump_via && to_string(host.jump_via),
         "disabled" => host.disabled,
-        "comment" => host.comment
+        "comment" => host.comment,
+        "limited" => Ssm.Hosts.limited?(host),
+        "limited_reason" => Ssm.Hosts.limited_reason(host)
       }
     }
   end
