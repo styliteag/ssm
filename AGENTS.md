@@ -105,7 +105,9 @@ machine is the only quality gate that exists. Treat it as mandatory, not advisor
    subject` — types: feat, fix, refactor, docs, test, chore, perf, ci. No co-author
    trailers.
 9. **No new dependency** in `phoenix/mix.exs` without asking. The JWT layer runs on
-   OTP `:crypto` deliberately — no jose/joken.
+   OTP `:crypto` deliberately — no jose/joken. Exception (approved 2026-11-06,
+   ADR-0011): `oidcc` for the OIDC web login, which brings `jose` transitively; use
+   jose only through oidcc, never for ssm's own JWTs.
 10. **No `IO.puts`/`IO.inspect` in production code paths.** Use `Logger`.
 
 ## 4. Conventions
