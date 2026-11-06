@@ -134,6 +134,28 @@ defmodule Ssm.DiffsTest do
       assert {_, _, "ssh-ed25519 SYNCME laptop\n"} = write
     end
 
+    test "a successful sync refreshes the machine_id HMAC; a failed read keeps the sync result" do
+      user = user_fixture()
+      host = host_fixture()
+      key_fixture(user, %{key_type: "ssh-ed25519", key_base64: "SYNCME", name: "laptop"})
+      authorization_fixture(user, host, %{login: "deploy"})
+      stub_version(host.id)
+      MockClient.set_default_exec(%Result{exit_code: 0})
+
+      MockClient.set_exec(host.id, Ssm.Hosts.MachineId.command(), %Result{
+        stdout: "0123456789abcdef0123456789abcdef\n"
+      })
+
+      assert {:ok, [_]} = Diffs.sync_host(MockClient, host.id)
+
+      assert Ssm.Hosts.get_host(host.id).machine_id ==
+               "7f6b554ff5b43db2137ea2a70f5f40b584d6f4384399cdaaace85722c78c705f"
+
+      MockClient.set_exec(host.id, Ssm.Hosts.MachineId.command(), %Result{exit_code: 1})
+      assert {:ok, [_]} = Diffs.sync_host(MockClient, host.id)
+      assert Ssm.Hosts.get_host(host.id).machine_id =~ ~r/\A7f6b554f/
+    end
+
     test "bails atomically on a readonly login" do
       user = user_fixture()
       host = host_fixture()

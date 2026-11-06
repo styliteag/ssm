@@ -12,6 +12,8 @@ defmodule SsmWeb.MctlProviderTest do
   @ed_fp "ssh-ed25519 SHA256:fL66gvwaZdYDdKSZ3NwHakAvwnspoc1Lj5IAqcb4+4Q"
   @ecdsa_fp "ecdsa-sha2-nistp256 SHA256:lF0rWjfoTUXjkp9k51UM1vcqsjpqOz9XcMLrCCVpnNM"
 
+  @machine_id "7f6b554ff5b43db2137ea2a70f5f40b584d6f4384399cdaaace85722c78c705f"
+
   @p %Principal{
     id: 1,
     name: "mission-control",
@@ -95,6 +97,57 @@ defmodule SsmWeb.MctlProviderTest do
                MctlProvider.get_host(@p, to_string(host.id))
     end
 
+    test "ssh_host_keys use the exact spec format: <type> SHA256:<unpadded base64>" do
+      host = host_fixture()
+
+      {:ok, _} =
+        Hosts.Host.key_changeset(host, %{public_key: @ed, fingerprint: @ed_fp}) |> Repo.update()
+
+      assert {:ok, %{identity: %{ssh_host_keys: [key]}}} =
+               MctlProvider.get_host(@p, to_string(host.id))
+
+      assert key =~ ~r/\Assh-ed25519 SHA256:[A-Za-z0-9+\/]{43}\z/
+    end
+
+    test "a bare legacy pin with a stored key is reported typed; without a key it is omitted" do
+      with_key = host_fixture()
+
+      {:ok, _} =
+        with_key
+        |> Ecto.Changeset.change(
+          host_key: @ed,
+          key_fingerprint: "SHA256:" <> String.replace_prefix(@ed_fp, "ssh-ed25519 SHA256:", "")
+        )
+        |> Repo.update()
+
+      bare = host_fixture()
+
+      {:ok, _} =
+        bare
+        |> Ecto.Changeset.change(
+          key_fingerprint: "SHA256:" <> String.replace_prefix(@ed_fp, "ssh-ed25519 SHA256:", "")
+        )
+        |> Repo.update()
+
+      assert {:ok, %{identity: %{ssh_host_keys: [@ed_fp]}}} =
+               MctlProvider.get_host(@p, to_string(with_key.id))
+
+      assert {:ok, %{identity: %{ssh_host_keys: []}}} =
+               MctlProvider.get_host(@p, to_string(bare.id))
+    end
+
+    test "identity carries the stored machine_id HMAC, nil when unknown" do
+      host = host_fixture()
+
+      assert {:ok, %{identity: %{machine_id: nil}}} =
+               MctlProvider.get_host(@p, to_string(host.id))
+
+      {:ok, _} = host |> Hosts.Host.machine_id_changeset(@machine_id) |> Repo.update()
+
+      assert {:ok, %{identity: %{machine_id: @machine_id}}} =
+               MctlProvider.get_host(@p, to_string(host.id))
+    end
+
     test "get_host: unknown or malformed id is not_found" do
       assert {:error, :not_found} = MctlProvider.get_host(@p, "999999")
       assert {:error, :not_found} = MctlProvider.get_host(@p, "abc")
@@ -154,7 +207,7 @@ defmodule SsmWeb.MctlProviderTest do
       b = host_fixture()
       assert {:error, :not_found} = MctlProvider.update_host(@p, "999999", %{"name" => "x"})
 
-      assert {:error, :conflict} =
+      assert {:error, {:conflict, _msg, %{"name" => ["already exists"]}}} =
                MctlProvider.update_host(@p, to_string(b.id), %{"name" => a.name})
 
       assert {:error, {:validation, %{"customer" => [_]}}} =
@@ -184,13 +237,14 @@ defmodule SsmWeb.MctlProviderTest do
       assert host.port == 2200
       assert Enum.map(host.groups, & &1.slug) == ["web"]
 
-      # The key is not known to the mock until scripted: the job fails, host stays.
+      # The key is not known to the mock until scripted: the job fails and
+      # the half-created host is removed again.
       await_jobs()
       assert {:ok, failed} = MctlProvider.get_job(@p, job.id)
       assert failed.state == "failed"
       assert failed.error["code"] == "connect_failed"
       refute failed.error["message"] =~ "mock"
-      assert Hosts.get_host(host.id).key_fingerprint == nil
+      assert Hosts.get_host(host.id) == nil
     end
 
     test "create is audited with the client IP; the job's pin carries the mctl actor" do
@@ -235,7 +289,43 @@ defmodule SsmWeb.MctlProviderTest do
       assert failed.state == "failed"
       assert failed.error["code"] == "host_key_changed"
       assert failed.error["message"] =~ @ed_fp
-      assert Hosts.get_host(String.to_integer(job.host_id)).key_fingerprint == @ecdsa_fp
+      assert Hosts.get_host(String.to_integer(job.host_id)) == nil
+    end
+
+    test "after a failed job the same name and address can be posted again" do
+      params = create_params()
+      MockClient.set_default_host_keys([@ed])
+      bad = put_in(params, ["attributes"], %{"key_fingerprint" => @ecdsa_fp})
+
+      assert {:ok, _} = MctlProvider.create_host(@p, bad)
+      await_jobs()
+      assert Hosts.count_hosts() == 0
+
+      assert {:ok, job} = MctlProvider.create_host(@p, params)
+      await_jobs()
+      assert {:ok, %{state: "succeeded"}} = MctlProvider.get_job(@p, job.id)
+    end
+
+    test "a successful job learns the machine_id HMAC over SSH" do
+      MockClient.set_default_host_keys([@ed])
+      MockClient.set_default_exec(%Ssm.Ssh.Result{stdout: "0123456789abcdef0123456789abcdef\n"})
+
+      assert {:ok, job} = MctlProvider.create_host(@p, create_params())
+      await_jobs()
+
+      assert {:ok, %{identity: %{machine_id: @machine_id}}} =
+               MctlProvider.get_host(@p, job.host_id)
+    end
+
+    test "a failed machine_id read does not fail the job" do
+      MockClient.set_default_host_keys([@ed])
+      MockClient.set_default_exec(%Ssm.Ssh.Result{exit_code: 1})
+
+      assert {:ok, job} = MctlProvider.create_host(@p, create_params())
+      await_jobs()
+
+      assert {:ok, %{state: "succeeded"}} = MctlProvider.get_job(@p, job.id)
+      assert {:ok, %{identity: %{machine_id: nil}}} = MctlProvider.get_host(@p, job.host_id)
     end
 
     test "a disabled host is created without SSH; the job succeeds unpinned" do
@@ -288,11 +378,13 @@ defmodule SsmWeb.MctlProviderTest do
       assert Hosts.count_hosts() == 0
     end
 
-    test "a duplicate name or address is a conflict" do
+    test "a duplicate name or address is a conflict naming the field" do
       host = host_fixture(%{name: "dup"})
-      assert {:error, :conflict} = MctlProvider.create_host(@p, create_params(%{"name" => "dup"}))
 
-      assert {:error, :conflict} =
+      assert {:error, {:conflict, _msg, %{"name" => ["already exists"]}}} =
+               MctlProvider.create_host(@p, create_params(%{"name" => "dup"}))
+
+      assert {:error, {:conflict, _msg, %{"address" => ["already exists"]}}} =
                MctlProvider.create_host(@p, create_params(%{"addresses" => [host.address]}))
     end
   end

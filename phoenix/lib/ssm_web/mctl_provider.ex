@@ -8,7 +8,9 @@ defmodule SsmWeb.MctlProvider do
   `create_host` validates and inserts the host (with membership) right
   away — a bad request is a 4xx, never a failed job — then runs the job:
   probe the host key and pin it (`Ssm.Hosts.HostKeys.pin/2`; a pre-seeded
-  `attributes.key_fingerprint` is verified, not trusted on first use).
+  `attributes.key_fingerprint` is verified, not trusted on first use) and
+  learn the machine-id HMAC (`Ssm.Hosts.MachineId`). A failed job deletes
+  the host again; a duplicate name/address is a 409 naming the field.
   Writes are audited in the activity log as `mctl:<token name>` with the
   client IP (`principal.ip`).
   """
@@ -17,7 +19,7 @@ defmodule SsmWeb.MctlProvider do
 
   alias MctlContract.Jobs.Ecto, as: Jobs
   alias Ssm.{Activity, Customers, Groups, Hosts}
-  alias Ssm.Hosts.HostKeys
+  alias Ssm.Hosts.{HostKeys, MachineId}
   alias Ssm.Ssh.ErrorCode
   alias SsmWeb.Mctl.{HostParams, HostView}
 
@@ -61,7 +63,7 @@ defmodule SsmWeb.MctlProvider do
       audit(principal, "create", host)
 
       {:ok, job} =
-        Jobs.run("create_host", to_string(host.id), &pin_job(host.id, principal, &1),
+        Jobs.run("create_host", to_string(host.id), &create_job(host.id, principal, &1),
           task_supervisor: @task_supervisor
         )
 
@@ -103,7 +105,29 @@ defmodule SsmWeb.MctlProvider do
     end
   end
 
-  # The create_host job's work: pin the new host's key (the only TOFU path).
+  # The create_host job's work. A failed job removes the host again, so the
+  # same name/address can be posted again (no orphan row with a rejected pin).
+  defp create_job(host_id, principal, job_id) do
+    case pin_job(host_id, principal, job_id) do
+      {:ok, _} = ok ->
+        ok
+
+      {:error, _code, _message} = failure ->
+        roll_back(host_id, principal)
+        failure
+    end
+  end
+
+  defp roll_back(host_id, principal) do
+    with %{} = host <- Hosts.get_host(host_id),
+         {:ok, _} <- Hosts.delete_host(host) do
+      audit(principal, "create_rolled_back", host)
+    end
+
+    :ok
+  end
+
+  # Pin the new host's key (the only TOFU path).
   defp pin_job(host_id, principal, job_id) do
     case Hosts.get_host(host_id) do
       nil ->
@@ -118,8 +142,12 @@ defmodule SsmWeb.MctlProvider do
     end
   end
 
-  defp pin_result({:ok, status, host}),
-    do: {:ok, %{"pin" => Atom.to_string(status), "ssh_host_key" => host.key_fingerprint}}
+  defp pin_result({:ok, status, host}) do
+    # identity-claims-v1: learn the machine-id HMAC now that the key is
+    # pinned and SSH is allowed; a failure never fails the job.
+    host = MachineId.refresh(host, [])
+    {:ok, %{"pin" => Atom.to_string(status), "ssh_host_key" => host.key_fingerprint}}
+  end
 
   defp pin_result({:error, {:host_key_changed, %{pinned: pinned, offered: offered}}}) do
     {:error, "host_key_changed",

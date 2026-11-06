@@ -32,14 +32,35 @@ defmodule SsmWeb.Mctl.HostView do
   end
 
   defp identity(host) do
-    pinned? = HostKey.pinned?(host.key_fingerprint)
+    keys = ssh_host_keys(host)
 
     %{
-      machine_id: nil,
+      machine_id: host.machine_id,
       product_uuid: nil,
       macs: [],
-      ssh_host_keys: if(pinned?, do: [host.key_fingerprint], else: []),
-      observed_at: if(pinned?, do: host.host_key_observed_at)
+      ssh_host_keys: keys,
+      observed_at: if(keys != [], do: host.host_key_observed_at)
     }
+  end
+
+  # identity-claims-v1 §1: `<type> SHA256:<unpadded base64>`. A bare legacy
+  # pin has no type; it is reported only when the stored public key gives it
+  # one, never as a typeless claim.
+  defp ssh_host_keys(%Host{key_fingerprint: pin, host_key: key}) do
+    cond do
+      not HostKey.pinned?(pin) -> []
+      typed?(pin) -> [pin]
+      is_binary(key) -> from_public_key(key)
+      true -> []
+    end
+  end
+
+  defp typed?(pin), do: match?([_type, _hash], String.split(pin, " "))
+
+  defp from_public_key(key) do
+    case HostKey.fingerprint(key) do
+      {:ok, fingerprint} -> [fingerprint]
+      {:error, _} -> []
+    end
   end
 end

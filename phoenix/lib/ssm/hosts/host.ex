@@ -15,6 +15,10 @@ defmodule Ssm.Hosts.Host do
 
   mctl contract v1: a host belongs to at most one customer and any number of
   groups (`host_groups`), assigned only through `Ssm.Hosts.update_membership/2`.
+
+  `machine_id` is the identity-claims-v1 HMAC of the machine's raw id, set
+  only by `Ssm.Hosts.MachineId` (`machine_id_changeset/2`), never cast from
+  user input.
   """
 
   use Ecto.Schema
@@ -31,6 +35,7 @@ defmodule Ssm.Hosts.Host do
     field :key_fingerprint, :string
     field :host_key, :string
     field :host_key_observed_at, :utc_datetime
+    field :machine_id, :string
     field :disabled, :boolean, default: false
     field :comment, :string
 
@@ -91,6 +96,10 @@ defmodule Ssm.Hosts.Host do
       host_key_observed_at: DateTime.utc_now(:second)
     )
   end
+
+  @doc "Store a learned machine-id HMAC; programmatic only."
+  def machine_id_changeset(host, machine_id) when is_binary(machine_id),
+    do: change(host, machine_id: machine_id)
 
   defp normalize_fingerprint(changeset) do
     case fetch_change(changeset, :key_fingerprint) do

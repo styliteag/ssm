@@ -156,6 +156,20 @@ defmodule Ssm.Hosts.HostKeysTest do
 
       assert Hosts.get_host(leaf.id).key_fingerprint == @ecdsa_fp
     end
+
+    test "learns the machine_id HMAC of hosts it just probed" do
+      host = host_fixture()
+      MockClient.set_host_keys(host.id, [@ed])
+
+      MockClient.set_exec(host.id, Ssm.Hosts.MachineId.command(), %Ssm.Ssh.Result{
+        stdout: "0123456789abcdef0123456789abcdef\n"
+      })
+
+      assert %{pinned: [_]} = HostKeys.pin_all()
+
+      assert Hosts.get_host(host.id).machine_id ==
+               "7f6b554ff5b43db2137ea2a70f5f40b584d6f4384399cdaaace85722c78c705f"
+    end
   end
 
   describe "Host changeset (pre-seeding)" do

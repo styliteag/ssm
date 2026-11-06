@@ -303,16 +303,13 @@ defmodule Ssm.Ssh.ErlangClient do
     ssh_config = Application.get_env(:ssm, :ssh, [])
     :ok = ensure_ssh_started()
 
-    key_dir =
-      Keyword.get_lazy(opts, :key_dir, fn ->
-        prepare_key_dir(
-          Keyword.get(ssh_config, :key_file, "keys/id_ssm"),
-          Keyword.get(ssh_config, :key_passphrase)
-        )
-      end)
+    keys = init_keys(opts, ssh_config)
 
     state = %{
-      key_dir: key_dir,
+      key_dir: keys.dir,
+      key_source: keys.source,
+      key_passphrase: keys.passphrase,
+      key_stamp: keys.stamp,
       conns: %{},
       forwarders: %{}
     }
@@ -398,11 +395,13 @@ defmodule Ssm.Ssh.ErlangClient do
   # What the caller must do to obtain a connection: direct handshake, or
   # handshake against a local forwarder port (spawned here — cheap; the
   # caller awaits its readiness and performs the handshake itself).
-  defp connect_spec(%Target{jump_target: nil} = target, state) do
+  defp connect_spec(target, state), do: do_connect_spec(target, refresh_keys(state))
+
+  defp do_connect_spec(%Target{jump_target: nil} = target, state) do
     {:reply, {:connect, state.key_dir, target.address, target.port, :direct}, state}
   end
 
-  defp connect_spec(%Target{} = target, state) do
+  defp do_connect_spec(%Target{} = target, state) do
     case ensure_forwarder(target, state) do
       {:ok, local_port, state} ->
         {:reply, {:connect, state.key_dir, "127.0.0.1", local_port, :forwarded}, state}
@@ -634,24 +633,87 @@ defmodule Ssm.Ssh.ErlangClient do
 
   ## Key material
 
-  # Copy (and, when a passphrase is configured, decrypt via ssh-keygen -p)
-  # the operator's key into a private dir laid out the way Erlang's
-  # ssh_file expects (id_ed25519 / id_rsa / id_ecdsa).
-  defp prepare_key_dir(key_file, passphrase) do
-    dir = Path.join(System.tmp_dir!(), "ssm-ssh-#{System.unique_integer([:positive])}")
-    File.mkdir_p!(dir)
-    File.chmod!(dir, 0o700)
+  # An explicit `:key_dir` (tests) is used as is. Otherwise the operator's key
+  # is copied into a private temp dir at boot and again whenever the source
+  # file changes (`refresh_keys/1`), so a key created or replaced after boot
+  # works without a restart.
+  defp init_keys(opts, ssh_config) do
+    case Keyword.fetch(opts, :key_dir) do
+      {:ok, dir} ->
+        %{dir: dir, source: nil, passphrase: nil, stamp: nil}
 
-    source = Path.expand(key_file)
+      :error ->
+        source = Path.expand(key_opt(opts, ssh_config, :key_file, "keys/id_ssm"))
+        passphrase = key_opt(opts, ssh_config, :key_passphrase, nil)
 
+        dir = Path.join(System.tmp_dir!(), "ssm-ssh-#{System.unique_integer([:positive])}")
+        File.mkdir_p!(dir)
+        File.chmod!(dir, 0o700)
+
+        stamp = install_key(dir, source, passphrase, nil)
+        %{dir: dir, source: source, passphrase: passphrase, stamp: stamp}
+    end
+  end
+
+  defp key_opt(opts, ssh_config, key, default),
+    do: Keyword.get_lazy(opts, key, fn -> Keyword.get(ssh_config, key, default) end)
+
+  defp refresh_keys(%{key_source: nil} = state), do: state
+
+  defp refresh_keys(state) do
+    stamp = install_key(state.key_dir, state.key_source, state.key_passphrase, state.key_stamp)
+    %{state | key_stamp: stamp}
+  end
+
+  # Content hash, not mtime: a same-size rewrite within one second must count.
+  defp source_stamp(source) do
     case File.read(source) do
-      {:ok, _} ->
-        work = Path.join(dir, "key.work")
-        File.cp!(source, work)
-        File.chmod!(work, 0o600)
-        maybe_decrypt!(work, passphrase)
+      {:ok, content} -> :crypto.hash(:sha256, content)
+      {:error, _} -> :missing
+    end
+  end
 
+  # Returns the stamp now in effect. Unchanged source: no-op. Vanished
+  # source: the last installed key stays usable.
+  defp install_key(dir, source, passphrase, previous) do
+    case source_stamp(source) do
+      ^previous ->
+        previous
+
+      :missing ->
+        if previous == nil, do: log_key_unreadable(source, :enoent)
+        previous
+
+      stamp ->
+        case copy_key(dir, source, passphrase) do
+          :ok ->
+            stamp
+
+          {:error, reason} ->
+            log_key_unreadable(source, reason)
+            previous
+        end
+    end
+  end
+
+  defp log_key_unreadable(source, reason) do
+    Logger.warning(
+      "ssh.key_unreadable file=#{source} reason=#{inspect(reason)} — " <>
+        "SSH operations will fail until SSH_KEY points at a readable key"
+    )
+  end
+
+  defp copy_key(dir, source, passphrase) do
+    with {:ok, _} <- File.read(source) do
+      work = Path.join(dir, "key.work")
+      File.cp!(source, work)
+      File.chmod!(work, 0o600)
+
+      try do
+        maybe_decrypt!(work, passphrase)
         material = File.read!(work)
+
+        for name <- ~w(id_ed25519 id_rsa id_ecdsa), do: File.rm(Path.join(dir, name))
 
         for name <- standard_key_names(material) do
           dest = Path.join(dir, name)
@@ -659,16 +721,11 @@ defmodule Ssm.Ssh.ErlangClient do
           File.chmod!(dest, 0o600)
         end
 
-        File.rm!(work)
-
-      {:error, reason} ->
-        Logger.warning(
-          "ssh.key_unreadable file=#{source} reason=#{inspect(reason)} — " <>
-            "SSH operations will fail until SSH_KEY points at a readable key"
-        )
+        :ok
+      after
+        File.rm(work)
+      end
     end
-
-    dir
   end
 
   defp maybe_decrypt!(_path, nil), do: :ok

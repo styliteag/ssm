@@ -20,7 +20,7 @@ defmodule Ssm.Hosts.HostKeys do
 
   alias Ssm.Activity
   alias Ssm.Hosts
-  alias Ssm.Hosts.Host
+  alias Ssm.Hosts.{Host, MachineId}
   alias Ssm.Repo
   alias Ssm.Ssh.HostKey
 
@@ -147,10 +147,17 @@ defmodule Ssm.Hosts.HostKeys do
     |> Enum.sort_by(&{jump_depth(&1, by_id, 0), &1.id})
     |> Enum.reduce(%{pinned: [], already: [], failed: []}, fn host, acc ->
       # Re-read: an earlier iteration may have pinned this host's jump hop.
-      record(acc, host.name, pin(Hosts.get_host(host.id) || host, opts))
+      result = pin(Hosts.get_host(host.id) || host, opts)
+      record(acc, host.name, learn_machine_id(result, opts))
     end)
     |> Map.new(fn {key, names} -> {key, Enum.reverse(names)} end)
   end
+
+  # identity-claims-v1: a host just probed is reachable; learn its machine id.
+  defp learn_machine_id({:ok, status, host}, opts) when status != :already_pinned,
+    do: {:ok, status, MachineId.refresh(host, opts)}
+
+  defp learn_machine_id(result, _opts), do: result
 
   defp record(acc, name, {:ok, :already_pinned, _}), do: %{acc | already: [name | acc.already]}
   defp record(acc, name, {:ok, _status, _}), do: %{acc | pinned: [name | acc.pinned]}

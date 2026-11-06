@@ -12,7 +12,7 @@ defmodule Ssm.Diffs do
 
   alias Ssm.Authorizations.Authorization
   alias Ssm.Hosts
-  alias Ssm.Hosts.Host
+  alias Ssm.Hosts.{Host, MachineId}
   alias Ssm.Repo
   alias Ssm.Ssh.ScriptRunner
   alias Ssm.Users.UserKey
@@ -90,8 +90,14 @@ defmodule Ssm.Diffs do
       |> expected_logins()
       |> Enum.sort()
       |> sync_logins(client, target, host_id, [])
+      |> tap(&learn_machine_id(&1, host, client))
     end
   end
+
+  # identity-claims-v1: a successful sync proves the host reachable; refresh
+  # its machine-id claim (best effort, never changes the sync result).
+  defp learn_machine_id({:ok, _}, host, client), do: MachineId.refresh(host, client: client)
+  defp learn_machine_id(_other, _host, _client), do: :ok
 
   defp sync_logins([], _client, _target, _host_id, acc), do: {:ok, Enum.reverse(acc)}
 

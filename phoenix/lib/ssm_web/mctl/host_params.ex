@@ -135,19 +135,28 @@ defmodule SsmWeb.Mctl.HostParams do
   def parse_id(_), do: :error
 
   @doc """
-  Map a failed host changeset to a provider error: uniqueness → `:conflict`,
-  everything else → validation errors under contract field names.
+  Map a failed host changeset to a provider error: uniqueness → a
+  `conflict` whose details name the clashing field, everything else →
+  validation errors under contract field names.
   """
-  @spec changeset_error(Ecto.Changeset.t()) :: :conflict | {:validation, map()}
+  @spec changeset_error(Ecto.Changeset.t()) ::
+          {:conflict, String.t(), map()} | {:validation, map()}
   def changeset_error(%Ecto.Changeset{errors: errors}) do
-    if Enum.any?(errors, fn {_field, {_msg, meta}} -> meta[:constraint] == :unique end) do
-      :conflict
-    else
-      {:validation,
-       errors
-       |> Enum.group_by(&contract_field(elem(&1, 0)), fn {_f, {msg, _}} -> msg end)}
+    case Enum.filter(errors, fn {_field, {_msg, meta}} -> meta[:constraint] == :unique end) do
+      [] ->
+        {:validation,
+         errors
+         |> Enum.group_by(&contract_field(elem(&1, 0)), fn {_f, {msg, _}} -> msg end)}
+
+      unique ->
+        {:conflict, "a host with this name or address already exists",
+         Map.new(unique, fn {field, _} -> {conflict_field(field), ["already exists"]} end)}
     end
   end
+
+  # Conflicts name the field as the client sees it in the request.
+  defp conflict_field(:address), do: "address"
+  defp conflict_field(field), do: to_string(field)
 
   defp contract_field(:name), do: "name"
   defp contract_field(:address), do: "addresses"
