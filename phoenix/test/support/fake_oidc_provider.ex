@@ -20,7 +20,7 @@ defmodule Ssm.FakeOIDCProvider do
   def start do
     key = JOSE.JWK.generate_key({:ec, "P-256"})
     other = JOSE.JWK.generate_key({:ec, "P-256"})
-    {:ok, agent} = Agent.start_link(fn -> %{codes: %{}, key: key} end)
+    {:ok, agent} = Agent.start_link(fn -> %{codes: %{}, key: key, jwks_hits: 0} end)
 
     {:ok, server} =
       Bandit.start_link(
@@ -35,6 +35,9 @@ defmodule Ssm.FakeOIDCProvider do
     Agent.update(agent, &Map.put(&1, :issuer, issuer))
     %{issuer: issuer, agent: agent, key: key, other_key: other, server: server}
   end
+
+  @doc "How often the JWKS endpoint was fetched."
+  def jwks_hits(%{agent: agent}), do: Agent.get(agent, & &1.jwks_hits)
 
   @doc "Register claims for an authorization code (nonce included by the caller)."
   def put_code(%{agent: agent}, code, claims, opts \\ []) do
@@ -60,10 +63,10 @@ defmodule Ssm.FakeOIDCProvider do
   end
 
   @doc "Sign `claims` as a compact JWS with `key` (kid header set)."
-  def sign(key, claims, alg \\ "ES256") do
+  def sign(key, claims, alg \\ "ES256", kid \\ @kid) do
     {_, token} =
       key
-      |> JOSE.JWT.sign(%{"alg" => alg, "kid" => @kid}, claims)
+      |> JOSE.JWT.sign(%{"alg" => alg, "kid" => kid}, claims)
       |> JOSE.JWS.compact()
 
     token
@@ -98,6 +101,7 @@ defmodule Ssm.FakeOIDCProvider do
   end
 
   def call(%{path_info: ["jwks"]} = conn, agent) do
+    Agent.update(agent, &Map.update!(&1, :jwks_hits, fn n -> n + 1 end))
     key = Agent.get(agent, & &1.key)
     {_, public} = key |> JOSE.JWK.to_public() |> JOSE.JWK.to_map()
 
@@ -113,7 +117,7 @@ defmodule Ssm.FakeOIDCProvider do
     with true <- basic_auth_ok?(conn),
          {claims, opts} when is_map(claims) <- Agent.get(agent, & &1.codes[params["code"]]),
          true <- pkce_ok?(opts, params["code_verifier"]) do
-      id_token = id_token(claims, Keyword.get(opts, :sign_with), agent)
+      id_token = id_token(claims, opts, agent)
 
       json(conn, %{
         "access_token" => "at-" <> Base.url_encode64(:crypto.strong_rand_bytes(6)),
@@ -128,9 +132,13 @@ defmodule Ssm.FakeOIDCProvider do
 
   def call(conn, _agent), do: send_resp(conn, 404, "")
 
-  defp id_token(claims, :none, _agent), do: unsigned(claims)
-  defp id_token(claims, nil, agent), do: sign(Agent.get(agent, & &1.key), claims)
-  defp id_token(claims, key, _agent), do: sign(key, claims)
+  defp id_token(claims, opts, agent) do
+    case {Keyword.get(opts, :sign_with), Keyword.get(opts, :kid, @kid)} do
+      {:none, _} -> unsigned(claims)
+      {nil, kid} -> sign(Agent.get(agent, & &1.key), claims, "ES256", kid)
+      {key, kid} -> sign(key, claims, "ES256", kid)
+    end
+  end
 
   defp basic_auth_ok?(conn) do
     case get_req_header(conn, "authorization") do

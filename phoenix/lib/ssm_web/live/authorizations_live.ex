@@ -497,7 +497,7 @@ defmodule SsmWeb.AuthorizationsLive do
       activity_type: "auth",
       action: "bulk_grant",
       target: "#{login} (#{length(created)} grants)",
-      actor_username: socket.assigns.current_user.username,
+      actor_username: socket.assigns.current_user.actor,
       details: %{
         login: login,
         users: length(user_ids),
@@ -529,7 +529,7 @@ defmodule SsmWeb.AuthorizationsLive do
       activity_type: "auth",
       action: action,
       target: target,
-      actor_username: socket.assigns.current_user.username
+      actor_username: socket.assigns.current_user.actor
     }
 
     attrs = if action == "delete", do: attrs, else: Map.put(attrs, :user_id, auth.user_id)

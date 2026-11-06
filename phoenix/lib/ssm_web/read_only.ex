@@ -5,9 +5,10 @@ defmodule SsmWeb.ReadOnly do
   `UserAuth.on_mount(:live_user_required, ...)` attaches `guard/3` as a
   `handle_event` hook to every authenticated LiveView. A viewer may send
   only the events in `@read_events` (sorting, filtering, searching, view
-  switches, opening a key, read-only diff re-checks); every other event is
+  switches, opening a key, opening a key); every other event is
   refused before the LiveView's own `handle_event` runs. An allow-list, so
-  a new write event is blocked by default.
+  a new write event is blocked by default. Diff re-checks and refreshes are
+  not allowed: they open SSH connections to the hosts.
 
   Browser controllers behind authentication are GET-only (export); the
   `/api/v2` bearer API is a separate credential and not affected.
@@ -17,7 +18,7 @@ defmodule SsmWeb.ReadOnly do
 
   @read_events ~w(
     filter load_more sort view-mode list-search search type-filter view
-    diff-view diff-search select deselect refresh recheck recheck-row cancel
+    diff-view diff-search select deselect cancel
     unknown-key-cancel
   )
 

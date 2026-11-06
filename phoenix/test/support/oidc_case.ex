@@ -87,7 +87,8 @@ defmodule SsmWeb.OIDCCase do
 
     Fake.put_code(provider, code, all,
       challenge: q["code_challenge"],
-      sign_with: Keyword.get(opts, :sign_with)
+      sign_with: Keyword.get(opts, :sign_with),
+      kid: Keyword.get(opts, :kid, "fake-key-1")
     )
 
     state = Keyword.get(opts, :state, q["state"])

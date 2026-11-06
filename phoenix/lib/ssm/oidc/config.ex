@@ -44,9 +44,27 @@ defmodule Ssm.OIDC.Config do
   @spec enabled?() :: boolean()
   def enabled?, do: get() != nil
 
-  @doc "`:on | :admins_only | :off`, effective (see `from_env/1` for the safety rule)."
+  @doc """
+  `:on | :admins_only | :off`, effective now. `:off` only holds while the
+  provider worker has its configuration loaded; with the IdP unreachable
+  (nothing loaded) it behaves as `:admins_only`, so nobody is locked out.
+  See `from_env/1` for the boot-time safety rule.
+  """
   @spec local_login() :: :on | :admins_only | :off
-  def local_login, do: Application.get_env(:ssm, :local_login, :on)
+  def local_login do
+    case Application.get_env(:ssm, :local_login, :on) do
+      :off -> if provider_ready?(), do: :off, else: :admins_only
+      mode -> mode
+    end
+  end
+
+  # oidcc keeps the loaded document in an ETS table named like the worker.
+  # Any doubt (no table, no entry) reads as "not ready": the fail-safe side.
+  defp provider_ready? do
+    match?([{:provider_configuration, _}], :ets.lookup(@provider, :provider_configuration))
+  rescue
+    ArgumentError -> false
+  end
 
   @doc "Read the environment and store the result in the application env."
   @spec load(map()) :: :ok
@@ -145,10 +163,19 @@ defmodule Ssm.OIDC.Config do
   defp blank_to(value, _default), do: value
 
   defp parse_local_login(env) do
-    case env["LOCAL_LOGIN"] do
-      "admins_only" -> :admins_only
-      "off" -> :off
-      _ -> :on
+    case env["LOCAL_LOGIN"] |> to_string() |> String.trim() |> String.downcase() do
+      mode when mode in ["", "on"] ->
+        :on
+
+      "admins_only" ->
+        :admins_only
+
+      "off" ->
+        :off
+
+      _invalid ->
+        Logger.error("LOCAL_LOGIN must be on, admins_only or off; using admins_only")
+        :admins_only
     end
   end
 

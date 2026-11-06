@@ -441,7 +441,7 @@ defmodule SsmWeb.KeysLive do
       activity_type: "key",
       action: action,
       target: key_label(key),
-      actor_username: socket.assigns.current_user.username,
+      actor_username: socket.assigns.current_user.actor,
       user_id: key.user_id,
       details: %{key_type: key.key_type}
     })

@@ -21,7 +21,7 @@ defmodule Ssm.OIDC.Backchannel do
     with {:ok, claims} <- verify(token),
          :ok <- validate(claims, config),
          :ok <- claim_jti(claims["jti"]) do
-      revoke(config.issuer, claims)
+      revoke(config, claims)
     end
   end
 
@@ -94,20 +94,25 @@ defmodule Ssm.OIDC.Backchannel do
     end
   end
 
-  defp revoke(issuer, claims) do
+  # `sub` ends every session of the user; `sid` alone ends exactly that
+  # session (checked from the session cookie), and its operator's open
+  # LiveViews are disconnected so they re-check.
+  defp revoke(config, claims) do
     sub = claims["sub"]
     sid = claims["sid"]
+    ttl = config.session_max_hours * 3600
 
-    {:ok, ids} =
-      if present?(sub),
-        do: Accounts.revoke_by_subject(issuer, sub),
-        else: Accounts.revoke_by_sid(issuer, sid)
+    if present?(sid), do: Accounts.revoke_sid(config.issuer, sid, ttl)
 
-    Enum.each(ids, &disconnect/1)
+    ids =
+      if present?(sub) do
+        {:ok, ids} = Accounts.revoke_by_subject(config.issuer, sub)
+        ids
+      else
+        Accounts.operator_ids_by_sid(config.issuer, sid)
+      end
+
+    Enum.each(ids, &Accounts.disconnect_sessions/1)
     {:ok, %{sub: sub, sid: sid}}
-  end
-
-  defp disconnect(operator_id) do
-    SsmWeb.Endpoint.broadcast(SsmWeb.UserAuth.operator_socket_id(operator_id), "disconnect", %{})
   end
 end

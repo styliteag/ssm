@@ -384,7 +384,7 @@ defmodule SsmWeb.UsersLive do
       activity_type: "user",
       action: "split",
       target: result.new_user.username,
-      actor_username: socket.assigns.current_user.username,
+      actor_username: socket.assigns.current_user.actor,
       user_id: result.new_user.id,
       details: %{
         from: user.username,
@@ -399,7 +399,7 @@ defmodule SsmWeb.UsersLive do
       activity_type: "user",
       action: "merge",
       target: result.target.username,
-      actor_username: socket.assigns.current_user.username,
+      actor_username: socket.assigns.current_user.actor,
       user_id: result.target.id,
       details: %{
         merged_users: Enum.join(result.deleted_users, ", "),
@@ -416,7 +416,7 @@ defmodule SsmWeb.UsersLive do
       activity_type: "user",
       action: action,
       target: user.username,
-      actor_username: socket.assigns.current_user.username
+      actor_username: socket.assigns.current_user.actor
     })
   end
 
@@ -425,7 +425,7 @@ defmodule SsmWeb.UsersLive do
       activity_type: "user",
       action: action,
       target: user.username,
-      actor_username: socket.assigns.current_user.username,
+      actor_username: socket.assigns.current_user.actor,
       user_id: user.id
     })
   end

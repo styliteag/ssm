@@ -243,7 +243,7 @@ defmodule SsmWeb.HostsLive do
   end
 
   def handle_event("pin_host_keys", _params, socket) do
-    actor = socket.assigns.current_user.username
+    actor = socket.assigns.current_user.actor
 
     {:noreply,
      socket
@@ -342,7 +342,7 @@ defmodule SsmWeb.HostsLive do
       activity_type: "host",
       action: action,
       target: host.name,
-      actor_username: socket.assigns.current_user.username,
+      actor_username: socket.assigns.current_user.actor,
       details: %{address: host.address, port: host.port}
     })
   end

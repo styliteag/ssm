@@ -61,7 +61,7 @@ defmodule SsmWeb.UserAuth do
   end
 
   @doc "LiveView socket topic of an operator's sessions (disconnect target)."
-  def operator_socket_id(operator_id), do: "ssm_sessions:op:#{operator_id}"
+  defdelegate operator_socket_id(operator_id), to: Accounts, as: :socket_id
 
   # Only a stored same-origin path is a valid post-login target.
   defp local_path("/" <> _ = path) do
@@ -135,7 +135,7 @@ defmodule SsmWeb.UserAuth do
     socket = mount_current_user(socket, session)
 
     if socket.assigns.current_user do
-      {:cont, SsmWeb.ReadOnly.attach(socket)}
+      {:cont, socket |> SsmWeb.ReadOnly.attach() |> watch_oidc_session(session)}
     else
       {:halt,
        socket
@@ -154,6 +154,58 @@ defmodule SsmWeb.UserAuth do
     end
   end
 
+  # An OIDC session is more than a cookie check at mount: a timer ends the
+  # view at the absolute expiry, and every `oidc_recheck_ms` (60 s) the
+  # operator row is read again (disabled, revoked, sid revoked, role
+  # changed). Back-channel logout and disabling also broadcast a disconnect.
+  defp watch_oidc_session(%{assigns: %{current_user: %{source: :oidc}}} = socket, session) do
+    if Phoenix.LiveView.connected?(socket) do
+      slice = Map.take(session, ~w(operator_id oidc_expires_at oidc_started_ms oidc_sid))
+      remaining_ms = max(slice["oidc_expires_at"] - System.os_time(:second), 0) * 1000
+      Process.send_after(self(), :oidc_session_expired, min(remaining_ms, 4_000_000_000))
+      schedule_recheck()
+
+      Phoenix.LiveView.attach_hook(socket, :oidc_session, :handle_info, fn msg, socket ->
+        oidc_info(msg, socket, slice)
+      end)
+    else
+      socket
+    end
+  end
+
+  defp watch_oidc_session(socket, _session), do: socket
+
+  defp oidc_info(:oidc_session_expired, socket, _slice), do: {:halt, session_ended(socket)}
+
+  defp oidc_info(:oidc_session_recheck, socket, slice) do
+    role = socket.assigns.current_user.role
+
+    case user_from_session(slice) do
+      %{role: ^role} ->
+        schedule_recheck()
+        {:halt, socket}
+
+      _ended_or_changed ->
+        {:halt, session_ended(socket)}
+    end
+  end
+
+  defp oidc_info(_msg, socket, _slice), do: {:cont, socket}
+
+  defp schedule_recheck,
+    do:
+      Process.send_after(
+        self(),
+        :oidc_session_recheck,
+        Application.get_env(:ssm, :oidc_recheck_ms, 60_000)
+      )
+
+  defp session_ended(socket) do
+    socket
+    |> Phoenix.LiveView.put_flash(:error, "Your session has ended. Please sign in again.")
+    |> Phoenix.LiveView.redirect(to: ~p"/sign-in")
+  end
+
   defp mount_current_user(socket, session) do
     Phoenix.Component.assign_new(socket, :current_user, fn ->
       user_from_session(session)
@@ -167,29 +219,40 @@ defmodule SsmWeb.UserAuth do
 
   defp user_from_session(session), do: local_from_session(session)
 
-  # Username present, session young enough, htpasswd entry unchanged since
-  # login. Every htpasswd user is a local admin.
+  # Local sign-in not switched off (LOCAL_LOGIN=off; the "off without OIDC"
+  # safety already turned that into admins_only at boot), username present,
+  # session young enough, htpasswd entry unchanged since login. Every
+  # htpasswd user is a local admin.
   defp local_from_session(session) do
-    with username when is_binary(username) <- session["ssm_user"],
+    with true <- Ssm.OIDC.Config.local_login() != :off,
+         username when is_binary(username) <- session["ssm_user"],
          logged_in_at when is_integer(logged_in_at) <- session["logged_in_at"],
          true <- System.os_time(:second) - logged_in_at <= @session_max_age,
          {:ok, fingerprint} <- Htpasswd.entry_fingerprint(htpasswd_path(), username),
          true <- fingerprint == session["pwv"] do
-      %{username: username, role: "admin", source: :local}
+      %{username: username, actor: username, role: "admin", source: :local}
     else
       _ -> nil
     end
   end
 
   # Operator still exists and is enabled, the absolute lifetime has not
-  # passed and no back-channel logout / revocation came after the login.
+  # passed and no back-channel logout (by sub or by this session's sid)
+  # came after the login.
   defp operator_from_session(id, session) do
     with expires when is_integer(expires) <- session["oidc_expires_at"],
          started when is_integer(started) <- session["oidc_started_ms"],
          true <- System.os_time(:second) < expires,
          %{disabled_at: nil} = operator <- Accounts.get_operator(id),
-         true <- started > (operator.session_revoked_at || 0) do
-      %{username: operator.name, role: operator.role, source: :oidc, operator_id: operator.id}
+         true <- started > (operator.session_revoked_at || 0),
+         false <- Accounts.sid_revoked?(operator.oidc_issuer, session["oidc_sid"]) do
+      %{
+        username: operator.name,
+        actor: Accounts.actor_label(operator),
+        role: operator.role,
+        source: :oidc,
+        operator_id: operator.id
+      }
     else
       _ -> nil
     end

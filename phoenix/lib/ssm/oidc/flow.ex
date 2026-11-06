@@ -11,6 +11,10 @@ defmodule Ssm.OIDC.Flow do
 
   alias Ssm.Accounts
   alias Ssm.OIDC.{Config, Roles}
+  alias Ssm.RateLimit
+
+  @max_iat_age 600
+  @max_iat_skew 120
 
   @type pending :: %{state: String.t(), nonce: String.t(), verifier: String.t()}
   @type login :: %{
@@ -57,7 +61,8 @@ defmodule Ssm.OIDC.Flow do
       redirect_uri: redirect_uri,
       nonce: pending.nonce,
       pkce_verifier: pending.verifier,
-      require_pkce: true
+      require_pkce: true,
+      refresh_jwks: &refresh_jwks/2
     }
 
     case Oidcc.retrieve_token(
@@ -73,7 +78,8 @@ defmodule Ssm.OIDC.Flow do
   end
 
   defp from_claims(%{"sub" => sub} = claims, config) when is_binary(sub) and sub != "" do
-    with {:ok, role, customers} <- resolve(claims, config, sub),
+    with :ok <- check_iat(claims["iat"], sub),
+         {:ok, role, customers} <- resolve(claims, config, sub),
          {:ok, operator} <- upsert(claims, config, sub, role, customers),
          :ok <- ensure_enabled(operator) do
       {:ok, %{operator: operator, sid: sid(claims), amr: amr(claims)}}
@@ -81,6 +87,28 @@ defmodule Ssm.OIDC.Flow do
   end
 
   defp from_claims(_claims, _config), do: {:error, {:invalid_token, nil}}
+
+  # oidcc checks `exp`; `iat` must also be recent (10 min) and not ahead of
+  # our clock by more than 2 min.
+  defp check_iat(iat, sub) when is_integer(iat) do
+    age = System.os_time(:second) - iat
+    if age <= @max_iat_age and age >= -@max_iat_skew, do: :ok, else: {:error, {:iat_invalid, sub}}
+  end
+
+  defp check_iat(_iat, sub), do: {:error, {:iat_invalid, sub}}
+
+  # An unknown `kid` makes oidcc re-fetch the JWKS; allow that once a minute
+  # for the whole app, otherwise keep the cached keys (verification then
+  # fails with no matching key).
+  defp refresh_jwks(_jwks, kid) do
+    provider = Config.provider()
+
+    if RateLimit.hit(:oidc_jwks_refresh, 1, 60) == :ok do
+      Oidcc.ProviderConfiguration.Worker.refresh_jwks_for_unknown_kid(provider, kid)
+    end
+
+    {:ok, :oidcc_provider_configuration_worker.get_jwks(provider)}
+  end
 
   defp resolve(claims, config, sub) do
     case Roles.resolve(claims, config) do

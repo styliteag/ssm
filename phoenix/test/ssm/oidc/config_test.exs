@@ -81,7 +81,6 @@ defmodule Ssm.OIDC.ConfigTest do
   test "LOCAL_LOGIN modes", %{path: path} do
     assert {_, :admins_only} = Config.from_env(env(path, %{"LOCAL_LOGIN" => "admins_only"}))
     assert {_, :off} = Config.from_env(env(path, %{"LOCAL_LOGIN" => "off"}))
-    assert {_, :on} = Config.from_env(env(path, %{"LOCAL_LOGIN" => "bogus"}))
   end
 
   test "LOCAL_LOGIN=off without OIDC becomes admins_only and logs an error" do
@@ -98,5 +97,25 @@ defmodule Ssm.OIDC.ConfigTest do
       env = env(path, %{"LOCAL_LOGIN" => "off"}) |> Map.delete("OIDC_CLIENT_ID")
       assert {nil, :admins_only} = Config.from_env(env)
     end)
+  end
+
+  test "LOCAL_LOGIN is case-insensitive", %{path: path} do
+    assert {_, :admins_only} = Config.from_env(env(path, %{"LOCAL_LOGIN" => " Admins_Only "}))
+    assert {_, :off} = Config.from_env(env(path, %{"LOCAL_LOGIN" => "OFF"}))
+    assert {_, :on} = Config.from_env(env(path, %{"LOCAL_LOGIN" => "On"}))
+  end
+
+  test "invalid LOCAL_LOGIN becomes admins_only and logs an error", %{path: path} do
+    log =
+      capture_log(fn ->
+        assert {_, :admins_only} = Config.from_env(env(path, %{"LOCAL_LOGIN" => "bogus"}))
+      end)
+
+    assert log =~ "LOCAL_LOGIN"
+  end
+
+  test "empty or unset LOCAL_LOGIN is on", %{path: path} do
+    assert {_, :on} = Config.from_env(env(path, %{"LOCAL_LOGIN" => ""}))
+    assert {_, :on} = Config.from_env(env(path))
   end
 end

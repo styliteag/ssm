@@ -27,7 +27,7 @@ defmodule SsmWeb.OIDCLoginTest do
         assert op.source == "oidc"
 
         [entry] = audit("oidc.login")
-        assert entry.actor_username == "Test User"
+        assert entry.actor_username == "Test User (oidc:#{op.id})"
         meta = Jason.decode!(entry.meta)
         assert meta["role"] == unquote(role)
         assert meta["amr"] == ["pwd", "otp"]

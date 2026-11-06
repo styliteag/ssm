@@ -59,7 +59,7 @@ defmodule SsmWeb.OIDCBackchannelTest do
   test "a new login after the logout works", %{conn: conn, provider: p} do
     logged_in(conn, p)
     send_logout(p, logout_claims(p))
-    again = logged_in(build_conn(), p)
+    again = logged_in(build_conn(), p, "sid-2")
     assert html_response(get(again, ~p"/dashboard"), 200) =~ "Signed in as"
   end
 
@@ -152,7 +152,7 @@ defmodule SsmWeb.OIDCBackchannelTest do
     claims = logout_claims(p, %{"jti" => "same-jti"})
     assert response(send_logout(p, claims), 200)
 
-    again = logged_in(build_conn(), p)
+    again = logged_in(build_conn(), p, "sid-2")
     assert response(send_logout(p, claims), 400)
     assert html_response(get(again, ~p"/dashboard"), 200) =~ "Signed in as"
   end
@@ -164,7 +164,7 @@ defmodule SsmWeb.OIDCBackchannelTest do
   end
 
   test "is rate limited", %{provider: p} do
-    codes = for _ <- 1..32, do: send_logout(p, logout_claims(p)).status
+    codes = for _ <- 1..125, do: send_logout(p, logout_claims(p)).status
     assert 429 in codes
   end
 end

@@ -90,3 +90,58 @@ defmodule SsmWeb.ReadOnlyTest do
     refute render_click(lv, "new", %{}) =~ "read-only"
   end
 end
+
+defmodule SsmWeb.ReadOnlyDiffTest do
+  use SsmWeb.OIDCCase
+
+  import Phoenix.LiveViewTest
+  import Ssm.Fixtures
+
+  alias Ssm.Ssh.MockClient
+
+  setup do
+    start_supervised!(MockClient)
+    Ssm.Diffs.StatusCache.reset()
+    %{host: host_fixture(%{name: "web1"})}
+  end
+
+  defp ssh_used?,
+    do:
+      MockClient.calls()
+      |> Map.take([:connect, :exec, :read, :write, :probe])
+      |> Map.values()
+      |> Enum.any?(&(&1 != []))
+
+  defp as(conn, p, role), do: sso_login(conn, p, %{"orbit_role" => role})
+
+  test "viewer: mounting /diff and /diff?host_id= opens no SSH connection", %{
+    conn: conn,
+    provider: p,
+    host: host
+  } do
+    conn = as(conn, p, "viewer")
+
+    {:ok, lv, html} = live(conn, ~p"/diff")
+    render_async(lv)
+    assert html =~ "web1"
+
+    {:ok, lv, html} = live(conn, ~p"/diff?host_id=#{host.id}")
+    render_async(lv)
+    assert html =~ "operator"
+
+    refute ssh_used?()
+  end
+
+  test "viewer sees the cached status without a re-check", %{conn: conn, provider: p, host: host} do
+    Ssm.Diffs.StatusCache.put(host.id, :synced)
+    {:ok, lv, _} = live(as(conn, p, "viewer"), ~p"/diff")
+    render_async(lv)
+    refute ssh_used?()
+  end
+
+  test "operator: the same page does open SSH connections", %{conn: conn, provider: p} do
+    {:ok, lv, _} = live(as(conn, p, "operator"), ~p"/diff")
+    render_async(lv)
+    assert ssh_used?()
+  end
+end

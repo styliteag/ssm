@@ -24,7 +24,25 @@ defmodule SsmWeb.Api.AuthController do
     refresh_token: [type: :string, required: true, min_len: 1]
   ]
 
+  # LOCAL_LOGIN=off: .htpasswd credentials are refused (every htpasswd user
+  # is an admin, so `on` and `admins_only` behave the same). Same error as a
+  # wrong password; nothing is checked or counted.
   def login(conn, params) do
+    if Ssm.OIDC.Config.local_login() == :off,
+      do: local_login_off(conn),
+      else: do_login(conn, params)
+  end
+
+  def refresh(conn, params) do
+    if Ssm.OIDC.Config.local_login() == :off,
+      do: local_login_off(conn),
+      else: do_refresh(conn, params)
+  end
+
+  defp local_login_off(conn),
+    do: Envelope.fail(conn, 401, "INVALID_CREDENTIALS", "invalid credentials")
+
+  defp do_login(conn, params) do
     case Params.validate(params, @login_spec) do
       {:ok, %{username: username, password: password}} ->
         with :ok <- LoginThrottle.check(conn.remote_ip, username),
@@ -45,7 +63,7 @@ defmodule SsmWeb.Api.AuthController do
     end
   end
 
-  def refresh(conn, params) do
+  defp do_refresh(conn, params) do
     with {:ok, %{refresh_token: token}} <- Params.validate(params, @refresh_spec),
          {:ok, %{"sub" => subject}} <- Token.verify(token, "refresh") do
       Envelope.ok(conn, token_pair(subject))

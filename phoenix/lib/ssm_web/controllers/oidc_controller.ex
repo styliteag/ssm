@@ -45,7 +45,7 @@ defmodule SsmWeb.OIDCController do
         activity_type: "auth",
         action: "oidc.login",
         target: "login",
-        actor_username: login.operator.name,
+        actor_username: Ssm.Accounts.actor_label(login.operator),
         details: %{role: login.operator.role, amr: login.amr, sub: login.operator.oidc_subject}
       })
 
@@ -121,8 +121,18 @@ defmodule SsmWeb.OIDCController do
     end
   end
 
+  # Own buckets: back-channel logout is server-to-server traffic and must
+  # not be starved by (or starve) browser logins. `remote_ip` is the real
+  # client only via `SsmWeb.Plugs.TrustedProxies`; X-Forwarded-For is never
+  # read here.
   defp rate_limit(conn, _opts) do
-    case RateLimit.hit({:oidc, RateLimit.client_key(conn.remote_ip)}, 30, 60) do
+    {bucket, limit} =
+      case action_name(conn) do
+        :backchannel_logout -> {:oidc_backchannel, 120}
+        _ -> {:oidc, 30}
+      end
+
+    case RateLimit.hit({bucket, RateLimit.client_key(conn.remote_ip)}, limit, 60) do
       :ok ->
         conn
 

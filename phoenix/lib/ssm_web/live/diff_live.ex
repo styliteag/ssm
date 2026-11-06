@@ -42,6 +42,7 @@ defmodule SsmWeb.DiffLive do
         cond do
           host.disabled -> {host.id, :disabled}
           match?({_status, _at}, cached[host.id]) -> {host.id, elem(cached[host.id], 0)}
+          read_only?(socket) -> {host.id, {:error, "not checked yet"}}
           true -> {host.id, :loading}
         end
       end)
@@ -55,7 +56,7 @@ defmodule SsmWeb.DiffLive do
       |> assign(diff_search: "", diff_sort: nil)
 
     socket =
-      if connected?(socket) do
+      if connected?(socket) and not read_only?(socket) do
         to_check = Enum.reject(hosts, fn host -> host.disabled or fresh?(cached[host.id]) end)
         start_statuses_async(socket, to_check)
       else
@@ -64,6 +65,10 @@ defmodule SsmWeb.DiffLive do
 
     {:ok, socket}
   end
+
+  # Viewers get what is already known (the status cache); anything that would
+  # open an SSH connection to a host is for operators and admins.
+  defp read_only?(socket), do: socket.assigns.current_user.role == "viewer"
 
   defp fresh?({_status, cached_at}),
     do: System.monotonic_time(:millisecond) - cached_at < @status_ttl_ms
@@ -86,10 +91,15 @@ defmodule SsmWeb.DiffLive do
       assign(socket, selected: selected, detail: nil, detail_error: nil, diff_view: view)
 
     socket =
-      if (connected?(socket) and selected) && !selected.disabled do
-        start_detail_async(socket, selected)
-      else
-        socket
+      cond do
+        selected && read_only?(socket) ->
+          assign(socket, :detail_error, "Live diffs need an operator account (read-only access).")
+
+        (connected?(socket) and selected) && !selected.disabled ->
+          start_detail_async(socket, selected)
+
+        true ->
+          socket
       end
 
     {:noreply, socket}
@@ -504,7 +514,7 @@ defmodule SsmWeb.DiffLive do
       activity_type: "auth",
       action: "create",
       target: "#{user.username}@#{host.name}:#{login}",
-      actor_username: socket.assigns.current_user.username,
+      actor_username: socket.assigns.current_user.actor,
       user_id: user.id
     })
   end
@@ -514,7 +524,7 @@ defmodule SsmWeb.DiffLive do
       activity_type: "key",
       action: "create",
       target: key.name || key.key_type,
-      actor_username: socket.assigns.current_user.username,
+      actor_username: socket.assigns.current_user.actor,
       user_id: user.id,
       details: %{key_type: key.key_type}
     })
@@ -541,7 +551,7 @@ defmodule SsmWeb.DiffLive do
       activity_type: "host",
       action: "sync",
       target: host.name,
-      actor_username: socket.assigns.current_user.username,
+      actor_username: socket.assigns.current_user.actor,
       details: details
     })
   end
