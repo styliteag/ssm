@@ -2,8 +2,9 @@ defmodule SsmWeb.MctlProvider do
   @moduledoc """
   ssm's side of the mctl contract v1 (`/api/mctl/v1`, contract-v1 §8):
   hosts with customer/groups and the pinned SSH host key as identity,
-  customers and groups (own tables), and `create_host` jobs in the
-  library's job store (`mctl_jobs`).
+  customers and groups (own tables), `create_host` jobs in the library's
+  job store (`mctl_jobs`) and host summaries (C4) from the persisted
+  periodic key check (`Ssm.Diffs.HostChecks`, table `host_checks`).
 
   `create_host` validates and inserts the host (with membership) right
   away — a bad request is a 4xx, never a failed job — then runs the job:
@@ -19,9 +20,10 @@ defmodule SsmWeb.MctlProvider do
 
   alias MctlContract.Jobs.Ecto, as: Jobs
   alias Ssm.{Activity, Customers, Groups, Hosts}
+  alias Ssm.Diffs.HostChecks
   alias Ssm.Hosts.{HostKeys, MachineId}
   alias Ssm.Ssh.ErrorCode
-  alias SsmWeb.Mctl.{HostParams, HostView}
+  alias SsmWeb.Mctl.{HostParams, HostView, SummaryView}
 
   require Logger
 
@@ -31,7 +33,7 @@ defmodule SsmWeb.MctlProvider do
   def product, do: %{product: "ssm", version: to_string(Application.spec(:ssm, :vsn))}
 
   @impl true
-  def cursor_types(collection) when collection in ~w(hosts jobs), do: [:integer]
+  def cursor_types(collection) when collection in ~w(hosts host_summaries jobs), do: [:integer]
   def cursor_types(_collection), do: [:string]
 
   @impl true
@@ -54,6 +56,43 @@ defmodule SsmWeb.MctlProvider do
   @impl true
   def get_host(_principal, id) do
     with {:ok, host} <- fetch_host(id), do: {:ok, HostView.render(host)}
+  end
+
+  # C4 host summaries: from the persisted periodic key check
+
+  @impl true
+  def list_host_summaries(_principal, %{after: after_key, limit: limit, filters: filters}) do
+    case summary_filters(filters) do
+      {:ok, parsed} ->
+        {rows, next} = HostChecks.page_summaries(first(after_key), limit, parsed)
+        {:ok, Enum.map(rows, &SummaryView.render/1), next && [next]}
+
+      :none ->
+        {:ok, [], nil}
+    end
+  end
+
+  @impl true
+  def get_host_summary(_principal, id) do
+    with {:ok, int} <- HostParams.parse_id(id),
+         %{} = row <- HostChecks.get_summary_row(int) do
+      {:ok, SummaryView.render(row)}
+    else
+      _ -> {:error, :not_found}
+    end
+  end
+
+  defp summary_filters(filters) do
+    case filters["host_id"] do
+      nil ->
+        {:ok, %{changed_after: filters["changed_after"]}}
+
+      raw ->
+        case HostParams.parse_id(raw) do
+          {:ok, id} -> {:ok, %{host_id: id, changed_after: filters["changed_after"]}}
+          :error -> :none
+        end
+    end
   end
 
   @impl true

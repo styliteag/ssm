@@ -36,7 +36,7 @@ defmodule Ssm.Diffs do
 
   defmodule HostDiff do
     @moduledoc "A host's full diff across every login."
-    defstruct [:host_id, :host_name, :disabled, logins: []]
+    defstruct [:host_id, :host_name, :disabled, :read_error, logins: []]
   end
 
   @doc """
@@ -65,7 +65,13 @@ defmodule Ssm.Diffs do
         end)
 
       {:ok,
-       %HostDiff{host_id: host.id, host_name: host.name, disabled: host.disabled, logins: logins}}
+       %HostDiff{
+         host_id: host.id,
+         host_name: host.name,
+         disabled: host.disabled,
+         read_error: read_error,
+         logins: logins
+       }}
     end
   end
 

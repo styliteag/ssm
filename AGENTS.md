@@ -25,7 +25,7 @@ recreated.
 
 | Path | What lives there |
 |------|------------------|
-| `phoenix/lib/ssm/` | Domain contexts: `hosts.ex`, `users.ex` (+ `user_key`, `key_parser`, `bulk_ops`), `authorizations.ex`, `diffs.ex` (+ `status_cache`), `activity.ex`, `auth/` (htpasswd, JWT token), `release.ex` (prod migrate) |
+| `phoenix/lib/ssm/` | Domain contexts: `hosts.ex`, `users.ex` (+ `user_key`, `key_parser`, `bulk_ops`), `authorizations.ex`, `diffs.ex` (+ `status_cache`, and the persisted periodic check: `host_checks`, `sync_check`, `sync_scheduler`), `activity.ex`, `auth/` (htpasswd, JWT token), `release.ex` (prod migrate) |
 | `phoenix/lib/ssm/ssh/` | `client.ex` (behaviour), `erlang_client.ex` (prod), `mock_client.ex` (tests), `safety.ex` (readonly markers), `script_runner.ex`, `cache.ex` |
 | `phoenix/lib/ssm_web/live/` | One LiveView per page: dashboard, hosts, users, keys, authorizations, diff, activities, login |
 | `phoenix/lib/ssm_web/api/` | `/api/v2` plumbing: `auth_plug.ex` (bearer JWT), `envelope.ex`, `errors.ex` (stable error codes), `params.ex` |
@@ -41,7 +41,8 @@ recreated.
 `user_key`, `authorization`, `activity_log`. `authorization` links user↔host with a
 remote `login`. `host.disabled` blocks all SSH operations. `operators` (OIDC web accounts) and newer tables for the mctl
 contract are plural (contract spec names): `customers`, `groups`, `host_groups`, plus
-the `mctl_contract` library's `mctl_tokens`, `mctl_jobs`, `mctl_idempotency`.
+the `mctl_contract` library's `mctl_tokens`, `mctl_jobs`, `mctl_idempotency`, and `host_checks`
+(last result of the periodic key check per host, `ON DELETE CASCADE`).
 
 **Web login** (ADR-0011, `lib/ssm/oidc/`, `ssm_web/oidc_controller.ex`): `.htpasswd`
 users are local admins (session `ssm_user`). With `OIDC_ISSUER` set, SSO users are
@@ -60,7 +61,10 @@ keys; `probe_host_key/2` on the SSH client is the only trust-on-first-use path.
 
 **mctl API** (`/api/mctl/v1`): `MctlContract.Plug` from the path dependency
 `mctl_contract` with `SsmWeb.MctlProvider`; own `ssm_` bearer tokens, own envelope.
-Conformance test: `test/ssm_web/mctl_conformance_test.exs`.
+Conformance test: `test/ssm_web/mctl_conformance_test.exs`. Host summaries (C4,
+`/host-summaries`, `/hosts/{id}/summary`) read `host_checks`, which `Ssm.Diffs.SyncScheduler`
+refreshes every `SSM_SYNC_INTERVAL` through `Ssm.Diffs.HostChecks.sweep/1` (disabled hosts
+are never touched and keep no row; the stored drift holds fingerprints and comments only).
 
 **Request paths**: UI — session cookie (htpasswd login) → LiveView. API — Bearer JWT
 (`AuthPlug`) → controller → envelope `{success, data, error{code,message,details},
@@ -272,7 +276,7 @@ secret as the python stack, so pre-cutover tokens keep working.
 **Env vars** (env-only, read in `phoenix/config/runtime.exs`; python-stack names and
 defaults preserved): `DATABASE_URL` (or `DATABASE_PATH`), `HTPASSWD`, `SSH_KEY`,
 `SSH_KEY_PASSPHRASE`, `SSH_TIMEOUT`, `SSH_CONNECT_TIMEOUT`, `SSH_CONCURRENCY`,
-`SSH_CHECK_SCHEDULE`, `SSH_UPDATE_SCHEDULE`, `JWT_SECRET` (fallback `SESSION_KEY`),
+`SSH_CHECK_SCHEDULE`, `SSH_UPDATE_SCHEDULE`, `SSM_SYNC_INTERVAL`, `SSM_SYNC_CONCURRENCY`, `JWT_SECRET` (fallback `SESSION_KEY`),
 `SECRET_KEY_BASE`, `LOGLEVEL`, `PORT`, `LISTEN`, `PHX_HOST`, `POOL_SIZE`,
 `TRUSTED_PROXIES`, `MCTL_TOKEN_FILE`, `MCTL_TOKEN_SCOPES`, and the OIDC set read at boot by
 `Ssm.OIDC.Config` (not runtime.exs): `OIDC_ISSUER`, `OIDC_CLIENT_ID`,
@@ -290,8 +294,9 @@ for amd64+arm64, pushes to Docker Hub + GHCR with `latest`/semver manifests and
 creates a GitHub release. The image applies migrations on start.
 
 **Known open wounds** (documented so you don't re-discover them; fix only when asked):
-scheduler sweeps (`SSH_CHECK_SCHEDULE`/`SSH_UPDATE_SCHEDULE`) are read but not wired
-to jobs — restoring them needs explicit sign-off (rewrite plan §8);
+the python-era sweeps `SSH_CHECK_SCHEDULE`/`SSH_UPDATE_SCHEDULE` are read but not wired
+to jobs — restoring them needs explicit sign-off (rewrite plan §8); the read-only periodic
+key check is separate (`SSM_SYNC_INTERVAL`) and never writes to a host;
 `.secrets-whitelist` still carries Rust- and Python-era
 path entries (harmless, narrow — cleaning it needs user approval per rule #6);
 `./ssm.db` at the repo root is the final snapshot of the python stack's data, kept as

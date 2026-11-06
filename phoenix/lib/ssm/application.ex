@@ -5,6 +5,8 @@ defmodule Ssm.Application do
 
   use Application
 
+  require Logger
+
   @impl true
   def start(_type, _args) do
     Ssm.OIDC.Config.load()
@@ -27,11 +29,14 @@ defmodule Ssm.Application do
         # Back-channel logout replay store.
         Ssm.OIDC.JtiStore,
         # mctl contract: create_host job work (host-key probe + pin).
-        {Task.Supervisor, name: Ssm.Mctl.TaskSupervisor}
+        {Task.Supervisor, name: Ssm.Mctl.TaskSupervisor},
+        # Periodic key check sweeps (Ssm.Diffs.SyncScheduler).
+        {Task.Supervisor, name: Ssm.Diffs.TaskSupervisor}
       ] ++
         oidc_children() ++
         mctl_boot() ++
         ssh_children() ++
+        sync_children() ++
         [
           # Start to serve requests, typically the last entry
           SsmWeb.Endpoint
@@ -76,6 +81,30 @@ defmodule Ssm.Application do
     case Ssm.OIDC.Config.get() do
       nil -> []
       _config -> [Supervisor.child_spec(Ssm.OIDC.Supervisor, restart: :temporary)]
+    end
+  end
+
+  # The periodic key check: needs the real SSH client, so off in tests;
+  # SSM_SYNC_INTERVAL=0|off disables it, a bad value is logged and the
+  # default (15 minutes) applies.
+  defp sync_children do
+    if Application.get_env(:ssm, :start_ssh_client, true) do
+      raw = Application.get_env(:ssm, :sync_check, []) |> Keyword.get(:interval)
+
+      case Ssm.Diffs.SyncScheduler.parse_interval(raw) do
+        {:ok, seconds} ->
+          [{Ssm.Diffs.SyncScheduler, interval_ms: seconds * 1000}]
+
+        :off ->
+          []
+
+        {:error, message} ->
+          Logger.error("#{message}; using the default interval")
+          {:ok, seconds} = Ssm.Diffs.SyncScheduler.parse_interval(nil)
+          [{Ssm.Diffs.SyncScheduler, interval_ms: seconds * 1000}]
+      end
+    else
+      []
     end
   end
 

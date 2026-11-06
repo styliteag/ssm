@@ -20,6 +20,7 @@ defmodule SsmWeb.DiffLive do
   alias Ssm.Diffs
   alias Ssm.Diffs.HostDiff
   alias Ssm.Diffs.StatusCache
+  alias Ssm.Diffs.SyncCheck
   alias Ssm.Hosts
   alias Ssm.Hosts.Host
   alias Ssm.Users
@@ -149,19 +150,7 @@ defmodule SsmWeb.DiffLive do
     end
   end
 
-  defp summarize(%HostDiff{logins: logins}) do
-    read_error = Enum.find_value(logins, & &1.read_error)
-
-    if read_error do
-      {:error, read_error}
-    else
-      items = Enum.flat_map(logins, & &1.items)
-      missing = Enum.count(items, &(&1.status == :missing_on_host))
-      extra = Enum.count(items, &(&1.status == :extra_on_host))
-
-      if missing + extra == 0, do: :synced, else: {:needs_sync, missing, extra}
-    end
-  end
+  defp summarize(%HostDiff{} = diff), do: SyncCheck.status(diff)
 
   @impl true
   def handle_async(:statuses, {:ok, _done}, socket) do

@@ -34,6 +34,13 @@ config :ssm, :ssh,
   check_schedule: System.get_env("SSH_CHECK_SCHEDULE"),
   update_schedule: System.get_env("SSH_UPDATE_SCHEDULE")
 
+# Periodic key check (Ssm.Diffs.SyncScheduler): every SSM_SYNC_INTERVAL
+# (seconds, or Nm / Nh; default 15m; 0 or off disables), at most
+# SSM_SYNC_CONCURRENCY hosts at once. The interval is parsed at boot.
+config :ssm, :sync_check,
+  interval: System.get_env("SSM_SYNC_INTERVAL"),
+  concurrency: String.to_integer(System.get_env("SSM_SYNC_CONCURRENCY", "8"))
+
 # LOGLEVEL accepts RUST_LOG-style directives ("info", "ssm=debug,actix=warn");
 # the most verbose known level wins, unknown tokens fall back to :info —
 # ported from config.py rust_log_to_python_level.
