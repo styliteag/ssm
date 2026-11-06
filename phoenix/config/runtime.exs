@@ -17,6 +17,11 @@ end
 
 config :ssm, :htpasswd_path, System.get_env("HTPASSWD", ".htpasswd")
 
+# Reverse proxies in front of ssm (comma-separated addresses/CIDRs). Only for
+# requests from these, X-Forwarded-For sets the client IP (mctl token
+# last_used_ip, per-IP auth failure limit). Unset: the header is ignored.
+config :ssm, :trusted_proxies, System.get_env("TRUSTED_PROXIES", "")
+
 config :ssm, :ssh,
   key_file: System.get_env("SSH_KEY", "keys/id_ssm"),
   key_passphrase: System.get_env("SSH_KEY_PASSPHRASE"),

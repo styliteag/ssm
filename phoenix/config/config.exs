@@ -7,6 +7,10 @@
 # General application configuration
 import Config
 
+# mctl contract v1 (/api/mctl/v1): the library's Ecto stores (tokens, jobs,
+# idempotency) live in ssm's repo; service tokens carry the `ssm_` prefix.
+config :mctl_contract, repo: Ssm.Repo, token_prefix: "ssm_"
+
 config :ssm,
   ecto_repos: [Ssm.Repo],
   generators: [timestamp_type: :utc_datetime]

@@ -20,6 +20,9 @@ defmodule Ssm.Ssh do
   def write_file(target, path, content), do: impl().write_file(target, path, content)
 
   @impl true
+  def probe_host_key(target, opts \\ []), do: impl().probe_host_key(target, opts)
+
+  @impl true
   def close, do: impl().close()
 
   defp impl, do: Application.get_env(:ssm, :ssh_client, Ssm.Ssh.Cache)

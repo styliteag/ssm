@@ -39,7 +39,18 @@ recreated.
 
 **Data model** (SQLite, table names are singular — Diesel parity): `host`, `user`,
 `user_key`, `authorization`, `activity_log`. `authorization` links user↔host with a
-remote `login`. `host.disabled` blocks all SSH operations.
+remote `login`. `host.disabled` blocks all SSH operations. Newer tables for the mctl
+contract are plural (contract spec names): `customers`, `groups`, `host_groups`, plus
+the `mctl_contract` library's `mctl_tokens`, `mctl_jobs`, `mctl_idempotency`.
+
+**Host keys** (ADR-0008, `lib/ssm/ssh/host_key*.ex`, `lib/ssm/hosts/host_keys.ex`):
+every connect verifies `host.key_fingerprint`; unpinned hosts are refused.
+`Ssm.Hosts.HostKeys` (`pin/2`, `accept/3`, `pin_all/1`) is the only place that stores
+keys; `probe_host_key/2` on the SSH client is the only trust-on-first-use path.
+
+**mctl API** (`/api/mctl/v1`): `MctlContract.Plug` from the path dependency
+`mctl_contract` with `SsmWeb.MctlProvider`; own `ssm_` bearer tokens, own envelope.
+Conformance test: `test/ssm_web/mctl_conformance_test.exs`.
 
 **Request paths**: UI — session cookie (htpasswd login) → LiveView. API — Bearer JWT
 (`AuthPlug`) → controller → envelope `{success, data, error{code,message,details},
@@ -232,7 +243,7 @@ meta{total,page,page_size}}`.
 
 **Error codes** (`ssm_web/api/errors.ex`): `AUTH_REQUIRED` 401, `INVALID_CREDENTIALS`
 401, `VALIDATION_FAILED` 422, `{HOST,USER,KEY,AUTHORIZATION}_NOT_FOUND` 404,
-`HOST_DISABLED` 409, `SSH_READONLY` 409, `CONFLICT` 409, `SSH_CONNECT_FAILED` 502,
+`RATE_LIMITED` 429 (failed-login lock, `Retry-After`), `HOST_DISABLED` 409, `SSH_READONLY` 409, `CONFLICT` 409, `SSH_CONNECT_FAILED` 502,
 `INTERNAL_ERROR` 500.
 
 **Auth quick test** (dev server):
@@ -250,7 +261,8 @@ secret as the python stack, so pre-cutover tokens keep working.
 defaults preserved): `DATABASE_URL` (or `DATABASE_PATH`), `HTPASSWD`, `SSH_KEY`,
 `SSH_KEY_PASSPHRASE`, `SSH_TIMEOUT`, `SSH_CONNECT_TIMEOUT`, `SSH_CONCURRENCY`,
 `SSH_CHECK_SCHEDULE`, `SSH_UPDATE_SCHEDULE`, `JWT_SECRET` (fallback `SESSION_KEY`),
-`SECRET_KEY_BASE`, `LOGLEVEL`, `PORT`, `LISTEN`, `PHX_HOST`, `POOL_SIZE`.
+`SECRET_KEY_BASE`, `LOGLEVEL`, `PORT`, `LISTEN`, `PHX_HOST`, `POOL_SIZE`,
+`TRUSTED_PROXIES`, `MCTL_TOKEN_FILE`, `MCTL_TOKEN_SCOPES`.
 
 **Secrets protection**: run `./install-hooks.sh` after cloning (installs
 `.githooks/pre-commit` secret scanner; other tools may overwrite

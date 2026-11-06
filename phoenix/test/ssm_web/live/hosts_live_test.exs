@@ -231,4 +231,32 @@ defmodule SsmWeb.HostsLiveTest do
       assert MockClient.calls().connect == []
     end
   end
+
+  describe "pin host keys now" do
+    setup do
+      start_supervised!(MockClient)
+      :ok
+    end
+
+    @ed "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDe2nndD7+tlXY2983h/zouDiBPDl6Ni4YtTK7Y5TyuQ"
+
+    test "pins unpinned hosts and reports failures", %{conn: conn} do
+      ok = host_fixture(%{name: "web1"})
+      bad = host_fixture(%{name: "web2"})
+      MockClient.set_host_keys(ok.id, [@ed])
+      MockClient.fail_connect(bad.id)
+
+      {:ok, view, _html} = live(conn, ~p"/hosts")
+
+      view |> element("#pin-host-keys") |> render_click()
+      render_async(view)
+
+      html = render(view)
+      assert html =~ "Pinned 1 host key"
+      assert html =~ "web2"
+      assert Hosts.get_host(ok.id).key_fingerprint =~ "ssh-ed25519 SHA256:"
+      assert Hosts.get_host(bad.id).key_fingerprint == nil
+      assert has_element?(view, "#hosts-#{ok.id} [data-pinned]")
+    end
+  end
 end

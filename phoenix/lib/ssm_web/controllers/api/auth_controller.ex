@@ -10,7 +10,9 @@ defmodule SsmWeb.Api.AuthController do
 
   alias Ssm.Auth.Htpasswd
   alias Ssm.Auth.Token
+  alias Ssm.LoginThrottle
   alias SsmWeb.Api.Envelope
+  alias SsmWeb.Api.Errors
   alias SsmWeb.Api.Params
 
   @login_spec [
@@ -25,10 +27,17 @@ defmodule SsmWeb.Api.AuthController do
   def login(conn, params) do
     case Params.validate(params, @login_spec) do
       {:ok, %{username: username, password: password}} ->
-        if Htpasswd.verify(htpasswd_path(), username, password) do
+        with :ok <- LoginThrottle.check(conn.remote_ip, username),
+             true <- Htpasswd.verify(htpasswd_path(), username, password) do
+          LoginThrottle.record_success(username)
           Envelope.ok(conn, token_pair(username))
         else
-          Envelope.fail(conn, 401, "INVALID_CREDENTIALS", "invalid credentials")
+          {:error, retry_after} ->
+            Errors.rate_limited(conn, retry_after)
+
+          false ->
+            LoginThrottle.record_failure(conn.remote_ip, username)
+            Envelope.fail(conn, 401, "INVALID_CREDENTIALS", "invalid credentials")
         end
 
       {:error, errors} ->

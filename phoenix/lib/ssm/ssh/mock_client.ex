@@ -9,7 +9,7 @@ defmodule Ssm.Ssh.MockClient do
 
   use Agent
 
-  alias Ssm.Ssh.{RemoteFile, Result}
+  alias Ssm.Ssh.{HostKey, RemoteFile, Result}
 
   def start_link(_opts \\ []) do
     Agent.start_link(fn -> initial_state() end, name: __MODULE__)
@@ -21,6 +21,9 @@ defmodule Ssm.Ssh.MockClient do
       exec_responses: %{},
       default_exec: nil,
       connect_failures: MapSet.new(),
+      host_keys: %{},
+      default_host_keys: [],
+      probe_calls: [],
       connect_calls: [],
       exec_calls: [],
       exec_inputs: [],
@@ -45,6 +48,16 @@ defmodule Ssm.Ssh.MockClient do
     Agent.update(__MODULE__, &%{&1 | default_exec: result})
   end
 
+  @doc "Script the public host keys (OpenSSH lines) a host offers to probes."
+  def set_host_keys(host_id, public_keys) when is_list(public_keys) do
+    Agent.update(__MODULE__, &put_in(&1, [:host_keys, host_id], public_keys))
+  end
+
+  @doc "Host keys offered by every host without its own `set_host_keys/2`."
+  def set_default_host_keys(public_keys) when is_list(public_keys) do
+    Agent.update(__MODULE__, &%{&1 | default_host_keys: public_keys})
+  end
+
   def fail_connect(host_id) do
     Agent.update(__MODULE__, &%{&1 | connect_failures: MapSet.put(&1.connect_failures, host_id)})
   end
@@ -53,6 +66,7 @@ defmodule Ssm.Ssh.MockClient do
     Agent.get(__MODULE__, fn state ->
       %{
         connect: Enum.reverse(state.connect_calls),
+        probe: Enum.reverse(state.probe_calls),
         exec: Enum.reverse(state.exec_calls),
         exec_inputs: Enum.reverse(state.exec_inputs),
         read: Enum.reverse(state.read_calls),
@@ -76,6 +90,33 @@ defmodule Ssm.Ssh.MockClient do
         {:ok, state}
       end
     end)
+  end
+
+  @impl true
+  def probe_host_key(target, opts) do
+    with :ok <- connect(target) do
+      Agent.get_and_update(__MODULE__, fn state ->
+        state = %{state | probe_calls: [{target.host_id, opts} | state.probe_calls]}
+        keys = Map.get(state.host_keys, target.host_id, state.default_host_keys)
+        {probe_answer(target, keys, opts), state}
+      end)
+    end
+  end
+
+  defp probe_answer(target, [], _opts),
+    do: {:error, {:ssh_connect_failed, "mock: no host key scripted for host #{target.host_id}"}}
+
+  defp probe_answer(_target, keys, opts) do
+    prefer = Keyword.get(opts, :prefer)
+    line = Enum.find(keys, hd(keys), &String.starts_with?(&1, "#{prefer} "))
+    {:ok, public_key} = HostKey.public_key(line)
+    {:ok, fingerprint} = HostKey.fingerprint(public_key)
+    offered = %{public_key: public_key, fingerprint: fingerprint}
+    expect = Keyword.get(opts, :expect)
+
+    if HostKey.pinned?(expect) and not HostKey.matches?(expect, fingerprint),
+      do: {:error, {:host_key_mismatch, offered}},
+      else: {:ok, offered}
   end
 
   @impl true

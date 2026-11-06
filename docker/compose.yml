@@ -31,6 +31,11 @@ services:
       # hostname — otherwise the LiveView socket origin check rejects the
       # browser and every page degrades to longpoll with endless reconnects.
       # - PHX_HOST=ssm.example.net
+      # Behind a reverse proxy, also name the proxy (addresses/CIDRs,
+      # comma-separated) so the client IP comes from X-Forwarded-For —
+      # used for the mission control API's failed-login limit and token
+      # last-use IP. Unset, X-Forwarded-For is ignored (and logged once).
+      # - TRUSTED_PROXIES=172.16.0.0/12
       - LOGLEVEL=info
     networks:
       - ssm-network

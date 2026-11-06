@@ -19,8 +19,13 @@ defmodule Ssm.Application do
         # Ssm.Ssh.MockClient via config :ssm, :ssh_client).
         Ssm.Ssh.Cache,
         # Last known per-host sync status for the diff viewer.
-        Ssm.Diffs.StatusCache
+        Ssm.Diffs.StatusCache,
+        # In-memory request/failure limits (mctl API auth hooks).
+        Ssm.RateLimit,
+        # mctl contract: create_host job work (host-key probe + pin).
+        {Task.Supervisor, name: Ssm.Mctl.TaskSupervisor}
       ] ++
+        mctl_boot() ++
         ssh_children() ++
         [
           # Start to serve requests, typically the last entry
@@ -44,6 +49,21 @@ defmodule Ssm.Application do
   defp skip_migrations?() do
     # By default, sqlite migrations are run when using a release
     System.get_env("RELEASE_NAME") == nil
+  end
+
+  # After the repo and the migrator: install/rotate the `ssm_` service token
+  # from MCTL_TOKEN_FILE, fail create_host jobs a restart interrupted, and
+  # prune the mctl tables periodically. Off in tests (SQL sandbox).
+  defp mctl_boot do
+    if Application.get_env(:ssm, :mctl_boot, true) do
+      [
+        Supervisor.child_spec({Task, &Ssm.Mctl.Boot.run/0}, id: :mctl_boot),
+        # Hourly batched prune of mctl_jobs / mctl_idempotency.
+        Ssm.Mctl.Pruner
+      ]
+    else
+      []
+    end
   end
 
   defp ssh_children do

@@ -114,6 +114,21 @@ defmodule Ssm.Repo.BaselineMigrationTest do
     Ecto.Migrator.run(Ssm.Repo, path, :up, all: true, dynamic_repo: repo_pid, log: false)
   end
 
+  # Every migration version on disk, oldest first — the baseline is the first,
+  # later additive migrations must apply on top of every DB generation.
+  defp all_versions do
+    Application.app_dir(:ssm, ["priv", "repo", "migrations"])
+    |> File.ls!()
+    |> Enum.filter(&String.match?(&1, ~r/^\d+_.*\.exs$/))
+    |> Enum.map(&(&1 |> String.split("_", parts: 2) |> hd() |> String.to_integer()))
+    |> Enum.sort()
+  end
+
+  defp column_names(table) do
+    %{rows: rows} = Ssm.Repo.query!("SELECT name FROM pragma_table_info('#{table}')")
+    List.flatten(rows)
+  end
+
   defp table_names do
     %{rows: rows} =
       Ssm.Repo.query!("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
@@ -130,7 +145,8 @@ defmodule Ssm.Repo.BaselineMigrationTest do
 
   test "creates the full schema on a fresh database and is idempotent", %{repo_pid: repo_pid} do
     applied = migrate!(repo_pid)
-    assert applied == [20_260_101_000_000]
+    assert applied == all_versions()
+    assert hd(applied) == 20_260_101_000_000
 
     tables = table_names()
 
@@ -162,10 +178,26 @@ defmodule Ssm.Repo.BaselineMigrationTest do
     Ssm.Repo.query!("INSERT INTO \"user\" (username) VALUES ('alice')")
     diesel_user_key_sql = table_sql("user_key")
 
-    assert migrate!(repo_pid) == [20_260_101_000_000]
+    assert migrate!(repo_pid) == all_versions()
 
     tables = table_names()
     assert "activity_log" in tables, "adoption must create the missing activity_log table"
+
+    # Later additive migrations land on the adopted Diesel host table too:
+    # pinning + mctl contract columns, backfilled timestamps, new tables.
+    host_columns = column_names("host")
+
+    for column <- ~w(host_key customer_id inserted_at updated_at) do
+      assert column in host_columns, "missing host.#{column} on an adopted DB"
+    end
+
+    %{rows: [[inserted_at, updated_at]]} =
+      Ssm.Repo.query!("SELECT inserted_at, updated_at FROM \"host\"")
+
+    assert {:ok, _, 0} = DateTime.from_iso8601(inserted_at)
+    assert {:ok, _, 0} = DateTime.from_iso8601(updated_at)
+
+    for table <- ~w(customers groups host_groups), do: assert(table in tables)
 
     # Existing data untouched.
     %{rows: [[1]]} = Ssm.Repo.query!("SELECT count(*) FROM \"host\"")

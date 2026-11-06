@@ -41,3 +41,7 @@ config :bcrypt_elixir, log_rounds: 1
 # SSH: never start the real client in tests; the facade resolves to the mock
 config :ssm, start_ssh_client: false
 config :ssm, :ssh_client, Ssm.Ssh.MockClient
+
+# mctl boot work (service token from MCTL_TOKEN_FILE, failing stale jobs)
+# would race the SQL sandbox; tests call it explicitly.
+config :ssm, :mctl_boot, false

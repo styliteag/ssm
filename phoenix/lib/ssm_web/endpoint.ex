@@ -42,11 +42,16 @@ defmodule SsmWeb.Endpoint do
 
   plug Plug.RequestId
   plug Plug.Telemetry, event_prefix: [:phoenix, :endpoint]
+  plug SsmWeb.Plugs.TrustedProxies
 
-  plug Plug.Parsers,
+  # Like Plug.Parsers, but /api/mctl/v1 bodies stay unparsed: MctlContract.Plug
+  # parses them after the token check (no token + broken JSON -> 401; with a
+  # token -> the contract's 400 bad_request).
+  plug MctlContract.Parsers,
     parsers: [:urlencoded, :multipart, :json],
     pass: ["*/*"],
-    json_decoder: Phoenix.json_library()
+    json_decoder: Phoenix.json_library(),
+    mctl_prefix: "/api/mctl/v1"
 
   plug Plug.MethodOverride
   plug Plug.Head

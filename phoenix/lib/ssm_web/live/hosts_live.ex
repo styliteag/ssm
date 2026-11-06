@@ -28,7 +28,7 @@ defmodule SsmWeb.HostsLive do
     {:ok,
      socket
      |> assign(page_title: "Hosts")
-     |> assign(form: nil, editing: nil, testing_id: nil)
+     |> assign(form: nil, editing: nil, testing_id: nil, pinning: false)
      |> assign(filter: "active", conn_results: %{}, sort: nil, view: "list")
      |> reload_hosts()}
   end
@@ -242,7 +242,31 @@ defmodule SsmWeb.HostsLive do
     end
   end
 
+  def handle_event("pin_host_keys", _params, socket) do
+    actor = socket.assigns.current_user.username
+
+    {:noreply,
+     socket
+     |> assign(:pinning, true)
+     |> start_async(:pin_host_keys, fn -> Hosts.pin_host_keys_now(actor: actor) end)}
+  end
+
   @impl true
+  def handle_async(:pin_host_keys, {:ok, report}, socket) do
+    {:noreply,
+     socket
+     |> assign(:pinning, false)
+     |> put_flash(if(report.failed == [], do: :info, else: :error), pin_summary(report))
+     |> reload_hosts()}
+  end
+
+  def handle_async(:pin_host_keys, {:exit, reason}, socket) do
+    {:noreply,
+     socket
+     |> assign(:pinning, false)
+     |> put_flash(:error, "Pinning host keys crashed: #{inspect(reason)}")}
+  end
+
   def handle_async(:test_connection, {:ok, {host, result}}, socket) do
     socket = assign(socket, :testing_id, nil)
 
@@ -281,6 +305,28 @@ defmodule SsmWeb.HostsLive do
   end
 
   ## Helpers
+
+  defp pin_summary(%{pinned: pinned, already: already, failed: failed}) do
+    base =
+      "Pinned #{length(pinned)} host key(s); #{length(already)} already pinned."
+
+    case failed do
+      [] ->
+        base
+
+      _ ->
+        details =
+          Enum.map_join(failed, "; ", fn {name, reason} -> "#{name}: #{pin_error(reason)}" end)
+
+        base <> " Failed (still unpinned or changed): " <> details
+    end
+  end
+
+  defp pin_error({:host_key_changed, %{pinned: pinned, offered: offered}}),
+    do: "host key changed (pinned #{pinned}, offered #{offered.fingerprint})"
+
+  defp pin_error({_code, message}) when is_binary(message), do: message
+  defp pin_error(reason), do: inspect(reason)
 
   # A cleared select posts `""`; Ecto's cast treats `""` as a missing value
   # rather than an explicit nil, so map it here (the jump_via pattern).
@@ -326,6 +372,18 @@ defmodule SsmWeb.HostsLive do
         Hosts
         <:subtitle>{@host_count} managed SSH hosts</:subtitle>
         <:actions>
+          <.button
+            id="pin-host-keys"
+            phx-click="pin_host_keys"
+            disabled={@pinning}
+            data-confirm="Connect to every enabled host without a pinned SSH host key and trust the key it presents now (trust on first use)?"
+            title="Pin SSH host keys of all enabled hosts that are not pinned yet"
+          >
+            <.icon
+              name={if @pinning, do: "hero-arrow-path", else: "hero-finger-print"}
+              class={["size-4", @pinning && "motion-safe:animate-spin"]}
+            /> Pin host keys
+          </.button>
           <.button id="new-host" variant="primary" phx-click="new">
             <.icon name="hero-plus" class="size-4" /> New host
           </.button>
@@ -413,6 +471,13 @@ defmodule SsmWeb.HostsLive do
         >
           <:col :let={host} label="Name" sort="name">
             <span class="font-medium">{host.name}</span>
+            <span
+              :if={Ssm.Ssh.HostKey.pinned?(host.key_fingerprint)}
+              data-pinned
+              title={"Host key pinned: #{host.key_fingerprint}"}
+            >
+              <.icon name="hero-finger-print" class="size-3.5 opacity-60" />
+            </span>
             <p :if={host.comment} class="text-xs opacity-60">{host.comment}</p>
           </:col>
           <:col :let={host} label="Address" sort="address">{host.address}:{host.port}</:col>

@@ -13,6 +13,16 @@ defmodule SsmWeb.Router do
     get "/health", HealthController, :show
   end
 
+  # mctl contract v1 (mctl-docs contract-v1.md): the shared library plug
+  # brings its own bearer auth (`ssm_` service tokens with scopes, SHA-256
+  # only), envelope `{data, meta}` / `{error}` and OpenAPI. `/api/v2` and its
+  # envelope are untouched.
+  forward "/api/mctl/v1", MctlContract.Plug,
+    provider: SsmWeb.MctlProvider,
+    token_store: MctlContract.Tokens.Ecto,
+    auth_hooks: SsmWeb.MctlAuthHooks,
+    product: "ssm"
+
   pipeline :api_v2_auth do
     plug SsmWeb.Api.AuthPlug
   end

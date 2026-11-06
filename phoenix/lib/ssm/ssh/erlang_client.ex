@@ -13,8 +13,14 @@ defmodule Ssm.Ssh.ErlangClient do
       tmp dir via `ssh-keygen -p` (OTP cannot decode encrypted
       openssh-key-v1 material natively)
 
-  Host keys are accepted silently — parity with the python stack, which ran
-  asyncssh with `known_hosts=None`.
+  Host keys are pinned (ADR-0008). Every connect verifies the server's key
+  against the target's `host_key_fingerprint` inside `Ssm.Ssh.HostKeyCb`
+  during key exchange — a different key aborts the handshake before
+  authentication, an unpinned host is refused without connecting.
+  `probe_host_key/2` is the only path that accepts an unknown key (trust on
+  first use); it never registers its connection. Jump hops are verified by
+  OpenSSH itself: each forwarder gets a generated `ssh_config` +
+  `known_hosts` (the hops' pinned public keys, `StrictHostKeyChecking yes`).
 
   The GenServer owns only the connection/forwarder registry; channel work
   (exec/sftp) AND the connect handshakes run in the caller's process, so
@@ -30,7 +36,8 @@ defmodule Ssm.Ssh.ErlangClient do
   use GenServer
   require Logger
 
-  alias Ssm.Ssh.{RemoteFile, Result, Target}
+  alias Ssm.Hosts.SshFields
+  alias Ssm.Ssh.{HostKey, HostKeyCb, RemoteFile, Result, Target}
 
   @gregorian_epoch_offset 62_167_219_200
 
@@ -90,6 +97,47 @@ defmodule Ssm.Ssh.ErlangClient do
   end
 
   @impl Ssm.Ssh.Client
+  def probe_host_key(%Target{} = target, opts) do
+    expect = Keyword.get(opts, :expect)
+    key_mode = if HostKey.pinned?(expect), do: {:verify, expect}, else: :capture
+    prefer = Keyword.get(opts, :prefer) || expect
+
+    with :ok <- SshFields.check_target(target),
+         :ok <- ensure_jump_chain_pinned(target),
+         {:connect, key_dir, address, port, mode} <- probe_spec(target),
+         :ok <- maybe_await_forwarder(mode, port) do
+      address
+      |> handshake(port, target.username, key_dir, key_mode, prefer)
+      |> probe_result(target)
+    else
+      {:error, {:ssh_connect_failed, _}} = error -> error
+      {:error, reason} -> {:error, connect_error(target, reason)}
+    end
+  end
+
+  defp probe_spec(target) do
+    GenServer.call(__MODULE__, {:probe_spec, target}, registry_timeout())
+  catch
+    :exit, reason -> {:error, {:registry_unavailable, reason}}
+  end
+
+  defp probe_result({{:ok, conn}, {:accepted, offered}}, _target) do
+    catch_all(fn -> :ssh.close(conn) end)
+    {:ok, offered}
+  end
+
+  defp probe_result({{:ok, conn}, nil}, target) do
+    catch_all(fn -> :ssh.close(conn) end)
+    {:error, connect_error(target, :host_key_never_offered)}
+  end
+
+  defp probe_result({{:error, _}, {:rejected, offered}}, _target),
+    do: {:error, {:host_key_mismatch, offered}}
+
+  defp probe_result({{:error, reason}, _report}, target),
+    do: {:error, connect_error(target, reason)}
+
+  @impl Ssm.Ssh.Client
   def close do
     GenServer.call(__MODULE__, :close, :infinity)
   end
@@ -100,7 +148,15 @@ defmodule Ssm.Ssh.ErlangClient do
   end
 
   # Fast registry round-trips; the actual handshake happens in this process.
+  # Unpinned targets (or jump hops OpenSSH cannot verify) never get that far.
   defp checkout(target) do
+    with :ok <- SshFields.check_target(target),
+         :ok <- ensure_pinned(target) do
+      lookup(target)
+    end
+  end
+
+  defp lookup(target) do
     case GenServer.call(__MODULE__, {:lookup, target}, registry_timeout()) do
       {:ok, conn} ->
         {:ok, conn}
@@ -116,9 +172,47 @@ defmodule Ssm.Ssh.ErlangClient do
       {:error, {:ssh_connect_failed, "ssh registry unavailable: #{inspect(reason)}"}}
   end
 
+  defp ensure_pinned(target) do
+    if HostKey.pinned?(target.host_key_fingerprint) do
+      ensure_jump_chain_pinned(target)
+    else
+      {:error,
+       {:ssh_connect_failed,
+        "host key for #{target.name} is not pinned — refusing to connect unverified " <>
+          "(pin it first: Hosts → Pin host keys)"}}
+    end
+  end
+
+  # OpenSSH verifies jump hops against known_hosts, which needs the full
+  # public key — a fingerprint alone is not enough.
+  defp ensure_jump_chain_pinned(%Target{jump_target: nil}), do: :ok
+
+  defp ensure_jump_chain_pinned(%Target{jump_target: jump}) do
+    case Enum.find(jump_chain(jump), &(not verifiable_hop?(&1))) do
+      nil ->
+        :ok
+
+      hop ->
+        {:error,
+         {:ssh_connect_failed,
+          "jump host #{hop.name} cannot be verified by OpenSSH: it needs a pinned " <>
+            "public key matching its fingerprint (pin its host key first) and a plain address"}}
+    end
+  end
+
+  # The address goes into known_hosts verbatim: no whitespace or pattern
+  # characters that could add or widen an entry.
+  defp verifiable_hop?(%Target{host_key: key, host_key_fingerprint: pinned, address: address}) do
+    is_binary(key) and Regex.match?(~r/^[^\s,\[\]*?!]+$/, address) and
+      case HostKey.fingerprint(key) do
+        {:ok, fingerprint} -> HostKey.matches?(pinned, fingerprint)
+        {:error, _} -> false
+      end
+  end
+
   defp connect_in_caller(target, key_dir, address, port, mode) do
     with :ok <- maybe_await_forwarder(mode, port),
-         {:ok, conn} <- ssh_connect(address, port, target.username, key_dir) do
+         {:ok, conn} <- verified_connect(address, port, target, key_dir) do
       GenServer.call(__MODULE__, {:register, target.host_id, conn}, registry_timeout())
     else
       {:error, reason} ->
@@ -138,6 +232,39 @@ defmodule Ssm.Ssh.ErlangClient do
       :ok -> :ok
       {:error, reason} -> {:error, {:forwarder_not_ready, reason}}
     end
+  end
+
+  defp verified_connect(address, port, target, key_dir) do
+    pinned = target.host_key_fingerprint
+
+    case handshake(address, port, target.username, key_dir, {:verify, pinned}, pinned) do
+      {{:ok, conn}, _report} -> {:ok, conn}
+      {{:error, _}, {:rejected, offered}} -> {:error, {:host_key_changed, pinned, offered}}
+      {{:error, reason}, _report} -> {:error, reason}
+    end
+  end
+
+  # One handshake plus the HostKeyCb verdict it produced. The callback runs in
+  # the connection process and reports to us before :ssh.connect returns, so
+  # a zero-timeout receive collects it (and keeps the caller's mailbox clean).
+  defp handshake(address, port, username, key_dir, key_mode, prefer) do
+    result = ssh_connect(address, port, username, key_dir, key_mode, prefer)
+
+    report =
+      receive do
+        {:ssm_host_key, verdict, offered} -> {verdict, offered}
+      after
+        0 -> nil
+      end
+
+    {result, report}
+  end
+
+  defp connect_error(target, {:host_key_changed, pinned, offered}) do
+    {:ssh_connect_failed,
+     "host key changed for #{target.name}: pinned #{pinned}, offered #{offered.fingerprint} — " <>
+       "refusing to connect (possible man-in-the-middle; if the host was re-installed, " <>
+       "accept the new key explicitly)"}
   end
 
   defp connect_error(target, reason),
@@ -203,6 +330,10 @@ defmodule Ssm.Ssh.ErlangClient do
         connect_spec(target, state)
     end
   end
+
+  # A probe always handshakes afresh (never reuses or registers a
+  # connection); jump targets still need their forwarder.
+  def handle_call({:probe_spec, target}, _from, state), do: connect_spec(target, state)
 
   def handle_call({:register, host_id, conn}, _from, state) do
     case fetch_live(state.conns, host_id) do
@@ -281,15 +412,23 @@ defmodule Ssm.Ssh.ErlangClient do
     end
   end
 
-  defp ssh_connect(address, port, username, key_dir) do
+  # The host-key algorithm order is fixed with the pinned type first, so a
+  # host with several keys always presents the one we can verify. It must be
+  # `modify_algorithms prepend` (reorder only): replacing the public_key list
+  # via preferred_algorithms would also restrict user-auth key algorithms.
+  defp ssh_connect(address, port, username, key_dir, key_mode, prefer) do
     :ssh.connect(
       String.to_charlist(address),
       port,
       [
         user: String.to_charlist(username),
         user_dir: String.to_charlist(key_dir),
-        silently_accept_hosts: true,
+        key_cb: {HostKeyCb, mode: key_mode, reply_to: self()},
+        modify_algorithms: [prepend: [public_key: HostKey.algorithm_preference(prefer)]],
+        silently_accept_hosts: false,
+        save_accepted_host: false,
         user_interaction: false,
+        quiet_mode: true,
         auth_methods: ~c"publickey",
         connect_timeout: connect_timeout_ms()
       ],
@@ -316,47 +455,10 @@ defmodule Ssm.Ssh.ErlangClient do
   end
 
   defp start_forwarder(target, state) do
-    # jump_target is the innermost hop; walking jump_target links yields the
-    # chain inner→outer. OpenSSH wants the FINAL -J list outer→inner and the
-    # innermost hop as the command's destination host.
-    [innermost | rest_outer] = jump_chain(target.jump_target)
-
     with {:ok, ssh_bin} <- find_openssh(),
-         {:ok, local_port} <- free_local_port() do
-      jump_args =
-        case rest_outer do
-          [] ->
-            []
-
-          outer ->
-            list =
-              outer
-              |> Enum.reverse()
-              |> Enum.map_join(",", &"#{&1.username}@#{&1.address}:#{&1.port}")
-
-            ["-J", list]
-        end
-
-      args =
-        [
-          "-N",
-          "-L",
-          "127.0.0.1:#{local_port}:#{target.address}:#{target.port}",
-          "-i",
-          key_file_path(state.key_dir),
-          "-p",
-          Integer.to_string(innermost.port),
-          "-o",
-          "StrictHostKeyChecking=no",
-          "-o",
-          "UserKnownHostsFile=/dev/null",
-          "-o",
-          "BatchMode=yes",
-          "-o",
-          "ExitOnForwardFailure=yes",
-          "-o",
-          "ConnectTimeout=#{max(div(timeout_ms(), 1000), 1)}"
-        ] ++ jump_args ++ ["#{innermost.username}@#{innermost.address}"]
+         {:ok, local_port} <- free_local_port(),
+         {:ok, config_path} <- write_forwarder_files(target, state.key_dir) do
+      args = forwarder_args(target, config_path, key_file_path(state.key_dir), local_port)
 
       # Spawn only — readiness is awaited by the caller (await_forwarder),
       # so a slow jump host cannot stall the registry.
@@ -366,6 +468,101 @@ defmodule Ssm.Ssh.ErlangClient do
     else
       {:error, reason} -> {:error, reason, state}
     end
+  end
+
+  defp write_forwarder_files(target, key_dir) do
+    known_hosts = Path.join(key_dir, "known_hosts-#{target.host_id}")
+    config = Path.join(key_dir, "ssh_config-#{target.host_id}")
+
+    with :ok <- File.write(known_hosts, known_hosts_content(target.jump_target)),
+         :ok <- File.write(config, forwarder_config(key_file_path(key_dir), known_hosts)) do
+      {:ok, config}
+    end
+  end
+
+  defp remove_forwarder_files(state, host_id) do
+    for name <- ["known_hosts-#{host_id}", "ssh_config-#{host_id}"] do
+      _ = File.rm(Path.join(state.key_dir, name))
+    end
+
+    :ok
+  end
+
+  @doc false
+  # known_hosts for a jump chain: one line per hop (innermost first) with the
+  # hop's pinned public key, matched by OpenSSH on `address` / `[address]:port`.
+  @spec known_hosts_content(Target.t()) :: String.t()
+  def known_hosts_content(%Target{} = innermost_hop) do
+    innermost_hop
+    |> jump_chain()
+    |> Enum.map_join(&(HostKey.known_hosts_line(&1.address, &1.port, &1.host_key) <> "\n"))
+  end
+
+  @doc false
+  # ssh_config for the forwarder and every ProxyJump hop: strict checking
+  # against the generated known_hosts only; no user/global files consulted.
+  @spec forwarder_config(String.t(), String.t()) :: String.t()
+  def forwarder_config(key_file, known_hosts) do
+    """
+    Host *
+      IdentityFile "#{key_file}"
+      IdentitiesOnly yes
+      StrictHostKeyChecking yes
+      UserKnownHostsFile "#{known_hosts}"
+      GlobalKnownHostsFile /dev/null
+      CheckHostIP no
+      UpdateHostKeys no
+      BatchMode yes
+      ConnectTimeout #{max(div(connect_timeout_ms(), 1000), 1)}
+    """
+  end
+
+  @doc false
+  # argv of the OpenSSH forwarder. jump_target is the innermost hop; walking
+  # jump_target links yields the chain inner→outer. OpenSSH wants the -J
+  # list outer→inner and the innermost hop as the destination. User and port
+  # of the destination go as -l/-p, and `--` ends the options, so no host
+  # field is ever parsed as an ssh option (SshFields also refuses them).
+  # -F (unlike -o) is passed on to the ProxyJump child processes, so the
+  # generated config verifies every hop, not just the innermost one.
+  @spec forwarder_args(Target.t(), String.t(), String.t(), :inet.port_number()) :: [String.t()]
+  def forwarder_args(%Target{} = target, config_path, key_file, local_port) do
+    [innermost | rest_outer] = jump_chain(target.jump_target)
+
+    jump_args =
+      case rest_outer do
+        [] ->
+          []
+
+        outer ->
+          list =
+            outer
+            |> Enum.reverse()
+            |> Enum.map_join(",", &"#{&1.username}@#{bracket(&1.address)}:#{&1.port}")
+
+          ["-J", list]
+      end
+
+    [
+      "-F",
+      config_path,
+      "-N",
+      "-L",
+      "127.0.0.1:#{local_port}:#{bracket(target.address)}:#{target.port}",
+      "-i",
+      key_file,
+      "-l",
+      innermost.username,
+      "-p",
+      Integer.to_string(innermost.port),
+      "-o",
+      "ExitOnForwardFailure=yes"
+    ] ++ jump_args ++ ["--", innermost.address]
+  end
+
+  # IPv6 literals need brackets inside -L and -J specs.
+  defp bracket(address) do
+    if String.contains?(address, ":"), do: "[#{address}]", else: address
   end
 
   defp jump_chain(nil), do: []
@@ -419,6 +616,8 @@ defmodule Ssm.Ssh.ErlangClient do
       nil -> :ok
       %{port: port} -> safe_port_close(port)
     end
+
+    remove_forwarder_files(state, host_id)
 
     %{
       state

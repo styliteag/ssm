@@ -3,7 +3,7 @@ defmodule Ssm.Ssh.Cache do
   Per-host read cache in front of the real client — port of ssh/caching.py.
   Reading authorized_keys is the hot path; this memoises `read_file` per
   `{host_id, path}` in ETS and invalidates the entry whenever `write_file`
-  hits the same path. `connect`/`exec` pass straight through.
+  hits the same path. `connect`/`exec`/`probe_host_key` pass straight through.
   """
 
   @behaviour Ssm.Ssh.Client
@@ -29,6 +29,9 @@ defmodule Ssm.Ssh.Cache do
 
   @impl Ssm.Ssh.Client
   def exec(target, command, opts), do: inner().exec(target, command, opts)
+
+  @impl Ssm.Ssh.Client
+  def probe_host_key(target, opts), do: inner().probe_host_key(target, opts)
 
   @impl Ssm.Ssh.Client
   def read_file(target, path) do

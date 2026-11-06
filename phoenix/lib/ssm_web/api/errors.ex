@@ -19,6 +19,13 @@ defmodule SsmWeb.Api.Errors do
   def authorization_not_found(conn, message \\ "authorization not found"),
     do: Envelope.fail(conn, 404, "AUTHORIZATION_NOT_FOUND", message)
 
+  @doc "Too many failed logins: 429 with `Retry-After` (seconds)."
+  def rate_limited(conn, retry_after, message \\ "too many failed attempts, try again later") do
+    conn
+    |> Plug.Conn.put_resp_header("retry-after", Integer.to_string(retry_after))
+    |> Envelope.fail(429, "RATE_LIMITED", message)
+  end
+
   @doc "Non-integer path ids are a validation failure, as with FastAPI's typed path params."
   def path_id(raw) do
     case Params.parse_path_id(raw) do

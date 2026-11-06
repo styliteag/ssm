@@ -29,6 +29,21 @@ defmodule Ssm.Ssh.Client do
   @doc "Write content to a path."
   @callback write_file(Target.t(), String.t(), String.t()) :: :ok | error
 
+  @doc """
+  Open a fresh, uncached connection only to learn the host key (ADR-0008).
+  The single trust-on-first-use path: without `opts[:expect]` any key is
+  accepted and returned; with `expect: fingerprint` a different key is
+  refused before authentication (`{:error, {:host_key_mismatch, offered}}`).
+  `opts[:prefer]` names a key type (`"ssh-rsa"`, …) to ask the server for
+  first. Nothing is stored — the caller (`Ssm.Hosts.HostKeys`) decides.
+  """
+  @callback probe_host_key(Target.t(), keyword()) ::
+              {:ok, offered_key()}
+              | {:error, {:host_key_mismatch, offered_key()}}
+              | error
+
+  @type offered_key :: %{public_key: String.t(), fingerprint: String.t()}
+
   @doc "Close every connection this client owns."
   @callback close() :: :ok
 end
