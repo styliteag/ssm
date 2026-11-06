@@ -378,6 +378,43 @@ defmodule SsmWeb.MctlProviderTest do
       assert Hosts.count_hosts() == 0
     end
 
+    test "username follows the SSH field rules (default root)" do
+      assert {:ok, job} = MctlProvider.create_host(@p, create_params())
+      assert Hosts.get_host(String.to_integer(job.host_id)).username == "root"
+      await_jobs()
+
+      for bad <- ["-oProxyCommand=x", "a b", "user@host", ""] do
+        assert {:error, {:validation, %{"attributes.username" => _}}} =
+                 MctlProvider.create_host(
+                   @p,
+                   create_params(%{"attributes" => %{"username" => bad}})
+                 )
+      end
+    end
+
+    test "jump_via names an existing ssm host by id or by name" do
+      bastion = host_fixture(%{name: "bastion"})
+
+      for ref <- [to_string(bastion.id), bastion.id, "bastion"] do
+        assert {:ok, job} =
+                 MctlProvider.create_host(
+                   @p,
+                   create_params(%{"attributes" => %{"jump_via" => ref}})
+                 )
+
+        assert Hosts.get_host(String.to_integer(job.host_id)).jump_via == bastion.id
+        await_jobs()
+      end
+
+      for ghost <- ["ghost", "999999", 999_999, "", true] do
+        assert {:error, {:validation, %{"attributes.jump_via" => _}}} =
+                 MctlProvider.create_host(
+                   @p,
+                   create_params(%{"attributes" => %{"jump_via" => ghost}})
+                 )
+      end
+    end
+
     test "a duplicate name or address is a conflict naming the field" do
       host = host_fixture(%{name: "dup"})
 

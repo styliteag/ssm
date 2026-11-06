@@ -98,6 +98,7 @@ defmodule SsmWeb.MctlProvider do
   @impl true
   def create_host(principal, params) do
     with {:ok, attrs, membership} <- HostParams.create(params),
+         {:ok, attrs} <- HostParams.resolve_jump(attrs),
          {:ok, host} <- insert_host(attrs, membership) do
       audit(principal, "create", host)
 

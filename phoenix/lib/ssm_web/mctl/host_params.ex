@@ -8,7 +8,7 @@ defmodule SsmWeb.Mctl.HostParams do
     * `mode` — only `pull` (or none): ssm connects to the host.
     * `addresses` — exactly one (ssm stores one address per host).
     * `attributes` — `username` (default `root`), `port` (default 22),
-      `jump_via` (ssm host id), `disabled`, `comment`, `key_fingerprint`
+      `jump_via` (an existing ssm host, by id or by name), `disabled`, `comment`, `key_fingerprint`
       (pre-seeds the host-key pin, ADR-0008: the create job then verifies
       instead of trusting on first use).
   """
@@ -23,7 +23,10 @@ defmodule SsmWeb.Mctl.HostParams do
       "properties" => %{
         "username" => %{"type" => "string", "default" => "root"},
         "port" => %{"type" => "integer", "minimum" => 1, "maximum" => 65_535, "default" => 22},
-        "jump_via" => %{"type" => ["string", "null"], "description" => "ssm host id"},
+        "jump_via" => %{
+          "type" => ["string", "integer", "null"],
+          "description" => "jump host: an existing ssm host, by id or by name"
+        },
         "disabled" => %{"type" => "boolean", "default" => false},
         "comment" => %{"type" => ["string", "null"]},
         "key_fingerprint" => %{
@@ -79,13 +82,16 @@ defmodule SsmWeb.Mctl.HostParams do
     end)
   end
 
-  defp check_attribute("username", v) when is_binary(v) and v != "", do: :ok
+  defp check_attribute("username", v) do
+    if Ssm.Hosts.SshFields.valid_username?(v),
+      do: :ok,
+      else: {:error, "must be a login name (letters, digits, . _ -; not starting with -)"}
+  end
+
   defp check_attribute("port", v) when is_integer(v) and v > 0 and v < 65_536, do: :ok
   defp check_attribute("jump_via", v) when is_nil(v), do: :ok
 
-  defp check_attribute("jump_via", v) when is_binary(v) or is_integer(v) do
-    if parse_id(v) == :error, do: {:error, "must be an ssm host id"}, else: :ok
-  end
+  defp check_attribute("jump_via", v) when (is_binary(v) and v != "") or is_integer(v), do: :ok
 
   defp check_attribute("disabled", v) when is_boolean(v), do: :ok
   defp check_attribute("comment", v) when is_nil(v) or is_binary(v), do: :ok
@@ -111,15 +117,26 @@ defmodule SsmWeb.Mctl.HostParams do
       address: address,
       username: Map.get(attrs, "username", "root"),
       port: Map.get(attrs, "port", 22),
-      jump_via: attrs |> Map.get("jump_via") |> jump_id(),
+      jump_via: Map.get(attrs, "jump_via"),
       disabled: Map.get(attrs, "disabled", false),
       comment: Map.get(attrs, "comment"),
       key_fingerprint: Map.get(attrs, "key_fingerprint")
     }
   end
 
-  defp jump_id(nil), do: nil
-  defp jump_id(value), do: elem(parse_id(value), 1)
+  @doc """
+  Resolve the `jump_via` reference of `create/1`'s host attrs (an ssm host
+  id or name) to the host id; an unknown host is a validation error.
+  """
+  @spec resolve_jump(map()) :: {:ok, map()} | {:error, {:validation, map()}}
+  def resolve_jump(%{jump_via: nil} = attrs), do: {:ok, attrs}
+
+  def resolve_jump(%{jump_via: ref} = attrs) do
+    case Ssm.Hosts.resolve_host_ref(ref) do
+      {:ok, id} -> {:ok, %{attrs | jump_via: id}}
+      :error -> {:error, {:validation, %{"attributes.jump_via" => ["no such ssm host"]}}}
+    end
+  end
 
   @doc "Parse an ssm host id from a contract string id."
   @spec parse_id(term()) :: {:ok, pos_integer()} | :error

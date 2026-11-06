@@ -17,6 +17,30 @@ defmodule Ssm.Hosts do
   @spec get_host(integer()) :: Host.t() | nil
   def get_host(id), do: Repo.get(Host, id)
 
+  @doc """
+  Resolve a host reference — an id (integer or decimal string) or a host
+  name — to an existing host's id. An id wins over a host named like it.
+  """
+  @spec resolve_host_ref(term()) :: {:ok, integer()} | :error
+  def resolve_host_ref(ref) when is_integer(ref) and ref > 0 do
+    if Repo.exists?(from h in Host, where: h.id == ^ref), do: {:ok, ref}, else: :error
+  end
+
+  def resolve_host_ref(ref) when is_binary(ref) and ref != "" do
+    with {id, ""} <- Integer.parse(ref),
+         {:ok, id} <- resolve_host_ref(id) do
+      {:ok, id}
+    else
+      _ ->
+        case Repo.one(from h in Host, where: h.name == ^ref, select: h.id) do
+          nil -> :error
+          id -> {:ok, id}
+        end
+    end
+  end
+
+  def resolve_host_ref(_ref), do: :error
+
   @spec fetch_host(integer()) :: {:ok, Host.t()} | {:error, :not_found}
   def fetch_host(id) do
     case Repo.get(Host, id) do
