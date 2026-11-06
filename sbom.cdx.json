@@ -7,7 +7,7 @@
       "type": "application",
       "bom-ref": "stylite-ssm",
       "name": "stylite-ssm",
-      "version": "1.1.11"
+      "version": "2.0.1"
     }
   },
   "components": [
@@ -235,10 +235,38 @@
     },
     {
       "type": "library",
+      "bom-ref": "pkg:hex/jose@1.11.13",
+      "name": "jose",
+      "version": "1.11.13",
+      "purl": "pkg:hex/jose@1.11.13",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
       "bom-ref": "pkg:hex/mime@2.0.7",
       "name": "mime",
       "version": "2.0.7",
       "purl": "pkg:hex/mime@2.0.7",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:hex/oidcc@3.9.2",
+      "name": "oidcc",
+      "version": "3.9.2",
+      "purl": "pkg:hex/oidcc@3.9.2",
       "licenses": [
         {
           "license": {
@@ -407,6 +435,20 @@
       "name": "telemetry_poller",
       "version": "1.3.0",
       "purl": "pkg:hex/telemetry_poller@1.3.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:hex/telemetry_registry@0.3.2",
+      "name": "telemetry_registry",
+      "version": "0.3.2",
+      "purl": "pkg:hex/telemetry_registry@0.3.2",
       "licenses": [
         {
           "license": {

@@ -11,6 +11,10 @@ defmodule SsmWeb.SessionController do
   alias Ssm.LoginThrottle
   alias SsmWeb.UserAuth
 
+  # LOCAL_LOGIN=off: no local form (every .htpasswd user is a local admin, so
+  # `admins_only` needs no extra check here).
+  plug :require_local_login when action == :create
+
   @invalid "Invalid username or password."
   @locked "Too many failed attempts, try again later"
 
@@ -37,6 +41,14 @@ defmodule SsmWeb.SessionController do
 
   def delete(conn, _params) do
     UserAuth.log_out_user(conn)
+  end
+
+  defp require_local_login(conn, _opts) do
+    if Ssm.OIDC.Config.local_login() == :off do
+      conn |> deny("Local sign-in is disabled.") |> halt()
+    else
+      conn
+    end
   end
 
   defp fail(conn, username) do

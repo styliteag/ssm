@@ -86,6 +86,10 @@ defmodule SsmWeb.Router do
     plug :fetch_design
   end
 
+  pipeline :oidc_backchannel do
+    plug :accepts, ["html", "json"]
+  end
+
   # Theme cookies → assigns for the root layout's data-theme (design pattern
   # from ../dashboard & ../link-shortener; see SsmWeb.Design).
   defp fetch_design(conn, _opts) do
@@ -104,6 +108,10 @@ defmodule SsmWeb.Router do
 
     get "/", PageController, :home
     post "/session", SessionController, :create
+
+    # Generic OIDC login (oidc-client-v1); 404 while OIDC_ISSUER is unset.
+    get "/auth/oidc/login", OIDCController, :login
+    get "/auth/oidc/callback", OIDCController, :callback
     delete "/sign-out", SessionController, :delete
 
     # Theme choice works pre-login too (the login page is themed).
@@ -113,6 +121,14 @@ defmodule SsmWeb.Router do
     live_session :auth, on_mount: [{SsmWeb.UserAuth, :live_no_user}] do
       live "/sign-in", LoginLive
     end
+  end
+
+  # Back-channel logout: server-to-server, no session, no CSRF (the signed
+  # logout_token is the credential).
+  scope "/", SsmWeb do
+    pipe_through :oidc_backchannel
+
+    post "/auth/oidc/backchannel-logout", OIDCController, :backchannel_logout
   end
 
   scope "/", SsmWeb do

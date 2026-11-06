@@ -88,6 +88,8 @@ defmodule Ssm.MixProject do
       {:dns_cluster, "~> 0.2.0"},
       {:bandit, "~> 1.5"},
       {:bcrypt_elixir, "~> 3.0"},
+      # Generic OIDC login for the web UI (ADR-0011, oidc-client-v1 spec)
+      {:oidcc, "~> 3.9"},
       # mctl contract v1 (/api/mctl/v1): plug, tokens, jobs, conformance tests
       {:mctl_contract, path: "../../../mctl_contract"}
     ]

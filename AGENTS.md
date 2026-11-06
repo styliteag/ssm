@@ -39,9 +39,19 @@ recreated.
 
 **Data model** (SQLite, table names are singular — Diesel parity): `host`, `user`,
 `user_key`, `authorization`, `activity_log`. `authorization` links user↔host with a
-remote `login`. `host.disabled` blocks all SSH operations. Newer tables for the mctl
+remote `login`. `host.disabled` blocks all SSH operations. `operators` (OIDC web accounts) and newer tables for the mctl
 contract are plural (contract spec names): `customers`, `groups`, `host_groups`, plus
 the `mctl_contract` library's `mctl_tokens`, `mctl_jobs`, `mctl_idempotency`.
+
+**Web login** (ADR-0011, `lib/ssm/oidc/`, `ssm_web/oidc_controller.ex`): `.htpasswd`
+users are local admins (session `ssm_user`). With `OIDC_ISSUER` set, SSO users are
+`Ssm.Accounts.Operator` rows (table `operators`, roles admin/operator/viewer; named so
+because `Ssm.Users.User` is the SSH target user), session `operator_id`, checked
+against the row on every request/mount (disabled, `session_revoked_at`, absolute
+expiry). `viewer` is read-only through one allow-list, `SsmWeb.ReadOnly` — a new
+LiveView write event is blocked for viewers by default; add only read-only events to
+its `@read_events`. Tests use the fake provider in `test/support/fake_oidc_provider.ex`
+via `SsmWeb.OIDCCase`. `/api/v2` bearer tokens are independent of all this.
 
 **Host keys** (ADR-0008, `lib/ssm/ssh/host_key*.ex`, `lib/ssm/hosts/host_keys.ex`):
 every connect verifies `host.key_fingerprint`; unpinned hosts are refused.
@@ -262,7 +272,10 @@ defaults preserved): `DATABASE_URL` (or `DATABASE_PATH`), `HTPASSWD`, `SSH_KEY`,
 `SSH_KEY_PASSPHRASE`, `SSH_TIMEOUT`, `SSH_CONNECT_TIMEOUT`, `SSH_CONCURRENCY`,
 `SSH_CHECK_SCHEDULE`, `SSH_UPDATE_SCHEDULE`, `JWT_SECRET` (fallback `SESSION_KEY`),
 `SECRET_KEY_BASE`, `LOGLEVEL`, `PORT`, `LISTEN`, `PHX_HOST`, `POOL_SIZE`,
-`TRUSTED_PROXIES`, `MCTL_TOKEN_FILE`, `MCTL_TOKEN_SCOPES`.
+`TRUSTED_PROXIES`, `MCTL_TOKEN_FILE`, `MCTL_TOKEN_SCOPES`, and the OIDC set read at boot by
+`Ssm.OIDC.Config` (not runtime.exs): `OIDC_ISSUER`, `OIDC_CLIENT_ID`,
+`OIDC_CLIENT_SECRET_FILE`, `OIDC_ROLE_CLAIM`, `OIDC_CUSTOMERS_CLAIM`, `OIDC_ROLE_MAP`,
+`OIDC_LOGIN_LABEL`, `OIDC_SESSION_MAX_HOURS`, `LOCAL_LOGIN`.
 
 **Secrets protection**: run `./install-hooks.sh` after cloning (installs
 `.githooks/pre-commit` secret scanner; other tools may overwrite

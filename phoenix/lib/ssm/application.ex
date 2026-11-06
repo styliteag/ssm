@@ -7,6 +7,8 @@ defmodule Ssm.Application do
 
   @impl true
   def start(_type, _args) do
+    Ssm.OIDC.Config.load()
+
     children =
       [
         SsmWeb.Telemetry,
@@ -22,9 +24,12 @@ defmodule Ssm.Application do
         Ssm.Diffs.StatusCache,
         # In-memory request/failure limits (mctl API auth hooks).
         Ssm.RateLimit,
+        # Back-channel logout replay store.
+        Ssm.OIDC.JtiStore,
         # mctl contract: create_host job work (host-key probe + pin).
         {Task.Supervisor, name: Ssm.Mctl.TaskSupervisor}
       ] ++
+        oidc_children() ++
         mctl_boot() ++
         ssh_children() ++
         [
@@ -63,6 +68,14 @@ defmodule Ssm.Application do
       ]
     else
       []
+    end
+  end
+
+  # Provider discovery/JWKS worker, only when OIDC_ISSUER configured OIDC.
+  defp oidc_children do
+    case Ssm.OIDC.Config.get() do
+      nil -> []
+      _config -> [Supervisor.child_spec(Ssm.OIDC.Supervisor, restart: :temporary)]
     end
   end
 

@@ -10,7 +10,15 @@ defmodule SsmWeb.LoginLive do
 
   @impl true
   def mount(_params, _session, socket) do
-    {:ok, assign(socket, form: to_form(%{"username" => ""}, as: :login), page_title: "Sign in")}
+    oidc = Ssm.OIDC.Config.get()
+
+    {:ok,
+     assign(socket,
+       form: to_form(%{"username" => ""}, as: :login),
+       page_title: "Sign in",
+       oidc_label: oidc && oidc.login_label,
+       local_form?: Ssm.OIDC.Config.local_login() != :off
+     )}
   end
 
   @impl true
@@ -24,7 +32,22 @@ defmodule SsmWeb.LoginLive do
               <.icon name="hero-key" class="size-5 text-primary" /> Secure SSH Manager
             </h1>
 
-            <.form for={@form} action={~p"/session"} method="post" class="space-y-4">
+            <a
+              :if={@oidc_label}
+              id="oidc-login"
+              href={~p"/auth/oidc/login"}
+              class="btn btn-primary w-full"
+            >
+              {@oidc_label}
+            </a>
+
+            <.form
+              :if={@local_form?}
+              for={@form}
+              action={~p"/session"}
+              method="post"
+              class="space-y-4"
+            >
               <.input
                 field={@form[:username]}
                 name="username"
