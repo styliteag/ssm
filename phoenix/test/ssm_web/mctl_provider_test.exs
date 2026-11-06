@@ -22,6 +22,8 @@ defmodule SsmWeb.MctlProviderTest do
     ip: "203.0.113.9"
   }
 
+  @wait Application.compile_env(:ssm, :mctl_login_wait)
+
   setup do
     start_supervised!(MockClient)
     :ok
@@ -271,7 +273,14 @@ defmodule SsmWeb.MctlProviderTest do
 
       assert {:ok, done} = MctlProvider.get_job(@p, job.id)
       assert done.state == "succeeded", inspect(done)
-      assert done.result == %{"ssh_host_key" => @ed_fp, "pin" => "pinned"}
+
+      assert done.result == %{
+               "ssh_host_key" => @ed_fp,
+               "pin" => "pinned",
+               "ssm_public_key" => Ssm.Test.OwnKeyStub.default(),
+               "username" => "root"
+             }
+
       assert Hosts.get_host(String.to_integer(job.host_id)).key_fingerprint == @ed_fp
     end
 
@@ -423,6 +432,154 @@ defmodule SsmWeb.MctlProviderTest do
 
       assert {:error, {:conflict, _msg, %{"address" => ["already exists"]}}} =
                MctlProvider.create_host(@p, create_params(%{"addresses" => [host.address]}))
+    end
+  end
+
+  describe "create_host waits for ssm's key on the host" do
+    setup do
+      on_exit(fn ->
+        Application.delete_env(:ssm, :test_own_public_key)
+        Application.put_env(:ssm, :mctl_login_wait, @wait)
+      end)
+    end
+
+    defp wait_for_job(job_id, fun, tries \\ 200) do
+      {:ok, job} = MctlProvider.get_job(@p, job_id)
+
+      cond do
+        fun.(job) -> job
+        tries == 0 -> flunk("job never matched: #{inspect(job)}")
+        true -> Process.sleep(5) && wait_for_job(job_id, fun, tries - 1)
+      end
+    end
+
+    test "ssm_public_key is in the result while the job runs; the job succeeds once the key works" do
+      Application.put_env(:ssm, :mctl_login_wait,
+        timeout_ms: 10_000,
+        first_delay_ms: 5,
+        max_delay_ms: 5
+      )
+
+      MockClient.set_default_host_keys([@ed])
+      MockClient.fail_probe_auth(1_000_000)
+
+      assert {:ok, job} =
+               MctlProvider.create_host(
+                 @p,
+                 create_params(%{"attributes" => %{"key_fingerprint" => @ed_fp}})
+               )
+
+      running =
+        wait_for_job(job.id, &(&1.state == "running" and &1.progress =~ "attempt"))
+
+      assert running.result == %{
+               "ssm_public_key" => Ssm.Test.OwnKeyStub.default(),
+               "username" => "root"
+             }
+
+      assert running.progress =~ "root"
+
+      # mctl authorizes the key through the dashboard; the next login works.
+      MockClient.fail_probe_auth(0)
+      await_jobs()
+
+      assert {:ok, done} = MctlProvider.get_job(@p, job.id)
+      assert done.state == "succeeded"
+      assert done.result["ssm_public_key"] == Ssm.Test.OwnKeyStub.default()
+      assert done.result["pin"] == "verified"
+      assert done.result["ssh_host_key"] == @ed_fp
+    end
+
+    test "retries the login with backoff until it succeeds" do
+      MockClient.set_default_host_keys([@ed])
+      MockClient.fail_probe_auth(3)
+
+      assert {:ok, job} = MctlProvider.create_host(@p, create_params())
+      await_jobs()
+
+      assert {:ok, %{state: "succeeded"}} = MctlProvider.get_job(@p, job.id)
+      assert length(MockClient.calls().probe) == 4
+    end
+
+    test "gives up after the wait with auth_failed; the host is removed, the key stays readable" do
+      MockClient.set_default_host_keys([@ed])
+      MockClient.fail_probe_auth(1_000_000)
+
+      assert {:ok, job} =
+               MctlProvider.create_host(
+                 @p,
+                 create_params(%{"attributes" => %{"username" => "deploy"}})
+               )
+
+      await_jobs()
+
+      assert {:ok, failed} = MctlProvider.get_job(@p, job.id)
+      assert failed.state == "failed"
+      assert failed.error["code"] == "auth_failed"
+      assert failed.error["message"] =~ "deploy"
+      assert failed.error["message"] =~ "ssm_public_key"
+      refute failed.error["message"] =~ "mock"
+      assert failed.result["ssm_public_key"] == Ssm.Test.OwnKeyStub.default()
+      assert length(MockClient.calls().probe) > 1
+      assert Hosts.get_host(String.to_integer(job.host_id)) == nil
+    end
+
+    test "a different host key fails at once with host_key_changed, without retrying" do
+      MockClient.set_default_host_keys([@ed])
+      MockClient.fail_probe_auth(1_000_000)
+
+      assert {:ok, job} =
+               MctlProvider.create_host(
+                 @p,
+                 create_params(%{"attributes" => %{"key_fingerprint" => @ecdsa_fp}})
+               )
+
+      await_jobs()
+
+      assert {:ok, %{state: "failed", error: %{"code" => "host_key_changed"}}} =
+               MctlProvider.get_job(@p, job.id)
+
+      assert length(MockClient.calls().probe) == 1
+    end
+
+    test "other connect errors are not retried" do
+      assert {:ok, job} = MctlProvider.create_host(@p, create_params())
+      await_jobs()
+
+      assert {:ok, %{state: "failed", error: %{"code" => "connect_failed"}}} =
+               MctlProvider.get_job(@p, job.id)
+
+      assert length(MockClient.calls().probe) == 1
+    end
+
+    test "without a usable SSH_KEY the job fails with ssm_key_unavailable before any SSH" do
+      Application.put_env(:ssm, :test_own_public_key, :unavailable)
+      MockClient.set_default_host_keys([@ed])
+
+      assert {:ok, job} = MctlProvider.create_host(@p, create_params())
+      await_jobs()
+
+      assert {:ok, %{state: "failed", error: %{"code" => "ssm_key_unavailable"}}} =
+               MctlProvider.get_job(@p, job.id)
+
+      assert MockClient.calls().probe == []
+      assert Hosts.count_hosts() == 0
+    end
+
+    test "a host behind a jump host is probed through it" do
+      MockClient.set_default_host_keys([@ed])
+      bastion = host_fixture(%{name: "bastion"})
+
+      assert {:ok, job} =
+               MctlProvider.create_host(
+                 @p,
+                 create_params(%{"attributes" => %{"jump_via" => "bastion"}})
+               )
+
+      await_jobs()
+      assert {:ok, %{state: "succeeded"}} = MctlProvider.get_job(@p, job.id)
+      host = Hosts.get_host(String.to_integer(job.host_id))
+      assert Hosts.target_for(host).jump_target.host_id == bastion.id
     end
   end
 

@@ -23,6 +23,7 @@ defmodule Ssm.Ssh.MockClient do
       connect_failures: MapSet.new(),
       host_keys: %{},
       default_host_keys: [],
+      probe_auth_failures: 0,
       probe_calls: [],
       connect_calls: [],
       exec_calls: [],
@@ -56,6 +57,15 @@ defmodule Ssm.Ssh.MockClient do
   @doc "Host keys offered by every host without its own `set_host_keys/2`."
   def set_default_host_keys(public_keys) when is_list(public_keys) do
     Agent.update(__MODULE__, &%{&1 | default_host_keys: public_keys})
+  end
+
+  @doc """
+  The next `count` probes that pass the host-key check fail authentication
+  (any host), as a real probe does until ssm's key is authorized on the
+  host. `0` clears it.
+  """
+  def fail_probe_auth(count) when is_integer(count) and count >= 0 do
+    Agent.update(__MODULE__, &%{&1 | probe_auth_failures: count})
   end
 
   def fail_connect(host_id) do
@@ -98,7 +108,7 @@ defmodule Ssm.Ssh.MockClient do
       Agent.get_and_update(__MODULE__, fn state ->
         state = %{state | probe_calls: [{target.host_id, opts} | state.probe_calls]}
         keys = Map.get(state.host_keys, target.host_id, state.default_host_keys)
-        {probe_answer(target, keys, opts), state}
+        target |> probe_answer(keys, opts) |> probe_auth(state)
       end)
     end
   end
@@ -118,6 +128,15 @@ defmodule Ssm.Ssh.MockClient do
       do: {:error, {:host_key_mismatch, offered}},
       else: {:ok, offered}
   end
+
+  # Like the real handshake: the host key is checked before authentication.
+  defp probe_auth({:ok, _offered}, %{probe_auth_failures: n} = state) when n > 0 do
+    {{:error,
+      {:ssh_connect_failed, "mock: Unable to connect using the available authentication methods"}},
+     %{state | probe_auth_failures: n - 1}}
+  end
+
+  defp probe_auth(answer, state), do: {answer, state}
 
   @impl true
   def exec(target, command, opts) do

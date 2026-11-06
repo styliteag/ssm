@@ -11,6 +11,11 @@ import Config
 # idempotency) live in ssm's repo; service tokens carry the `ssm_` prefix.
 config :mctl_contract, repo: Ssm.Repo, token_prefix: "ssm_"
 
+# mctl create_host (onboarding v2 §4): after handing out ssm's public key the
+# job retries the SSH login with exponential backoff until the key is
+# authorized on the host, for at most `timeout_ms`.
+config :ssm, :mctl_login_wait, timeout_ms: 600_000, first_delay_ms: 2_000, max_delay_ms: 30_000
+
 config :ssm,
   ecto_repos: [Ssm.Repo],
   generators: [timestamp_type: :utc_datetime]

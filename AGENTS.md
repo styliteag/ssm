@@ -61,7 +61,10 @@ keys; `probe_host_key/2` on the SSH client is the only trust-on-first-use path.
 
 **mctl API** (`/api/mctl/v1`): `MctlContract.Plug` from the path dependency
 `mctl_contract` with `SsmWeb.MctlProvider`; own `ssm_` bearer tokens, own envelope.
-Conformance test: `test/ssm_web/mctl_conformance_test.exs`. Host summaries (C4,
+Conformance test: `test/ssm_web/mctl_conformance_test.exs`. `POST /hosts` runs
+`SsmWeb.Mctl.CreateHostJob`: it puts `ssm_public_key` (`Ssm.Ssh.OwnKey`, derived from
+`SSH_KEY`) into the still-running job's result, then retries the probe/login with backoff
+(`config :ssm, :mctl_login_wait`, 10 min) until mctl has authorized that key. Host summaries (C4,
 `/host-summaries`, `/hosts/{id}/summary`) read `host_checks`, which `Ssm.Diffs.SyncScheduler`
 refreshes every `SSM_SYNC_INTERVAL` through `Ssm.Diffs.HostChecks.sweep/1` (disabled hosts
 are never touched and keep no row; the stored drift holds fingerprints and comments only).

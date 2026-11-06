@@ -7,11 +7,12 @@ defmodule SsmWeb.MctlProvider do
   periodic key check (`Ssm.Diffs.HostChecks`, table `host_checks`).
 
   `create_host` validates and inserts the host (with membership) right
-  away — a bad request is a 4xx, never a failed job — then runs the job:
-  probe the host key and pin it (`Ssm.Hosts.HostKeys.pin/2`; a pre-seeded
-  `attributes.key_fingerprint` is verified, not trusted on first use) and
-  learn the machine-id HMAC (`Ssm.Hosts.MachineId`). A failed job deletes
-  the host again; a duplicate name/address is a 409 naming the field.
+  away — a bad request is a 4xx, never a failed job — then runs the job
+  (`SsmWeb.Mctl.CreateHostJob`): hand out `ssm_public_key`, wait for the
+  login to work, pin the host key (a pre-seeded `attributes.key_fingerprint`
+  is verified, not trusted on first use) and learn the machine-id HMAC. A
+  failed job deletes the host again; a duplicate name/address is a 409
+  naming the field.
   Writes are audited in the activity log as `mctl:<token name>` with the
   client IP (`principal.ip`).
   """
@@ -19,13 +20,9 @@ defmodule SsmWeb.MctlProvider do
   @behaviour MctlContract.Provider
 
   alias MctlContract.Jobs.Ecto, as: Jobs
-  alias Ssm.{Activity, Customers, Groups, Hosts}
+  alias Ssm.{Customers, Groups, Hosts}
   alias Ssm.Diffs.HostChecks
-  alias Ssm.Hosts.{HostKeys, MachineId}
-  alias Ssm.Ssh.ErrorCode
-  alias SsmWeb.Mctl.{HostParams, HostView, SummaryView}
-
-  require Logger
+  alias SsmWeb.Mctl.{Audit, CreateHostJob, HostParams, HostView, SummaryView}
 
   @task_supervisor Ssm.Mctl.TaskSupervisor
 
@@ -103,7 +100,7 @@ defmodule SsmWeb.MctlProvider do
       audit(principal, "create", host)
 
       {:ok, job} =
-        Jobs.run("create_host", to_string(host.id), &create_job(host.id, principal, &1),
+        Jobs.run("create_host", to_string(host.id), &CreateHostJob.run(host.id, principal, &1),
           task_supervisor: @task_supervisor
         )
 
@@ -143,63 +140,6 @@ defmodule SsmWeb.MctlProvider do
     else
       _ -> {:error, :not_found}
     end
-  end
-
-  # The create_host job's work. A failed job removes the host again, so the
-  # same name/address can be posted again (no orphan row with a rejected pin).
-  defp create_job(host_id, principal, job_id) do
-    case pin_job(host_id, principal, job_id) do
-      {:ok, _} = ok ->
-        ok
-
-      {:error, _code, _message} = failure ->
-        roll_back(host_id, principal)
-        failure
-    end
-  end
-
-  defp roll_back(host_id, principal) do
-    with %{} = host <- Hosts.get_host(host_id),
-         {:ok, _} <- Hosts.delete_host(host) do
-      audit(principal, "create_rolled_back", host)
-    end
-
-    :ok
-  end
-
-  # Pin the new host's key (the only TOFU path).
-  defp pin_job(host_id, principal, job_id) do
-    case Hosts.get_host(host_id) do
-      nil ->
-        {:error, "not_found", "the host was deleted before its key was pinned"}
-
-      %{disabled: true} ->
-        {:ok, %{"pin" => "skipped_disabled", "ssh_host_key" => nil}}
-
-      host ->
-        Jobs.progress(job_id, "probing SSH host key")
-        pin_result(HostKeys.pin(host, actor: actor(principal), ip: principal.ip))
-    end
-  end
-
-  defp pin_result({:ok, status, host}) do
-    # identity-claims-v1: learn the machine-id HMAC now that the key is
-    # pinned and SSH is allowed; a failure never fails the job.
-    host = MachineId.refresh(host, [])
-    {:ok, %{"pin" => Atom.to_string(status), "ssh_host_key" => host.key_fingerprint}}
-  end
-
-  defp pin_result({:error, {:host_key_changed, %{pinned: pinned, offered: offered}}}) do
-    {:error, "host_key_changed",
-     "host key differs from the pinned one: pinned #{pinned}, offered #{offered.fingerprint}"}
-  end
-
-  # Raw SSH detail (addresses, Erlang terms) goes to the log only; the
-  # client gets a short code and a fixed sentence.
-  defp pin_result({:error, reason}) do
-    {code, message} = ErrorCode.classify(reason)
-    Logger.warning("mctl create_host: host key probe failed (#{code}): #{inspect(reason)}")
-    {:error, code, message}
   end
 
   ## Customers and groups
@@ -266,15 +206,5 @@ defmodule SsmWeb.MctlProvider do
   defp first(nil), do: nil
   defp first([key | _]), do: key
 
-  defp actor(principal), do: "mctl:#{principal.name}"
-
-  defp audit(principal, action, host) do
-    Activity.log(%{
-      activity_type: "host",
-      action: action,
-      target: host.name,
-      actor_username: actor(principal),
-      details: %{address: host.address, port: host.port, via: "mctl", ip: principal.ip}
-    })
-  end
+  defp audit(principal, action, host), do: Audit.host(principal, action, host)
 end
