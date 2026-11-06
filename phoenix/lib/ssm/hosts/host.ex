@@ -11,6 +11,8 @@ defmodule Ssm.Hosts.Host do
   use Ecto.Schema
   import Ecto.Changeset
 
+  alias Ssm.Hosts.SshFields
+
   schema "host" do
     field :name, :string
     field :username, :string
@@ -39,6 +41,10 @@ defmodule Ssm.Hosts.Host do
     |> validate_required([:name, :username, :address, :port])
     |> validate_length(:name, min: 1, max: 255)
     |> validate_number(:port, greater_than: 0, less_than: 65_536)
+    # Both reach the local ssh command line (jump chains): no option-like or
+    # separator characters (see Ssm.Hosts.SshFields).
+    |> validate_change(:username, &ssh_field(&1, &2, SshFields.valid_username?(&2)))
+    |> validate_change(:address, &ssh_field(&1, &2, SshFields.valid_address?(&2)))
     # ecto_sqlite3 derives the constraint name as <table>_<cols>_index from
     # SQLite's error text (the CONSTRAINT name is not reported), so we rely on
     # Ecto's default naming rather than the DDL constraint names.
@@ -46,4 +52,12 @@ defmodule Ssm.Hosts.Host do
     |> unique_constraint([:address, :port])
     |> foreign_key_constraint(:jump_via)
   end
+
+  defp ssh_field(_field, _value, true), do: []
+
+  defp ssh_field(:username, _value, false),
+    do: [username: "must be a login name (letters, digits, . _ -; not starting with -)"]
+
+  defp ssh_field(:address, _value, false),
+    do: [address: "must be a hostname or an IP address"]
 end

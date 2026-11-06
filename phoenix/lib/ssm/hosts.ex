@@ -41,6 +41,19 @@ defmodule Ssm.Hosts do
   @spec change_host(Host.t(), map()) :: Ecto.Changeset.t()
   def change_host(%Host{} = host, attrs \\ %{}), do: Host.changeset(host, attrs)
 
+  @doc """
+  Hosts whose username/address break `Ssm.Hosts.SshFields` (rows from
+  before the rule): `[{host, [:username | :address]}]`. SSH to them, and to
+  hosts behind them, is refused until the record is fixed.
+  """
+  @spec list_hosts_unsafe_for_ssh() :: [{Host.t(), [atom()]}]
+  def list_hosts_unsafe_for_ssh do
+    for host <- list_hosts(),
+        problems = Ssm.Hosts.SshFields.problems(host),
+        problems != [],
+        do: {host, problems}
+  end
+
   @spec count_hosts() :: non_neg_integer()
   def count_hosts, do: Repo.aggregate(Host, :count)
 

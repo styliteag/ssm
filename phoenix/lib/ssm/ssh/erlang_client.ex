@@ -30,6 +30,7 @@ defmodule Ssm.Ssh.ErlangClient do
   use GenServer
   require Logger
 
+  alias Ssm.Hosts.SshFields
   alias Ssm.Ssh.{RemoteFile, Result, Target}
 
   @gregorian_epoch_offset 62_167_219_200
@@ -100,7 +101,15 @@ defmodule Ssm.Ssh.ErlangClient do
   end
 
   # Fast registry round-trips; the actual handshake happens in this process.
+  # Targets whose username/address could be read as ssh options (rows from
+  # before the validation) never get that far.
   defp checkout(target) do
+    with :ok <- SshFields.check_target(target) do
+      lookup(target)
+    end
+  end
+
+  defp lookup(target) do
     case GenServer.call(__MODULE__, {:lookup, target}, registry_timeout()) do
       {:ok, conn} ->
         {:ok, conn}
@@ -316,47 +325,9 @@ defmodule Ssm.Ssh.ErlangClient do
   end
 
   defp start_forwarder(target, state) do
-    # jump_target is the innermost hop; walking jump_target links yields the
-    # chain inner→outer. OpenSSH wants the FINAL -J list outer→inner and the
-    # innermost hop as the command's destination host.
-    [innermost | rest_outer] = jump_chain(target.jump_target)
-
     with {:ok, ssh_bin} <- find_openssh(),
          {:ok, local_port} <- free_local_port() do
-      jump_args =
-        case rest_outer do
-          [] ->
-            []
-
-          outer ->
-            list =
-              outer
-              |> Enum.reverse()
-              |> Enum.map_join(",", &"#{&1.username}@#{&1.address}:#{&1.port}")
-
-            ["-J", list]
-        end
-
-      args =
-        [
-          "-N",
-          "-L",
-          "127.0.0.1:#{local_port}:#{target.address}:#{target.port}",
-          "-i",
-          key_file_path(state.key_dir),
-          "-p",
-          Integer.to_string(innermost.port),
-          "-o",
-          "StrictHostKeyChecking=no",
-          "-o",
-          "UserKnownHostsFile=/dev/null",
-          "-o",
-          "BatchMode=yes",
-          "-o",
-          "ExitOnForwardFailure=yes",
-          "-o",
-          "ConnectTimeout=#{max(div(timeout_ms(), 1000), 1)}"
-        ] ++ jump_args ++ ["#{innermost.username}@#{innermost.address}"]
+      args = forwarder_args(target, key_file_path(state.key_dir), local_port)
 
       # Spawn only — readiness is awaited by the caller (await_forwarder),
       # so a slow jump host cannot stall the registry.
@@ -366,6 +337,58 @@ defmodule Ssm.Ssh.ErlangClient do
     else
       {:error, reason} -> {:error, reason, state}
     end
+  end
+
+  @doc false
+  # argv of the OpenSSH forwarder. jump_target is the innermost hop; walking
+  # jump_target links yields the chain inner→outer. OpenSSH wants the -J
+  # list outer→inner and the innermost hop as the destination. User and port
+  # of the destination go as -l/-p, and `--` ends the options, so no host
+  # field is ever parsed as an ssh option (SshFields also refuses them).
+  @spec forwarder_args(Target.t(), String.t(), :inet.port_number()) :: [String.t()]
+  def forwarder_args(%Target{} = target, key_file, local_port) do
+    [innermost | rest_outer] = jump_chain(target.jump_target)
+
+    jump_args =
+      case rest_outer do
+        [] ->
+          []
+
+        outer ->
+          list =
+            outer
+            |> Enum.reverse()
+            |> Enum.map_join(",", &"#{&1.username}@#{bracket(&1.address)}:#{&1.port}")
+
+          ["-J", list]
+      end
+
+    [
+      "-N",
+      "-L",
+      "127.0.0.1:#{local_port}:#{bracket(target.address)}:#{target.port}",
+      "-i",
+      key_file,
+      "-l",
+      innermost.username,
+      "-p",
+      Integer.to_string(innermost.port),
+      "-o",
+      "StrictHostKeyChecking=no",
+      "-o",
+      "UserKnownHostsFile=/dev/null",
+      "-o",
+      "BatchMode=yes",
+      "-o",
+      "ExitOnForwardFailure=yes",
+      "-o",
+      "ConnectTimeout=#{max(div(timeout_ms(), 1000), 1)}"
+    ] ++ jump_args ++ ["--", innermost.address]
+  end
+
+  # IPv6 literals need brackets inside -L and -J specs.
+  defp bracket(address) do
+    if String.contains?(address, ":"), do: "[#{address}]", else: address
   end
 
   defp jump_chain(nil), do: []
