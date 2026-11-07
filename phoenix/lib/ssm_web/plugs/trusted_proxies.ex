@@ -27,11 +27,20 @@ defmodule SsmWeb.Plugs.TrustedProxies do
 
   @impl true
   def call(conn, _opts) do
+    conn = %{conn | remote_ip: unmap(conn.remote_ip)}
+
     case trusted() do
       [] -> maybe_warn(conn)
       cidrs -> %{conn | remote_ip: client_ip(conn, cidrs)}
     end
   end
+
+  # A dual-stack listener (`LISTEN=::`) sees IPv4 peers as `::ffff:a.b.c.d`;
+  # as IPv4 they match IPv4 proxy CIDRs and log as plain addresses.
+  defp unmap({0, 0, 0, 0, 0, 0xFFFF, hi, lo}),
+    do: {hi >>> 8, hi &&& 0xFF, lo >>> 8, lo &&& 0xFF}
+
+  defp unmap(ip), do: ip
 
   # A forwarded request without TRUSTED_PROXIES: per-IP limits and
   # last_used_ip see the proxy, not the client. Say so once per boot.

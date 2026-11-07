@@ -41,6 +41,18 @@ defmodule SsmWeb.TrustedProxiesTest do
     assert conn.remote_ip == {203, 0, 113, 7}
   end
 
+  # a dual-stack listener (LISTEN ::) sees IPv4 peers as ::ffff:a.b.c.d
+  test "IPv4-mapped IPv6 peer matches an IPv4 proxy CIDR" do
+    mapped_proxy = {0, 0, 0, 0, 0, 0xFFFF, 0x0A4D, 0x0004}
+    conn = call(mapped_proxy, "10.77.0.1", ["10.77.0.0/24"])
+    assert conn.remote_ip == {10, 77, 0, 1}
+  end
+
+  test "an untrusted IPv4-mapped IPv6 peer is reported as plain IPv4" do
+    assert call({0, 0, 0, 0, 0, 0xFFFF, 0xC633, 0x6409}, "10.0.0.1", ["172.18.0.0/16"]).remote_ip ==
+             {198, 51, 100, 9}
+  end
+
   test "request NOT from a trusted proxy: header is ignored (no spoofing)" do
     assert call({198, 51, 100, 9}, "10.0.0.1", ["172.18.0.0/16"]).remote_ip ==
              {198, 51, 100, 9}
