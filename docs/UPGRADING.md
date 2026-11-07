@@ -1,7 +1,7 @@
 # Upgrading a production deployment to the Elixir image
 
 Applies to any deployment running the old Python/React image
-(`ghcr.io/styliteag/ssm/ssm:1.1.x`) — including compose setups behind a
+(`ghcr.io/styliteag/ssm:1.1.x`) — including compose setups behind a
 reverse proxy such as Traefik. The Elixir image was built for a drop-in
 switch: same port, same volume paths, same environment variables, same
 database file.
@@ -14,9 +14,9 @@ Change the image tag. Everything else keeps working.
 services:
   ssm:
     # before
-    # image: ghcr.io/styliteag/ssm/ssm:1.1.11
+    # image: ghcr.io/styliteag/ssm:1.1.11
     # after (first Elixir release — check the releases page for the actual number)
-    image: ghcr.io/styliteag/ssm/ssm:2.0.0
+    image: ghcr.io/styliteag/ssm:2.0.0
 ```
 
 Then:

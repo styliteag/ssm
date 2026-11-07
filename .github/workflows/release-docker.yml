@@ -87,8 +87,8 @@ jobs:
         platforms: ${{ matrix.platform }}
         #cache-from: type=gha,scope=linux-${{ matrix.arch }}
         #cache-to: type=gha,scope=linux-${{ matrix.arch }},mode=max
-        cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/buildcache:linux-${{ matrix.arch }}
-        cache-to: type=registry,ref=ghcr.io/${{ github.repository }}/buildcache:linux-${{ matrix.arch }},mode=max
+        cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/ssm-buildcache:linux-${{ matrix.arch }}
+        cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/ssm-buildcache:linux-${{ matrix.arch }},mode=max
 
         sbom: true
         provenance: true
@@ -97,7 +97,7 @@ jobs:
           VCS_REF=${{ github.sha }}
         tags: |
           styliteag/ssm:${{ steps.version.outputs.version }}-${{ matrix.arch }}
-          ghcr.io/${{ github.repository }}/ssm:${{ steps.version.outputs.version }}-${{ matrix.arch }}
+          ghcr.io/${{ github.repository_owner }}/ssm:${{ steps.version.outputs.version }}-${{ matrix.arch }}
           
   merge:
     runs-on: ubuntu-latest
@@ -180,24 +180,24 @@ jobs:
         
         # GHCR manifests
         docker buildx imagetools create \
-          -t ghcr.io/${{ github.repository }}/ssm:${{ steps.version.outputs.version }} \
-          ghcr.io/${{ github.repository }}/ssm:${{ steps.version.outputs.version }}-amd64 \
-          ghcr.io/${{ github.repository }}/ssm:${{ steps.version.outputs.version }}-arm64
+          -t ghcr.io/${{ github.repository_owner }}/ssm:${{ steps.version.outputs.version }} \
+          ghcr.io/${{ github.repository_owner }}/ssm:${{ steps.version.outputs.version }}-amd64 \
+          ghcr.io/${{ github.repository_owner }}/ssm:${{ steps.version.outputs.version }}-arm64
         
         docker buildx imagetools create \
-          -t ghcr.io/${{ github.repository }}/ssm:latest \
-          ghcr.io/${{ github.repository }}/ssm:${{ steps.version.outputs.version }}-amd64 \
-          ghcr.io/${{ github.repository }}/ssm:${{ steps.version.outputs.version }}-arm64
+          -t ghcr.io/${{ github.repository_owner }}/ssm:latest \
+          ghcr.io/${{ github.repository_owner }}/ssm:${{ steps.version.outputs.version }}-amd64 \
+          ghcr.io/${{ github.repository_owner }}/ssm:${{ steps.version.outputs.version }}-arm64
         
         docker buildx imagetools create \
-          -t ghcr.io/${{ github.repository }}/ssm:${{ steps.version.outputs.major }}.${{ steps.version.outputs.minor }} \
-          ghcr.io/${{ github.repository }}/ssm:${{ steps.version.outputs.version }}-amd64 \
-          ghcr.io/${{ github.repository }}/ssm:${{ steps.version.outputs.version }}-arm64
+          -t ghcr.io/${{ github.repository_owner }}/ssm:${{ steps.version.outputs.major }}.${{ steps.version.outputs.minor }} \
+          ghcr.io/${{ github.repository_owner }}/ssm:${{ steps.version.outputs.version }}-amd64 \
+          ghcr.io/${{ github.repository_owner }}/ssm:${{ steps.version.outputs.version }}-arm64
         
         docker buildx imagetools create \
-          -t ghcr.io/${{ github.repository }}/ssm:${{ steps.version.outputs.major }} \
-          ghcr.io/${{ github.repository }}/ssm:${{ steps.version.outputs.version }}-amd64 \
-          ghcr.io/${{ github.repository }}/ssm:${{ steps.version.outputs.version }}-arm64
+          -t ghcr.io/${{ github.repository_owner }}/ssm:${{ steps.version.outputs.major }} \
+          ghcr.io/${{ github.repository_owner }}/ssm:${{ steps.version.outputs.version }}-amd64 \
+          ghcr.io/${{ github.repository_owner }}/ssm:${{ steps.version.outputs.version }}-arm64
 
     # Release body = the version's CHANGELOG section (the same text release.sh
     # rotated out of [Unreleased]), so the notes discipline reaches the release
@@ -230,7 +230,7 @@ jobs:
 
         Docker Images:
         - `styliteag/ssm:${{ steps.version.outputs.version }}`
-        - `ghcr.io/${{ github.repository }}/ssm:${{ steps.version.outputs.version }}`
+        - `ghcr.io/${{ github.repository_owner }}/ssm:${{ steps.version.outputs.version }}`
         EOF
 
     - name: Create GitHub release

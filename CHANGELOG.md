@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Releases publish the GitHub Container Registry image as
+  `ghcr.io/styliteag/ssm` (was the nested `ghcr.io/styliteag/ssm/ssm`, which
+  keeps its released tags). Docker Hub (`styliteag/ssm`) is unchanged.
+
 ## [4.5.0] - 2026-11-07
 
 ### Added

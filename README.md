@@ -85,7 +85,7 @@ The file is read per login attempt — changes take effect immediately.
 
 ## Production Deployment
 
-The combined image (`ghcr.io/styliteag/ssm/ssm:latest`) serves everything on port 80.
+The combined image (`ghcr.io/styliteag/ssm:latest`) serves everything on port 80.
 
 ```bash
 just up      # docker compose -f docker/compose.yml up -d --build

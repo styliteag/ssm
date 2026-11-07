@@ -37,9 +37,9 @@ jobs:
         cache-to: type=gha,mode=max
         tags: |
           styliteag/ssm:latest
-          ghcr.io/${{ github.repository }}/ssm:latest
+          ghcr.io/${{ github.repository_owner }}/ssm:latest
 #    - name: Build and push to GitHub Container Registry
 #      uses: docker/build-push-action@v6
 #      with:
 #        push: true
-#        tags: ghcr.io/${{ github.repository }}/ssm:latest
+#        tags: ghcr.io/${{ github.repository_owner }}/ssm:latest

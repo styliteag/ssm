@@ -17,6 +17,10 @@ jobs:
     strategy:
       matrix:
         package:
+          # images live at ghcr.io/<owner>/ssm since 4.5.0; the old nested
+          # ssm/ssm path keeps its released tags for existing installations
+          - ssm
+          - ssm-buildcache
           - ssm/ssm
           - ssm/buildcache
 
