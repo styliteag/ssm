@@ -5,7 +5,7 @@ setup and same Phoenix stack, so the same problems apply here.
 
 ## Security: update Bandit (HIGH)
 
-- [ ] `phoenix/mix.lock` pins `bandit 1.12.4`. On 2026-10-26, 11 advisories
+- [x] Done (fix/dependabot): bandit 1.14.1. Was: `phoenix/mix.lock` pins `bandit 1.12.4`. On 2026-10-26, 11 advisories
   were published against Bandit < 1.14.0 (9 HIGH): HTTP request smuggling via
   chunk extensions, WebSocket fragment size bypass, HTTP/2 frames resetting the
   body read timeout (EEF-CVE-2026-108525 … EEF-CVE-2026-115269). In omon,
