@@ -15,7 +15,7 @@
 
 /* daisyUI Tailwind Plugin — all built-in themes disabled; only the
    hand-written design blocks below exist. */
-@plugin "daisyui/packages/bundle/daisyui" {
+@plugin "../vendor/daisyui" {
   themes: false;
 }
 
@@ -26,7 +26,7 @@
    never repurpose it. */
 
 /* Orbit — the classic dashboard look: slate surfaces, emerald primary. */
-@plugin "daisyui/packages/bundle/daisyui-theme" {
+@plugin "../vendor/daisyui-theme" {
   name: "orbit-dark";
   default: true;
   prefersdark: true;
@@ -62,7 +62,7 @@
 }
 
 /* Orbit in daylight — cool paper, slate ink, deepened emerald. */
-@plugin "daisyui/packages/bundle/daisyui-theme" {
+@plugin "../vendor/daisyui-theme" {
   name: "orbit-light";
   default: false;
   prefersdark: false;
@@ -98,7 +98,7 @@
 }
 
 /* Bench — ink on paper, stamp green, square corners. */
-@plugin "daisyui/packages/bundle/daisyui-theme" {
+@plugin "../vendor/daisyui-theme" {
   name: "bench-light";
   default: false;
   prefersdark: false;
@@ -134,7 +134,7 @@
 }
 
 /* Bench after dark — terminal: phosphor green on near-black. */
-@plugin "daisyui/packages/bundle/daisyui-theme" {
+@plugin "../vendor/daisyui-theme" {
   name: "bench-dark";
   default: false;
   prefersdark: false;
@@ -170,7 +170,7 @@
 }
 
 /* Soft — warm white, friendly green + coral, pill shapes. */
-@plugin "daisyui/packages/bundle/daisyui-theme" {
+@plugin "../vendor/daisyui-theme" {
   name: "soft-light";
   default: false;
   prefersdark: false;
@@ -206,7 +206,7 @@
 }
 
 /* Soft at night — warm dark, brighter green + coral, pill shapes. */
-@plugin "daisyui/packages/bundle/daisyui-theme" {
+@plugin "../vendor/daisyui-theme" {
   name: "soft-dark";
   default: false;
   prefersdark: false;
@@ -245,7 +245,7 @@
    anchors stay put — primary/success are GREEN, error RED, warning amber,
    info blue — the rainbow lives in the violet-tinted base plus purple
    secondary and magenta accent. */
-@plugin "daisyui/packages/bundle/daisyui-theme" {
+@plugin "../vendor/daisyui-theme" {
   name: "rainbow-dark";
   default: false;
   prefersdark: false;
@@ -280,7 +280,7 @@
   --noise: 0;
 }
 
-@plugin "daisyui/packages/bundle/daisyui-theme" {
+@plugin "../vendor/daisyui-theme" {
   name: "rainbow-light";
   default: false;
   prefersdark: false;
