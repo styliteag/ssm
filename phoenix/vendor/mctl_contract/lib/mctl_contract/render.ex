@@ -37,6 +37,10 @@ defmodule MctlContract.Render do
     }
   end
 
+  @doc "Result of `POST /customers/{slug}/merge`."
+  @spec customer_merge(map()) :: map()
+  def customer_merge(r), do: %{"moved_hosts" => get(r, :moved_hosts) || 0}
+
   @spec named(map()) :: map()
   def named(c), do: %{"slug" => get(c, :slug), "name" => get(c, :name)}
 

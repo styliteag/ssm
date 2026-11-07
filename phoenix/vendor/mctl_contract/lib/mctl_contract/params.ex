@@ -44,6 +44,21 @@ defmodule MctlContract.Params do
   @spec named_update(term()) :: {:ok, map()} | {:error, map()}
   def named_update(body), do: check(body, %{"name" => {:required, &name/1}})
 
+  @doc """
+  `POST /customers/{slug}/merge`: `into` (required slug of the target,
+  not `source` itself); nothing else.
+  """
+  @spec customer_merge(term(), String.t()) :: {:ok, map()} | {:error, map()}
+  def customer_merge(body, source) do
+    case check(body, %{"into" => {:required, &slug/1}}) do
+      {:ok, %{"into" => ^source}} ->
+        {:error, %{"into" => ["must differ from the merged customer"]}}
+
+      result ->
+        result
+    end
+  end
+
   @doc "`POST /hosts/{id}/actions`: `action` (string), `params` (object, default `%{}`)."
   @spec host_action(term()) :: {:ok, map()} | {:error, map()}
   def host_action(body) do

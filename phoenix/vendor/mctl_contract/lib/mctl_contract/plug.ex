@@ -181,6 +181,10 @@ defmodule MctlContract.Plug do
     )
   end
 
+  post "/customers/:slug/merge", private: %{mctl_need: "setup"} do
+    idempotent(conn, &Handlers.merge_customer(&1, opts(&1), slug))
+  end
+
   get "/groups", private: %{mctl_need: "read"} do
     Handlers.list(conn, opts(conn), "groups", :list_groups, Handlers.renderer(:named))
   end

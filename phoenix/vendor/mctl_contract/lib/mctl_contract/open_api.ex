@@ -8,7 +8,7 @@ defmodule MctlContract.OpenAPI do
   when the provider implements them (`MctlContract.Capabilities`); so do
   `POST /hosts/{id}/actions` and `HostAction` (with the provider's action
   names as enum) and the routes and schemas of the `delete_host`,
-  `maintenance`, `people` and `rename_group` capabilities.
+  `maintenance`, `people`, `rename_group` and `merge_customer` capabilities.
   """
   alias MctlContract.{Capabilities, Envelope, Page}
   alias MctlContract.OpenAPI.Schemas
@@ -45,7 +45,7 @@ defmodule MctlContract.OpenAPI do
      body: "HostAction", status: 202, idempotent: true}
   ]
 
-  # contract sections 10 and 11, one group per capability
+  # contract sections 10 to 12, one group per capability
   @capability_ops %{
     "delete_host" => [
       {"delete", "/hosts/{id}", "setup", "Job", "Delete a host (job, kind delete_host)",
@@ -69,6 +69,11 @@ defmodule MctlContract.OpenAPI do
     "rename_group" => [
       {"patch", "/groups/{slug}", "setup", "Group", "Rename a group (slug stays)",
        body: "NamedUpdate"}
+    ],
+    "merge_customer" => [
+      {"post", "/customers/{slug}/merge", "setup", "CustomerMergeResult",
+       "Merge the customer into another (hosts move, the customer is deleted; global token)",
+       body: "CustomerMerge", idempotent: true}
     ]
   }
 

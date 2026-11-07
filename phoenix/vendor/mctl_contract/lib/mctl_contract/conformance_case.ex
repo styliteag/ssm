@@ -29,6 +29,10 @@ defmodule MctlContract.ConformanceCase do
       * `cleanup()` (optional) – runs after every test
       * `person_key()` (optional, capability `people`) – the key of a
         person the tool knows (`GET /people/{key}` shape check), or nil
+      * `bound_token(scopes)` (optional, capability `merge_customer`) – a
+        valid token with these scopes and a binding (not global), or nil
+        when the tool has no bindings; a merge with it must be 403
+        `forbidden`
     """
     @callback setup(map()) :: :ok | keyword() | map()
     @callback token([String.t()]) :: String.t()
@@ -36,7 +40,12 @@ defmodule MctlContract.ConformanceCase do
     @callback unsupported_mode() :: String.t() | nil
     @callback cleanup() :: any()
     @callback person_key() :: String.t() | nil
-    @optional_callbacks setup: 1, unsupported_mode: 0, cleanup: 0, person_key: 0
+    @callback bound_token([String.t()]) :: String.t() | nil
+    @optional_callbacks setup: 1,
+                        unsupported_mode: 0,
+                        cleanup: 0,
+                        person_key: 0,
+                        bound_token: 1
   end
 
   using opts do
@@ -249,6 +258,11 @@ defmodule MctlContract.ConformanceCase do
 
       test "conformance: rename_group is served exactly when /me advertises it", %{mctl: c} do
         MctlContract.ConformanceCase.Rename.check_group(c)
+      end
+
+      # contract section 12: merge moves the hosts and deletes the source
+      test "conformance: merge_customer is served exactly when /me advertises it", %{mctl: c} do
+        MctlContract.ConformanceCase.Merge.check(c)
       end
 
       test "conformance: Idempotency-Key replays the first response", %{mctl: c} do

@@ -179,6 +179,26 @@ defmodule MctlContract.Provider do
   @callback update_group(Principal.t(), slug :: String.t(), params :: map()) ::
               {:ok, map()} | {:error, error()}
 
+  @doc """
+  Optional (merge, contract section 12): merge customer `source` into
+  customer `target` (`POST /customers/{slug}/merge`, scope `setup`, body
+  `{"into": target}`; the library has checked the shape and that both
+  slugs differ). The tool moves every host of `source` to `target`,
+  carries over its own rights or memberships of `source` where it has
+  them (e.g. the users of a group), then deletes `source`. Returns the
+  number of moved hosts.
+
+  Like customer create it needs a GLOBAL token: a token with a binding
+  gets `{:error, :forbidden}`. `:not_found` when `source` or `target` is
+  unknown (mctl treats `:not_found` for a gone `source` with an existing
+  `target` as already merged, so a repeat after success is safe).
+  `{:conflict, message}` when the tool cannot merge (the message says
+  why, e.g. "source has subfolders"). Without it the route answers
+  `404 not_found` and `/me` has no `merge_customer` capability.
+  """
+  @callback merge_customer(Principal.t(), source :: String.t(), target :: String.t()) ::
+              {:ok, %{moved_hosts: non_neg_integer()}} | {:error, error()}
+
   @optional_callbacks cursor_types: 1,
                       attributes_schema: 0,
                       list_host_summaries: 2,
@@ -191,5 +211,6 @@ defmodule MctlContract.Provider do
                       cancel_maintenance: 2,
                       get_person: 2,
                       remove_person: 3,
-                      update_group: 3
+                      update_group: 3,
+                      merge_customer: 3
 end

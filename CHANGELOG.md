@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Merge customers from Mission Control** (mctl contract 0.2.0, capability
+  `merge_customer`): `POST /api/mctl/v1/customers/{slug}/merge` with
+  `{"into": "<slug>"}` moves every host of the customer to the target and
+  deletes the customer, in one transaction. The activity log records it as
+  `customer_merge` (type host, target `customer:<slug>`). Unknown slugs, or a
+  repeat after success, answer 404.
+
 ## [4.5.2] - 2026-11-07
 
 ### Added

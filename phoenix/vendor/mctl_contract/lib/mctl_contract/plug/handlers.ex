@@ -180,6 +180,23 @@ defmodule MctlContract.Plug.Handlers do
       else: not_found(conn)
   end
 
+  @doc """
+  `POST /customers/{slug}/merge` (capability `merge_customer`): shape
+  check, then `provider.merge_customer/3`; 200 with `moved_hosts`.
+  """
+  def merge_customer(conn, opts, slug) do
+    if_capability(conn, opts, "merge_customer", fn provider ->
+      case Params.customer_merge(body(conn), slug) do
+        {:ok, %{"into" => into}} ->
+          result = provider.merge_customer(principal(conn), slug, into)
+          reply(conn, result, 200, &Render.customer_merge/1)
+
+        {:error, details} ->
+          Respond.error(conn, "validation_failed", "invalid input", details)
+      end
+    end)
+  end
+
   defp if_capability(conn, opts, capability, fun) do
     provider = opts[:provider]
 

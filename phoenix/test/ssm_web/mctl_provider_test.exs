@@ -627,6 +627,30 @@ defmodule SsmWeb.MctlProviderTest do
   end
 
   describe "customers and groups" do
+    test "merge_customer moves the hosts to the target and deletes the source" do
+      {:ok, _} = Customers.create_customer(%{slug: "kunde-1", name: "Kunde"})
+      {:ok, _} = Customers.create_customer(%{slug: "kunde", name: "Kunde"})
+      {:ok, a} = Hosts.update_membership(host_fixture(%{name: "a"}), %{customer: "kunde-1"})
+      {:ok, b} = Hosts.update_membership(host_fixture(%{name: "b"}), %{customer: "kunde-1"})
+      {:ok, _} = Hosts.update_membership(host_fixture(%{name: "c"}), %{customer: "kunde"})
+
+      assert {:ok, %{moved_hosts: 2}} = MctlProvider.merge_customer(@p, "kunde-1", "kunde")
+      assert Customers.get_customer_by_slug("kunde-1") == nil
+
+      for host <- [a, b] do
+        assert {:ok, %{customer: "kunde"}} = MctlProvider.get_host(@p, to_string(host.id))
+      end
+
+      assert Repo.get_by(Ssm.Activity.ActivityLog,
+               action: "customer_merge",
+               target: "customer:kunde-1"
+             )
+
+      assert {:error, :not_found} = MctlProvider.merge_customer(@p, "kunde-1", "kunde")
+      assert {:error, :not_found} = MctlProvider.merge_customer(@p, "kunde", "ghost")
+      assert "merge_customer" in MctlContract.Capabilities.list(MctlProvider)
+    end
+
     test "create, conflict, list, rename" do
       assert {:ok, %{slug: "kunde-a", name: "A"}} =
                MctlProvider.create_customer(@p, %{"slug" => "kunde-a", "name" => "A"})

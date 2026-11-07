@@ -11,6 +11,19 @@ defmodule MctlContract.OpenAPI.Schemas do
     |> then(&if(actions, do: Map.put(&1, "HostAction", host_action(actions)), else: &1))
     |> then(&if("maintenance" in caps, do: Map.merge(&1, maintenance()), else: &1))
     |> then(&if("people" in caps, do: Map.merge(&1, people()), else: &1))
+    |> then(&if("merge_customer" in caps, do: Map.merge(&1, customer_merge()), else: &1))
+  end
+
+  defp customer_merge do
+    %{
+      "CustomerMerge" =>
+        obj(
+          %{"into" => Map.put(slug(), "description", "slug of the target, not the merged one")},
+          ["into"]
+        ),
+      "CustomerMergeResult" =>
+        obj(%{"moved_hosts" => %{"type" => "integer", "minimum" => 0}}, ["moved_hosts"])
+    }
   end
 
   defp maintenance do

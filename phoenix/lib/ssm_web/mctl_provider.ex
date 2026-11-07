@@ -5,7 +5,7 @@ defmodule SsmWeb.MctlProvider do
   customers and groups (own tables), `create_host` jobs in the library's
   job store (`mctl_jobs`), host summaries (C4) from the persisted
   periodic key check (`Ssm.Diffs.HostChecks`, table `host_checks`),
-  `delete_host`, `rename_group` (§11) and people (offboarding,
+  `delete_host`, `rename_group` (§11), `merge_customer` (§12) and people (offboarding,
   `SsmWeb.Mctl.People`). No maintenance capability: ssm has no alerts to
   silence.
 
@@ -207,6 +207,16 @@ defmodule SsmWeb.MctlProvider do
   @impl true
   def create_group(_principal, params) do
     params |> named_attrs() |> Groups.create_group() |> named_result()
+  end
+
+  # contract section 12 (capability `merge_customer`): ssm has no token
+  # binding, so every `setup` token may merge (like create_customer)
+  @impl true
+  def merge_customer(principal, source, target) do
+    with {:ok, result} <- Customers.merge_customer(source, target) do
+      Audit.customer(principal, "merge", source, %{into: target, moved_hosts: result.moved_hosts})
+      {:ok, result}
+    end
   end
 
   # contract section 11 (capability `rename_group`): the name only, the

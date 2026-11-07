@@ -5,6 +5,28 @@ versions: [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] – 2026-11-07
+
+### Added
+
+- Merge (contract section 12): optional Provider callback
+  `merge_customer/3` (`POST /customers/{slug}/merge`, scope `setup`, body
+  `{"into": <target slug>}`, `200` `{"moved_hosts": n}`). The tool moves
+  every host of the source to the target, carries over its own rights or
+  memberships of the source where it has them, and deletes the source.
+  GLOBAL token only (`403 forbidden` for a token with a binding, as
+  customer create). `404 not_found` for an unknown source or target; mctl
+  treats `404` for a gone source with an existing target as already
+  merged, so a repeat after success is safe. `422` for a missing or
+  invalid `into`, `into` equal to the source, or other keys; `409
+  conflict` with the tool's message when it cannot merge. Idempotency-Key
+  accepted. Capability `merge_customer` in `GET /me`; without the callback
+  the route is `404 not_found` and absent from OpenAPI (schemas
+  `CustomerMerge`, `CustomerMergeResult`). ConformanceCase checks it
+  (served or absent); new optional fixture `bound_token/1` (a token with
+  a binding, or nil when the tool has none). `Params.customer_merge/2`,
+  `Render.customer_merge/1`.
+
 ## [0.1.0] – 2026-11-07
 
 ### Added (after the API freeze of 2026-11-06)
