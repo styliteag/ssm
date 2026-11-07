@@ -40,6 +40,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `release.sh` (`just release`) accepts an explicit version `X.Y.Z` above the
+  current one, for the suite-wide 4.5.0.
 - **Viewers no longer see write buttons**: for an SSO `viewer` the pages hide every control that would only answer "Your account is read-only." (new, edit, delete, sync, bulk actions, …); the authorization matrix still shows who is authorized but cannot be clicked. The list comes from the same allow-list as the server-side refusal, which stays in place.
 - **A rotated provider key no longer breaks back-channel logout**: a `logout_token` signed with a key id ssm has not seen makes ssm re-fetch the provider's keys, as the SSO login already did — at most once a minute for the whole app.
 

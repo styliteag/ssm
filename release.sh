@@ -17,7 +17,7 @@ print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 # Function to show usage
 show_usage() {
-    echo "Usage: $0 [major|minor|patch]"
+    echo "Usage: $0 [major|minor|patch|X.Y.Z]"
     echo ""
     echo "This script will:"
     echo "  1. Update CHANGELOG.md (move [Unreleased] to new version)"
@@ -35,9 +35,30 @@ show_usage() {
 }
 
 # Function to increment version
+# explicit X.Y.Z (e.g. the suite-wide 4.5.0): accepted when above the current version
+is_version() { [[ "$1" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; }
+version_gt() {
+    local a b i
+    IFS='.' read -r -a a <<< "$1"
+    IFS='.' read -r -a b <<< "$2"
+    for i in 0 1 2; do
+        (( a[i] > b[i] )) && return 0
+        (( a[i] < b[i] )) && return 1
+    done
+    return 1
+}
+
 increment_version() {
     local current_version="$1"
     local increment_type="$2"
+    if is_version "$increment_type"; then
+        if ! version_gt "$increment_type" "$current_version"; then
+            echo "Version $increment_type is not above $current_version" >&2
+            return 1
+        fi
+        echo "$increment_type"
+        return 0
+    fi
     
     # Parse current version
     IFS='.' read -r -a version_parts <<< "$current_version"
@@ -184,7 +205,7 @@ main() {
     fi
     
     # Validate increment type
-    if [[ ! "$increment_type" =~ ^(major|minor|patch)$ ]]; then
+    if [[ ! "$increment_type" =~ ^(major|minor|patch)$ ]] && ! is_version "$increment_type"; then
         print_error "Invalid increment type: $increment_type"
         show_usage
         exit 1
