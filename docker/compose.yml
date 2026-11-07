@@ -31,6 +31,10 @@ services:
       # hostname — otherwise the LiveView socket origin check rejects the
       # browser and every page degrades to longpoll with endless reconnects.
       # - PHX_HOST=ssm.example.net
+      # Further names the UI is served under (comma-separated, e.g. a VPN
+      # name next to the public one): accepted by the origin check, and the
+      # single sign-on callback and post-logout page stay on that name.
+      # - PHX_ALT_HOSTS=ssm.vpn.example.net
       # Behind a reverse proxy, also name the proxy (addresses/CIDRs,
       # comma-separated) so the client IP comes from X-Forwarded-For —
       # used for the mission control API's failed-login limit and token

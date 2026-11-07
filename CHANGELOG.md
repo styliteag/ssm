@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **More than one name for the web UI**: `PHX_ALT_HOSTS` (comma-separated)
+  lists further host names ssm is served under, e.g. a NetBird name next to
+  the public `PHX_HOST`. LiveView accepts those origins, and single sign-on
+  started on such a name returns to it (callback and post-logout sign-in
+  page), so the login no longer fails for lack of the session cookie. Other
+  host names still get the `PHX_HOST` URLs.
+
 ### Changed
 
 - Releases publish the GitHub Container Registry image as

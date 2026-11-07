@@ -22,7 +22,7 @@ defmodule SsmWeb.OIDCController do
   plug :rate_limit
 
   def login(conn, _params) do
-    case Flow.start(callback_url()) do
+    case Flow.start(callback_url(conn)) do
       {:ok, url, pending} ->
         conn
         |> put_session(:oidc_state, pending.state)
@@ -40,7 +40,7 @@ defmodule SsmWeb.OIDCController do
     conn = drop_pending(conn)
 
     with {:ok, code} <- check_params(params, pending),
-         {:ok, login} <- Flow.finish(code, pending, callback_url()) do
+         {:ok, login} <- Flow.finish(code, pending, callback_url(conn)) do
       Activity.log(%{
         activity_type: "auth",
         action: "oidc.login",
@@ -114,7 +114,9 @@ defmodule SsmWeb.OIDCController do
     |> redirect(to: ~p"/sign-in")
   end
 
-  defp callback_url, do: url(~p"/auth/oidc/callback")
+  # On the host the login started on (session cookies are host-only); only
+  # PHX_HOST and PHX_ALT_HOSTS names, see `SsmWeb.Hosts`.
+  defp callback_url(conn), do: SsmWeb.Hosts.url(conn, ~p"/auth/oidc/callback")
 
   defp require_oidc(conn, _opts) do
     if Config.enabled?() do

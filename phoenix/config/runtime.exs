@@ -164,7 +164,25 @@ if config_env() == :prod do
   # back to longpoll and reconnects forever. Once PHX_HOST names the public
   # hostname, compare against that instead — Phoenix matches the host only,
   # which is exactly what survives a proxy hop.
-  check_origin = if phx_host, do: true, else: :conn
+  #
+  # PHX_ALT_HOSTS: further names the UI is served under (comma list, e.g. a
+  # NetBird name next to the public one). They join the origin check, and
+  # the SSO callback / post-logout URL follow them (`SsmWeb.Hosts`).
+  # Same parsing as `SsmWeb.Hosts.parse/1` (no app code in runtime.exs).
+  alt_hosts =
+    System.get_env("PHX_ALT_HOSTS", "")
+    |> String.split(",")
+    |> Enum.map(&(&1 |> String.trim() |> String.downcase()))
+    |> Enum.reject(&(&1 == ""))
+
+  config :ssm, :alt_hosts, alt_hosts
+
+  check_origin =
+    cond do
+      is_nil(phx_host) -> :conn
+      alt_hosts == [] -> true
+      true -> Enum.map([phx_host | alt_hosts], &("//" <> &1))
+    end
 
   # LISTEN mirrors the python stack (default "::" = all interfaces, v4+v6).
   listen_ip =
