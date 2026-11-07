@@ -25,6 +25,8 @@ RUN mix local.hex --force && mix local.rebar --force
 # here would invalidate the expensive deps layers on every release bump
 # (lesson from ../dashboard orbit/Dockerfile).
 COPY phoenix/mix.exs phoenix/mix.lock ./
+# vendored mctl_contract (path dependency, mctl_contract/scripts/vendor.sh)
+COPY phoenix/vendor vendor
 RUN mix deps.get --only prod
 
 COPY phoenix/config/config.exs phoenix/config/prod.exs config/
