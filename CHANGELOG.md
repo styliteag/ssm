@@ -45,6 +45,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `mix deps.get` works from a normal checkout next to `mctl_contract` again: the
+  path dependency tries `../mctl_contract`-style locations for both the checkout
+  and a worktree (`MCTL_CONTRACT_PATH` overrides).
 - **ssm no longer locks itself out of hosts added through Mission Control**: its own key in the login user's `authorized_keys` is never shown as drift and every sync keeps it (matched by key type and body), so the first sync no longer removes it (lab e2e B3).
 - **Single sign-on comes back on its own** when the identity provider was down while ssm started: the provider configuration is retried with backoff instead of staying unavailable until a restart (B13).
 - **`TRUSTED_PROXIES` also matches IPv4-mapped IPv6 peers** (`::ffff:a.b.c.d`), so failed-login limits and the security log see the real client IP behind the proxy (B5).

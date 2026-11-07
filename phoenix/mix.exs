@@ -84,7 +84,7 @@ defmodule Ssm.MixProject do
       # Generic OIDC login for the web UI (ADR-0011, oidc-client-v1 spec)
       {:oidcc, "~> 3.9"},
       # mctl contract v1 (/api/mctl/v1): plug, tokens, jobs, conformance tests
-      {:mctl_contract, path: "../../../mctl_contract"}
+      {:mctl_contract, path: mctl_contract_path()}
     ]
   end
 
@@ -109,5 +109,15 @@ defmodule Ssm.MixProject do
       ],
       precommit: ["compile --warnings-as-errors", "deps.unlock --unused", "format", "test"]
     ]
+  end
+
+  # Path dependency until mctl_contract v0.1.0 is tagged: the library sits next
+  # to the repo (orbit/ssm) or one level higher in a worktree (orbit/wt/ssm-x);
+  # in a Docker build both resolve to /mctl_contract. MCTL_CONTRACT_PATH wins.
+  defp mctl_contract_path do
+    candidates = ["../../mctl_contract", "../../../mctl_contract"]
+
+    System.get_env("MCTL_CONTRACT_PATH") ||
+      Enum.find(candidates, hd(candidates), &File.dir?(Path.expand(&1, __DIR__)))
   end
 end
