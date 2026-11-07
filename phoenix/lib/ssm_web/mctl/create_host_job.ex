@@ -15,8 +15,9 @@ defmodule SsmWeb.Mctl.CreateHostJob do
 
   A disabled host is not contacted: the job succeeds with `pin:
   skipped_disabled`. A failed job deletes the host again, so the same
-  request can be posted again. Clients get a short code and a fixed
-  sentence; raw SSH detail goes to the log only.
+  request can be posted again. A host deleted while the job runs ends it
+  as `failed` with `host_deleted` (no rollback, no crash). Clients get a
+  short code and a fixed sentence; raw SSH detail goes to the log only.
   """
 
   require Logger
@@ -33,11 +34,29 @@ defmodule SsmWeb.Mctl.CreateHostJob do
   @doc "Run the job for `host_id`; the `MctlContract.Jobs.Ecto.run/4` work function."
   @spec run(pos_integer(), map(), String.t()) :: {:ok, map()} | {:error, String.t(), String.t()}
   def run(host_id, principal, job_id) do
-    case work(host_id, principal, job_id) do
-      {:ok, _} = ok ->
+    host_id
+    |> guarded_work(principal, job_id)
+    |> outcome(host_id, principal)
+  end
+
+  # The host may be deleted while the job runs (DELETE /hosts/{id}, the
+  # UI): every outcome then is `host_deleted`, and a write that raced the
+  # deletion (stale update) must not crash the job.
+  defp guarded_work(host_id, principal, job_id) do
+    work(host_id, principal, job_id)
+  rescue
+    Ecto.StaleEntryError -> deleted()
+  end
+
+  defp outcome(result, host_id, principal) do
+    case {result, Hosts.get_host(host_id)} do
+      {_result, nil} ->
+        deleted()
+
+      {{:ok, _} = ok, _host} ->
         ok
 
-      {:error, _code, _message} = failure ->
+      {{:error, _code, _message} = failure, _host} ->
         roll_back(host_id, principal)
         failure
     end
@@ -160,7 +179,7 @@ defmodule SsmWeb.Mctl.CreateHostJob do
     {:error, code, message}
   end
 
-  defp deleted, do: {:error, "not_found", "the host was deleted before its key was pinned"}
+  defp deleted, do: {:error, "host_deleted", "the host was deleted while it was being added"}
 
   defp roll_back(host_id, principal) do
     with %{} = host <- Hosts.get_host(host_id),
