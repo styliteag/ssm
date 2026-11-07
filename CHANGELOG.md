@@ -53,6 +53,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **The changelog no longer ends in leftover tool output**: the file's tail carried a stray XML fragment and a "Note to self" session recap from the era it was first written. Since the release workflow lifts each version's section straight into the GitHub release body, that residue was operator-visible — it is gone, together with the empty `### Added` stubs the old release script seeded into releases that recorded nothing. The maintenance notes now name `./release.sh` as what rotates `[Unreleased]`, instead of describing the manual edit it replaced, and the three `2025-09-XX` placeholder dates (0.2.10–0.2.12) are the actual release dates recovered from their git tags.
+### Fixed
+- **Development checkouts no longer grow by ~12 GB**: daisyUI is vendored (`phoenix/assets/vendor/daisyui.js`, `daisyui-theme.js`, v5.5.20) instead of a Mix git dependency, so `mix deps.get` never clones the daisyUI repository.
 
 ### Security
 - **The GitLeaks CI scan is green again**: the reviewed allowlist now also covers retired material still present in repository history, so the job no longer carries a permanent error annotation and a genuinely new finding stands out instead of drowning in a known one.
