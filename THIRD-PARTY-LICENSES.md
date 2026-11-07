@@ -12,39 +12,39 @@ tooling is excluded as it is not part of the distributed artifact.
 
 | Component | Version | License |
 |---|---|---|
-| bandit | 1.12.4 | MIT |
+| bandit | 1.14.1 | MIT |
 | bcrypt_elixir | 3.3.2 | BSD-3-Clause AND ISC AND BSD-4-Clause |
 | comeonin | 5.5.1 | BSD-3-Clause |
 | daisyui | 22ecff57f2c3 | MIT |
 | db_connection | 2.10.2 | Apache-2.0 |
-| decimal | 3.1.1 | Apache-2.0 |
+| decimal | 3.2.0 | Apache-2.0 |
 | dns_cluster | 0.2.0 | MIT |
-| ecto | 3.14.1 | Apache-2.0 |
+| ecto | 3.14.3 | Apache-2.0 |
 | ecto_sql | 3.14.0 | Apache-2.0 |
 | ecto_sqlite3 | 0.24.1 | MIT |
 | expo | 1.1.1 | Apache-2.0 |
 | exqlite | 0.39.0 | MIT |
 | gettext | 1.0.2 | Apache-2.0 |
 | heroicons | 0435d4ca364a | MIT |
-| hpax | 1.0.4 | Apache-2.0 |
+| hpax | 1.1.0 | Apache-2.0 |
 | jason | 1.4.5 | Apache-2.0 |
 | jose | 1.11.13 | MIT |
 | mime | 2.0.7 | Apache-2.0 |
 | oidcc | 3.9.2 | Apache-2.0 |
 | phoenix | 1.8.9 | MIT |
 | phoenix_ecto | 4.7.0 | MIT |
-| phoenix_html | 4.3.0 | MIT |
+| phoenix_html | 4.4.0 | MIT |
 | phoenix_live_dashboard | 0.8.7 | MIT |
-| phoenix_live_view | 1.2.8 | MIT |
+| phoenix_live_view | 1.2.13 | MIT |
 | phoenix_pubsub | 2.2.0 | MIT |
 | phoenix_template | 1.0.4 | MIT |
 | plug | 1.20.3 | Apache-2.0 |
-| plug_crypto | 2.2.0 | Apache-2.0 |
+| plug_crypto | 2.2.1 | Apache-2.0 |
 | telemetry | 1.4.2 | Apache-2.0 |
 | telemetry_metrics | 1.1.0 | Apache-2.0 |
 | telemetry_poller | 1.3.0 | Apache-2.0 |
 | telemetry_registry | 0.3.2 | Apache-2.0 |
-| thousand_island | 1.5.0 | MIT |
+| thousand_island | 1.6.0 | MIT |
 | websock | 0.5.3 | MIT |
 | websock_adapter | 0.6.0 | MIT |
 
@@ -60,7 +60,7 @@ tooling is excluded as it is not part of the distributed artifact.
 
 ### Elixir/Hex
 
-### bandit 1.12.4 — MIT
+### bandit 1.14.1 — MIT
 
 <https://hex.pm/packages/bandit>
 
@@ -236,7 +236,7 @@ Full text: https://github.com/saadeghi/daisyui/blob/master/LICENSE
 
 _No license file bundled by the distributor; see the link above._
 
-### decimal 3.1.1 — Apache-2.0
+### decimal 3.2.0 — Apache-2.0
 
 <https://hex.pm/packages/decimal>
 
@@ -448,7 +448,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### ecto 3.14.1 — Apache-2.0
+### ecto 3.14.3 — Apache-2.0
 
 <https://hex.pm/packages/ecto>
 
@@ -739,7 +739,7 @@ MIT — sparse asset checkout bundles no license file.
 Full text: https://github.com/tailwindlabs/heroicons/blob/master/LICENSE
 ```
 
-### hpax 1.0.4 — Apache-2.0
+### hpax 1.1.0 — Apache-2.0
 
 <https://hex.pm/packages/hpax>
 
@@ -1255,7 +1255,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### phoenix_html 4.3.0 — MIT
+### phoenix_html 4.4.0 — MIT
 
 <https://hex.pm/packages/phoenix_html>
 
@@ -1311,7 +1311,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### phoenix_live_view 1.2.8 — MIT
+### phoenix_live_view 1.2.13 — MIT
 
 <https://hex.pm/packages/phoenix_live_view>
 
@@ -1418,7 +1418,7 @@ Copyright (c) 2013 Plataformatec.
   limitations under the License.
 ```
 
-### plug_crypto 2.2.0 — Apache-2.0
+### plug_crypto 2.2.1 — Apache-2.0
 
 <https://hex.pm/packages/plug_crypto>
 
@@ -2184,7 +2184,7 @@ Apache License
    limitations under the License.
 ```
 
-### thousand_island 1.5.0 — MIT
+### thousand_island 1.6.0 — MIT
 
 <https://hex.pm/packages/thousand_island>
 
