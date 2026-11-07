@@ -13,7 +13,12 @@
 # (ssh-keygen -p).
 
 # ---- builder ----------------------------------------------------------------
-FROM elixir:1.20 AS builder
+# Elixir/OTP: the one source is .tool-versions next to this file (test/tool_versions_test.exs
+# checks these ARGs against it). The official elixir image pins OTP to its
+# major only; .tool-versions carries the exact OTP for local/CI toolchains.
+ARG ELIXIR_VERSION=1.20.5
+ARG OTP_VERSION=29
+FROM elixir:${ELIXIR_VERSION}-otp-${OTP_VERSION} AS builder
 
 ENV MIX_ENV=prod
 
