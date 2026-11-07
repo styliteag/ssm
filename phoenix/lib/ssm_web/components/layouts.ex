@@ -38,8 +38,12 @@ defmodule SsmWeb.Layouts do
   slot :inner_block, required: true
 
   def app(assigns) do
+    assigns = assign(assigns, :read_only, read_only?(assigns.current_user))
+
     ~H"""
-    <div class="flex min-h-screen">
+    <%!-- HEEx does not interpolate inside <style>; the CSS comes from module constants --%>
+    {read_only_style(@read_only)}
+    <div class="flex min-h-screen" data-read-only={@read_only}>
       <aside
         :if={@current_user}
         class="hidden w-56 flex-none flex-col border-r border-base-300 bg-base-200 sm:flex"
@@ -109,6 +113,15 @@ defmodule SsmWeb.Layouts do
     <.flash_group flash={@flash} />
     """
   end
+
+  # viewers (OIDC role `viewer`) see no write controls (SsmWeb.ReadOnly)
+  defp read_only?(%{role: "viewer"}), do: true
+  defp read_only?(_user), do: false
+
+  defp read_only_style(true),
+    do: Phoenix.HTML.raw("<style>" <> SsmWeb.ReadOnly.hide_css() <> "</style>")
+
+  defp read_only_style(false), do: nil
 
   defp nav_items do
     [

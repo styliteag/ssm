@@ -24,6 +24,27 @@ defmodule SsmWeb.ReadOnlyTest do
     end
   end
 
+  describe "write controls" do
+    test "are hidden for a viewer by CSS from the allow-list", %{conn: conn, provider: p} do
+      {:ok, _} = Hosts.create_host(host_attrs())
+      {:ok, _lv, html} = live(login_as(conn, p, "viewer"), ~p"/hosts")
+
+      assert html =~ "data-read-only"
+      css = SsmWeb.ReadOnly.hide_css()
+      # unescaped: quotes inside <style> must reach the browser as is
+      assert html =~ css
+      assert css =~ ~s|:not([phx-click="sort"])|
+      refute css =~ ~s|:not([phx-click="delete"])|
+      assert css =~ ~s|[phx-click="matrix-toggle"]{pointer-events:none|
+    end
+
+    test "stay visible for an operator", %{conn: conn, provider: p} do
+      {:ok, _lv, html} = live(login_as(conn, p, "operator"), ~p"/hosts")
+      refute html =~ "data-read-only"
+      refute html =~ "display:none !important"
+    end
+  end
+
   describe "viewer" do
     test "can open pages and sort", %{conn: conn, provider: p} do
       conn = login_as(conn, p, "viewer")
