@@ -51,6 +51,30 @@ defmodule Ssm.Customers do
     end
   end
 
+  @doc """
+  Deletes an empty customer (mctl contract 0.4.0, `delete_customer`). A
+  customer that still has hosts is `{:error, {:conflict, message}}` and
+  stays; hosts are never moved or stripped. `{:error, :not_found}` for an
+  unknown slug (also on a repeat).
+  """
+  @spec delete_customer(String.t()) :: :ok | {:error, :not_found | {:conflict, String.t()}}
+  def delete_customer(slug) do
+    case get_customer_by_slug(slug) do
+      nil ->
+        {:error, :not_found}
+
+      customer ->
+        case Repo.aggregate(from(h in Host, where: h.customer_id == ^customer.id), :count) do
+          0 ->
+            {:ok, _} = Repo.delete(customer)
+            :ok
+
+          n ->
+            {:error, {:conflict, "customer #{slug} has #{n} hosts"}}
+        end
+    end
+  end
+
   @doc "Customers after `after_slug` (exclusive), sorted by slug; next key or nil."
   @spec page_customers(String.t() | nil, pos_integer()) :: {[Customer.t()], String.t() | nil}
   def page_customers(after_slug, limit) do

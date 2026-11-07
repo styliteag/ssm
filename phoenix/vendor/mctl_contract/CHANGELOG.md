@@ -5,6 +5,24 @@ versions: [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.0] – 2026-11-08
+
+### Added
+
+- Delete customer (contract section 14): optional Provider callback
+  `delete_customer/2` (`DELETE /customers/{slug}`, scope `setup`, `204`
+  without body). Only an empty customer is deleted: while any host of the
+  tool belongs to it the provider answers `{:conflict, "customer <slug> has
+  <n> hosts"}` (409) and changes nothing (it never moves or strips hosts);
+  other reasons the tool cannot delete it (e.g. users have rights on it)
+  are a 409 with their own message. Where the tool has bindings, a bound
+  token gets `403 forbidden`. `404 not_found` for an unknown slug, also on
+  a repeat. Capability `delete_customer` in `GET /me`; the route is `404
+  not_found` and absent from OpenAPI without it. ConformanceCase
+  `MctlContract.ConformanceCase.DeleteCustomer` (served or absent; served:
+  409 while a host belongs to it, 403 scope / `bound_token/1`, 204, 404
+  repeat).
+
 ## [0.3.0] – 2026-11-07
 
 ### Added

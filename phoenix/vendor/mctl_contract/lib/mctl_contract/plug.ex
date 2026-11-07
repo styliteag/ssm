@@ -185,6 +185,10 @@ defmodule MctlContract.Plug do
     idempotent(conn, &Handlers.merge_customer(&1, opts(&1), slug))
   end
 
+  delete "/customers/:slug", private: %{mctl_need: "setup"} do
+    Handlers.delete_customer(conn, opts(conn), slug)
+  end
+
   get "/groups", private: %{mctl_need: "read"} do
     Handlers.list(conn, opts(conn), "groups", :list_groups, Handlers.renderer(:named))
   end

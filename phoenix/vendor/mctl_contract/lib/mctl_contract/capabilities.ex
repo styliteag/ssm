@@ -16,6 +16,7 @@ defmodule MctlContract.Capabilities do
     * `"merge_customer"` – `merge_customer/3`
       (`POST /customers/{slug}/merge`)
     * `"delete_group"` – `delete_group/2` (`DELETE /groups/{slug}`)
+    * `"delete_customer"` – `delete_customer/2` (`DELETE /customers/{slug}`)
     * `"action:<name>"` – one per name of `host_actions/0` when the
       provider implements both `host_actions/0` and `host_action/3`
       (`POST /hosts/{id}/actions`)
@@ -29,7 +30,8 @@ defmodule MctlContract.Capabilities do
     {"people", [get_person: 2, remove_person: 3]},
     {"rename_group", [update_group: 3]},
     {"merge_customer", [merge_customer: 3]},
-    {"delete_group", [delete_group: 2]}
+    {"delete_group", [delete_group: 2]},
+    {"delete_customer", [delete_customer: 2]}
   ]
 
   @spec list(module()) :: [String.t()]

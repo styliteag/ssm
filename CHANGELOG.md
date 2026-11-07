@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- mctl contract 0.4.0 `delete_customer` (`DELETE /api/mctl/v1/customers/{slug}`):
+  Mission Control can delete a customer without hosts; a customer that
+  still has hosts answers 409 and no host is moved. Logged as
+  `customer_delete`. mctl_contract vendored at v0.4.0.
+
 ### Changed
 
 - Build: one source for the Elixir/OTP versions, `.tool-versions`. a test (`test/tool_versions_test.exs`) fails when the Dockerfile ARGs drift from it.

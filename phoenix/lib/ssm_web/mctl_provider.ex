@@ -5,7 +5,7 @@ defmodule SsmWeb.MctlProvider do
   customers and groups (own tables), `create_host` jobs in the library's
   job store (`mctl_jobs`), host summaries (C4) from the persisted
   periodic key check (`Ssm.Diffs.HostChecks`, table `host_checks`),
-  `delete_host`, `rename_group` (§11), `merge_customer` (§12), `delete_group` and people (offboarding,
+  `delete_host`, `rename_group` (§11), `merge_customer` (§12), `delete_group`, `delete_customer` and people (offboarding,
   `SsmWeb.Mctl.People`). No maintenance capability: ssm has no alerts to
   silence.
 
@@ -235,6 +235,16 @@ defmodule SsmWeb.MctlProvider do
   def delete_group(principal, slug) do
     with :ok <- Groups.delete_group(slug) do
       Audit.group(principal, "delete", slug)
+      :ok
+    end
+  end
+
+  # contract 0.4.0 (capability `delete_customer`): empty customers only; no
+  # token binding in ssm, so every `setup` token may delete (like create)
+  @impl true
+  def delete_customer(principal, slug) do
+    with :ok <- Customers.delete_customer(slug) do
+      Audit.customer(principal, "delete", slug)
       :ok
     end
   end

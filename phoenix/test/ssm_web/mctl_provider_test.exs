@@ -668,6 +668,29 @@ defmodule SsmWeb.MctlProviderTest do
       assert "delete_group" in MctlContract.Capabilities.list(MctlProvider)
     end
 
+    test "delete_customer deletes an empty customer; one with hosts is a conflict and stays" do
+      {:ok, _} = Customers.create_customer(%{slug: "leer", name: "Leer"})
+      {:ok, _} = Customers.create_customer(%{slug: "voll", name: "Voll"})
+      {:ok, h} = Hosts.update_membership(host_fixture(%{name: "v1"}), %{customer: "voll"})
+
+      assert :ok = MctlProvider.delete_customer(@p, "leer")
+      assert Customers.get_customer_by_slug("leer") == nil
+
+      assert Repo.get_by(Ssm.Activity.ActivityLog,
+               action: "customer_delete",
+               target: "customer:leer"
+             )
+
+      assert {:error, :not_found} = MctlProvider.delete_customer(@p, "leer")
+
+      assert {:error, {:conflict, "customer voll has 1 hosts"}} =
+               MctlProvider.delete_customer(@p, "voll")
+
+      assert Customers.get_customer_by_slug("voll")
+      assert {:ok, %{customer: "voll"}} = MctlProvider.get_host(@p, to_string(h.id))
+      assert "delete_customer" in MctlContract.Capabilities.list(MctlProvider)
+    end
+
     test "create, conflict, list, rename" do
       assert {:ok, %{slug: "kunde-a", name: "A"}} =
                MctlProvider.create_customer(@p, %{"slug" => "kunde-a", "name" => "A"})

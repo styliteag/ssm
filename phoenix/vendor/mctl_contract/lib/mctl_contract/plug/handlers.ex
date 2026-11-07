@@ -161,6 +161,19 @@ defmodule MctlContract.Plug.Handlers do
     end)
   end
 
+  @doc """
+  `DELETE /customers/{slug}` (capability `delete_customer`): 204 without
+  body; 409 when hosts still belong to the customer.
+  """
+  def delete_customer(conn, opts, slug) do
+    if_capability(conn, opts, "delete_customer", fn provider ->
+      case provider.delete_customer(principal(conn), slug) do
+        :ok -> conn |> Plug.Conn.send_resp(204, "") |> Plug.Conn.halt()
+        {:error, reason} -> Respond.provider_error(conn, reason)
+      end
+    end)
+  end
+
   @doc "`GET /people/{key}`: 400 on a malformed key."
   def get_person(conn, opts, key) do
     if_capability(conn, opts, "people", fn provider ->

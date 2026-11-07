@@ -212,6 +212,20 @@ defmodule MctlContract.Provider do
   """
   @callback delete_group(Principal.t(), slug :: String.t()) :: :ok | {:error, error()}
 
+  @doc """
+  Optional (delete, contract section 14): delete the customer `slug`
+  (`DELETE /customers/{slug}`, scope `setup`). Only an empty customer may
+  go: when any host of the tool still belongs to it, return
+  `{:error, {:conflict, "customer <slug> has <n> hosts"}}` and change
+  nothing (the tool never moves or strips hosts here); other reasons the
+  tool cannot delete it (e.g. users have rights on it) are a conflict with
+  their own message. Where the tool has bindings, a token with a binding
+  gets `{:error, :forbidden}` (as merge). `:not_found` for an unknown
+  slug, also on a repeat after success. Without it the route answers
+  `404 not_found` and `/me` has no `delete_customer` capability.
+  """
+  @callback delete_customer(Principal.t(), slug :: String.t()) :: :ok | {:error, error()}
+
   @optional_callbacks cursor_types: 1,
                       attributes_schema: 0,
                       list_host_summaries: 2,
@@ -226,5 +240,6 @@ defmodule MctlContract.Provider do
                       remove_person: 3,
                       update_group: 3,
                       merge_customer: 3,
-                      delete_group: 2
+                      delete_group: 2,
+                      delete_customer: 2
 end

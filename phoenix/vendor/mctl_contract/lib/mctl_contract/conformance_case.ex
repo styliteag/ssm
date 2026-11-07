@@ -29,10 +29,11 @@ defmodule MctlContract.ConformanceCase do
       * `cleanup()` (optional) – runs after every test
       * `person_key()` (optional, capability `people`) – the key of a
         person the tool knows (`GET /people/{key}` shape check), or nil
-      * `bound_token(scopes)` (optional, capabilities `merge_customer` and
-        `delete_group`) – a valid token with these scopes and a binding
-        (not global), or nil when the tool has no bindings; a merge or a
-        group delete with it must be 403 `forbidden`
+      * `bound_token(scopes)` (optional, capabilities `merge_customer`,
+        `delete_group` and `delete_customer`) – a valid token with these
+        scopes and a binding (not global), or nil when the tool has no
+        bindings; a merge or a group/customer delete with it must be 403
+        `forbidden`
     """
     @callback setup(map()) :: :ok | keyword() | map()
     @callback token([String.t()]) :: String.t()
@@ -268,6 +269,11 @@ defmodule MctlContract.ConformanceCase do
       # contract section 13: only an unused group is deleted
       test "conformance: delete_group is served exactly when /me advertises it", %{mctl: c} do
         MctlContract.ConformanceCase.DeleteGroup.check(c)
+      end
+
+      # contract section 14: only an empty customer is deleted
+      test "conformance: delete_customer is served exactly when /me advertises it", %{mctl: c} do
+        MctlContract.ConformanceCase.DeleteCustomer.check(c)
       end
 
       test "conformance: Idempotency-Key replays the first response", %{mctl: c} do
