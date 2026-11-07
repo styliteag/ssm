@@ -22,6 +22,7 @@ defmodule SsmWeb.UserAuth do
 
   alias Ssm.Accounts
   alias Ssm.Auth.Htpasswd
+  alias Ssm.OIDC.Logout
 
   @session_max_age 7 * 24 * 60 * 60
 
@@ -42,9 +43,11 @@ defmodule SsmWeb.UserAuth do
   @doc """
   Logs an OIDC operator in (oidc-client-v1 §7): renews the session and
   records `oidc_sid`, `oidc_sub` and the absolute expiry
-  (`OIDC_SESSION_MAX_HOURS`). `login` is `%{operator: _, sid: _}`.
+  (`OIDC_SESSION_MAX_HOURS`). `login` is `%{operator: _, sid: _}`,
+  optionally with `id_token: _` (kept for the logout hint,
+  `Ssm.OIDC.Logout.keep/2`).
   """
-  def log_in_operator(conn, %{operator: operator, sid: sid}, max_hours) do
+  def log_in_operator(conn, %{operator: operator, sid: sid} = login, max_hours) do
     user_return_to = get_session(conn, :user_return_to)
     now = System.os_time(:second)
 
@@ -55,6 +58,7 @@ defmodule SsmWeb.UserAuth do
     |> put_session(:oidc_sub, operator.oidc_subject)
     |> put_session(:oidc_started_ms, Accounts.now_ms())
     |> put_session(:oidc_expires_at, now + max_hours * 3600)
+    |> put_id_token_hint(Logout.keep(Map.get(login, :id_token), max_hours))
     |> put_session(:logged_in_at, now)
     |> put_session(:live_socket_id, operator_socket_id(operator.id))
     |> redirect(to: local_path(user_return_to) || signed_in_path(conn))
@@ -70,15 +74,33 @@ defmodule SsmWeb.UserAuth do
 
   defp local_path(_), do: nil
 
-  @doc "Logs the user out and disconnects any live sessions."
+  defp put_id_token_hint(conn, entries) do
+    Enum.reduce(entries, conn, fn {key, value}, acc -> put_session(acc, key, value) end)
+  end
+
+  @doc """
+  Logs the user out and disconnects any live sessions. An OIDC operator is
+  then sent to the provider's end-session endpoint when RP-initiated logout
+  applies (`Ssm.OIDC.Logout`); everyone else, and every failure, goes to the
+  sign-in page.
+  """
   def log_out_user(conn) do
+    operator? = get_session(conn, :operator_id) != nil
+    sealed = get_session(conn, :oidc_id_token)
+    ref = get_session(conn, :oidc_id_token_ref)
+
     if live_socket_id = get_session(conn, :live_socket_id) do
       SsmWeb.Endpoint.broadcast(live_socket_id, "disconnect", %{})
     end
 
-    conn
-    |> renew_session()
-    |> redirect(to: ~p"/sign-in")
+    conn = renew_session(conn)
+    target = operator? && Logout.end_session_url(url(~p"/sign-in"), sealed, ref)
+    Logout.forget(ref)
+
+    case target do
+      url when is_binary(url) -> redirect(conn, external: url)
+      _ -> redirect(conn, to: ~p"/sign-in")
+    end
   end
 
   defp renew_session(conn) do

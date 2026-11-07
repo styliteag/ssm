@@ -29,6 +29,8 @@ defmodule Ssm.Application do
         Ssm.RateLimit,
         # Back-channel logout replay store.
         Ssm.OIDC.JtiStore,
+        # Large ID tokens kept server-side for the logout hint.
+        Ssm.OIDC.TokenStore,
         # mctl contract: create_host job work (host-key probe + pin).
         {Task.Supervisor, name: Ssm.Mctl.TaskSupervisor},
         # Periodic key check sweeps (Ssm.Diffs.SyncScheduler).

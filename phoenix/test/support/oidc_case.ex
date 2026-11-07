@@ -29,7 +29,7 @@ defmodule SsmWeb.OIDCCase do
   setup tags do
     Ssm.DataCase.setup_sandbox(tags)
     Ssm.RateLimit.reset()
-    provider = Fake.start()
+    provider = Fake.start(end_session: tags[:end_session] != false)
 
     config = %Config{
       issuer: provider.issuer,

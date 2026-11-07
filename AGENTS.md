@@ -52,7 +52,15 @@ against the row on every request/mount (disabled, `session_revoked_at`, absolute
 expiry). `viewer` is read-only through one allow-list, `SsmWeb.ReadOnly` — a new
 LiveView write event is blocked for viewers by default; add only read-only events to
 its `@read_events`. Tests use the fake provider in `test/support/fake_oidc_provider.ex`
-via `SsmWeb.OIDCCase`. `/api/v2` bearer tokens are independent of all this.
+via `SsmWeb.OIDCCase`. Logout (`UserAuth.log_out_user/1`): after the local session ends, an
+OIDC operator is redirected to the provider's `end_session_endpoint` (RP-initiated logout,
+`Ssm.OIDC.Logout`; query `client_id`, `post_logout_redirect_uri` = ssm's sign-in URL,
+`id_token_hint`) unless `OIDC_RP_LOGOUT` is `false`/`0`/`off`/`no` (default on), the provider
+has no such endpoint or its discovery cannot be read — then the normal sign-in redirect.
+A random `state` is always added. `id_token_hint` comes from the raw ID token of the login: at
+most 1500 bytes it sits in the session encrypted (`Plug.Crypto`, salt `ssm oidc id_token_hint v1`),
+larger ones in `Ssm.OIDC.TokenStore` (ETS, TTL = `OIDC_SESSION_MAX_HOURS`, deleted at logout) with
+only a random reference in the session; never logged. `.htpasswd` users are unaffected. `/api/v2` bearer tokens are independent of all this.
 
 **Host keys** (ADR-0008, `lib/ssm/ssh/host_key*.ex`, `lib/ssm/hosts/host_keys.ex`):
 every connect verifies `host.key_fingerprint`; unpinned hosts are refused.
@@ -71,6 +79,14 @@ are never touched and keep no row; the stored drift holds fingerprints and comme
 Contract section 10: `DELETE /hosts/{id}` (refused for a jump host in use — `jump_via` cascades)
 and people (`Ssm.People` matches operator by issuer+subject, SSH users and key comments by e-mail;
 `SsmWeb.Mctl.People` removes only the person's key lines per login through `script.sh`).
+
+**Connect Mission Control** (US-API-09, `Ssm.Mctl.Connect`, `ssm_web/live/api_tokens_live.ex`,
+`/settings/api-tokens`, admin only — checked on mount and in every event): an admin creates,
+rotates or revokes the UI-managed service token `mission-control` (library module
+`MctlContract.Connect` on the `ssm_` token store). The token is shown once together with
+`SsmWeb.Endpoint.url()` (public URL, from `PHX_HOST`) and the `MCTL_CONNECTORS_FILE` snippet;
+audit actions `mctl.connect.create|rotate|revoke` (type `auth`, never the token). The
+env-managed `mission-control-env` token (`Ssm.Mctl.Boot`) is separate and never touched.
 
 **Request paths**: UI — session cookie (htpasswd login) → LiveView. API — Bearer JWT
 (`AuthPlug`) → controller → envelope `{success, data, error{code,message,details},
@@ -287,7 +303,7 @@ defaults preserved): `DATABASE_URL` (or `DATABASE_PATH`), `HTPASSWD`, `SSH_KEY`,
 `TRUSTED_PROXIES`, `MCTL_TOKEN_FILE`, `MCTL_TOKEN_SCOPES`, and the OIDC set read at boot by
 `Ssm.OIDC.Config` (not runtime.exs): `OIDC_ISSUER`, `OIDC_CLIENT_ID`,
 `OIDC_CLIENT_SECRET_FILE`, `OIDC_ROLE_CLAIM`, `OIDC_CUSTOMERS_CLAIM`, `OIDC_ROLE_MAP`,
-`OIDC_LOGIN_LABEL`, `OIDC_SESSION_MAX_HOURS`, `LOCAL_LOGIN`.
+`OIDC_LOGIN_LABEL`, `OIDC_SESSION_MAX_HOURS`, `OIDC_RP_LOGOUT`, `LOCAL_LOGIN`.
 
 **Secrets protection**: run `./install-hooks.sh` after cloning (installs
 `.githooks/pre-commit` secret scanner; other tools may overwrite

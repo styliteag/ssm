@@ -20,6 +20,7 @@ defmodule Ssm.OIDC.Config do
             login_label: "Login with SSO",
             session_max_hours: 8,
             local_login: :on,
+            rp_logout: true,
             provider_opts: %{}
 
   @type t :: %__MODULE__{}
@@ -96,7 +97,8 @@ defmodule Ssm.OIDC.Config do
         customers_claim: env["OIDC_CUSTOMERS_CLAIM"] || "orbit_customers",
         role_map: parse_role_map(env["OIDC_ROLE_MAP"]),
         login_label: blank_to(env["OIDC_LOGIN_LABEL"], "Login with SSO"),
-        session_max_hours: parse_hours(env["OIDC_SESSION_MAX_HOURS"])
+        session_max_hours: parse_hours(env["OIDC_SESSION_MAX_HOURS"]),
+        rp_logout: parse_flag(env["OIDC_RP_LOGOUT"])
       }
     else
       {:error, reason} ->
@@ -157,6 +159,11 @@ defmodule Ssm.OIDC.Config do
       {hours, ""} when hours > 0 -> hours
       _ -> 8
     end
+  end
+
+  # Default on; false/0/off/no (any case) turn it off.
+  defp parse_flag(value) do
+    String.downcase(String.trim(to_string(value))) not in ["false", "0", "off", "no"]
   end
 
   defp blank_to(value, default) when value in [nil, ""], do: default

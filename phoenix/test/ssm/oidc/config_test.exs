@@ -36,6 +36,19 @@ defmodule Ssm.OIDC.ConfigTest do
     assert c.customers_claim == "orbit_customers"
     assert c.login_label == "Login with SSO"
     assert c.session_max_hours == 8
+    assert c.rp_logout == true
+  end
+
+  test "OIDC_RP_LOGOUT off values, any case", %{path: path} do
+    for value <- ["false", "0", "off", "no", "FALSE", "Off", " No "] do
+      assert {%Config{rp_logout: false}, _} =
+               Config.from_env(env(path, %{"OIDC_RP_LOGOUT" => value}))
+    end
+
+    for value <- ["", "true", "1", "on", "junk"] do
+      assert {%Config{rp_logout: true}, _} =
+               Config.from_env(env(path, %{"OIDC_RP_LOGOUT" => value}))
+    end
   end
 
   test "overrides and role map order", %{path: path} do

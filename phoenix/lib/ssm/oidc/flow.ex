@@ -4,7 +4,8 @@ defmodule Ssm.OIDC.Flow do
   §1). `start/1` builds the authorize URL and the single-use values the
   caller keeps in the session; `finish/3` exchanges the code, lets oidcc
   validate the ID token (signature, iss, aud, exp, nonce, PKCE) and turns
-  the claims into an operator. No access or refresh token is kept.
+  the claims into an operator. No access or refresh token is kept; the raw
+  ID token is returned only for the logout hint (`Ssm.OIDC.Logout`).
   """
 
   require Logger
@@ -19,6 +20,7 @@ defmodule Ssm.OIDC.Flow do
   @type login :: %{
           operator: Ssm.Accounts.Operator.t(),
           sid: String.t() | nil,
+          id_token: String.t() | nil,
           amr: [String.t()]
         }
 
@@ -71,10 +73,14 @@ defmodule Ssm.OIDC.Flow do
            config.client_secret,
            opts
          ) do
-      {:ok, token} -> from_claims(token.id.claims, config)
+      {:ok, token} -> with_id_token(from_claims(token.id.claims, config), token.id.token)
       {:error, reason} -> token_error(reason)
     end
   end
+
+  # The raw ID token is handed on only for the RP-initiated logout hint.
+  defp with_id_token({:ok, login}, raw), do: {:ok, Map.put(login, :id_token, raw)}
+  defp with_id_token(error, _raw), do: error
 
   defp from_claims(%{"sub" => sub} = claims, config) when is_binary(sub) and sub != "" do
     with :ok <- check_iat(claims["iat"], sub),

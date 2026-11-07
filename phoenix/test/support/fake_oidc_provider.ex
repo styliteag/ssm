@@ -16,11 +16,18 @@ defmodule Ssm.FakeOIDCProvider do
   def client_id, do: @client_id
   def client_secret, do: @client_secret
 
-  @doc "Start the provider; returns `%{issuer, agent, key, other_key}`."
-  def start do
+  @doc """
+  Start the provider; returns `%{issuer, agent, key, other_key}`. Option
+  `end_session: false` leaves `end_session_endpoint` out of the discovery.
+  """
+  def start(opts \\ []) do
     key = JOSE.JWK.generate_key({:ec, "P-256"})
     other = JOSE.JWK.generate_key({:ec, "P-256"})
-    {:ok, agent} = Agent.start_link(fn -> %{codes: %{}, key: key, jwks_hits: 0} end)
+
+    {:ok, agent} =
+      Agent.start_link(fn ->
+        %{codes: %{}, key: key, jwks_hits: 0, end_session: Keyword.get(opts, :end_session, true)}
+      end)
 
     {:ok, server} =
       Bandit.start_link(
@@ -42,6 +49,9 @@ defmodule Ssm.FakeOIDCProvider do
   @doc "Key rotation: the JWKS serves `key` under `kid` from now on."
   def rotate(%{agent: agent}, key, kid),
     do: Agent.update(agent, &Map.merge(&1, %{key: key, kid: kid}))
+
+  @doc "The last ID token the token endpoint issued."
+  def last_id_token(%{agent: agent}), do: Agent.get(agent, & &1[:last_id_token])
 
   @doc "Register claims for an authorization code (nonce included by the caller)."
   def put_code(%{agent: agent}, code, claims, opts \\ []) do
@@ -87,21 +97,9 @@ defmodule Ssm.FakeOIDCProvider do
 
   @impl true
   def call(%{path_info: [".well-known", "openid-configuration"]} = conn, agent) do
-    issuer = Agent.get(agent, & &1.issuer)
+    %{issuer: issuer, end_session: end_session?} = Agent.get(agent, & &1)
 
-    json(conn, %{
-      "issuer" => issuer,
-      "authorization_endpoint" => issuer <> "/authorize",
-      "token_endpoint" => issuer <> "/token",
-      "jwks_uri" => issuer <> "/jwks",
-      "response_types_supported" => ["code"],
-      "scopes_supported" => ["openid", "profile", "email"],
-      "subject_types_supported" => ["public"],
-      "id_token_signing_alg_values_supported" => ["ES256"],
-      "token_endpoint_auth_methods_supported" => ["client_secret_basic"],
-      "code_challenge_methods_supported" => ["S256"],
-      "grant_types_supported" => ["authorization_code"]
-    })
+    json(conn, discovery(issuer, end_session?))
   end
 
   def call(%{path_info: ["jwks"]} = conn, agent) do
@@ -123,6 +121,7 @@ defmodule Ssm.FakeOIDCProvider do
          {claims, opts} when is_map(claims) <- Agent.get(agent, & &1.codes[params["code"]]),
          true <- pkce_ok?(opts, params["code_verifier"]) do
       id_token = id_token(claims, opts, agent)
+      Agent.update(agent, &Map.put(&1, :last_id_token, id_token))
 
       json(conn, %{
         "access_token" => "at-" <> Base.url_encode64(:crypto.strong_rand_bytes(6)),
@@ -136,6 +135,26 @@ defmodule Ssm.FakeOIDCProvider do
   end
 
   def call(conn, _agent), do: send_resp(conn, 404, "")
+
+  defp discovery(issuer, end_session?) do
+    base = %{
+      "issuer" => issuer,
+      "authorization_endpoint" => issuer <> "/authorize",
+      "token_endpoint" => issuer <> "/token",
+      "jwks_uri" => issuer <> "/jwks",
+      "response_types_supported" => ["code"],
+      "scopes_supported" => ["openid", "profile", "email"],
+      "subject_types_supported" => ["public"],
+      "id_token_signing_alg_values_supported" => ["ES256"],
+      "token_endpoint_auth_methods_supported" => ["client_secret_basic"],
+      "code_challenge_methods_supported" => ["S256"],
+      "grant_types_supported" => ["authorization_code"]
+    }
+
+    if end_session?,
+      do: Map.put(base, "end_session_endpoint", issuer <> "/logout"),
+      else: base
+  end
 
   defp id_token(claims, opts, agent) do
     case {Keyword.get(opts, :sign_with), Keyword.get(opts, :kid, @kid)} do
