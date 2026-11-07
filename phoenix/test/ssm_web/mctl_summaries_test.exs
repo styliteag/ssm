@@ -234,7 +234,8 @@ defmodule SsmWeb.MctlSummariesTest do
   end
 
   test "the provider advertises the host_summaries capability" do
-    assert MctlContract.Capabilities.list(P) == ["host_summaries"]
+    # section 10: delete_host and people; no maintenance (no alerts in ssm)
+    assert MctlContract.Capabilities.list(P) == ["host_summaries", "delete_host", "people"]
     assert P.cursor_types("host_summaries") == [:integer]
   end
 end

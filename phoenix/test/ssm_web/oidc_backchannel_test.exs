@@ -147,6 +147,35 @@ defmodule SsmWeb.OIDCBackchannelTest do
     end
   end
 
+  describe "JWKS refresh for an unknown kid" do
+    test "a rotated provider key is fetched and accepted", %{conn: conn, provider: p} do
+      Ssm.RateLimit.reset()
+      conn = logged_in(conn, p)
+      Fake.rotate(p, p.other_key, "fake-key-2")
+      before = Fake.jwks_hits(p)
+
+      token = Fake.sign(p.other_key, logout_claims(p), "ES256", "fake-key-2")
+      resp = post(build_conn(), "/auth/oidc/backchannel-logout", %{"logout_token" => token})
+
+      assert response(resp, 200) == ""
+      assert Fake.jwks_hits(p) == before + 1
+      assert conn |> recycle() |> get(~p"/dashboard") |> redirected_to() == "/sign-in"
+    end
+
+    test "at most one refresh per minute, shared with the login", %{provider: p} do
+      Ssm.RateLimit.reset()
+      before = Fake.jwks_hits(p)
+
+      for i <- 1..4 do
+        token = Fake.sign(p.key, logout_claims(p), "ES256", "unknown-#{i}")
+        resp = post(build_conn(), "/auth/oidc/backchannel-logout", %{"logout_token" => token})
+        assert response(resp, 400)
+      end
+
+      assert Fake.jwks_hits(p) - before <= 1
+    end
+  end
+
   test "a replayed jti is refused", %{conn: conn, provider: p} do
     logged_in(conn, p)
     claims = logout_claims(p, %{"jti" => "same-jti"})

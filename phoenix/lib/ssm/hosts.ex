@@ -96,6 +96,11 @@ defmodule Ssm.Hosts do
   @spec delete_host(Host.t()) :: {:ok, Host.t()} | {:error, Ecto.Changeset.t()}
   def delete_host(%Host{} = host), do: Repo.delete(host)
 
+  @doc "Names of the hosts that use `host` as their jump host."
+  @spec jump_dependents(Host.t()) :: [String.t()]
+  def jump_dependents(%Host{id: id}),
+    do: Repo.all(from h in Host, where: h.jump_via == ^id, order_by: h.name, select: h.name)
+
   @spec change_host(Host.t(), map()) :: Ecto.Changeset.t()
   def change_host(%Host{} = host, attrs \\ %{}), do: Host.changeset(host, attrs)
 

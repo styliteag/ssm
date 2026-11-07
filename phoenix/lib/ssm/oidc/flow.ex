@@ -10,8 +10,7 @@ defmodule Ssm.OIDC.Flow do
   require Logger
 
   alias Ssm.Accounts
-  alias Ssm.OIDC.{Config, Roles}
-  alias Ssm.RateLimit
+  alias Ssm.OIDC.{Config, Jwks, Roles}
 
   @max_iat_age 600
   @max_iat_skew 120
@@ -97,18 +96,10 @@ defmodule Ssm.OIDC.Flow do
 
   defp check_iat(_iat, sub), do: {:error, {:iat_invalid, sub}}
 
-  # An unknown `kid` makes oidcc re-fetch the JWKS; allow that once a minute
-  # for the whole app, otherwise keep the cached keys (verification then
-  # fails with no matching key).
-  defp refresh_jwks(_jwks, kid) do
-    provider = Config.provider()
-
-    if RateLimit.hit(:oidc_jwks_refresh, 1, 60) == :ok do
-      Oidcc.ProviderConfiguration.Worker.refresh_jwks_for_unknown_kid(provider, kid)
-    end
-
-    {:ok, :oidcc_provider_configuration_worker.get_jwks(provider)}
-  end
+  # An unknown `kid` makes oidcc re-fetch the JWKS; `Ssm.OIDC.Jwks` allows
+  # that once a minute for the whole app, otherwise keeps the cached keys
+  # (verification then fails with no matching key).
+  defp refresh_jwks(_jwks, kid), do: {:ok, Jwks.refresh_for_unknown_kid(kid)}
 
   defp resolve(claims, config, sub) do
     case Roles.resolve(claims, config) do
@@ -121,6 +112,8 @@ defmodule Ssm.OIDC.Flow do
     attrs = %{
       name: display_name(claims, sub),
       email: string(claims["email"]),
+      # only `true` counts (OIDC Core 5.1: boolean)
+      email_verified: claims["email_verified"] == true,
       role: role,
       customers: customers,
       sid: sid(claims)

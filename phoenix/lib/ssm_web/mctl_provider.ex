@@ -3,8 +3,10 @@ defmodule SsmWeb.MctlProvider do
   ssm's side of the mctl contract v1 (`/api/mctl/v1`, contract-v1 §8):
   hosts with customer/groups and the pinned SSH host key as identity,
   customers and groups (own tables), `create_host` jobs in the library's
-  job store (`mctl_jobs`) and host summaries (C4) from the persisted
-  periodic key check (`Ssm.Diffs.HostChecks`, table `host_checks`).
+  job store (`mctl_jobs`), host summaries (C4) from the persisted
+  periodic key check (`Ssm.Diffs.HostChecks`, table `host_checks`),
+  `delete_host` and people (offboarding, `SsmWeb.Mctl.People`). No
+  maintenance capability: ssm has no alerts to silence.
 
   `create_host` validates and inserts the host (with membership) right
   away — a bad request is a 4xx, never a failed job — then runs the job
@@ -22,7 +24,7 @@ defmodule SsmWeb.MctlProvider do
   alias MctlContract.Jobs.Ecto, as: Jobs
   alias Ssm.{Customers, Groups, Hosts}
   alias Ssm.Diffs.HostChecks
-  alias SsmWeb.Mctl.{Audit, CreateHostJob, HostParams, HostView, SummaryView}
+  alias SsmWeb.Mctl.{Audit, CreateHostJob, HostParams, HostView, People, SummaryView}
 
   @task_supervisor Ssm.Mctl.TaskSupervisor
 
@@ -141,6 +143,38 @@ defmodule SsmWeb.MctlProvider do
       _ -> {:error, :not_found}
     end
   end
+
+  # Contract section 10. The host row goes with its authorizations and
+  # checks (ON DELETE CASCADE); keys on the host itself stay untouched (it
+  # may be gone). A jump host still in use is refused: the cascade would
+  # delete the hosts behind it.
+  @impl true
+  def delete_host(principal, id) do
+    with {:ok, host} <- fetch_host(id),
+         [] <- Hosts.jump_dependents(host),
+         {:ok, _deleted} <- Hosts.delete_host(host) do
+      audit(principal, "delete", host)
+
+      {:ok, job} =
+        Jobs.run("delete_host", to_string(host.id), fn _ -> {:ok, %{"deleted" => true}} end,
+          inline: true
+        )
+
+      {:ok, Jobs.to_map(job)}
+    else
+      {:error, :not_found} = error -> error
+      [_ | _] = names -> {:error, {:conflict, "jump host of #{Enum.join(names, ", ")}"}}
+      {:error, %Ecto.Changeset{}} -> {:error, {:conflict, "host cannot be deleted"}}
+    end
+  end
+
+  ## People (offboarding, SsmWeb.Mctl.People)
+
+  @impl true
+  def get_person(_principal, key), do: People.get(key)
+
+  @impl true
+  def remove_person(principal, key, params), do: People.remove(principal, key, params)
 
   ## Customers and groups
 

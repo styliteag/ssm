@@ -15,8 +15,12 @@ defmodule Ssm.Accounts do
 
   @doc """
   Insert or overwrite the operator for (`issuer`, `subject`). Name, e-mail,
-  role and customers are overwritten every time; `disabled_at` is untouched.
-  `attrs`: `:name`, `:email`, `:role`, `:customers` (list of slugs), `:sid`.
+  `email_verified`, role and customers are overwritten every time;
+  `disabled_at` is untouched. `verified_email` is set once, from the first
+  login whose e-mail is verified, and never moves afterwards (the IdP user
+  may change the claim; offboarding matches by this one only).
+  `attrs`: `:name`, `:email`, `:email_verified`, `:role`, `:customers`
+  (list of slugs), `:sid`.
   """
   @spec upsert_from_oidc(String.t(), String.t(), map()) ::
           {:ok, Operator.t()} | {:error, Ecto.Changeset.t()}
@@ -29,6 +33,8 @@ defmodule Ssm.Accounts do
       oidc_subject: subject,
       name: attrs.name,
       email: attrs[:email],
+      email_verified: attrs[:email_verified] == true,
+      verified_email: verified_email(existing, attrs),
       role: attrs.role,
       customers: Jason.encode!(attrs[:customers] || []),
       last_sid: attrs[:sid],
@@ -37,6 +43,15 @@ defmodule Ssm.Accounts do
     |> Repo.insert_or_update()
     |> tap(&disconnect_on_role_change(existing, &1))
   end
+
+  defp verified_email(%Operator{verified_email: frozen}, _attrs) when is_binary(frozen),
+    do: frozen
+
+  defp verified_email(_existing, %{email_verified: true, email: email})
+       when is_binary(email) and email != "",
+       do: email
+
+  defp verified_email(_existing, _attrs), do: nil
 
   defp disconnect_on_role_change(%Operator{role: old}, {:ok, %Operator{role: new} = operator})
        when old != new,

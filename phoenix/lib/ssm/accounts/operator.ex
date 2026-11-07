@@ -18,6 +18,10 @@ defmodule Ssm.Accounts.Operator do
     field :source, :string, default: "oidc"
     field :name, :string
     field :email, :string
+    # `email_verified` claim of the last login; `verified_email` is set once,
+    # at the first verified login, and is what offboarding matches by
+    field :email_verified, :boolean, default: false
+    field :verified_email, :string
     field :role, :string
     field :customers, :string, default: "[]"
     field :disabled_at, :utc_datetime
@@ -37,6 +41,8 @@ defmodule Ssm.Accounts.Operator do
       :oidc_subject,
       :name,
       :email,
+      :email_verified,
+      :verified_email,
       :role,
       :customers,
       :last_sid,

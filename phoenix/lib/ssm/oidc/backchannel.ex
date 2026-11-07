@@ -1,13 +1,14 @@
 defmodule Ssm.OIDC.Backchannel do
   @moduledoc """
   OpenID Connect Back-Channel Logout 1.0 (oidc-client-v1 §7). Validates the
-  `logout_token` against the provider's JWKS (signature, `iss`, `aud`,
+  `logout_token` against the provider's JWKS (an unknown `kid` gets one
+  throttled refresh, `Ssm.OIDC.Jwks`; signature, `iss`, `aud`,
   `iat` ≤ 5 min, `events`, `sid` or `sub`, no `nonce`, `jti` unseen), then
   revokes the matching operators' sessions and disconnects their LiveViews.
   """
 
   alias Ssm.Accounts
-  alias Ssm.OIDC.{Config, JtiStore}
+  alias Ssm.OIDC.{Config, JtiStore, Jwks}
 
   @event "http://schemas.openid.net/event/backchannel-logout"
   @algs ~w(ES256 ES384 ES512 RS256 RS384 RS512 PS256 PS384 PS512 EdDSA)
@@ -28,9 +29,8 @@ defmodule Ssm.OIDC.Backchannel do
   def handle(_), do: {:error, :missing_token}
 
   defp verify(token) do
-    with {:ok, keys} <- keys(),
-         {:ok, kid} <- header_kid(token),
-         %{} = key <- Enum.find(keys, &(&1["kid"] == kid)),
+    with {:ok, kid} <- header_kid(token),
+         {:ok, key} <- key_for(kid),
          {true, %JOSE.JWT{fields: claims}, _} <-
            JOSE.JWT.verify_strict(JOSE.JWK.from_map(key), @algs, token) do
       {:ok, claims}
@@ -41,14 +41,24 @@ defmodule Ssm.OIDC.Backchannel do
     _ -> {:error, :bad_signature}
   end
 
-  defp keys do
-    {_, %{"keys" => keys}} =
-      Config.provider() |> Oidcc.ProviderConfiguration.Worker.get_jwks() |> JOSE.JWK.to_map()
-
-    {:ok, keys}
+  # an unknown kid (key rotation) gets one throttled JWKS refresh, as the
+  # ID-token check does (Ssm.OIDC.Jwks)
+  defp key_for(kid) do
+    case find(Jwks.get(), kid) do
+      nil -> kid |> Jwks.refresh_for_unknown_kid() |> find(kid) |> found()
+      key -> {:ok, key}
+    end
   catch
     _, _ -> {:error, :provider_unavailable}
   end
+
+  defp find(jwks, kid) do
+    {_, %{"keys" => keys}} = JOSE.JWK.to_map(jwks)
+    Enum.find(keys, &(&1["kid"] == kid))
+  end
+
+  defp found(nil), do: {:error, :unknown_kid}
+  defp found(key), do: {:ok, key}
 
   defp header_kid(token) do
     case JOSE.JWS.peek_protected(token) |> Jason.decode() do

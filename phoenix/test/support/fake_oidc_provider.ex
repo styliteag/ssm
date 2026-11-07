@@ -39,6 +39,10 @@ defmodule Ssm.FakeOIDCProvider do
   @doc "How often the JWKS endpoint was fetched."
   def jwks_hits(%{agent: agent}), do: Agent.get(agent, & &1.jwks_hits)
 
+  @doc "Key rotation: the JWKS serves `key` under `kid` from now on."
+  def rotate(%{agent: agent}, key, kid),
+    do: Agent.update(agent, &Map.merge(&1, %{key: key, kid: kid}))
+
   @doc "Register claims for an authorization code (nonce included by the caller)."
   def put_code(%{agent: agent}, code, claims, opts \\ []) do
     Agent.update(agent, fn s -> put_in(s, [:codes, code], {claims, opts}) end)
@@ -102,11 +106,12 @@ defmodule Ssm.FakeOIDCProvider do
 
   def call(%{path_info: ["jwks"]} = conn, agent) do
     Agent.update(agent, &Map.update!(&1, :jwks_hits, fn n -> n + 1 end))
-    key = Agent.get(agent, & &1.key)
+    %{key: key} = state = Agent.get(agent, & &1)
     {_, public} = key |> JOSE.JWK.to_public() |> JOSE.JWK.to_map()
+    kid = Map.get(state, :kid, @kid)
 
     json(conn, %{
-      "keys" => [Map.merge(public, %{"kid" => @kid, "use" => "sig", "alg" => "ES256"})]
+      "keys" => [Map.merge(public, %{"kid" => kid, "use" => "sig", "alg" => "ES256"})]
     })
   end
 

@@ -68,6 +68,9 @@ Conformance test: `test/ssm_web/mctl_conformance_test.exs`. `POST /hosts` runs
 `/host-summaries`, `/hosts/{id}/summary`) read `host_checks`, which `Ssm.Diffs.SyncScheduler`
 refreshes every `SSM_SYNC_INTERVAL` through `Ssm.Diffs.HostChecks.sweep/1` (disabled hosts
 are never touched and keep no row; the stored drift holds fingerprints and comments only).
+Contract section 10: `DELETE /hosts/{id}` (refused for a jump host in use — `jump_via` cascades)
+and people (`Ssm.People` matches operator by issuer+subject, SSH users and key comments by e-mail;
+`SsmWeb.Mctl.People` removes only the person's key lines per login through `script.sh`).
 
 **Request paths**: UI — session cookie (htpasswd login) → LiveView. API — Bearer JWT
 (`AuthPlug`) → controller → envelope `{success, data, error{code,message,details},
