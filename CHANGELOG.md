@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
-- **Development checkouts no longer grow by ~12 GB**: the daisyUI dependency is pinned by commit instead of by tag, so `mix deps.get` fetches one commit instead of every daisyUI release.
+- **Development checkouts no longer grow by ~12 GB**: daisyUI is vendored (`phoenix/assets/vendor/daisyui.js`, `daisyui-theme.js`, v5.5.20) instead of a Mix git dependency, so `mix deps.get` never clones the daisyUI repository.
 
 ### Security
 - **The GitLeaks CI scan is green again**: the reviewed allowlist now also covers retired material still present in repository history, so the job no longer carries a permanent error annotation and a genuinely new finding stands out instead of drowning in a known one.

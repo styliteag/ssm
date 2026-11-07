@@ -74,15 +74,6 @@ defmodule Ssm.MixProject do
        app: false,
        compile: false,
        depth: 1},
-      {:daisyui,
-       github: "saadeghi/daisyui",
-       # v5.5.20, pinned by commit: with `tag:` Mix fetches every tag (--tags) and
-       # the shallow clone grows to ~12 GB (Mix.SCM.Git tags_switch)
-       ref: "22ecff57f2c391b80a75617325748cf4d13fdf47",
-       sparse: "packages/bundle",
-       app: false,
-       compile: false,
-       depth: 1},
       {:telemetry_metrics, "~> 1.0"},
       {:telemetry_poller, "~> 1.0"},
       {:gettext, "~> 1.0"},
