@@ -28,13 +28,20 @@ defmodule Ssm.OIDC.Config do
   @doc "The provider worker name."
   def provider, do: @provider
 
-  @doc "Child spec of the provider worker (discovery + JWKS refresh) for `config`."
+  @doc """
+  Child spec of the provider worker (discovery + JWKS refresh) for `config`.
+  An unreachable IdP is retried with a random exponential backoff (1 s to
+  60 s) instead of crashing the worker until `Ssm.OIDC.Supervisor` gives up.
+  """
   @spec provider_child_spec(t()) :: Supervisor.child_spec()
   def provider_child_spec(%__MODULE__{} = config) do
     Oidcc.ProviderConfiguration.Worker.child_spec(%{
       issuer: config.issuer,
       name: @provider,
-      provider_configuration_opts: config.provider_opts
+      provider_configuration_opts: config.provider_opts,
+      backoff_type: :random_exponential,
+      backoff_min: 1_000,
+      backoff_max: 60_000
     })
   end
 

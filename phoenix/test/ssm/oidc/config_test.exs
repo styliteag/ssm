@@ -131,4 +131,16 @@ defmodule Ssm.OIDC.ConfigTest do
     assert {_, :on} = Config.from_env(env(path, %{"LOCAL_LOGIN" => ""}))
     assert {_, :on} = Config.from_env(env(path))
   end
+
+  # an IdP that is down while ssm boots (502 from the proxy) must not kill
+  # SSO for good: the worker retries with backoff instead of crashing until
+  # its supervisor gives up (lab 2026-11-07: "provider_not_ready" forever)
+  test "the provider worker retries with backoff" do
+    spec = Ssm.OIDC.Config.provider_child_spec(%Ssm.OIDC.Config{issuer: "https://idp.example"})
+    {Oidcc.ProviderConfiguration.Worker, :start_link, [opts]} = spec.start
+
+    assert opts.backoff_type == :random_exponential
+    assert opts.backoff_min == 1_000
+    assert opts.backoff_max == 60_000
+  end
 end

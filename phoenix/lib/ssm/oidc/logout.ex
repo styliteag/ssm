@@ -89,8 +89,6 @@ defmodule Ssm.OIDC.Logout do
       %{end_session_endpoint: endpoint} when is_binary(endpoint) and endpoint != "" -> endpoint
       _ -> nil
     end
-  rescue
-    _ -> nil
   catch
     _, _ -> nil
   end
