@@ -112,6 +112,98 @@ defmodule Ssm.DiffsTest do
     end
   end
 
+  describe "ssm's own key (Ssm.Ssh.OwnKey) in the login user's authorized_keys" do
+    # ssm logs in with it (onboarding v2 puts it into ~root/.ssh/authorized_keys):
+    # never drift, never removed by a sync
+    @own Ssm.Test.OwnKeyStub.default()
+
+    defp keyfile(host, login, text) do
+      stub_version(host.id)
+
+      MockClient.set_exec(host.id, "sh .ssm/script.sh get_ssh_keyfiles", %Result{
+        stdout:
+          keyfiles_json([
+            %{login: login, has_pragma: true, readonly_condition: nil, keyfile: text}
+          ])
+      })
+    end
+
+    test "on the host it is :present, whatever its comment or options" do
+      host = host_fixture(%{username: "root"})
+
+      for line <- [
+            "#{@own} ssm@mission-control",
+            "#{@own}",
+            ~s(from="10.0.0.0/8",no-pty #{@own} ssm)
+          ] do
+        keyfile(host, "root", line)
+        assert {:ok, %HostDiff{logins: [login]}} = Diffs.host_diff(MockClient, host.id)
+        assert [%KeyDiff{status: :present, line: ^line}] = login.items
+      end
+    end
+
+    test "missing on the host is no drift either" do
+      user = user_fixture()
+      host = host_fixture(%{username: "root"})
+      key_fixture(user, %{key_type: "ssh-ed25519", key_base64: "OPKEY", name: "op"})
+      authorization_fixture(user, host, %{login: "root"})
+      keyfile(host, "root", "ssh-ed25519 OPKEY op")
+
+      assert {:ok, %HostDiff{logins: [login]}} = Diffs.host_diff(MockClient, host.id)
+      assert Enum.map(login.items, & &1.status) == [:present]
+    end
+
+    test "in another login's file it is an ordinary extra key" do
+      host = host_fixture(%{username: "root"})
+      keyfile(host, "deploy", "#{@own} ssm")
+      assert {:ok, %HostDiff{logins: [login]}} = Diffs.host_diff(MockClient, host.id)
+      assert [%KeyDiff{status: :extra_on_host}] = login.items
+    end
+
+    test "a sync of the login user keeps it; other logins do not get it" do
+      user = user_fixture()
+      host = host_fixture(%{username: "root"})
+      key_fixture(user, %{key_type: "ssh-ed25519", key_base64: "OPKEY", name: "op"})
+      authorization_fixture(user, host, %{login: "root"})
+      authorization_fixture(user, host, %{login: "deploy"})
+      stub_version(host.id)
+      MockClient.set_default_exec(%Result{exit_code: 0})
+
+      assert {:ok, synced} = Diffs.sync_host(MockClient, host.id)
+      assert Enum.map(synced, &{&1.login, &1.written_keys}) == [{"deploy", 1}, {"root", 2}]
+
+      writes =
+        for {_id, cmd, input} <- MockClient.calls().exec_inputs,
+            [_, login] <- [Regex.run(~r/set_authorized_keyfile (\S+)/, cmd)],
+            into: %{},
+            do: {login, input}
+
+      assert writes["root"] == "ssh-ed25519 OPKEY op\n#{@own} ssm\n"
+      assert writes["deploy"] == "ssh-ed25519 OPKEY op\n"
+    end
+
+    test "an admin-assigned copy of the own key is written once" do
+      user = user_fixture()
+      host = host_fixture(%{username: "root"})
+      [type, b64] = String.split(@own)
+      key_fixture(user, %{key_type: type, key_base64: b64, name: "ssm"})
+      authorization_fixture(user, host, %{login: "root"})
+      stub_version(host.id)
+      MockClient.set_default_exec(%Result{exit_code: 0})
+
+      assert {:ok, [%{login: "root", written_keys: 1}]} = Diffs.sync_host(MockClient, host.id)
+    end
+
+    test "without the own key (SSH_KEY unreadable) nothing changes" do
+      Application.put_env(:ssm, :test_own_public_key, :unavailable)
+      on_exit(fn -> Application.delete_env(:ssm, :test_own_public_key) end)
+      host = host_fixture(%{username: "root"})
+      keyfile(host, "root", "#{@own} ssm")
+      assert {:ok, %HostDiff{logins: [login]}} = Diffs.host_diff(MockClient, host.id)
+      assert [%KeyDiff{status: :extra_on_host}] = login.items
+    end
+  end
+
   describe "sync_host/2" do
     test "writes expected keys for each login and reports counts" do
       user = user_fixture()

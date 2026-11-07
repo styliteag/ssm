@@ -58,4 +58,21 @@ defmodule Ssm.Ssh.OwnKeyTest do
     {:ok, _} = OwnKey.public_key(key_file: path, work_dir: work)
     assert File.ls!(work) == []
   end
+
+  # diffs ask for the own key on every sweep: no ssh-keygen per call
+  test "is cached per key file and follows a replaced key", %{tmp_dir: dir} do
+    {path, first} = keygen(dir, "id_d", "")
+    assert OwnKey.public_key(key_file: path) == {:ok, first}
+    work = Path.join(dir, "work2")
+    File.mkdir_p!(work)
+    File.chmod!(work, 0o500)
+    # a cache hit derives nothing (an unwritable work dir would fail a derivation)
+    assert OwnKey.public_key(key_file: path, work_dir: work) == {:ok, first}
+    File.chmod!(work, 0o700)
+
+    File.rm!(path)
+    {_, second} = keygen(dir, "id_d", "")
+    assert second != first
+    assert OwnKey.public_key(key_file: path) == {:ok, second}
+  end
 end

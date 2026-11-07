@@ -8,6 +8,10 @@ defmodule Ssm.Ssh.OwnKey do
   read from a `.pub` file next to it (a stale one would make every login
   fail). The private key is copied into a private temp file (0600; OpenSSH
   refuses world-readable keys) that is removed again at once.
+
+  A derived key is cached (`:persistent_term`) per key file, passphrase and
+  file stat (inode, size, mtime): diffs ask for it on every sweep. A
+  replaced key file is derived again.
   """
 
   require Logger
@@ -24,13 +28,29 @@ defmodule Ssm.Ssh.OwnKey do
     passphrase = option(opts, config, :key_passphrase, nil) || ""
     work_dir = Keyword.get_lazy(opts, :work_dir, &System.tmp_dir!/0)
 
-    case derive(source, passphrase, work_dir) do
+    case cached(source, passphrase, work_dir) do
       {:ok, _} = ok ->
         ok
 
       {:error, reason} ->
         Logger.warning("ssh.own_key_unavailable file=#{source} reason=#{inspect(reason)}")
         {:error, :ssm_key_unavailable}
+    end
+  end
+
+  defp cached(source, passphrase, work_dir) do
+    with {:ok, %File.Stat{inode: inode, size: size, mtime: mtime}} <- File.stat(source) do
+      key = {__MODULE__, source, :crypto.hash(:sha256, passphrase), inode, size, mtime}
+
+      case :persistent_term.get(key, nil) do
+        {:ok, _} = hit ->
+          hit
+
+        nil ->
+          result = derive(source, passphrase, work_dir)
+          if match?({:ok, _}, result), do: :persistent_term.put(key, result)
+          result
+      end
     end
   end
 

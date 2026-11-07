@@ -6,6 +6,13 @@ defmodule Ssm.Diffs do
   Every read/write goes through `Ssm.Ssh.ScriptRunner` (never raw SFTP), so
   home-dir probing, `has_pragma` detection, the readonly sentinel and managed
   backups all come for free. Disabled hosts short-circuit before any SSH.
+
+  ssm's own public key (`Ssm.Ssh.OwnKey`, the key it logs in with) in the
+  file of the host's login user (`host.username`) is never drift: on the
+  host it is `:present` (matched by type and base64, whatever its options
+  or comment), missing it is not reported, and a sync of that login always
+  writes it – otherwise the first sync would lock ssm out (onboarding v2
+  installs it into `~root/.ssh/authorized_keys`).
   """
 
   import Ecto.Query
@@ -58,10 +65,11 @@ defmodule Ssm.Diffs do
 
       expected_logins = expected_logins(host_id)
       all_logins = (expected_logins ++ Map.keys(observed)) |> Enum.uniq() |> Enum.sort()
+      own = own_key_for(host)
 
       logins =
         Enum.map(all_logins, fn login ->
-          build_login_diff(host_id, login, Map.get(observed, login), read_error)
+          build_login_diff(host_id, login, Map.get(observed, login), read_error, own[login])
         end)
 
       {:ok,
@@ -91,11 +99,12 @@ defmodule Ssm.Diffs do
     with {:ok, host} <- Hosts.fetch_host(host_id),
          :ok <- ensure_not_disabled(host) do
       target = Hosts.target_for(host)
+      own = own_key_for(host)
 
       host_id
       |> expected_logins()
       |> Enum.sort()
-      |> sync_logins(client, target, host_id, [])
+      |> sync_logins(client, target, host_id, own, [])
       |> tap(&learn_machine_id(&1, host, client))
     end
   end
@@ -105,16 +114,16 @@ defmodule Ssm.Diffs do
   defp learn_machine_id({:ok, _}, host, client), do: MachineId.refresh(host, client: client)
   defp learn_machine_id(_other, _host, _client), do: :ok
 
-  defp sync_logins([], _client, _target, _host_id, acc), do: {:ok, Enum.reverse(acc)}
+  defp sync_logins([], _client, _target, _host_id, _own, acc), do: {:ok, Enum.reverse(acc)}
 
-  defp sync_logins([login | rest], client, target, host_id, acc) do
-    expected = expected_keys_for_login(host_id, login)
+  defp sync_logins([login | rest], client, target, host_id, own, acc) do
+    expected = host_id |> expected_keys_for_login(login) |> with_own_key(own[login])
     content = Enum.map_join(expected, "", &(&1 <> "\n"))
 
     case ScriptRunner.set_authorized_keyfile(client, target, login, content) do
       :ok ->
         synced = %SyncedLogin{login: login, written_keys: length(expected)}
-        sync_logins(rest, client, target, host_id, [synced | acc])
+        sync_logins(rest, client, target, host_id, own, [synced | acc])
 
       {:error, _} = error ->
         error
@@ -123,17 +132,52 @@ defmodule Ssm.Diffs do
 
   ## Diff building
 
-  defp build_login_diff(host_id, login, entry, read_error) do
-    expected = expected_keys_for_login(host_id, login)
+  defp build_login_diff(host_id, login, entry, read_error, own) do
+    {_, expected} = host_id |> expected_keys_for_login(login) |> split_own(own)
     actual = if entry, do: parse_authorized_keys(entry.keyfile), else: []
+    {own_lines, actual} = split_own(actual, own)
 
     %LoginDiff{
       login: login,
       has_pragma: !!(entry && entry.has_pragma),
       readonly_condition: entry && entry.readonly_condition,
       read_error: if(is_nil(entry) && read_error, do: read_error),
-      items: compute_diff(expected, actual)
+      items: compute_diff(expected, actual) ++ to_sorted(MapSet.new(own_lines), :present)
     }
+  end
+
+  ## ssm's own key
+
+  # %{login => {type, base64}}: the own key belongs to the host's login user
+  defp own_key_for(%Host{username: login}) when is_binary(login) do
+    module = Application.get_env(:ssm, :own_key, Ssm.Ssh.OwnKey)
+
+    with {:ok, line} <- module.public_key(),
+         [type, base64 | _] <- String.split(line) do
+      %{login => {type, base64}}
+    else
+      _ -> %{}
+    end
+  end
+
+  defp own_key_for(_host), do: %{}
+
+  defp split_own(lines, nil), do: {[], lines}
+  defp split_own(lines, own), do: Enum.split_with(lines, &own_key_line?(&1, own))
+
+  # the key's type and base64 as adjacent fields: any options prefix, any comment
+  defp own_key_line?(line, {type, base64}) do
+    line
+    |> String.split()
+    |> Enum.chunk_every(2, 1, :discard)
+    |> Enum.member?([type, base64])
+  end
+
+  defp with_own_key(expected, nil), do: expected
+
+  defp with_own_key(expected, {type, base64} = own) do
+    {_, rest} = split_own(expected, own)
+    rest ++ [format_key_line(type, base64, "ssm")]
   end
 
   @doc false

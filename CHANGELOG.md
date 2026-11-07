@@ -38,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A rotated provider key no longer breaks back-channel logout**: a `logout_token` signed with a key id ssm has not seen makes ssm re-fetch the provider's keys, as the SSO login already did — at most once a minute for the whole app.
 
 ### Fixed
+- **ssm no longer locks itself out of hosts added through Mission Control**: its own key in the login user's `authorized_keys` is never shown as drift and every sync keeps it (matched by key type and body), so the first sync no longer removes it (lab e2e B3).
 - **Mission Control: deleting a host while it is being added** now ends its `create_host` job as `failed` with the code `host_deleted` instead of crashing the job (the code was `not_found` when the host was gone before the job started).
 - **SSH key added after start is picked up**: the key set in `SSH_KEY` is re-read on every new connection when the file changes, so creating or replacing it no longer needs a restart (previously: `auth_failed` until restart).
 - **Failed host creation via the mctl API leaves nothing behind**: when the `create_host` job fails (e.g. key rejected), the half-created host is removed, so the same request can be sent again. A duplicate name or address now returns `409 conflict` with `details` naming the field (`{"name": ["already exists"]}` / `{"address": [...]}`) instead of a bare 409.

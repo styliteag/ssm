@@ -357,7 +357,10 @@ defmodule SsmWeb.DiffLiveTest do
         String.contains?(cmd, "set_authorized_keyfile")
       end)
 
-    assert [{host_id, _, "ssh-ed25519 WANTED\n"}] = writes
+    # root is the host's login user: ssm's own key is always written too
+    own = Ssm.Test.OwnKeyStub.default()
+    assert [{host_id, _, content}] = writes
+    assert content == "ssh-ed25519 WANTED\n#{own} ssm\n"
     assert host_id == drifted.id
     refute host_id == synced_host.id
   end
