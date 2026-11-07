@@ -148,6 +148,19 @@ defmodule MctlContract.Plug.Handlers do
     end)
   end
 
+  @doc """
+  `DELETE /groups/{slug}` (capability `delete_group`): 204 without body;
+  409 when hosts still carry the group.
+  """
+  def delete_group(conn, opts, slug) do
+    if_capability(conn, opts, "delete_group", fn provider ->
+      case provider.delete_group(principal(conn), slug) do
+        :ok -> conn |> Plug.Conn.send_resp(204, "") |> Plug.Conn.halt()
+        {:error, reason} -> Respond.provider_error(conn, reason)
+      end
+    end)
+  end
+
   @doc "`GET /people/{key}`: 400 on a malformed key."
   def get_person(conn, opts, key) do
     if_capability(conn, opts, "people", fn provider ->

@@ -1,6 +1,6 @@
-tag: v0.2.0
-commit: 0e3de6113ef41b3641312ed2cac911c3936db84a
-sha256: 4633f2cff664be6170f58070a5f4d2022ba54748ca1162fd6c7eb79d056a0cff
+tag: v0.3.0
+commit: 1a701d90504294cb91886eb3d8dbd5d47c5c9d54
+sha256: 1b6f7ecab86fbf483b870356e1301d44f21006d50a100aa404340ffd1e977bc9
 vendored: 2026-11-07
 
 Copied by mctl_contract/scripts/vendor.sh. Do not edit: change mctl_contract,

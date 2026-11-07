@@ -5,6 +5,23 @@ versions: [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.0] – 2026-11-07
+
+### Added
+
+- Delete group (contract section 13): optional Provider callback
+  `delete_group/2` (`DELETE /groups/{slug}`, scope `setup`, `204` without
+  body). Only an unused group is deleted: while any host of the tool
+  carries it the provider answers `{:conflict, "group <slug> is used by
+  <n> hosts"}` (409) and changes nothing (it never strips the group from
+  hosts). Where the tool has bindings, a bound token gets `403 forbidden`.
+  `404 not_found` for an unknown slug, also on a repeat. Capability
+  `delete_group` in `GET /me`; the route is `404 not_found` and absent
+  from OpenAPI without it. ConformanceCase
+  `MctlContract.ConformanceCase.DeleteGroup` (served or absent; served:
+  409 while a host carries the group, 403 scope / `bound_token/1`, 204,
+  404 repeat).
+
 ## [0.2.0] – 2026-11-07
 
 ### Added

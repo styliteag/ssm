@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- mctl contract 0.3.0 `delete_group` (`DELETE /api/mctl/v1/groups/{slug}`):
+  Mission Control can delete a group no host carries any more; a group
+  still in use answers 409 and no host loses it. Logged as `group_delete`.
+  mctl_contract vendored at v0.3.0.
+
 ## [4.6.0] - 2026-11-07
 
 ### Added

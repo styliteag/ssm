@@ -651,6 +651,23 @@ defmodule SsmWeb.MctlProviderTest do
       assert "merge_customer" in MctlContract.Capabilities.list(MctlProvider)
     end
 
+    test "delete_group deletes an unused group; a used one is a conflict and stays" do
+      {:ok, _} = Groups.create_group(%{slug: "leer", name: "Leer"})
+      {:ok, _} = Groups.create_group(%{slug: "web", name: "Web"})
+      {:ok, _} = Hosts.update_membership(host_fixture(%{name: "w1"}), %{groups: ["web"]})
+
+      assert :ok = MctlProvider.delete_group(@p, "leer")
+      assert Groups.get_group_by_slug("leer") == nil
+      assert Repo.get_by(Ssm.Activity.ActivityLog, action: "group_delete", target: "group:leer")
+      assert {:error, :not_found} = MctlProvider.delete_group(@p, "leer")
+
+      assert {:error, {:conflict, "group web is used by 1 hosts"}} =
+               MctlProvider.delete_group(@p, "web")
+
+      assert Groups.get_group_by_slug("web")
+      assert "delete_group" in MctlContract.Capabilities.list(MctlProvider)
+    end
+
     test "create, conflict, list, rename" do
       assert {:ok, %{slug: "kunde-a", name: "A"}} =
                MctlProvider.create_customer(@p, %{"slug" => "kunde-a", "name" => "A"})

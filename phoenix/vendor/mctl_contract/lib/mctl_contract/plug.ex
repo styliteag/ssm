@@ -206,6 +206,10 @@ defmodule MctlContract.Plug do
     Handlers.update_group(conn, opts(conn), slug)
   end
 
+  delete "/groups/:slug", private: %{mctl_need: "setup"} do
+    Handlers.delete_group(conn, opts(conn), slug)
+  end
+
   get "/jobs", private: %{mctl_need: "read"} do
     Handlers.list(conn, opts(conn), "jobs", :list_jobs, Handlers.renderer(:job))
   end

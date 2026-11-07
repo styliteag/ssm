@@ -24,6 +24,17 @@ defmodule SsmWeb.Mctl.Audit do
     })
   end
 
+  @doc "Log a group action (`delete`)."
+  def group(principal, action, slug, details \\ %{}) do
+    Activity.log(%{
+      activity_type: "host",
+      action: "group_" <> action,
+      target: "group:" <> slug,
+      actor_username: actor(principal),
+      details: Map.merge(%{via: "mctl", ip: principal.ip}, details)
+    })
+  end
+
   @doc "Log a host action (`create`, `update`, `create_rolled_back`)."
   def host(principal, action, host, details \\ %{}) do
     Activity.log(%{

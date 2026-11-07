@@ -5,7 +5,7 @@ defmodule SsmWeb.MctlProvider do
   customers and groups (own tables), `create_host` jobs in the library's
   job store (`mctl_jobs`), host summaries (C4) from the persisted
   periodic key check (`Ssm.Diffs.HostChecks`, table `host_checks`),
-  `delete_host`, `rename_group` (§11), `merge_customer` (§12) and people (offboarding,
+  `delete_host`, `rename_group` (§11), `merge_customer` (§12), `delete_group` and people (offboarding,
   `SsmWeb.Mctl.People`). No maintenance capability: ssm has no alerts to
   silence.
 
@@ -226,6 +226,16 @@ defmodule SsmWeb.MctlProvider do
     case Groups.get_group_by_slug(slug) do
       nil -> {:error, :not_found}
       group -> group |> Groups.update_group(named_attrs(params)) |> named_result()
+    end
+  end
+
+  # contract 0.3.0 (capability `delete_group`): unused groups only; ssm has
+  # no token binding, so every `setup` token may delete (like create_group)
+  @impl true
+  def delete_group(principal, slug) do
+    with :ok <- Groups.delete_group(slug) do
+      Audit.group(principal, "delete", slug)
+      :ok
     end
   end
 
