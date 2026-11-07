@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Mission Control can rename groups**: `PATCH /api/mctl/v1/groups/{slug}`
+  with `{"name": …}` changes the display name of a host group (scope
+  `setup`); the slug stays. Unknown groups answer 404, an empty or overlong
+  name 422, the same name twice is fine. `/me` lists the new capability
+  `rename_group`. Customer rename (`PATCH /customers/{slug}`) already
+  existed and is now covered by the shared conformance tests too.
+
 - **Security log for CrowdSec**: one JSON line on stdout per failed web or
   `/api/v2/auth/login` password, login-throttle lock, invalid refresh
   token, refused single sign-on callback or back-channel logout, and bad or

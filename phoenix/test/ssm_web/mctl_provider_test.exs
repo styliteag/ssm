@@ -650,6 +650,35 @@ defmodule SsmWeb.MctlProviderTest do
       assert {:ok, [%{slug: "web"}], nil} = MctlProvider.list_groups(@p, page())
     end
 
+    test "update_group renames only the name, keeps the slug, is idempotent" do
+      {:ok, _} = MctlProvider.create_group(@p, %{"slug" => "web", "name" => "Web"})
+
+      for _ <- 1..2 do
+        assert {:ok, %{slug: "web", name: "Webserver"}} =
+                 MctlProvider.update_group(@p, "web", %{"name" => "Webserver"})
+      end
+
+      assert %{slug: "web", name: "Webserver"} = Ssm.Groups.get_group_by_slug("web")
+
+      assert {:ok, [%{slug: "web", name: "Webserver"}], nil} =
+               MctlProvider.list_groups(@p, page())
+    end
+
+    test "update_group: unknown slug is not_found, an empty name a validation error" do
+      assert {:error, :not_found} = MctlProvider.update_group(@p, "ghost", %{"name" => "x"})
+
+      {:ok, _} = MctlProvider.create_group(@p, %{"slug" => "web", "name" => "Web"})
+
+      assert {:error, {:validation, %{"name" => [_ | _]}}} =
+               MctlProvider.update_group(@p, "web", %{"name" => String.duplicate("x", 256)})
+
+      assert %{name: "Web"} = Ssm.Groups.get_group_by_slug("web")
+    end
+
+    test "rename_group is a capability" do
+      assert "rename_group" in MctlContract.Capabilities.list(MctlProvider)
+    end
+
     test "list pages by slug" do
       for s <- ~w(b a c),
           do: {:ok, _} = MctlProvider.create_group(@p, %{"slug" => s, "name" => s})

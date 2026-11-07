@@ -5,8 +5,9 @@ defmodule SsmWeb.MctlProvider do
   customers and groups (own tables), `create_host` jobs in the library's
   job store (`mctl_jobs`), host summaries (C4) from the persisted
   periodic key check (`Ssm.Diffs.HostChecks`, table `host_checks`),
-  `delete_host` and people (offboarding, `SsmWeb.Mctl.People`). No
-  maintenance capability: ssm has no alerts to silence.
+  `delete_host`, `rename_group` (§11) and people (offboarding,
+  `SsmWeb.Mctl.People`). No maintenance capability: ssm has no alerts to
+  silence.
 
   `create_host` validates and inserts the host (with membership) right
   away — a bad request is a 4xx, never a failed job — then runs the job
@@ -206,6 +207,16 @@ defmodule SsmWeb.MctlProvider do
   @impl true
   def create_group(_principal, params) do
     params |> named_attrs() |> Groups.create_group() |> named_result()
+  end
+
+  # contract section 11 (capability `rename_group`): the name only, the
+  # slug is fixed after create
+  @impl true
+  def update_group(_principal, slug, params) do
+    case Groups.get_group_by_slug(slug) do
+      nil -> {:error, :not_found}
+      group -> group |> Groups.update_group(named_attrs(params)) |> named_result()
+    end
   end
 
   defp named_attrs(params), do: %{slug: params["slug"], name: params["name"]}
