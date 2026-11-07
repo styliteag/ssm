@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.5.2] - 2026-11-07
+
 ### Added
 
 - **More than one name for the web UI**: `PHX_ALT_HOSTS` (comma-separated)
