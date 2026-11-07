@@ -30,8 +30,12 @@ defmodule SsmWeb.MctlAuthHooks do
     {limit, window} = limits(:auth_failures)
 
     case RateLimit.check({:mctl_auth_failed, client(conn)}, limit, window) do
-      :ok -> {:ok, conn}
-      {:error, retry_after} -> {:error, retry_after}
+      :ok ->
+        {:ok, conn}
+
+      {:error, retry_after} ->
+        Ssm.SecurityLog.auth_failure(conn, "locked")
+        {:error, retry_after}
     end
   end
 
@@ -41,6 +45,7 @@ defmodule SsmWeb.MctlAuthHooks do
   def on_auth_failure(_conn, :missing), do: :ok
 
   def on_auth_failure(conn, reason) do
+    Ssm.SecurityLog.auth_failure(conn, "bad_token")
     {limit, window} = limits(:auth_failures)
     ip = ip(conn)
     failures = RateLimit.count({:mctl_auth_failed, client(conn)}, window)

@@ -51,10 +51,12 @@ defmodule SsmWeb.Api.AuthController do
           Envelope.ok(conn, token_pair(username))
         else
           {:error, retry_after} ->
+            Ssm.SecurityLog.auth_failure(conn, "locked")
             Errors.rate_limited(conn, retry_after)
 
           false ->
             LoginThrottle.record_failure(conn.remote_ip, username)
+            Ssm.SecurityLog.auth_failure(conn, "bad_password")
             Envelope.fail(conn, 401, "INVALID_CREDENTIALS", "invalid credentials")
         end
 
@@ -69,6 +71,7 @@ defmodule SsmWeb.Api.AuthController do
       Envelope.ok(conn, token_pair(subject))
     else
       {:error, :invalid_token} ->
+        Ssm.SecurityLog.auth_failure(conn, "bad_token")
         Envelope.fail(conn, 401, "AUTH_REQUIRED", "invalid token")
 
       {:error, errors} ->

@@ -51,7 +51,9 @@ defmodule SsmWeb.OIDCController do
 
       UserAuth.log_in_operator(conn, login, Config.get().session_max_hours)
     else
-      {:error, {reason, sub}} -> fail(conn, reason, sub)
+      {:error, {reason, sub}} ->
+        Ssm.SecurityLog.auth_failure(conn, "oidc_failed")
+        fail(conn, reason, sub)
     end
   end
 
@@ -70,6 +72,7 @@ defmodule SsmWeb.OIDCController do
 
       {:error, reason} ->
         Logger.warning("OIDC back-channel logout refused: #{reason}")
+        Ssm.SecurityLog.auth_failure(conn, "oidc_failed")
         conn |> put_resp_header("cache-control", "no-store") |> send_resp(400, "")
     end
   end
@@ -137,6 +140,8 @@ defmodule SsmWeb.OIDCController do
         conn
 
       {:error, retry_after} ->
+        Ssm.SecurityLog.auth_failure(conn, "locked")
+
         conn
         |> put_resp_header("retry-after", Integer.to_string(retry_after))
         |> send_resp(429, "Too Many Requests")

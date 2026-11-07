@@ -10,6 +10,7 @@ defmodule Ssm.Application do
   @impl true
   def start(_type, _args) do
     Ssm.OIDC.Config.load()
+    :ok = Ssm.SecurityLog.install()
 
     children =
       [

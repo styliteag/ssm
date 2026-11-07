@@ -24,6 +24,9 @@ config :ssm, jwt_secret: "ssm-test-only-jwt-secret-0000000000-1111111111"
 # Print only warnings and errors during test
 config :logger, level: :warning
 
+# auth_failure lines (Ssm.SecurityLog): no stdout handler, capture_log only
+config :ssm, :security_log_stdout, false
+
 # Initialize plugs at runtime for faster test compilation
 config :phoenix, :plug_init_mode, :runtime
 

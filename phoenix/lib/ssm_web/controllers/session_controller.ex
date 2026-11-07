@@ -25,7 +25,7 @@ defmodule SsmWeb.SessionController do
       LoginThrottle.record_success(username)
       UserAuth.log_in_user(conn, username)
     else
-      {:error, _retry_after} -> deny(conn, @locked)
+      {:error, _retry_after} -> locked(conn)
       false -> fail(conn, username)
     end
   end
@@ -35,7 +35,7 @@ defmodule SsmWeb.SessionController do
 
     case LoginThrottle.check(conn.remote_ip, username) do
       :ok -> fail(conn, username)
-      {:error, _retry_after} -> deny(conn, @locked)
+      {:error, _retry_after} -> locked(conn)
     end
   end
 
@@ -53,7 +53,13 @@ defmodule SsmWeb.SessionController do
 
   defp fail(conn, username) do
     LoginThrottle.record_failure(conn.remote_ip, username)
+    Ssm.SecurityLog.auth_failure(conn, "bad_password")
     deny(conn, @invalid)
+  end
+
+  defp locked(conn) do
+    Ssm.SecurityLog.auth_failure(conn, "locked")
+    deny(conn, @locked)
   end
 
   defp deny(conn, message) do

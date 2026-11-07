@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+
+- **Security log for CrowdSec**: one JSON line on stdout per failed web or
+  `/api/v2/auth/login` password, login-throttle lock, invalid refresh
+  token, refused single sign-on callback or back-channel logout, and bad or
+  throttled mctl contract token:
+  `{"type":"auth_failure","app":"ssm","ts":…,"ip":…,"reason":…,"path":…}`
+  (reasons `bad_password`, `bad_token`, `locked`, `oidc_failed`), with the
+  real client IP (`TRUSTED_PROXIES`) and never a username, password or
+  token. The line bypasses the normal log format, so it always starts with
+  `{"type":"auth_failure"`.
 - **Hosts with a non-root login are marked "limited"**: ssm does not use sudo, so when it logs in as another user than `root` it only sees and manages the `authorized_keys` files that user can access (usually only its own). The Hosts page shows a "limited" badge with this explanation next to the login (list and cards), and the host form says so when the login is not `root`. The mctl API reports it as read-only host attributes `limited` and `limited_reason`, and the `create_host` job result carries `limited`.
 - **Mission Control can install ssm's key on new hosts**: the `create_host` job of `POST /api/mctl/v1/hosts` now puts `ssm_public_key` (the public key ssm logs in with, derived from `SSH_KEY`) and `username` into the job result right away, while the job is still `running`. The job then retries the SSH login with growing pauses (2 s up to 30 s) for up to 10 minutes until that key is authorized on the host, then pins the host key as before. A pre-seeded `attributes.key_fingerprint` (e.g. from the dashboard agent) is checked on every attempt; a different host key fails the job at once with `host_key_changed`. If the login still fails after 10 minutes the job fails with `auth_failed` and a message naming the login user; if ssm's own key cannot be read it fails with `ssm_key_unavailable`. Other connection errors fail at once as before.
 - **Jump host by name when adding hosts through Mission Control**: `POST /api/mctl/v1/hosts` now accepts `attributes.jump_via` as an existing ssm host's id or name (an unknown host is `422` with `attributes.jump_via: ["no such ssm host"]`), and `attributes.username` is checked with the same login-name rules as the Hosts page (default `root`).
