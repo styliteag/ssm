@@ -55,7 +55,7 @@ defmodule SsmWeb.Layouts do
         </a>
 
         <ul class="menu w-full flex-1 gap-1 px-2" id="sidebar-nav">
-          <li :for={{label, path, icon, key} <- nav_items()}>
+          <li :for={{label, path, icon, key} <- nav_items(@current_user)}>
             <.link
               navigate={path}
               class={["flex items-center gap-2", @active == key && "menu-active"]}
@@ -76,7 +76,7 @@ defmodule SsmWeb.Layouts do
                 <.icon name="hero-bars-3" class="size-5" />
               </summary>
               <ul class="menu absolute left-0 z-30 mt-2 w-52 rounded-box border border-base-300 bg-base-100 p-2 shadow-lg">
-                <li :for={{label, path, icon, _key} <- nav_items()}>
+                <li :for={{label, path, icon, _key} <- nav_items(@current_user)}>
                   <.link navigate={path} class="flex items-center gap-2">
                     <.icon name={icon} class="size-4" />
                     {label}
@@ -123,8 +123,8 @@ defmodule SsmWeb.Layouts do
 
   defp read_only_style(false), do: nil
 
-  defp nav_items do
-    [
+  defp nav_items(user) do
+    items = [
       {"Dashboard", ~p"/dashboard", "hero-squares-2x2", :dashboard},
       {"Hosts", ~p"/hosts", "hero-server", :hosts},
       {"Users", ~p"/users", "hero-users", :users},
@@ -133,6 +133,10 @@ defmodule SsmWeb.Layouts do
       {"Diff Viewer", ~p"/diff", "hero-arrows-right-left", :diff},
       {"Activities", ~p"/activities", "hero-clock", :activities}
     ]
+
+    if match?(%{role: "admin"}, user),
+      do: items ++ [{"API tokens", ~p"/settings/api-tokens", "hero-link", :api_tokens}],
+      else: items
   end
 
   @doc """

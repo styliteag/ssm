@@ -148,6 +148,7 @@ defmodule SsmWeb.Router do
       live "/authorizations", AuthorizationsLive
       live "/diff", DiffLive
       live "/activities", ActivitiesLive
+      live "/settings/api-tokens", ApiTokensLive
     end
   end
 
