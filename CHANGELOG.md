@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.7.0] - 2026-11-08
+
 ### Added
 
 - mctl contract 0.3.0 `delete_group` (`DELETE /api/mctl/v1/groups/{slug}`):
