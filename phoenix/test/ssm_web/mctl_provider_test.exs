@@ -776,4 +776,70 @@ defmodule SsmWeb.MctlProviderTest do
     assert MctlProvider.cursor_types("customers") == [:string]
     assert MctlProvider.cursor_types("groups") == [:string]
   end
+
+  describe "probe_ssh (contract 0.5.0)" do
+    setup do
+      Ssm.RateLimit.reset()
+      :ok
+    end
+
+    test "a direct probe answers per port and is audited" do
+      port = Ssm.MctlFixtures.ssh_banner_server()
+
+      assert {:ok,
+              %{
+                address: "127.0.0.1",
+                via: nil,
+                results: [%{port: ^port, open: true, banner: "SSH-2.0-test"}]
+              }} =
+               MctlProvider.probe_ssh(@p, %{"address" => "127.0.0.1", "ports" => [port]})
+
+      [entry | _] = Ssm.Activity.list(activity_type: "host")
+      assert entry.action == "probe_ssh"
+      assert entry.target == "127.0.0.1"
+      assert entry.actor_username == "mctl:mission-control"
+      assert "probe_ssh" in MctlContract.Capabilities.list(MctlProvider)
+    end
+
+    test "an unknown jump host is not found; a disabled or unpinned one is refused" do
+      assert {:error, :not_found} =
+               MctlProvider.probe_ssh(@p, %{
+                 "address" => "10.0.0.9",
+                 "ports" => [22],
+                 "jump_via" => "nope"
+               })
+
+      off = host_fixture(%{name: "gw-off", disabled: true})
+
+      assert {:error, {:validation, %{"jump_via" => [reason]}}} =
+               MctlProvider.probe_ssh(@p, %{
+                 "address" => "10.0.0.9",
+                 "ports" => [22],
+                 "jump_via" => off.id
+               })
+
+      assert reason =~ "disabled"
+
+      unpinned = host_fixture(%{name: "gw-new"})
+
+      assert {:error, {:validation, %{"jump_via" => [reason]}}} =
+               MctlProvider.probe_ssh(@p, %{
+                 "address" => "10.0.0.9",
+                 "ports" => [22],
+                 "jump_via" => "gw-new"
+               })
+
+      assert reason =~ "no pinned host key"
+      assert unpinned.key_fingerprint == nil
+    end
+
+    test "probes are rate-limited per token" do
+      port = Ssm.MctlFixtures.ssh_banner_server()
+      params = %{"address" => "127.0.0.1", "ports" => [port]}
+      for _ <- 1..30, do: assert({:ok, _} = MctlProvider.probe_ssh(@p, params))
+
+      assert {:error, {:conflict, "too many SSH probes" <> _}} =
+               MctlProvider.probe_ssh(@p, params)
+    end
+  end
 end

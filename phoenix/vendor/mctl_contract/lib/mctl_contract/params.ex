@@ -59,6 +59,66 @@ defmodule MctlContract.Params do
     end
   end
 
+  @max_address 253
+  @max_probe_ports 5
+
+  @doc "Most ports one `POST /probe/ssh` may check."
+  def max_probe_ports, do: @max_probe_ports
+
+  @doc "Longest address `POST /probe/ssh` accepts (a DNS name's limit)."
+  def max_address, do: @max_address
+
+  @doc """
+  `POST /probe/ssh`: `address` (required: IP or DNS name, non-empty, at
+  most 253 characters, no whitespace), `ports` (required: 1 to 5 distinct
+  integers 1-65535), `jump_via` (optional: a host of the tool, non-empty
+  name or positive integer id); nothing else.
+  """
+  @spec probe_ssh(term()) :: {:ok, map()} | {:error, map()}
+  def probe_ssh(body) do
+    check(body, %{
+      "address" => {:required, &probe_address/1},
+      "ports" => {:required, &probe_ports/1},
+      "jump_via" => {:optional, &jump_via/1}
+    })
+  end
+
+  defp probe_address(v) when is_binary(v) do
+    cond do
+      v == "" -> {:error, "must not be empty"}
+      String.length(v) > @max_address -> {:error, "must be at most #{@max_address} characters"}
+      String.match?(v, ~r/[\s[:cntrl:]]/u) -> {:error, "must not contain whitespace"}
+      true -> :ok
+    end
+  end
+
+  defp probe_address(_v), do: {:error, "must be a string"}
+
+  defp probe_ports(list) when is_list(list) do
+    cond do
+      list == [] or length(list) > @max_probe_ports ->
+        {:error, "must hold 1 to #{@max_probe_ports} ports"}
+
+      not Enum.all?(list, &(is_integer(&1) and &1 in 1..65_535)) ->
+        {:error, "must be integers 1-65535"}
+
+      length(Enum.uniq(list)) != length(list) ->
+        {:error, "must not repeat a port"}
+
+      true ->
+        :ok
+    end
+  end
+
+  defp probe_ports(_v), do: {:error, "must be a list of ports"}
+
+  defp jump_via(v) when is_binary(v) do
+    if String.trim(v) == "", do: {:error, "must not be empty"}, else: :ok
+  end
+
+  defp jump_via(v) when is_integer(v) and v > 0, do: :ok
+  defp jump_via(_v), do: {:error, "must be a host name or a positive id"}
+
   @doc "`POST /hosts/{id}/actions`: `action` (string), `params` (object, default `%{}`)."
   @spec host_action(term()) :: {:ok, map()} | {:error, map()}
   def host_action(body) do

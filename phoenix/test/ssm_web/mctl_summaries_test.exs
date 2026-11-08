@@ -237,7 +237,16 @@ defmodule SsmWeb.MctlSummariesTest do
     # section 10: delete_host and people; no maintenance (no alerts in ssm);
     # section 11: rename_group
     assert MctlContract.Capabilities.list(P) ==
-             ["host_summaries", "delete_host", "people", "rename_group"]
+             [
+               "host_summaries",
+               "delete_host",
+               "people",
+               "rename_group",
+               "merge_customer",
+               "delete_group",
+               "delete_customer",
+               "probe_ssh"
+             ]
 
     assert P.cursor_types("host_summaries") == [:integer]
   end

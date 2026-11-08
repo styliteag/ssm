@@ -5,6 +5,29 @@ versions: [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.0] – 2026-11-08
+
+### Added
+
+- SSH probe (contract section 15): optional Provider callback
+  `probe_ssh/2` (`POST /probe/ssh`, scope `setup`, `200`). mctl asks the
+  tool whether an address answers on SSH ports, from the tool's own
+  network position, optionally through a jump host the tool knows
+  (`jump_via`, name or id). The library checks the shape: `address`
+  (non-empty, at most 253 characters, no whitespace), `ports` (1 to 5
+  distinct integers 1-65535), optional `jump_via` (non-empty name or
+  positive id), nothing else (422). Answer: `address`, `via` (jump host
+  name or null) and per port `{port, open, banner, error}` (`banner`: the
+  first line when it starts with `SSH-`). It is a narrow probe: no data
+  sent, no login; the provider refuses targets it does not allow (422
+  with `{:validation, …}`), answers 404 for an unknown `jump_via`, and
+  must rate-limit and audit it. Capability `probe_ssh` in `GET /me`; the
+  route and the schemas `SshProbe` / `SshProbeResult` are absent from
+  OpenAPI without it (404). ConformanceCase
+  `MctlContract.ConformanceCase.ProbeSsh` (served or absent; served: 403
+  scope, the 422 shape cases, and a happy path against the new optional
+  fixture `ssh_probe_target/0` when it returns `{address, port}`).
+
 ## [0.4.0] – 2026-11-08
 
 ### Added

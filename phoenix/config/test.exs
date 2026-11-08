@@ -53,3 +53,7 @@ config :ssm, :mctl_login_wait, timeout_ms: 300, first_delay_ms: 1, max_delay_ms:
 # mctl boot work (service token from MCTL_TOKEN_FILE, failing stale jobs)
 # would race the SQL sandbox; tests call it explicitly.
 config :ssm, :mctl_boot, false
+
+# SSH probe (probe_ssh): tests probe a local server on loopback, which
+# production refuses
+config :ssm, :probe_allow_loopback, true

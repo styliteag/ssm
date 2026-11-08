@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Mission Control can ask ssm whether an address answers SSH as seen from
+  ssm (mctl contract 0.5.0, capability `probe_ssh`, `POST
+  /api/mctl/v1/probe/ssh`): up to 5 ports, TCP connect and the first line
+  only (no login, nothing sent), directly or through one of ssm's hosts as
+  jump host (`ssh -W` with the pinned known_hosts of every hop). Loopback,
+  link-local, unspecified and multicast targets and ssm's own addresses are
+  refused; a disabled or unpinned jump host is refused. 30 probes per minute
+  per token; every probe is in the activity log (`probe_ssh`).
+
 ## [4.8.1] - 2026-11-08
 
 ### Fixed

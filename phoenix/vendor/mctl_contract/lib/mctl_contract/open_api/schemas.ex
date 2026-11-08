@@ -12,6 +12,67 @@ defmodule MctlContract.OpenAPI.Schemas do
     |> then(&if("maintenance" in caps, do: Map.merge(&1, maintenance()), else: &1))
     |> then(&if("people" in caps, do: Map.merge(&1, people()), else: &1))
     |> then(&if("merge_customer" in caps, do: Map.merge(&1, customer_merge()), else: &1))
+    |> then(&if("probe_ssh" in caps, do: Map.merge(&1, probe_ssh()), else: &1))
+  end
+
+  defp probe_ssh do
+    port = %{"type" => "integer", "minimum" => 1, "maximum" => 65_535}
+
+    %{
+      "SshProbe" =>
+        obj(
+          %{
+            "address" => %{
+              "type" => "string",
+              "minLength" => 1,
+              "maxLength" => Params.max_address(),
+              "pattern" => "^\\S+$",
+              "description" => "IP address or DNS name, as the tool resolves it"
+            },
+            "ports" => %{
+              "type" => "array",
+              "items" => port,
+              "minItems" => 1,
+              "maxItems" => Params.max_probe_ports(),
+              "uniqueItems" => true
+            },
+            "jump_via" => %{
+              "oneOf" => [
+                %{"type" => "string", "minLength" => 1},
+                %{"type" => "integer", "minimum" => 1}
+              ],
+              "description" => "a host of the tool to connect through (name or id)"
+            }
+          },
+          ~w(address ports)
+        ),
+      "SshProbeResult" =>
+        obj(
+          %{
+            "address" => str(),
+            "via" => nullable(str()),
+            "results" => %{
+              "type" => "array",
+              "items" =>
+                obj(
+                  %{
+                    "port" => port,
+                    "open" => %{"type" => "boolean"},
+                    "banner" =>
+                      Map.put(
+                        nullable(str()),
+                        "description",
+                        "first line when it starts with SSH-"
+                      ),
+                    "error" => nullable(str())
+                  },
+                  ~w(port open banner error)
+                )
+            }
+          },
+          ~w(address via results)
+        )
+    }
   end
 
   defp customer_merge do

@@ -39,6 +39,42 @@ defmodule Ssm.MctlFixtures do
   @impl true
   def unsupported_mode, do: "push"
 
+  # probe_ssh: a local server answering an SSH banner (loopback is allowed
+  # in the test config only, `:probe_allow_loopback`)
+  @impl true
+  def ssh_probe_target do
+    {"127.0.0.1", ssh_banner_server()}
+  end
+
+  @doc "Start a local TCP server that sends `banner` to every client; returns its port."
+  def ssh_banner_server(banner \\ "SSH-2.0-test\r\n") do
+    {:ok, listen} =
+      :gen_tcp.listen(0, [:binary, active: false, reuseaddr: true, ip: {127, 0, 0, 1}])
+
+    {:ok, port} = :inet.port(listen)
+
+    pid =
+      spawn(fn ->
+        accept = fn accept ->
+          case :gen_tcp.accept(listen) do
+            {:ok, socket} ->
+              :gen_tcp.send(socket, banner)
+              :gen_tcp.close(socket)
+              accept.(accept)
+
+            {:error, _} ->
+              :ok
+          end
+        end
+
+        accept.(accept)
+      end)
+
+    :ok = :gen_tcp.controlling_process(listen, pid)
+    ExUnit.Callbacks.on_exit(fn -> :gen_tcp.close(listen) end)
+    port
+  end
+
   # Job work runs in Ssm.Mctl.TaskSupervisor; let it finish before the
   # sandbox owner goes away.
   @impl true

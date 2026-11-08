@@ -226,6 +226,44 @@ defmodule MctlContract.Provider do
   """
   @callback delete_customer(Principal.t(), slug :: String.t()) :: :ok | {:error, error()}
 
+  @doc """
+  Optional (probe, contract section 15): check SSH reachability of
+  `address` FROM THE TOOL (`POST /probe/ssh`, scope `setup`), so mctl sees
+  what the tool will see, also through a jump host the tool knows. The
+  library has checked the shape: `"address"` (IP or DNS name, at most 253
+  characters, no whitespace), `"ports"` (1 to 5 distinct integers
+  1-65535) and the optional `"jump_via"` (a host of the tool, by name or
+  id). It is a narrow probe: per port open a TCP connection (through the
+  jump host when given) and read the first line; nothing is sent, no
+  login is tried.
+
+  Returns per port `%{port, open, banner, error}`: `open` true when the
+  connection was accepted, `banner` the first line when it starts with
+  `SSH-` (else nil), `error` a short reason when not open (else nil);
+  plus the probed `address` and `via` (the jump host's name, or nil).
+  The provider decides which targets it refuses (e.g. loopback,
+  link-local, its own addresses): `{:error, {:validation, %{"address" =>
+  [why]}}}` (422). `:not_found` when `jump_via` is unknown. Providers
+  must rate-limit and audit it (it is a network probe started by a
+  token). Without it the route answers `404 not_found` and `/me` has no
+  `probe_ssh` capability.
+  """
+  @callback probe_ssh(Principal.t(), params :: map()) ::
+              {:ok,
+               %{
+                 results: [
+                   %{
+                     port: pos_integer(),
+                     open: boolean(),
+                     banner: String.t() | nil,
+                     error: String.t() | nil
+                   }
+                 ],
+                 address: String.t(),
+                 via: String.t() | nil
+               }}
+              | {:error, error()}
+
   @optional_callbacks cursor_types: 1,
                       attributes_schema: 0,
                       list_host_summaries: 2,
@@ -241,5 +279,6 @@ defmodule MctlContract.Provider do
                       update_group: 3,
                       merge_customer: 3,
                       delete_group: 2,
-                      delete_customer: 2
+                      delete_customer: 2,
+                      probe_ssh: 2
 end

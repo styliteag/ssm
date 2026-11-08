@@ -94,6 +94,14 @@ variable an active env token is revoked. Prune old rows periodically with
 Optional job store: `MctlContract.Jobs.Ecto` (`run/4`, `progress/2`,
 `succeed/2`, `fail/3`, `fail_stale/1`).
 
+Optional capabilities are Provider callbacks; a tool advertises one in
+`GET /me` only when it implements it (`MctlContract.Capabilities`). One of
+them is a network action: `probe_ssh/2` (`POST /probe/ssh`, since 0.5.0)
+lets mctl check SSH reachability from the tool's position (optionally
+through the tool's jump host). Keep it narrow: at most 5 ports, a TCP
+connect and the first line only, nothing sent, no login. Providers refuse
+targets they do not allow, and must rate-limit and audit every probe.
+
 ## Conformance
 
 Every tool runs the same requests and assertions against its own endpoint:

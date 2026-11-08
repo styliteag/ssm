@@ -35,6 +35,33 @@ defmodule SsmWeb.Mctl.Audit do
     })
   end
 
+  @doc """
+  Log an SSH probe (`probe_ssh`) as type `host`, action `probe_ssh`, target
+  the probed address: ports, the jump host, and which ports answered SSH
+  (banners are not stored), or `refused` for a target ssm does not probe.
+  """
+  def probe(principal, address, ports, via, results) do
+    outcome =
+      case results do
+        :refused ->
+          %{refused: true}
+
+        list ->
+          %{
+            ssh_ports: for(r <- list, r.banner, do: r.port),
+            open_ports: for(r <- list, r.open, do: r.port)
+          }
+      end
+
+    Activity.log(%{
+      activity_type: "host",
+      action: "probe_ssh",
+      target: address,
+      actor_username: actor(principal),
+      details: Map.merge(%{ports: ports, jump_via: via, via: "mctl", ip: principal.ip}, outcome)
+    })
+  end
+
   @doc "Log a host action (`create`, `update`, `create_rolled_back`)."
   def host(principal, action, host, details \\ %{}) do
     Activity.log(%{

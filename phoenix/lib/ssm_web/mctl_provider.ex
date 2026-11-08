@@ -5,7 +5,8 @@ defmodule SsmWeb.MctlProvider do
   customers and groups (own tables), `create_host` jobs in the library's
   job store (`mctl_jobs`), host summaries (C4) from the persisted
   periodic key check (`Ssm.Diffs.HostChecks`, table `host_checks`),
-  `delete_host`, `rename_group` (§11), `merge_customer` (§12), `delete_group`, `delete_customer` and people (offboarding,
+  `delete_host`, `rename_group` (§11), `merge_customer` (§12), `delete_group`, `delete_customer`,
+  `probe_ssh` (SSH reachability as seen from ssm, `SsmWeb.Mctl.Probe`) and people (offboarding,
   `SsmWeb.Mctl.People`). No maintenance capability: ssm has no alerts to
   silence.
 
@@ -248,6 +249,11 @@ defmodule SsmWeb.MctlProvider do
       :ok
     end
   end
+
+  # contract 0.5.0 (capability `probe_ssh`): can ssm reach address:port and
+  # does SSH answer there, directly or via a jump host (SsmWeb.Mctl.Probe)
+  @impl true
+  def probe_ssh(principal, params), do: SsmWeb.Mctl.Probe.run(principal, params)
 
   defp named_attrs(params), do: %{slug: params["slug"], name: params["name"]}
   defp named(item), do: %{slug: item.slug, name: item.name}

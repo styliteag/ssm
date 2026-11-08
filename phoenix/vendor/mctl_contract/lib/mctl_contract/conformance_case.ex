@@ -34,6 +34,10 @@ defmodule MctlContract.ConformanceCase do
         scopes and a binding (not global), or nil when the tool has no
         bindings; a merge or a group/customer delete with it must be 403
         `forbidden`
+      * `ssh_probe_target()` (optional, capability `probe_ssh`) –
+        `{address, port}` of something the tool can reach in tests where
+        a TCP connection is accepted (an SSH server, ideally), or nil to
+        skip the happy path
     """
     @callback setup(map()) :: :ok | keyword() | map()
     @callback token([String.t()]) :: String.t()
@@ -42,11 +46,13 @@ defmodule MctlContract.ConformanceCase do
     @callback cleanup() :: any()
     @callback person_key() :: String.t() | nil
     @callback bound_token([String.t()]) :: String.t() | nil
+    @callback ssh_probe_target() :: {String.t(), pos_integer()} | nil
     @optional_callbacks setup: 1,
                         unsupported_mode: 0,
                         cleanup: 0,
                         person_key: 0,
-                        bound_token: 1
+                        bound_token: 1,
+                        ssh_probe_target: 0
   end
 
   using opts do
@@ -274,6 +280,11 @@ defmodule MctlContract.ConformanceCase do
       # contract section 14: only an empty customer is deleted
       test "conformance: delete_customer is served exactly when /me advertises it", %{mctl: c} do
         MctlContract.ConformanceCase.DeleteCustomer.check(c)
+      end
+
+      # contract section 15: a narrow SSH reachability probe from the tool
+      test "conformance: probe_ssh is served exactly when /me advertises it", %{mctl: c} do
+        MctlContract.ConformanceCase.ProbeSsh.check(c)
       end
 
       test "conformance: Idempotency-Key replays the first response", %{mctl: c} do

@@ -79,6 +79,8 @@ are never touched and keep no row; the stored drift holds fingerprints and comme
 Contract section 10: `DELETE /hosts/{id}` (refused for a jump host in use — `jump_via` cascades)
 and people (`Ssm.People` matches operator by issuer+subject, SSH users and key comments by e-mail;
 `SsmWeb.Mctl.People` removes only the person's key lines per login through `script.sh`).
+`probe_ssh` (contract 0.5.0, `SsmWeb.Mctl.Probe` → `Ssm.Ssh.Probe`): TCP connect + first line only, directly
+or via a jump host (`ErlangClient.banner_via/4`, `ssh -W`); refused ranges, 30/min per token, audited.
 
 **Connect Mission Control** (US-API-09, `Ssm.Mctl.Connect`, `ssm_web/live/api_tokens_live.ex`,
 `/settings/api-tokens`, admin only — checked on mount and in every event): an admin creates,

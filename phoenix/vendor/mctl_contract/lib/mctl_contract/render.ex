@@ -41,6 +41,24 @@ defmodule MctlContract.Render do
   @spec customer_merge(map()) :: map()
   def customer_merge(r), do: %{"moved_hosts" => get(r, :moved_hosts) || 0}
 
+  @doc "Result of `POST /probe/ssh`: the probed address, the jump host, one entry per port."
+  @spec probe_ssh(map()) :: map()
+  def probe_ssh(r) do
+    %{
+      "address" => get(r, :address),
+      "via" => get(r, :via),
+      "results" =>
+        Enum.map(get(r, :results) || [], fn p ->
+          %{
+            "port" => get(p, :port),
+            "open" => get(p, :open) == true,
+            "banner" => get(p, :banner),
+            "error" => get(p, :error)
+          }
+        end)
+    }
+  end
+
   @spec named(map()) :: map()
   def named(c), do: %{"slug" => get(c, :slug), "name" => get(c, :name)}
 

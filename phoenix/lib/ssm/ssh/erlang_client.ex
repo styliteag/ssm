@@ -332,6 +332,8 @@ defmodule Ssm.Ssh.ErlangClient do
   # connection); jump targets still need their forwarder.
   def handle_call({:probe_spec, target}, _from, state), do: connect_spec(target, state)
 
+  def handle_call(:key_dir, _from, state), do: {:reply, state.key_dir, state}
+
   def handle_call({:register, host_id, conn}, _from, state) do
     case fetch_live(state.conns, host_id) do
       {:ok, existing} ->
@@ -556,20 +558,7 @@ defmodule Ssm.Ssh.ErlangClient do
   @spec forwarder_args(Target.t(), String.t(), String.t(), :inet.port_number()) :: [String.t()]
   def forwarder_args(%Target{} = target, config_path, key_file, local_port) do
     [innermost | rest_outer] = jump_chain(target.jump_target)
-
-    jump_args =
-      case rest_outer do
-        [] ->
-          []
-
-        outer ->
-          list =
-            outer
-            |> Enum.reverse()
-            |> Enum.map_join(",", &"#{&1.username}@#{bracket(&1.address)}:#{&1.port}")
-
-          ["-J", list]
-      end
+    jump_args = jump_list_args(rest_outer)
 
     [
       "-F",
@@ -586,6 +575,156 @@ defmodule Ssm.Ssh.ErlangClient do
       "-o",
       "ExitOnForwardFailure=yes"
     ] ++ jump_args ++ ["--", innermost.address]
+  end
+
+  # -J list outer→inner (OpenSSH order) for the hops outside the innermost one
+  defp jump_list_args([]), do: []
+
+  defp jump_list_args(outer) do
+    list =
+      outer
+      |> Enum.reverse()
+      |> Enum.map_join(",", &"#{&1.username}@#{bracket(&1.address)}:#{&1.port}")
+
+    ["-J", list]
+  end
+
+  ## SSH probe through a jump host (Ssm.Ssh.Probe, mctl probe_ssh)
+
+  @doc """
+  The first bytes `address:port` sends when reached through the jump host
+  `jump` (and its own chain): `ssh -W` with the same generated ssh_config
+  and pinned known_hosts as the forwarders, so every hop is verified. Nothing
+  is sent to the target; the tunnel is closed after the first line, when ssh
+  exits or after `timeout_ms`. `{:ok, data}` (possibly without an SSH banner)
+  or `{:error, reason}` (connection refused, hop failure, no answer).
+  """
+  @spec banner_via(Target.t(), String.t(), :inet.port_number(), pos_integer()) ::
+          {:ok, binary()} | {:error, String.t()}
+  def banner_via(%Target{} = jump, address, port, timeout_ms) do
+    with {:ok, ssh_bin} <- find_openssh(),
+         {:ok, key_dir} <- running_key_dir(),
+         {:ok, config, files} <- write_probe_files(jump, key_dir) do
+      try do
+        run_probe(
+          ssh_bin,
+          probe_args(jump, address, port, config, key_file_path(key_dir)),
+          timeout_ms
+        )
+      after
+        Enum.each(files, &File.rm/1)
+      end
+    else
+      {:error, :openssh_client_not_installed} -> {:error, "the OpenSSH client is not installed"}
+      {:error, :not_running} -> {:error, "the SSH client is not running"}
+      {:error, reason} -> {:error, inspect(reason)}
+    end
+  end
+
+  @doc false
+  # argv of `ssh -W`: like forwarder_args/4, with the jump host as the
+  # innermost hop (destination) and the probed target as the -W spec.
+  @spec probe_args(Target.t(), String.t(), :inet.port_number(), String.t(), String.t()) ::
+          [String.t()]
+  def probe_args(%Target{} = jump, address, port, config_path, key_file) do
+    [innermost | rest_outer] = jump_chain(jump)
+
+    [
+      "-F",
+      config_path,
+      "-W",
+      "#{bracket(address)}:#{port}",
+      "-i",
+      key_file,
+      "-l",
+      innermost.username,
+      "-p",
+      Integer.to_string(innermost.port)
+    ] ++ jump_list_args(rest_outer) ++ ["--", innermost.address]
+  end
+
+  defp running_key_dir do
+    if GenServer.whereis(__MODULE__),
+      do: {:ok, GenServer.call(__MODULE__, :key_dir)},
+      else: {:error, :not_running}
+  end
+
+  defp write_probe_files(jump, key_dir) do
+    suffix = "probe-#{System.unique_integer([:positive])}"
+    known_hosts = Path.join(key_dir, "known_hosts-#{suffix}")
+    config = Path.join(key_dir, "ssh_config-#{suffix}")
+
+    with :ok <- File.write(known_hosts, known_hosts_content(jump)),
+         :ok <- File.write(config, forwarder_config(key_file_path(key_dir), known_hosts)) do
+      {:ok, config, [known_hosts, config]}
+    end
+  end
+
+  defp run_probe(ssh_bin, args, timeout_ms) do
+    port =
+      Port.open({:spawn_executable, ssh_bin}, [
+        :binary,
+        :exit_status,
+        :stderr_to_stdout,
+        args: args
+      ])
+
+    deadline = System.monotonic_time(:millisecond) + timeout_ms
+    result = collect_probe(port, "", deadline, timeout_ms)
+    close_probe(port)
+    result
+  end
+
+  defp collect_probe(port, acc, deadline, timeout_ms) do
+    left = max(deadline - System.monotonic_time(:millisecond), 0)
+
+    receive do
+      {^port, {:data, data}} ->
+        acc = acc <> data
+
+        case banner_line(acc) do
+          {:ok, line} -> {:ok, line}
+          :none -> collect_probe(port, acc, deadline, timeout_ms)
+        end
+
+      {^port, {:exit_status, status}} ->
+        {:error, probe_failure(acc, status)}
+    after
+      left ->
+        if acc == "",
+          do: {:error, "no answer within #{max(div(timeout_ms, 1000), 1)} s"},
+          else: {:ok, acc}
+    end
+  end
+
+  # the SSH banner line, wherever ssh's own messages (stderr) put it
+  defp banner_line(acc) do
+    acc
+    |> String.split("\n")
+    |> Enum.find(&String.starts_with?(&1, "SSH-"))
+    |> case do
+      nil -> :none
+      line -> if String.contains?(acc, line <> "\n"), do: {:ok, line <> "\n"}, else: :none
+    end
+  end
+
+  defp probe_failure(acc, status) do
+    case acc |> String.split("\n", trim: true) |> List.last() do
+      nil -> "ssh exited with status #{status}"
+      line -> String.slice(String.trim(line), 0, 200)
+    end
+  end
+
+  defp close_probe(port) do
+    if Port.info(port), do: Port.close(port)
+
+    receive do
+      {^port, _} -> :ok
+    after
+      0 -> :ok
+    end
+  catch
+    _, _ -> :ok
   end
 
   # IPv6 literals need brackets inside -L and -J specs.

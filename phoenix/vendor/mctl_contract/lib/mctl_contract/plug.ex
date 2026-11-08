@@ -214,6 +214,10 @@ defmodule MctlContract.Plug do
     Handlers.delete_group(conn, opts(conn), slug)
   end
 
+  post "/probe/ssh", private: %{mctl_need: "setup"} do
+    Handlers.probe_ssh(conn, opts(conn))
+  end
+
   get "/jobs", private: %{mctl_need: "read"} do
     Handlers.list(conn, opts(conn), "jobs", :list_jobs, Handlers.renderer(:job))
   end

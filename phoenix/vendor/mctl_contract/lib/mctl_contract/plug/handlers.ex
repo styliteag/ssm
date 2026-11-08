@@ -174,6 +174,22 @@ defmodule MctlContract.Plug.Handlers do
     end)
   end
 
+  @doc """
+  `POST /probe/ssh` (capability `probe_ssh`): shape check, then
+  `provider.probe_ssh/2`; 200 with the per-port results.
+  """
+  def probe_ssh(conn, opts) do
+    if_capability(conn, opts, "probe_ssh", fn provider ->
+      case Params.probe_ssh(body(conn)) do
+        {:ok, params} ->
+          reply(conn, provider.probe_ssh(principal(conn), params), 200, &Render.probe_ssh/1)
+
+        {:error, details} ->
+          Respond.error(conn, "validation_failed", "invalid input", details)
+      end
+    end)
+  end
+
   @doc "`GET /people/{key}`: 400 on a malformed key."
   def get_person(conn, opts, key) do
     if_capability(conn, opts, "people", fn provider ->
