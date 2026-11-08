@@ -23,6 +23,8 @@ defmodule SsmWeb.ScopeLiveTest do
   @host_bearing ~w(/dashboard /hosts /authorizations /diff /activities)
   @catalog ~w(/users /keys /grants)
   @no_host_data ~w(/sign-in /settings/api-tokens)
+  # one SSH user; host data through the scope, tested below
+  @per_user ~w(/users/:id)
 
   setup do
     start_supervised!(MockClient)
@@ -71,7 +73,7 @@ defmodule SsmWeb.ScopeLiveTest do
         for %{plug: Phoenix.LiveView.Plug, path: path} <- SsmWeb.Router.__routes__(),
             do: path
 
-      unclassified = live_paths -- (@host_bearing ++ @catalog ++ @no_host_data)
+      unclassified = live_paths -- (@host_bearing ++ @catalog ++ @no_host_data ++ @per_user)
 
       assert unclassified == [],
              "classify #{inspect(unclassified)} in #{__MODULE__} and apply Ssm.Scope there"
@@ -85,6 +87,17 @@ defmodule SsmWeb.ScopeLiveTest do
         refute html =~ @out_host
         refute html =~ @bare_host
         refute html =~ "out-login"
+      end
+    end
+
+    test "/users/:id shows only access on in-scope hosts", %{conn: conn, provider: p} do
+      for name <- ["alice", "bob"] do
+        user = Ssm.Repo.get_by!(Ssm.Users.User, username: name)
+        {:ok, lv, html} = live(scoped(conn, p), ~p"/users/#{user.id}")
+        html = html <> render(lv)
+        refute html =~ @out_host
+        refute html =~ "out-login"
+        if name == "alice", do: assert(html =~ @in_host)
       end
     end
 

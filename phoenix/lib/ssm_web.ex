@@ -86,6 +86,7 @@ defmodule SsmWeb do
       import Phoenix.HTML
       # Core UI components
       import SsmWeb.CoreComponents
+      import SsmWeb.Links
 
       # Common modules used in templates
       alias Phoenix.LiveView.JS

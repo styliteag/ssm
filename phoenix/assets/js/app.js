@@ -122,6 +122,22 @@ document.addEventListener("click", e => {
 // connect if there are any LiveViews on the page
 liveSocket.connect()
 
+// List filters live in the URL (?q=, ?type=, …). Remember them per page for
+// this tab and bring them back when the page is opened again without any
+// (sidebar, links): navigating away and back keeps the search. Clearing the
+// filters patches to an empty query, which is remembered too.
+const QUERY_KEY = path => `ssm:query:${path}`
+window.addEventListener("phx:page-loading-stop", ({detail}) => {
+  const key = QUERY_KEY(location.pathname)
+  let saved = null
+  try { saved = sessionStorage.getItem(key) } catch (_e) { return }
+  if (detail.kind !== "patch" && location.search === "" && saved) {
+    liveSocket.js().patch(location.pathname + saved, {replace: true})
+    return
+  }
+  try { sessionStorage.setItem(key, location.search) } catch (_e) { /* private mode */ }
+})
+
 // expose liveSocket on window for web console debug logs and latency simulation:
 // >> liveSocket.enableDebug()
 // >> liveSocket.enableLatencySim(1000)  // enabled for duration of browser session

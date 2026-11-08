@@ -27,8 +27,19 @@ defmodule SsmWeb.UsersLive do
      |> assign(page_title: "Users")
      |> assign(form: nil, editing: nil)
      |> assign(selected: MapSet.new(), splitting: nil, merging: nil, bulk_deleting: false)
-     |> assign(sort: nil, view: "list")
+     |> assign(sort: nil, view: "list", q: nil, status: nil)
      |> reload_users()}
+  end
+
+  @impl true
+  def handle_params(params, _uri, socket) do
+    status = if params["status"] in ~w(enabled disabled), do: params["status"]
+    {:noreply, socket |> assign(q: params["q"], status: status) |> reload_users()}
+  end
+
+  defp row_matches?(row, q, status) do
+    matches?(q, [row.user.username, row.user.comment]) and
+      (status == nil or status == "enabled" == row.user.enabled)
   end
 
   defp reload_users(socket) do
@@ -38,6 +49,7 @@ defmodule SsmWeb.UsersLive do
     rows =
       Users.list_users_with_counts(scope)
       |> Enum.map(&Map.merge(&1, %{id: &1.user.id, grant_count: grant_counts[&1.user.id] || 0}))
+      |> Enum.filter(&row_matches?(&1, socket.assigns.q, socket.assigns.status))
       |> SsmWeb.TableSort.sort(socket.assigns.sort, user_sorters())
 
     ids = MapSet.new(rows, & &1.id)
@@ -72,6 +84,10 @@ defmodule SsmWeb.UsersLive do
 
   def handle_event("view-mode", %{"view" => view}, socket) when view in ~w(list cards) do
     {:noreply, assign(socket, :view, view)}
+  end
+
+  def handle_event("search", params, socket) do
+    {:noreply, push_patch(socket, to: ~p"/users?#{query_params(params, ~w(q status))}")}
   end
 
   def handle_event("new", _params, socket) do
@@ -504,8 +520,17 @@ defmodule SsmWeb.UsersLive do
         </:actions>
       </.header>
 
+      <.list_search
+        id="users-search"
+        q={@q}
+        placeholder="Search user or comment"
+        filters={[
+          {"status", @status, [{"All", ""}, {"Enabled", "enabled"}, {"Disabled", "disabled"}]}
+        ]}
+      />
+
       <p :if={@user_count == 0} class="text-sm opacity-60">
-        No users yet — create the first one.
+        {if @q || @status, do: "No matching users.", else: "No users yet — create the first one."}
       </p>
 
       <div
@@ -548,7 +573,11 @@ defmodule SsmWeb.UsersLive do
               phx-click="toggle-select"
               phx-value-id={row.id}
             />
-            <span class="min-w-0 flex-1 truncate font-medium">{row.user.username}</span>
+            <.user_link
+              id={row.id}
+              name={row.user.username}
+              class="min-w-0 flex-1 truncate font-medium"
+            />
             <span class={[
               "badge badge-sm flex-none",
               (row.user.enabled && "badge-success") || "badge-error"
@@ -593,7 +622,7 @@ defmodule SsmWeb.UsersLive do
             />
           </:col>
           <:col :let={row} label="Username" sort="username">
-            <span class="font-medium">{row.user.username}</span>
+            <.user_link id={row.id} name={row.user.username} class="font-medium" />
             <p :if={row.user.comment} class="text-xs opacity-60">{row.user.comment}</p>
           </:col>
           <:col :let={row} label="Status" sort="status">

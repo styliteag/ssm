@@ -61,6 +61,8 @@ defmodule SsmWeb.AuthorizationsLive do
      |> assign(:hosts, Hosts.list_hosts(scope(socket)))
      |> assign(:show_authorized_only, params["authorized"] == "1")
      |> assign(:matrix_login_param, params["login"])
+     |> assign(:auth_search, params["q"] || "")
+     |> assign(:query, params)
      |> reload_authorizations()}
   end
 
@@ -327,8 +329,14 @@ defmodule SsmWeb.AuthorizationsLive do
     {:noreply, socket |> assign(:auth_sort, sort) |> reload_authorizations()}
   end
 
+  # the list search lives in the URL next to the other filters (?q=…)
   def handle_event("list-search", %{"q" => q}, socket) do
-    {:noreply, socket |> assign(:auth_search, q) |> reload_authorizations()}
+    params =
+      socket.assigns.query
+      |> Map.put("q", q)
+      |> query_params(~w(view user_id host_id authorized login q))
+
+    {:noreply, push_patch(socket, to: ~p"/authorizations?#{params}")}
   end
 
   def handle_event("matrix-user-search", %{"q" => q}, socket) do
@@ -718,6 +726,13 @@ defmodule SsmWeb.AuthorizationsLive do
                 {user_label(auth)}
               </.link>
               <.link
+                navigate={user_path(auth.user_id)}
+                class="opacity-40 hover:opacity-100"
+                title={"Open the SSH user #{user_label(auth)}"}
+              >
+                <.icon name="hero-user" class="size-3.5" />
+              </.link>
+              <.link
                 navigate={~p"/keys?user_id=#{auth.user_id}"}
                 class="opacity-40 hover:opacity-100"
                 title={"Keys of #{user_label(auth)}"}
@@ -746,7 +761,15 @@ defmodule SsmWeb.AuthorizationsLive do
             </span>
           </:col>
           <:col :let={{_id, auth}} label="Login" sort="login">
-            <span class="font-mono text-sm">{auth.login}</span>
+            <.link
+              :if={auth.host}
+              navigate={host_path(auth.host_id)}
+              class="link link-hover font-mono text-sm"
+              title="This login in the diff viewer"
+            >
+              {auth.login}
+            </.link>
+            <span :if={is_nil(auth.host)} class="font-mono text-sm">{auth.login}</span>
           </:col>
           <:col :let={{_id, auth}} label="Options" sort="options">
             <span class="font-mono text-xs">{auth.options || "—"}</span>

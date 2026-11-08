@@ -58,6 +58,7 @@ defmodule SsmWeb.KeysLive do
     {:noreply,
      socket
      |> assign(:filter_user_id, filter_user_id)
+     |> assign(:search, params["q"] || "")
      |> assign(:users, Users.list_users())
      |> reload_keys()}
   end
@@ -105,21 +106,26 @@ defmodule SsmWeb.KeysLive do
     }
   end
 
+  # owner filter and search live in the URL (?user_id=…&q=…)
+  defp patch_keys(socket, changes) do
+    params =
+      %{"user_id" => socket.assigns.filter_user_id, "q" => socket.assigns.search}
+      |> Map.merge(changes)
+      |> Map.new(fn {k, v} -> {k, v && to_string(v)} end)
+      |> query_params(~w(user_id q))
+
+    push_patch(socket, to: ~p"/keys?#{params}")
+  end
+
   ## Events
 
   @impl true
   def handle_event("filter", %{"user_id" => value}, socket) do
-    to =
-      case value do
-        "" -> ~p"/keys"
-        id -> ~p"/keys?user_id=#{id}"
-      end
-
-    {:noreply, push_patch(socket, to: to)}
+    {:noreply, patch_keys(socket, %{"user_id" => value})}
   end
 
   def handle_event("search", %{"q" => q}, socket) do
-    {:noreply, socket |> assign(:search, q) |> refilter()}
+    {:noreply, patch_keys(socket, %{"q" => q})}
   end
 
   def handle_event("sort", %{"key" => key}, socket) do
@@ -598,9 +604,7 @@ defmodule SsmWeb.KeysLive do
             </span>
           </div>
           <div class="mt-1 flex flex-wrap gap-x-3 text-xs opacity-70">
-            <.link navigate={~p"/keys?user_id=#{key.user_id}"} class="link link-hover">
-              {key.user.username}
-            </.link>
+            <.user_link id={key.user_id} name={key.user.username} />
             <span title="Distinct hosts the owner has authorizations for">
               {Map.get(@hosts_by_user, key.user_id, 0)} host(s)
             </span>
@@ -617,7 +621,9 @@ defmodule SsmWeb.KeysLive do
 
       <div :if={@view == "list" and @key_count > 0} class="overflow-x-auto">
         <.table id="keys" rows={@streams.keys} sort={@sort}>
-          <:col :let={{_id, key}} label="User" sort="user">{key.user.username}</:col>
+          <:col :let={{_id, key}} label="User" sort="user">
+            <.user_link id={key.user_id} name={key.user.username} />
+          </:col>
           <:col :let={{_id, key}} label="Name" sort="name">
             <span class="font-medium">{key.name || "—"}</span>
             <p class="font-mono text-xs opacity-60">{truncate_key(key.key_base64)}</p>

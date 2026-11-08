@@ -241,6 +241,12 @@ with `:role`/`:actor`) also refuse an SSH user holding a grant with admin-only o
 `admin_only_refused`). `test/ssm_web/scope_live_test.exs`
 enumerates every LiveView route: a new page fails the suite until it is classified there.
 
+**Navigation**: `SsmWeb.Links` (imported in every LiveView) holds the cross-link paths
+(`host_path/1` → diff, `user_path/1` → `/users/:id` `SsmWeb.UserLive`, `keys_path/1`, `grants_path/1`),
+`host_link`/`user_link`/`copy_text` components, `short_key_line/1`, and `list_search` + `query_params/2`
++ `matches?/2` for list searches. List filters live in the URL (`push_patch`); `assets/js/app.js`
+remembers each page's query in `sessionStorage` and restores it when the page opens without one.
+
 **Host keys** (ADR-0008, `lib/ssm/ssh/host_key*.ex`, `lib/ssm/hosts/host_keys.ex`):
 every connect verifies `host.key_fingerprint`; unpinned hosts are refused.
 `Ssm.Hosts.HostKeys` (`pin/2`, `accept/3`, `pin_all/1`) is the only place that stores

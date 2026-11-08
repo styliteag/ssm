@@ -32,6 +32,8 @@ defmodule SsmWeb.GrantsLive do
       group_id: parse_id(params["group_id"])
     }
 
+    socket = assign(socket, :q, params["q"])
+
     {:noreply,
      socket
      |> assign(:filters, filters)
@@ -42,6 +44,10 @@ defmodule SsmWeb.GrantsLive do
   end
 
   defp scope(socket), do: Scope.of(socket.assigns.current_user)
+
+  defp target_path(%{customer_id: id}) when is_integer(id), do: ~p"/grants?customer_id=#{id}"
+  defp target_path(%{group_id: id}) when is_integer(id), do: ~p"/grants?group_id=#{id}"
+  defp target_path(_grant), do: ~p"/grants"
 
   defp parse_id(nil), do: nil
 
@@ -59,6 +65,15 @@ defmodule SsmWeb.GrantsLive do
       socket
       |> scope()
       |> Grants.list_grants(ssh_user_id: user_id, customer_id: customer_id, group_id: group_id)
+      |> Enum.filter(fn g ->
+        matches?(socket.assigns[:q], [
+          g.ssh_user.username,
+          Grants.target_label(g),
+          g.login,
+          g.comment,
+          g.created_by
+        ])
+      end)
       |> SsmWeb.TableSort.sort(socket.assigns.sort, sorters())
 
     assign(socket,
@@ -97,6 +112,17 @@ defmodule SsmWeb.GrantsLive do
   ## Events
 
   @impl true
+  def handle_event("search", params, socket) do
+    %{user_id: u, customer_id: c, group_id: g} = socket.assigns.filters
+
+    query =
+      %{"user_id" => u, "customer_id" => c, "group_id" => g, "q" => params["q"]}
+      |> Map.new(fn {k, v} -> {k, v && to_string(v)} end)
+      |> query_params(~w(user_id customer_id group_id q))
+
+    {:noreply, push_patch(socket, to: ~p"/grants?#{query}")}
+  end
+
   def handle_event("sort", %{"key" => key}, socket) do
     sort = SsmWeb.TableSort.toggle(socket.assigns.sort, key)
     {:noreply, socket |> assign(:sort, sort) |> reload()}
@@ -237,6 +263,8 @@ defmodule SsmWeb.GrantsLive do
         </.link>
       </nav>
 
+      <.list_search id="grants-search" q={@q} placeholder="Search user, target, login, comment" />
+
       <p :if={@grants == []} id="no-grants" class="text-sm opacity-60">No grants here.</p>
 
       <div :if={@grants != []} class="overflow-x-auto">
@@ -245,9 +273,18 @@ defmodule SsmWeb.GrantsLive do
             <.link patch={~p"/grants?user_id=#{grant.ssh_user_id}"} class="link link-hover">
               {grant.ssh_user.username}
             </.link>
+            <.link
+              navigate={user_path(grant.ssh_user_id)}
+              class="ml-1 opacity-60 hover:opacity-100"
+              title="Open the SSH user"
+            >
+              <.icon name="hero-arrow-top-right-on-square" class="size-3" />
+            </.link>
           </:col>
           <:col :let={grant} label="Target" sort="target">
-            {Grants.target_label(grant)}
+            <.link patch={target_path(grant)} class="link link-hover">
+              {Grants.target_label(grant)}
+            </.link>
             <p :if={@limits[grant.id]} class="text-xs opacity-60">{@limits[grant.id]}</p>
           </:col>
           <:col :let={grant} label="Login" sort="login">

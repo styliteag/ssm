@@ -802,33 +802,6 @@ defmodule SsmWeb.DiffLive do
     end
   end
 
-  # "ssh-rsa AAAAB3Nz…Xyz12345 comment": the middle of a long key cut out
-  defp short_line(line) do
-    case KeyParser.parse_authorized_line(line) do
-      {:ok, parsed} ->
-        [
-          short_text(KeyParser.options(line) || "", 40),
-          parsed.key_type,
-          short_base64(parsed.key_base64),
-          parsed.name
-        ]
-        |> Enum.filter(&(is_binary(&1) and &1 != ""))
-        |> Enum.join(" ")
-
-      {:error, _} ->
-        short_text(line, 120)
-    end
-  end
-
-  defp short_base64(b64) when byte_size(b64) > 36,
-    do: binary_part(b64, 0, 12) <> "…" <> binary_part(b64, byte_size(b64) - 20, 20)
-
-  defp short_base64(b64), do: b64
-
-  defp short_text(text, max) do
-    if String.length(text) > max, do: String.slice(text, 0, max) <> "…", else: text
-  end
-
   defp extra_key_info(line, owners) do
     case KeyParser.parse_authorized_line(line) do
       {:ok, parsed} ->
@@ -1276,7 +1249,7 @@ defmodule SsmWeb.DiffLive do
                   class="min-w-0 truncate font-mono text-xs"
                   title={item.line}
                 >
-                  {short_line(item.line)}
+                  {short_key_line(item.line)}
                 </code>
                 <.key_owner
                   key={line_key(item.line, @key_owners)}
@@ -1361,7 +1334,12 @@ defmodule SsmWeb.DiffLive do
           on this host if missing. The host itself is only changed by a later sync.
         </p>
 
-        <pre class="mb-2 max-h-24 overflow-auto whitespace-pre-wrap break-all rounded bg-base-300 p-2 font-mono text-xs">{@unknown_key.line}</pre>
+        <div class="mb-2 flex items-center gap-2 rounded bg-base-300 p-2">
+          <code class="min-w-0 truncate font-mono text-xs" title={@unknown_key.line}>
+            {short_key_line(@unknown_key.line)}
+          </code>
+          <.copy_text id="copy-unknown-key" text={@unknown_key.line} class="ml-auto" />
+        </div>
 
         <form
           id="unknown-key-form"

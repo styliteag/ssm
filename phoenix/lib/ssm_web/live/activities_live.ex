@@ -116,6 +116,15 @@ defmodule SsmWeb.ActivitiesLive do
 
   ## Render
 
+  # where an entry's target lives: the host's diff, else a search on the page
+  # of its kind (names are not unique ids, a search finds renamed ones too)
+  defp target_path(%{host_id: id}) when is_integer(id), do: host_path(id)
+  defp target_path(%{target: t}) when t in [nil, ""], do: nil
+  defp target_path(%{activity_type: "user", target: t}), do: ~p"/users?q=#{t}"
+  defp target_path(%{activity_type: "key", target: t}), do: ~p"/keys?q=#{t}"
+  defp target_path(%{activity_type: "auth", target: t}), do: ~p"/authorizations?q=#{t}"
+  defp target_path(_entry), do: nil
+
   @impl true
   def render(assigns) do
     ~H"""
@@ -163,7 +172,15 @@ defmodule SsmWeb.ActivitiesLive do
               {entry.activity_type}
             </span>
             <span class="font-medium">{entry.action}</span>
-            <span class="truncate opacity-75">{entry.target}</span>
+            <.link
+              :if={target_path(entry)}
+              navigate={target_path(entry)}
+              class="link link-hover truncate opacity-75"
+              title="Open"
+            >
+              {entry.target}
+            </.link>
+            <span :if={!target_path(entry)} class="truncate opacity-75">{entry.target}</span>
             <span class="ml-auto flex-none text-xs opacity-60">
               {format_timestamp(entry.timestamp)} · {entry.actor_username}
             </span>

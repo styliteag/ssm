@@ -146,6 +146,7 @@ defmodule SsmWeb.Router do
       live "/dashboard", DashboardLive
       live "/hosts", HostsLive
       live "/users", UsersLive
+      live "/users/:id", UserLive
       live "/keys", KeysLive
       live "/authorizations", AuthorizationsLive
       live "/grants", GrantsLive

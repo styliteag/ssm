@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- SSH user page (`/users/<id>`): the user's keys (short, copyable), its access per host and
+  login with the host's last key check (links to the diff), whether a row comes from a
+  grant (link to the grants), and its grants. User names link to it from the users,
+  keys, grants and authorizations pages.
+- Search on the users (with an enabled/disabled filter), hosts and grants pages. The
+  searches and filters of users, hosts, keys, grants, authorizations and activities live
+  in the URL and are remembered per page in the browser tab: navigating away and back
+  keeps them.
+- More links: host names and status badges open the diff; authorization logins open the
+  diff; grant targets filter the grants; activity entries link to their host's diff or
+  search their user, key or authorization. The unknown-key dialog shows the key
+  shortened with a copy button.
+
 ## [4.12.3] - 2026-11-09
 
 ### Changed

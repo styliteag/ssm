@@ -50,11 +50,28 @@ defmodule SsmWeb.HostsLive do
      socket
      |> assign(page_title: "Hosts")
      |> assign(form: nil, editing: nil, testing_id: nil, pinning: false)
-     |> assign(filter: "active", conn_results: %{}, sort: nil, view: "list")
+     |> assign(filter: "active", q: nil, conn_results: %{}, sort: nil, view: "list")
      |> assign(refreshing: false, refresh_done: 0, refresh_total: 0, refresh_ids: [])
      |> assign(:tested_at, %{})
      |> assign(:managed, nil)
      |> reload_hosts()}
+  end
+
+  # filter pill and search live in the URL (?filter=…&q=…), see SsmWeb.Links
+  @impl true
+  def handle_params(params, _uri, socket) do
+    filter = if params["filter"] in @filters, do: params["filter"], else: "active"
+    {:noreply, socket |> assign(filter: filter, q: params["q"]) |> refilter()}
+  end
+
+  defp patch_query(socket, changes) do
+    params =
+      %{"filter" => socket.assigns.filter, "q" => socket.assigns.q}
+      |> Map.merge(changes)
+      |> query_params(~w(filter q))
+      |> Map.reject(fn {k, v} -> k == "filter" and v == "active" end)
+
+    push_patch(socket, to: ~p"/hosts?#{params}")
   end
 
   # Everything host-bearing is read through the user's scope (ADR-0012).
@@ -88,6 +105,7 @@ defmodule SsmWeb.HostsLive do
     rows =
       hosts
       |> Enum.filter(&matches_filter?(filter, &1, statuses[&1.id]))
+      |> Enum.filter(&matches?(socket.assigns.q, [&1.name, &1.address, &1.comment, &1.username]))
       |> SsmWeb.TableSort.sort(socket.assigns.sort, host_sorters(socket.assigns, statuses))
 
     socket
@@ -139,7 +157,11 @@ defmodule SsmWeb.HostsLive do
 
   @impl true
   def handle_event("filter", %{"filter" => filter}, socket) when filter in @filters do
-    {:noreply, socket |> assign(:filter, filter) |> refilter()}
+    {:noreply, patch_query(socket, %{"filter" => filter})}
+  end
+
+  def handle_event("search", params, socket) do
+    {:noreply, patch_query(socket, %{"q" => params["q"]})}
   end
 
   def handle_event("sort", %{"key" => key}, socket) do
@@ -754,6 +776,8 @@ defmodule SsmWeb.HostsLive do
         </button>
       </div>
 
+      <.list_search id="hosts-search" q={@q} placeholder="Search name, address, comment" />
+
       <p :if={@host_count == 0} class="text-sm opacity-60">
         No hosts yet — create the first one.
       </p>
@@ -772,7 +796,7 @@ defmodule SsmWeb.HostsLive do
         >
           <div class="flex items-center justify-between gap-2">
             <span class="min-w-0">
-              <span class="block truncate font-medium">{host.name}</span>
+              <.host_link id={host.id} name={host.name} class="block truncate font-medium" />
               <span class="block truncate text-xs opacity-60">{host.address}:{host.port}</span>
             </span>
             <span
@@ -814,7 +838,7 @@ defmodule SsmWeb.HostsLive do
           row_item={&Function.identity/1}
         >
           <:col :let={host} label="Name" sort="name">
-            <span class="font-medium">{host.name}</span>
+            <.host_link id={host.id} name={host.name} class="font-medium" />
             <.pin_icon host={host} />
             <p :if={host.comment} class="text-xs opacity-60">{host.comment}</p>
           </:col>
@@ -835,12 +859,13 @@ defmodule SsmWeb.HostsLive do
             </.link>
           </:col>
           <:col :let={host} label="Status" sort="status">
-            <span
+            <.link
+              navigate={host_path(host.id)}
               class={["badge badge-sm", status_class(@statuses[host.id])]}
               title={status_title(@statuses[host.id])}
             >
               {status_label(@statuses[host.id])}
-            </span>
+            </.link>
             <.revocation_badge host={host} pending={@pending_revocations[host.id]} />
             <p :if={not host.disabled} id={"checked-#{host.id}"} class="text-xs opacity-60">
               {checked_label(host.id, @tested_at, @stored_checks)}
