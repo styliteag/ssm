@@ -30,6 +30,7 @@ defmodule SsmWeb.DiffLive do
   alias Ssm.Diffs.SyncCheck
   alias Ssm.Hosts
   alias Ssm.Hosts.Host
+  alias Ssm.HostStatus
   alias Ssm.Users
   alias Ssm.Users.KeyAssignment
   alias Ssm.Users.KeyParser
@@ -52,8 +53,8 @@ defmodule SsmWeb.DiffLive do
   @kinds ~w(synced needs_sync auth unreachable dns other unchecked disabled)a
 
   # Opening the page never opens an SSH connection: every host shows its last
-  # known result (this node's status cache, else the stored check in
-  # `host_checks`). Hosts are read only on an explicit action: "Check" on a
+  # known result (`Ssm.HostStatus.derive/3`: this node's status cache, else
+  # the stored check in `host_checks`); `:loading` while a check runs. Hosts are read only on an explicit action: "Check" on a
   # row, "Check all" (asks first), or the detail view of one selected host.
   @impl true
   # Only hosts in the user's scope (ADR-0012) are listed, and every action
@@ -64,7 +65,7 @@ defmodule SsmWeb.DiffLive do
     cached = StatusCache.all()
     checks = HostChecks.stored(scope)
 
-    statuses = Map.new(hosts, &{&1.id, initial_status(&1, cached[&1.id], checks[&1.id])})
+    statuses = Map.new(hosts, &{&1.id, HostStatus.derive(&1, cached[&1.id], checks[&1.id])})
 
     socket =
       socket
@@ -75,21 +76,6 @@ defmodule SsmWeb.DiffLive do
       |> assign(diff_search: "", diff_sort: nil, diff_filter: "all")
 
     {:ok, socket}
-  end
-
-  defp initial_status(%Host{disabled: true}, _cached, _check), do: :disabled
-  defp initial_status(_host, {status, _at}, _check), do: status
-  defp initial_status(_host, nil, %HostCheck{} = check), do: check_status(check)
-  defp initial_status(_host, nil, nil), do: :unchecked
-
-  # The diff page status of a stored check (`Ssm.Diffs.SyncCheck.status/1`
-  # shapes; the stored drift lists the missing and extra keys per login).
-  defp check_status(%HostCheck{state: "synced"}), do: :synced
-  defp check_status(%HostCheck{state: "error", error: error}), do: {:error, error || "error"}
-
-  defp check_status(%HostCheck{state: "drift", drift: drift}) do
-    count = fn field -> drift |> Enum.map(&length(&1[field] || [])) |> Enum.sum() end
-    {:needs_sync, count.("missing"), count.("extra")}
   end
 
   # Viewers get what is already known; anything that would open an SSH
@@ -166,7 +152,7 @@ defmodule SsmWeb.DiffLive do
     |> start_async(:detail, fn -> Diffs.host_diff(id) end)
   end
 
-  defp summarize(%HostDiff{} = diff), do: SyncCheck.status(diff)
+  defp summarize(%HostDiff{} = diff), do: HostStatus.from_sync_status(SyncCheck.status(diff))
 
   @impl true
   def handle_async(:statuses, {:ok, _done}, socket) do
@@ -281,7 +267,7 @@ defmodule SsmWeb.DiffLive do
     {:noreply,
      socket
      |> update(:checks, &Map.put(&1, host_id, check))
-     |> update(:statuses, &Map.put(&1, host_id, check_status(check)))}
+     |> update(:statuses, &Map.put(&1, host_id, HostStatus.from_check(check)))}
   end
 
   def handle_info({:host_check, host_id, {:error, :disabled}}, socket) do
@@ -292,7 +278,8 @@ defmodule SsmWeb.DiffLive do
   end
 
   def handle_info({:host_check, host_id, {:error, reason}}, socket) do
-    {:noreply, update(socket, :statuses, &Map.put(&1, host_id, {:error, format_reason(reason)}))}
+    status = HostStatus.from_error(format_reason(reason))
+    {:noreply, update(socket, :statuses, &Map.put(&1, host_id, status))}
   end
 
   defp refresh_after_sync(socket, host) do
@@ -460,7 +447,7 @@ defmodule SsmWeb.DiffLive do
       |> fresh_hosts()
       |> Enum.reject(& &1.disabled)
       |> Enum.filter(fn host ->
-        match?({:needs_sync, _, _}, socket.assigns.statuses[host.id])
+        match?({:drift, _, _}, socket.assigns.statuses[host.id])
       end)
 
     if to_sync == [] do
@@ -676,8 +663,9 @@ defmodule SsmWeb.DiffLive do
     case statuses[id] do
       :disabled -> :disabled
       :synced -> :synced
-      {:needs_sync, _, _} -> :needs_sync
-      {:error, _} -> HostCheck.kind(checks[id]) || :other
+      {:drift, _, _} -> :needs_sync
+      {:auth_failed, _} -> :auth
+      {_error, message} when is_binary(message) -> HostCheck.kind(checks[id]) || :other
       _unchecked_or_loading -> :unchecked
     end
   end
@@ -737,14 +725,14 @@ defmodule SsmWeb.DiffLive do
     }
   end
 
-  defp diff_status_rank({:error, _}), do: 0
-  defp diff_status_rank({:needs_sync, _, _}), do: 1
+  defp diff_status_rank({:drift, _, _}), do: 1
   defp diff_status_rank(:synced), do: 2
   defp diff_status_rank(:loading), do: 3
   defp diff_status_rank(:unchecked), do: 3
   defp diff_status_rank(:disabled), do: 4
+  defp diff_status_rank({_error, _message}), do: 0
 
-  defp diff_count({:needs_sync, missing, extra}), do: missing + extra
+  defp diff_count({:drift, missing, extra}), do: missing + extra
   defp diff_count(:synced), do: 0
   defp diff_count(_status), do: nil
 
@@ -758,15 +746,17 @@ defmodule SsmWeb.DiffLive do
   defp status_class(:loading), do: "badge-ghost"
   defp status_class(:unchecked), do: "badge-ghost"
   defp status_class(:synced), do: "badge-success"
-  defp status_class({:needs_sync, _, _}), do: "badge-warning"
-  defp status_class({:error, _}), do: "badge-error"
+  defp status_class({:drift, _, _}), do: "badge-warning"
+  defp status_class({_error, _message}), do: "badge-error"
 
   defp status_text(:disabled), do: "disabled"
   defp status_text(:loading), do: "checking…"
   defp status_text(:unchecked), do: "not checked"
   defp status_text(:synced), do: "synchronized"
-  defp status_text({:needs_sync, missing, extra}), do: "needs sync (+#{missing}/−#{extra})"
-  defp status_text({:error, _}), do: "error"
+  defp status_text({:drift, missing, extra}), do: "needs sync (+#{missing}/−#{extra})"
+  defp status_text({:auth_failed, _}), do: "auth failed"
+  defp status_text({:host_key_changed, _}), do: "host key changed"
+  defp status_text({:unreachable, _}), do: "error"
 
   defp item_badge(assigns) do
     ~H"""

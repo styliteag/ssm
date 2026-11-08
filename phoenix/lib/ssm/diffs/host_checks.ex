@@ -8,7 +8,8 @@ defmodule Ssm.Diffs.HostChecks do
 
   Every SSH access goes through `Ssm.Diffs.host_diff/2`, which refuses
   disabled hosts before connecting and honours the readonly markers. A
-  disabled host keeps no row (its summary is `unknown`).
+  disabled host keeps no row (its summary is `unknown`): disabling or
+  re-enabling a host forgets it (`Ssm.Hosts.update_host/2` → `forget/1`).
   """
 
   import Ecto.Query
@@ -209,9 +210,14 @@ defmodule Ssm.Diffs.HostChecks do
       row.error_code == result.error_code
   end
 
-  defp forget(host_id) do
+  @doc """
+  Drop the last known status of a host: its stored check and its status
+  cache entry (`Ssm.HostStatus`: a disabled, re-enabled or deleted host).
+  """
+  @spec forget(integer()) :: :ok
+  def forget(host_id) do
     Repo.delete_all(from c in HostCheck, where: c.host_id == ^host_id)
-    :ok
+    StatusCache.delete(host_id)
   end
 
   defp now(opts),

@@ -11,6 +11,7 @@ defmodule Ssm.Hosts do
 
   import Ecto.Query
 
+  alias Ssm.Diffs.{HostChecks, StatusCache}
   alias Ssm.Hosts.Host
   alias Ssm.{Repo, Scope}
   alias Ssm.Ssh.Target
@@ -108,7 +109,13 @@ defmodule Ssm.Hosts do
 
   @spec update_host(Host.t(), map()) :: {:ok, Host.t()} | {:error, Ecto.Changeset.t()}
   def update_host(%Host{} = host, attrs) do
-    host |> Host.changeset(attrs) |> Repo.update()
+    changeset = Host.changeset(host, attrs)
+
+    with {:ok, updated} <- Repo.update(changeset) do
+      # a status from before a disable/enable is stale (Ssm.HostStatus)
+      if Ecto.Changeset.changed?(changeset, :disabled), do: HostChecks.forget(updated.id)
+      {:ok, updated}
+    end
   end
 
   # Where ssm connects to (and as whom): changing them retargets every sync of
@@ -180,6 +187,9 @@ defmodule Ssm.Hosts do
   """
   @spec delete_host(Host.t()) :: {:ok, Host.t()} | {:error, Ecto.Changeset.t()}
   def delete_host(%Host{} = host) do
+    # the jump_via cascade deletes the hosts behind this one too
+    gone = jump_descendants([host.id], MapSet.new([host.id]))
+
     Repo.transaction(fn ->
       case Repo.delete(host) do
         {:ok, deleted} ->
@@ -190,6 +200,24 @@ defmodule Ssm.Hosts do
           Repo.rollback(changeset)
       end
     end)
+    |> tap(fn result -> if match?({:ok, _}, result), do: evict_statuses(gone) end)
+  end
+
+  # Their check rows go by ON DELETE CASCADE; the cache entries must go
+  # too: SQLite reuses ids, a new host must not inherit a status.
+  defp evict_statuses(ids), do: Enum.each(ids, &StatusCache.delete/1)
+
+  # every id reachable through jump_via, the given ones included (a jump
+  # loop in old data ends at the first repeat)
+  defp jump_descendants([], seen), do: MapSet.to_list(seen)
+
+  defp jump_descendants(ids, seen) do
+    children =
+      from(h in Host, where: h.jump_via in ^ids, select: h.id)
+      |> Repo.all()
+      |> Enum.reject(&MapSet.member?(seen, &1))
+
+    jump_descendants(children, MapSet.union(seen, MapSet.new(children)))
   end
 
   defp detach_activity(host_id) do

@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The hosts page status badge no longer says "unknown" after a restart while
+  "checked … ago" shows a recent check: it falls back to the stored key check.
+  A host that refuses ssm's key shows "auth failed" and a changed host key
+  shows "host key changed" (hosts page and diff viewer) instead of a plain
+  "offline"/"error".
+- Disabling or re-enabling a host drops its last check result, so a re-enabled
+  host starts as "unknown" instead of showing a stale status. Deleting a host
+  through `/api/v2` or Mission Control (and the hosts behind a deleted jump
+  host) now also clears its cached status, so a later host that reuses the id
+  does not inherit it.
+
 ## [4.11.0] - 2026-11-08
 
 ### Security
