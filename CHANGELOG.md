@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- A sync no longer fails with "Directory nonexistent" for a login whose home has no
+  `~/.ssh` yet: ssm creates it (mode 0700, owned by the login's user and group) and
+  writes the file. It does so only inside a home that exists and is not a symlink,
+  and never follows a link planted at `~/.ssh`. A login without a usable home (missing
+  or a symlink) is skipped with that reason; the other logins are still written.
+
 ## [4.11.0] - 2026-11-08
 
 ### Security

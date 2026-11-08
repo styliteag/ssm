@@ -264,6 +264,7 @@ defmodule Ssm.Diffs do
   defp unsafe_reason(message) do
     case Regex.run(~r/unsafe \(([^)]+)\)/, message) do
       [_, "ssh_dir"] -> @ssh_dir_blocked
+      [_, "home"] -> "no usable home (missing or a symlink)"
       [_, kind] -> "unsafe: " <> kind
       nil -> "unsafe"
     end

@@ -259,6 +259,39 @@ get_authorized_keyfile_for() {
     exit 0
 }
 
+# Create a login's missing ~/.ssh as root: 0700 (umask 077), owned by the
+# login's uid/gid from getent. Only inside a home that exists and is no
+# symlink. mkdir never follows a link planted at .ssh (any existing entry
+# makes it fail); ssm then enters the new directory, re-checks it with
+# pwd -P (a link swapped in after the mkdir resolves elsewhere) and chowns
+# its cwd ("."), never a path. An existing ~/.ssh is left alone.
+ensure_ssh_dir() {
+    entry=$(do_getent_passwd "$1") || entry=""
+    home=$(printf "%s" "${entry}" | cut -d: -f6)
+    if [ -n "${home}" ] && { [ -e "${home}/.ssh" ] || [ -h "${home}/.ssh" ]; }; then
+        return 0
+    fi
+    if [ -z "${home}" ] || [ -h "${home}" ] || [ ! -d "${home}" ]; then
+        echo "Keyfile is unsafe (home), aborting."
+        exit 1
+    fi
+    owner="$(printf "%s" "${entry}" | cut -d: -f3):$(printf "%s" "${entry}" | cut -d: -f4)"
+    case "${owner}" in
+        :*|*:|*[!0-9:]*) echo "Keyfile is unsafe (home), aborting."; exit 1 ;;
+    esac
+    if ! (
+        cd "${home}" || exit 1
+        real_home=$(pwd -P) || exit 1
+        (umask 077 && mkdir .ssh) || exit 1
+        cd .ssh || exit 1
+        [ "$(pwd -P)" = "${real_home}/.ssh" ] || exit 1
+        chown "${owner}" . || exit 1
+    ); then
+        echo "Keyfile is unsafe (ssh_dir), aborting."
+        exit 1
+    fi
+}
+
 handle_set_authorized_keyfile() {
     login="$1"
 
@@ -267,6 +300,9 @@ handle_set_authorized_keyfile() {
         echo "Keyfile is readonly, aborting."
         exit 1
     fi
+
+    # a login without ~/.ssh gets one (never through a link)
+    ensure_ssh_dir "${login}"
 
     # ~/.ssh itself a link: the write would land elsewhere, refuse. A linked
     # authorized_keys is fine: its entry is replaced, never written through.

@@ -54,7 +54,11 @@ partial sync, API 409 `SSH_READONLY`). A `user_readonly` owned by anyone else is
 link, and its content is never shown (fixed reason `user_readonly (root-owned)`). `script.sh` runs as
 root and never reads or writes through a link. A symlinked/hardlinked/non-regular `authorized_keys`
 is reported `unsafe` (`symlink|hardlink|special`), not read, but still written: the entry is
-replaced, never written through, so revocation reaches it. A symlinked `~/.ssh` (or one resolving
+replaced, never written through, so revocation reaches it. A login without `~/.ssh` gets one at write time
+(`script.sh` `ensure_ssh_dir`: only in a home that exists and is no symlink, `mkdir` under
+umask 077, then a `pwd -P` re-check inside the new directory and `chown` of the cwd to the
+getent uid:gid — never a path); a missing or symlinked home is refused `unsafe (home)`, a sync
+skips that login ("no usable home"). A symlinked `~/.ssh` (or one resolving
 outside the home) is `unsafe: ssh_dir`: not read, not written, skipped by a sync as "revocation
 blocked: unsafe ~/.ssh" (diff, periodic check, audit). Writes: cwd-pinned in the real `~/.ssh`, a
 fresh `O_EXCL` temp file (umask 022: root-owned 0644, as before), a handwritten file renamed to
