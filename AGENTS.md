@@ -47,7 +47,8 @@ the `mctl_contract` library's `mctl_tokens`, `mctl_jobs`, `mctl_idempotency`, an
 `ON DELETE CASCADE` — a sync empties such a login's file after its last grant is gone; pruned only by
 `Ssm.Hosts.ManagedLogins.forget/4`: admin "Managed logins" on the hosts page or `DELETE
 /api/v2/hosts/{id}/managed-logins/{login}`, only without authorizations and when `script.sh
-has_keyfile` says the host has no file for it, audited `forget_login`).
+has_keyfile` says the host has no file for it — an unknown login or missing home answers `unknown`,
+exit 1, never "no" — audited `forget_login`).
 Sync and readonly markers (`Ssm.Diffs.sync_host/2`): a host-wide marker (`system_readonly`, vendor
 platform) stops a sync before any write; a login's own `~/.ssh/user_readonly` counts only when root
 owns it (`script.sh` `user_readonly_state`, `find -user 0`) and then skips only that login, the
@@ -60,7 +61,7 @@ is reported `unsafe` (`symlink|hardlink|special`), not read, but still written: 
 replaced, never written through, so revocation reaches it. A login without `~/.ssh` gets one at write time
 (`script.sh` `ensure_ssh_dir`: only in a home that exists and is no symlink, `mkdir` under
 umask 077, then a `pwd -P` re-check inside the new directory and `chown` of the cwd to the
-getent uid:gid — never a path); a missing or symlinked home is refused `unsafe (home)`, a sync
+getent uid:gid — never a path — only while the cwd is still empty, root-owned and 0700); a missing or symlinked home is refused `unsafe (home)`, a sync
 skips that login ("no usable home"). `set_authorized_keyfile <login> <ssh_user>` (`ScriptRunner` passes
 `target.username`) refuses a login other than the SSH user whose resolved home (`pwd -P`) is
 the SSH user's (`unsafe (shared_home)`, uid-0 aliases like `toor`): that file holds ssm's own

@@ -7,8 +7,8 @@ defmodule Ssm.Diffs.KeyRemoval do
 
   The login is read fresh through `script.sh` and diffed again
   (`Ssm.Diffs.login_diff_for_write/2`): only lines that are still extra are
-  removed — a key granted meanwhile, a present key and ssm's own key never
-  are. Every other line (comments included) is written back unchanged
+  removed — a key granted meanwhile, a present key, a granted key whose
+  host line has other options, and ssm's own key never are. Every other line (comments included) is written back unchanged
   through `script.sh set_authorized_keyfile`, the one safe write path
   (handwritten files backed up, links replaced, never written through). A
   disabled host is refused before any SSH; a readonly login (host-wide
@@ -98,10 +98,18 @@ defmodule Ssm.Diffs.KeyRemoval do
   defp ensure_writable(_entry, _host), do: :ok
 
   # the key identities to drop: extras of the fresh diff, narrowed to the
-  # selected lines
+  # selected lines. A granted key whose host line carries other options is
+  # extra and missing at once: never dropped (the next sync fixes it).
   defp selected_extras(diff, selector, host, login) do
+    granted =
+      for %{status: status, line: line} <- diff.items,
+          status != :extra_on_host,
+          into: MapSet.new(),
+          do: key_id(line)
+
     extras =
       for %{status: :extra_on_host, line: line} <- diff.items,
+          not MapSet.member?(granted, key_id(line)),
           into: MapSet.new(),
           do: key_id(line)
 

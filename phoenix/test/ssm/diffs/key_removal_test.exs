@@ -206,4 +206,27 @@ defmodule Ssm.Diffs.KeyRemovalTest do
     assert last_audit().action == "remove_keys_failed"
     assert Activity.details(last_audit())["error"] =~ "shared_home"
   end
+
+  test "a granted key's host line with other options is never removed" do
+    host = host_fixture(%{username: "root"})
+    user = user_fixture()
+    key_fixture(user, %{key_type: "ssh-ed25519", key_base64: "OPTED", name: "laptop"})
+    authorization_fixture(user, host, %{login: "deploy", options: "no-pty"})
+
+    stub_host(host, [entry("deploy", ["ssh-ed25519 OPTED laptop", "ssh-rsa ROGUE x"])])
+
+    assert {:ok, %{removed: 1}} =
+             KeyRemoval.remove(MockClient, host, "deploy", :all_extra, "admin")
+
+    assert writes(host) == [{"deploy", "ssh-ed25519 OPTED laptop\n"}]
+
+    assert {:error, {:stale, _}} =
+             KeyRemoval.remove(
+               MockClient,
+               host,
+               "deploy",
+               {:lines, ["ssh-ed25519 OPTED laptop"]},
+               "admin"
+             )
+  end
 end

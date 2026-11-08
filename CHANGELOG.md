@@ -25,7 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Hosts page (admins): "Managed logins" lists every login ssm keeps writing on a host
   with its number of authorizations, and "Forget" stops managing a login that has no
-  authorization and no `authorized_keys` left on the host (ssm checks the host first).
+  authorization and no `authorized_keys` left on the host (ssm checks the host first;
+  a login the host cannot resolve, or whose home is missing, is kept).
   The same over the API: `GET /api/v2/hosts/{id}/managed-logins` and
   `DELETE /api/v2/hosts/{id}/managed-logins/{login}` (new error code
   `MANAGED_LOGIN_NOT_FOUND`). Each forget is in the activity log.

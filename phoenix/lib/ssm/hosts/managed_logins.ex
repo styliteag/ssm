@@ -5,7 +5,8 @@ defmodule Ssm.Hosts.ManagedLogins do
   so a revocation reaches it. `forget/4` removes such a row once nothing is
   left to revoke: the login has no authorization on the host and the host
   has no `authorized_keys` for it (asked fresh through `script.sh
-  has_keyfile`; a link counts as a file). A disabled host is never
+  has_keyfile`; a link counts as a file; a login the host cannot resolve
+  or whose home is missing is never forgotten — ssm cannot tell). A disabled host is never
   contacted. The check of the authorizations and the delete run in one
   IMMEDIATE transaction, after the host answered.
 

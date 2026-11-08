@@ -2,7 +2,8 @@ defmodule Ssm.Ssh.ScriptHasKeyfileTest do
   @moduledoc """
   `script.sh has_keyfile <login>`: "yes" when anything sits at the login's
   `~/.ssh/authorized_keys` (a link too, dangling or not) or `~/.ssh` is a
-  link; "no" when there is no such entry, or no such login.
+  link; "no" when there is no such entry; "unknown" (exit 1) when getent
+  does not know the login or its home does not exist.
   """
 
   use ExUnit.Case, async: true
@@ -40,10 +41,13 @@ defmodule Ssm.Ssh.ScriptHasKeyfileTest do
     assert answer(ctx, "dirlink") == "yes"
   end
 
-  test "an unknown login or a login without home has no file", ctx do
+  test "an unknown login or a missing home cannot be told: unknown, exit 1", ctx do
     passwd_entry(ctx, "homeless", 1000, 1000, Path.join(ctx.dir, "gone"))
 
-    assert answer(ctx, "nobody-here") == "no"
-    assert answer(ctx, "homeless") == "no"
+    # an LDAP outage or an unmounted home must not look like "no file"
+    for login <- ["nobody-here", "homeless"] do
+      assert {out, 1} = run(ctx, ["has_keyfile", login])
+      assert String.trim(out) == "unknown"
+    end
   end
 end

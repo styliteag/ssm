@@ -102,4 +102,21 @@ defmodule Ssm.Ssh.ScriptSshDirTest do
     assert out =~ "readonly"
     refute File.exists?(Path.join(home, ".ssh"))
   end
+
+  test "a root-owned dir swapped in for the new ~/.ssh is never handed to the user", ctx do
+    home = add_user(ctx, "taker")
+    # a root-owned directory an admin left in the user's home
+    left = Path.join(home, "admin-stuff")
+    File.mkdir_p!(left)
+    File.write!(Path.join(left, "secret"), "x")
+
+    fake_bin(ctx, "mkdir", """
+    /bin/mkdir "$@" || exit 1
+    if [ "$1" = ".ssh" ]; then /bin/mv .ssh .ssh.mine && /bin/mv admin-stuff .ssh; fi\
+    """)
+
+    assert {out, 1} = write(ctx, "taker", "ssh-ed25519 K x\n")
+    assert out =~ "unsafe (ssh_dir)"
+    assert File.lstat!(Path.join(home, ".ssh")).uid == 0
+  end
 end

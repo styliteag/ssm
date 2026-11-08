@@ -91,7 +91,7 @@ defmodule Ssm.Hosts.ManagedLoginsTest do
 
     assert {:error, {:ssh_connect_failed, _}} = ManagedLogins.forget(MockClient, host, "old", "a")
 
-    has_keyfile(host, "old", "no", 2)
+    has_keyfile(host, "old", "unknown", 1)
     assert {:error, {:ssh_connect_failed, _}} = ManagedLogins.forget(MockClient, host, "old", "a")
     assert Authorizations.managed_logins(host.id) == ["old"]
   end

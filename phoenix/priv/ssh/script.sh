@@ -293,6 +293,9 @@ ensure_ssh_dir() {
         (umask 077 && mkdir .ssh) || exit 1
         cd .ssh || exit 1
         [ "$(pwd -P)" = "${real_home}/.ssh" ] || exit 1
+        # still ssm's fresh directory (empty, root-owned 0700), not one the
+        # user renamed in after the mkdir: the cwd is pinned, no new window
+        [ -z "$(ls -A)" ] && [ -n "$(find . -prune -user 0 -perm 700)" ] || exit 1
         chown "${owner}" . || exit 1
     ); then
         echo "Keyfile is unsafe (ssh_dir), aborting."
@@ -470,12 +473,18 @@ handle_get_ssh_keyfiles() {
 }
 
 # "yes" when anything sits at the login's ~/.ssh/authorized_keys (a link
-# too, dangling or not) or its ~/.ssh is a link, else "no" (also for a
-# login getent does not know). Nothing is read.
+# too, dangling or not) or its ~/.ssh is a link, else "no". "unknown" (exit
+# 1) when getent does not know the login or its home does not exist: an
+# LDAP outage or an unmounted home must not look like "no file". Nothing
+# is read.
 handle_has_keyfile() {
     home=$(login_home "$1") || home=""
-    if [ -n "${home}" ] && { [ -e "${home}/${authorized_keys_location}" ] \
-        || [ -h "${home}/${authorized_keys_location}" ] || [ -h "${home}/.ssh" ]; }; then
+    if [ -z "${home}" ] || { [ ! -e "${home}" ] && [ ! -h "${home}" ]; }; then
+        echo "unknown"
+        exit 1
+    fi
+    if [ -e "${home}/${authorized_keys_location}" ] \
+        || [ -h "${home}/${authorized_keys_location}" ] || [ -h "${home}/.ssh" ]; then
         echo "yes"
     else
         echo "no"

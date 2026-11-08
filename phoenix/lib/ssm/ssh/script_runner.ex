@@ -211,8 +211,9 @@ defmodule Ssm.Ssh.ScriptRunner do
 
   @doc """
   Whether the host has an `authorized_keys` entry for `login` (any file or
-  link there, or a linked `~/.ssh`): `{:ok, boolean}`. A login the host
-  does not know has none. Anything but a clear answer is an error.
+  link there, or a linked `~/.ssh`): `{:ok, boolean}`. A login getent does
+  not know or a missing home is `unknown` — like anything but a clear
+  answer, an error.
   """
   @spec has_keyfile(module(), Target.t(), String.t()) :: {:ok, boolean()} | {:error, term()}
   def has_keyfile(client \\ Ssm.Ssh, target, login) do
