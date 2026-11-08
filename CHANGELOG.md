@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.13.0] - 2026-11-09
+
 ### Added
 
 - SSH user page (`/users/<id>`): the user's keys (short, copyable), its access per host and
