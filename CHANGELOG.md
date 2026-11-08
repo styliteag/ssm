@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.8.0] - 2026-11-08
+
 ### Added
 
 - mctl contract 0.4.0 `delete_customer` (`DELETE /api/mctl/v1/customers/{slug}`):
