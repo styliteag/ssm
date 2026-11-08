@@ -13,6 +13,19 @@ defmodule SsmWeb.UsersLiveTest do
     assert {:error, {:redirect, %{to: "/sign-in"}}} = live(conn, ~p"/users")
   end
 
+  test "an event with a non-numeric id is a no-op, not a crash", %{conn: conn} do
+    user = user_fixture()
+    {:ok, view, _html} = live(conn, ~p"/users")
+
+    for event <- ~w(edit delete toggle_enabled toggle-select split-open),
+        id <- ["abc", "1x", ""] do
+      render_click(view, event, %{"id" => id})
+    end
+
+    assert render(view) =~ user.username
+    assert Users.get_user(user.id)
+  end
+
   test "lists users with counts and status", %{conn: conn} do
     user = user_fixture(%{username: "alice"})
     host = host_fixture()

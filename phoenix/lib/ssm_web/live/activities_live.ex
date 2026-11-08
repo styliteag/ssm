@@ -21,6 +21,8 @@ defmodule SsmWeb.ActivitiesLive do
   alias SsmWeb.Layouts
 
   @page_size 50
+  # "Load more" stops here: every click re-reads the whole list
+  @max_entries 1000
 
   @impl true
   def mount(_params, _session, socket) do
@@ -64,7 +66,8 @@ defmodule SsmWeb.ActivitiesLive do
     {visible, more} = Enum.split(entries, socket.assigns.limit)
 
     socket
-    |> assign(:has_more, more != [])
+    |> assign(:has_more, more != [] and socket.assigns.limit < @max_entries)
+    |> assign(:capped, more != [] and socket.assigns.limit >= @max_entries)
     |> assign(:entry_count, length(visible))
     |> stream(:activities, visible, reset: true)
   end
@@ -86,7 +89,7 @@ defmodule SsmWeb.ActivitiesLive do
   def handle_event("load_more", _params, socket) do
     {:noreply,
      socket
-     |> update(:limit, &(&1 + @page_size))
+     |> update(:limit, &min(&1 + @page_size, @max_entries))
      |> reload_entries()}
   end
 
@@ -175,6 +178,9 @@ defmodule SsmWeb.ActivitiesLive do
           Load more
         </button>
       </div>
+      <p :if={@capped} id="activities-capped" class="text-center text-xs opacity-70">
+        Showing the newest {@limit} entries — narrow the filter or search to see older ones.
+      </p>
     </Layouts.app>
     """
   end

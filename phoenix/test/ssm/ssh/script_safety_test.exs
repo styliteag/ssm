@@ -293,6 +293,72 @@ defmodule Ssm.Ssh.ScriptSafetyTest do
     end
   end
 
+  describe "login guards" do
+    test "an all-numeric or option-like login is refused before any lookup", ctx do
+      before = File.read!(ctx.root_keys)
+
+      for login <- ["0", "1000", "-x", ""] do
+        assert {out, 1} = write(ctx, login, "ssh-ed25519 ATTACKER x\n")
+        assert out =~ "Invalid login", "login #{inspect(login)}: #{out}"
+      end
+
+      assert File.read!(ctx.root_keys) == before
+    end
+
+    test "another name for the connecting user's ~/.ssh is refused (own_login)", ctx do
+      # toor on FreeBSD: a second passwd entry with root's home
+      File.write!(
+        Path.join(ctx.dir, "passwd"),
+        "toor:x:0:0::#{Path.join(ctx.dir, "root")}:/bin/sh\n",
+        [:append]
+      )
+
+      before = File.read!(ctx.root_keys)
+
+      assert {out, 1} = write(ctx, "toor", "ssh-ed25519 ATTACKER x\n")
+      assert out =~ "unsafe (own_login)"
+      assert File.read!(ctx.root_keys) == before
+    end
+
+    test "the connecting user's own name still writes its own file", ctx do
+      {me, 0} = System.cmd("id", ["-un"])
+
+      File.write!(
+        Path.join(ctx.dir, "passwd"),
+        "#{String.trim(me)}:x:0:0::#{Path.join(ctx.dir, "root")}:/bin/sh\n",
+        [:append]
+      )
+
+      assert {_, 0} = write(ctx, String.trim(me), "ssh-ed25519 SSMKEY ssm\n")
+      assert File.read!(ctx.root_keys) =~ "ssh-ed25519 SSMKEY ssm"
+    end
+
+    test "without getent the passwd lookup matches the login literally, never as a pattern",
+         ctx do
+      [function] =
+        Regex.run(~r/^do_getent_passwd\(\) \{.*?^\}/ms, ScriptRunner.script_source())
+
+      passwd = Path.join(ctx.dir, "passwd.plain")
+      File.write!(passwd, "root:x:0:0::/root:/bin/sh\n00:x:5:5::/zero:/bin/sh\n")
+
+      script =
+        "have_getent() { return 1; }\npasswd_file=\"$2\"\n" <>
+          function <>
+          "\ndo_getent_passwd \"$1\""
+
+      lookup = fn login ->
+        {out, _} = System.cmd("sh", ["-c", script, "sh", login, passwd])
+        out
+      end
+
+      assert lookup.("r..t") == ""
+      assert lookup.("r.*") == ""
+      assert lookup.("0") == ""
+      assert lookup.("00") =~ "/zero"
+      assert lookup.("root") =~ "/root"
+    end
+  end
+
   describe "user_readonly" do
     test "a hardlinked root-owned marker is ignored and its content never shown", ctx do
       secret = Path.join(ctx.dir, "secret")

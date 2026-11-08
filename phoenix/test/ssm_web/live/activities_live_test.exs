@@ -127,4 +127,12 @@ defmodule SsmWeb.ActivitiesLiveTest do
     assert has_element?(view, "#activities-#{oldest.id}")
     refute has_element?(view, "#load-more")
   end
+
+  test "load more stops at a fixed maximum", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/activities")
+
+    for _ <- 1..40, do: render_click(view, "load_more", %{})
+
+    assert :sys.get_state(view.pid).socket.assigns.limit == 1000
+  end
 end

@@ -3,14 +3,15 @@ defmodule Ssm.Authorizations.Authorization do
   Grants one managed user access to one host under a remote `login`, with
   optional authorized_keys `options` (e.g. `no-pty,from="10.0.0.0/8"`,
   allow-listed by `Ssm.Authorizations.Options`). Login and comment refuse
-  control characters.
+  control characters; the login must also pass `Ssm.Authorizations.Login`
+  (not for copies of stored grants, see `copy_changeset/2`).
   Unique per (user, host, login).
   """
 
   use Ecto.Schema
   import Ecto.Changeset
 
-  alias Ssm.Authorizations.Options
+  alias Ssm.Authorizations.{Login, Options}
   alias Ssm.ControlChars
 
   schema "authorization" do
@@ -25,6 +26,7 @@ defmodule Ssm.Authorizations.Authorization do
   def changeset(authorization, attrs) do
     authorization
     |> base_changeset(attrs)
+    |> Login.validate(:login)
     |> Options.validate_changeset()
   end
 

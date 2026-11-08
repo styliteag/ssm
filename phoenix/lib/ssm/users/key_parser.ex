@@ -152,7 +152,12 @@ defmodule Ssm.Users.KeyParser do
     end
   end
 
-  defp check_material(type, base64) do
+  @doc """
+  `:ok` when `base64` decodes to an SSH wire-format blob of `type`
+  (RFC 4253 §6.6), else `{:error, message}`.
+  """
+  @spec check_material(String.t(), String.t()) :: :ok | {:error, String.t()}
+  def check_material(type, base64) do
     case Base.decode64(base64) do
       {:ok, blob} -> check_wire_type(type, blob)
       :error -> {:error, "invalid base64 key material"}

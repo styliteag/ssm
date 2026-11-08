@@ -13,6 +13,24 @@ defmodule SsmWeb.AuthorizationsLiveTest do
     assert {:error, {:redirect, %{to: "/sign-in"}}} = live(conn, ~p"/authorizations")
   end
 
+  test "an event with a non-numeric id is a no-op, not a crash", %{conn: conn} do
+    auth = authorization_fixture(user_fixture(), host_fixture())
+    {:ok, view, _html} = live(conn, ~p"/authorizations")
+
+    for event <- ~w(edit delete), id <- ["abc", "1x", ""] do
+      render_click(view, event, %{"id" => id})
+    end
+
+    render_click(view, "matrix-login", %{"login" => "deploy"})
+    render_click(view, "matrix-toggle", %{"user-id" => "x", "host-id" => "1"})
+    render_click(view, "bulk-open", %{})
+    render_click(view, "bulk-toggle-user", %{"id" => "x"})
+    render_click(view, "bulk-toggle-host", %{"id" => "x"})
+
+    assert render(view) =~ "deploy"
+    assert Authorizations.get_authorization(auth.id)
+  end
+
   test "lists authorizations with user, host, and login", %{conn: conn} do
     user = user_fixture(%{username: "alice"})
     host = host_fixture(%{name: "web1"})

@@ -31,19 +31,29 @@ defmodule Ssm.Ssh.Target do
           host_key: String.t() | nil
         }
 
-  @doc "Build a target (and its jump chain) from `Ssm.Hosts.Host` structs."
-  @spec from_host(struct(), (integer() -> struct() | nil)) :: t()
-  def from_host(host, fetch_host) do
-    jump =
-      case host.jump_via do
-        nil ->
-          nil
+  @max_hops 16
 
-        jump_id ->
-          case fetch_host.(jump_id) do
-            nil -> nil
-            jump_host -> from_host(jump_host, fetch_host)
-          end
+  @doc "Longest jump chain (hosts in front of the target) that is followed."
+  @spec max_hops() :: pos_integer()
+  def max_hops, do: @max_hops
+
+  @doc """
+  Build a target (and its jump chain) from `Ssm.Hosts.Host` structs.
+  Defensive against stored data the write side refuses today: the chain
+  stops at a host already in it (a `jump_via` loop) and after
+  `max_hops/0` jump hosts, so it always terminates.
+  """
+  @spec from_host(struct(), (integer() -> struct() | nil)) :: t()
+  def from_host(host, fetch_host), do: build(host, fetch_host, MapSet.new([host.id]), 0)
+
+  defp build(host, fetch_host, seen, hops) do
+    jump =
+      with jump_id when not is_nil(jump_id) <- host.jump_via,
+           false <- MapSet.member?(seen, jump_id) or hops >= @max_hops,
+           %{} = jump_host <- fetch_host.(jump_id) do
+        build(jump_host, fetch_host, MapSet.put(seen, jump_id), hops + 1)
+      else
+        _ -> nil
       end
 
     %__MODULE__{

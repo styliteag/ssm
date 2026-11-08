@@ -395,6 +395,60 @@ defmodule Ssm.Ssh.ScriptRunnerTest do
     end
   end
 
+  describe "get_ssh_keyfiles/2 entry shape" do
+    test "entries of the wrong shape or with an unusable login are dropped" do
+      stub_version_current()
+
+      good = %{login: "deploy", has_pragma: false, keyfile: "ssh-ed25519 AAAA x"}
+
+      json =
+        Jason.encode!([
+          good,
+          "deploy",
+          [1, 2],
+          %{login: 0, has_pragma: false, keyfile: ""},
+          %{login: "0", has_pragma: false, keyfile: "root's keys"},
+          %{login: "-x", has_pragma: false, keyfile: ""},
+          %{login: "a/b", has_pragma: false, keyfile: ""},
+          %{login: "evil", has_pragma: "yes", keyfile: ""},
+          %{login: "evil2", has_pragma: false, keyfile: %{}},
+          %{login: "evil3", has_pragma: false, keyfile: "", readonly_condition: [1]},
+          %{has_pragma: false, keyfile: ""}
+        ])
+
+      MockClient.set_exec(7, "#{@remote} get_ssh_keyfiles", %Result{stdout: json})
+
+      assert {:ok, [%LoginKeyfile{login: "deploy"}]} =
+               ScriptRunner.get_ssh_keyfiles(MockClient, target())
+    end
+  end
+
+  describe "remote output in messages" do
+    test "a huge stderr is capped in the error message" do
+      stub_version_current()
+
+      MockClient.set_exec(7, "#{@remote} set_authorized_keyfile deploy", %Result{
+        stderr: String.duplicate("x", 100_000),
+        exit_code: 1
+      })
+
+      assert {:error, {:ssh_connect_failed, message}} =
+               ScriptRunner.set_authorized_keyfile(MockClient, target(), "deploy", "keys")
+
+      assert String.length(message) < 1_000
+
+      MockClient.set_exec(7, "#{@remote} get_ssh_keyfiles", %Result{
+        stderr: String.duplicate("y", 100_000),
+        exit_code: 2
+      })
+
+      assert {:error, {:ssh_connect_failed, message}} =
+               ScriptRunner.get_ssh_keyfiles(MockClient, target())
+
+      assert String.length(message) < 1_000
+    end
+  end
+
   describe "set_authorized_keyfile/4" do
     test "pipes the content to the script with the login quoted" do
       stub_version_current()

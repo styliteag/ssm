@@ -4,7 +4,8 @@ defmodule SsmWeb.AuthorizationExportController do
   `host_id` filters — the React AuthorizationsPage export with the same
   columns (`User, Host, Login Account, SSH Options, User Enabled,
   Host Address`), built server-side instead of from browser state. Only
-  rows on hosts in the user's scope (ADR-0012).
+  rows on hosts in the user's scope (ADR-0012). A cell starting with
+  `= + - @`, tab or CR gets a leading `'` (no spreadsheet formula).
   """
 
   use SsmWeb, :controller
@@ -48,11 +49,17 @@ defmodule SsmWeb.AuthorizationExportController do
 
   defp csv_line(fields) do
     Enum.map_join(fields, ",", fn field ->
-      ~s("#{String.replace(field, ~s("), ~s(""))}")
+      ~s("#{field |> neutralise_formula() |> String.replace(~s("), ~s(""))}")
     end)
   end
 
-  defp parse_id(nil), do: nil
+  # CSV injection (OWASP): a spreadsheet runs a cell that starts with
+  # = + - @ (or a tab/CR before one) as a formula; a leading ' keeps it text
+  defp neutralise_formula(<<c, _::binary>> = field) when c in ~c"=+-@\t\r", do: "'" <> field
+  defp neutralise_formula(field), do: field
+
+  # filters come from the query string: anything but a plain id is no filter
+  defp parse_id(value) when not is_binary(value), do: nil
 
   defp parse_id(value) do
     case Integer.parse(value) do

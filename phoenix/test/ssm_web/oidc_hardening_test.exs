@@ -275,6 +275,47 @@ defmodule SsmWeb.OIDCHardeningTest do
     end
   end
 
+  describe "profile claims" do
+    test "name and preferred_username lose control characters and are capped", %{
+      conn: conn,
+      provider: p
+    } do
+      claims = %{"name" => "Eve\u202E\nAdmin" <> String.duplicate("x", 1000)}
+      assert conn |> login(p, claims) |> redirected_to() == "/dashboard"
+
+      op = operator()
+      refute op.name =~ ~r/[\x{202E}\n]/u
+      assert String.starts_with?(op.name, "EveAdmin")
+      assert String.length(op.name) <= 255
+    end
+
+    test "a name of only control characters falls back to the next claim", %{
+      conn: conn,
+      provider: p
+    } do
+      claims = %{"name" => "\u0007\u202E", "preferred_username" => "eve"}
+      assert conn |> login(p, claims) |> redirected_to() == "/dashboard"
+      assert operator().name == "eve"
+    end
+
+    test "an e-mail with control characters or over 320 characters is not stored", %{
+      conn: conn,
+      provider: p
+    } do
+      claims = %{"email" => "eve@example.com\nx", "email_verified" => true}
+      assert conn |> login(p, claims) |> redirected_to() == "/dashboard"
+      assert operator().email == nil
+      assert operator().verified_email == nil
+
+      long = String.duplicate("a", 320) <> "@example.com"
+
+      assert build_conn() |> login(p, %{"email" => long}, sub: "other") |> redirected_to() ==
+               "/dashboard"
+
+      assert Repo.get_by!(Operator, oidc_subject: "other").email == nil
+    end
+  end
+
   describe "ID token iat" do
     test "older than 10 minutes is refused", %{conn: conn, provider: p} do
       claims = %{"iat" => System.os_time(:second) - 700, "exp" => System.os_time(:second) + 300}

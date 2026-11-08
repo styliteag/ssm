@@ -74,7 +74,7 @@ defmodule SsmWeb.UsersLive do
   end
 
   def handle_event("edit", %{"id" => id}, socket) do
-    case Users.get_user(String.to_integer(id)) do
+    case fetch_user(id) do
       nil ->
         {:noreply, put_flash(socket, :error, "User not found.")}
 
@@ -126,7 +126,7 @@ defmodule SsmWeb.UsersLive do
   end
 
   def handle_event("delete", %{"id" => id}, socket) do
-    with %User{} = user <- Users.get_user(String.to_integer(id)),
+    with %User{} = user <- fetch_user(id),
          {:ok, _} <- Users.delete_user(scope(socket), user) do
       log_user_activity(socket, "delete", user)
 
@@ -141,7 +141,7 @@ defmodule SsmWeb.UsersLive do
   end
 
   def handle_event("toggle_enabled", %{"id" => id}, socket) do
-    with %User{} = user <- Users.get_user(String.to_integer(id)),
+    with %User{} = user <- fetch_user(id),
          {:ok, updated} <- Users.update_user(scope(socket), user, %{enabled: !user.enabled}) do
       action = if updated.enabled, do: "enable", else: "disable"
       log_user_activity(socket, action, updated)
@@ -159,16 +159,17 @@ defmodule SsmWeb.UsersLive do
   ## Events: selection
 
   def handle_event("toggle-select", %{"id" => id}, socket) do
-    id = String.to_integer(id)
+    case parse_id(id) do
+      nil -> {:noreply, socket}
+      id -> toggle_select(socket, id)
+    end
+  end
 
-    selected =
-      if MapSet.member?(socket.assigns.selected, id) do
-        MapSet.delete(socket.assigns.selected, id)
-      else
-        MapSet.put(socket.assigns.selected, id)
-      end
-
-    {:noreply, assign(socket, :selected, selected)}
+  def handle_event("split-toggle-key", %{"id" => id}, socket) do
+    case parse_id(id) do
+      nil -> {:noreply, socket}
+      id -> split_toggle_key(socket, id)
+    end
   end
 
   def handle_event("toggle-select-all", _params, socket) do
@@ -187,7 +188,7 @@ defmodule SsmWeb.UsersLive do
   ## Events: split keys
 
   def handle_event("split-open", %{"id" => id}, socket) do
-    user = Users.get_user(String.to_integer(id))
+    user = fetch_user(id)
 
     cond do
       is_nil(user) ->
@@ -205,20 +206,6 @@ defmodule SsmWeb.UsersLive do
            selected_keys: MapSet.new()
          })}
     end
-  end
-
-  def handle_event("split-toggle-key", %{"id" => id}, socket) do
-    id = String.to_integer(id)
-    splitting = socket.assigns.splitting
-
-    selected_keys =
-      if MapSet.member?(splitting.selected_keys, id) do
-        MapSet.delete(splitting.selected_keys, id)
-      else
-        MapSet.put(splitting.selected_keys, id)
-      end
-
-    {:noreply, assign(socket, :splitting, %{splitting | selected_keys: selected_keys})}
   end
 
   def handle_event("split-change", %{"split" => %{"username" => username}}, socket) do
@@ -345,13 +332,45 @@ defmodule SsmWeb.UsersLive do
   # authorizations are all in the user's scope (ADR-0012 §3, `Users.writable?/2`).
   defp scope(socket), do: Ssm.Scope.of(socket.assigns.current_user)
 
-  defp parse_id(nil), do: nil
-
-  defp parse_id(value) do
+  # ids from client events: anything but a plain integer is "not found"
+  defp parse_id(value) when is_binary(value) do
     case Integer.parse(value) do
       {id, ""} -> id
       _ -> nil
     end
+  end
+
+  defp parse_id(_value), do: nil
+
+  defp fetch_user(id) do
+    case parse_id(id) do
+      nil -> nil
+      id -> Users.get_user(id)
+    end
+  end
+
+  defp toggle_select(socket, id) do
+    selected =
+      if MapSet.member?(socket.assigns.selected, id) do
+        MapSet.delete(socket.assigns.selected, id)
+      else
+        MapSet.put(socket.assigns.selected, id)
+      end
+
+    {:noreply, assign(socket, :selected, selected)}
+  end
+
+  defp split_toggle_key(socket, id) do
+    splitting = socket.assigns.splitting
+
+    selected_keys =
+      if MapSet.member?(splitting.selected_keys, id) do
+        MapSet.delete(splitting.selected_keys, id)
+      else
+        MapSet.put(splitting.selected_keys, id)
+      end
+
+    {:noreply, assign(socket, :splitting, %{splitting | selected_keys: selected_keys})}
   end
 
   defp merge_target(%{mode: "existing", target_id: target_id}, users) do

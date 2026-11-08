@@ -15,6 +15,7 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 TMP="${TMPDIR:-/tmp}"
+passwd_file="/etc/passwd"
 
 have_getent() {
   command -v getent >/dev/null 2>&1
@@ -24,7 +25,7 @@ do_getent_passwd_all() {
   if have_getent; then
     getent passwd
   else
-    cat /etc/passwd
+    cat "${passwd_file}"
   fi
 }
 
@@ -33,8 +34,20 @@ do_getent_passwd() {
   if have_getent; then
     getent passwd "${login}"
   else
-    grep "^${login}:" /etc/passwd
+    # the login is a literal name, never a pattern (string comparison:
+    # "0" must not equal "00")
+    LOGIN="${login}" awk -F: '($1 "") == (ENVIRON["LOGIN"] "")' "${passwd_file}"
   fi
+}
+
+# A login ssm may write: not empty, not all digits (getent would read it as
+# a uid: "0" is root), not starting with "-" (an option).
+login_ok() {
+    case "$1" in
+        ""|-*) return 1 ;;
+        *[!0-9]*) return 0 ;;
+        *) return 1 ;;
+    esac
 }
 
 # TODO: Read authorized_keys location from sshd config
@@ -260,7 +273,12 @@ get_authorized_keyfile_for() {
 }
 
 handle_set_authorized_keyfile() {
-    login="$1"
+    login="${1:-}"
+
+    if ! login_ok "${login}"; then
+        echo "Invalid login, aborting."
+        exit 1
+    fi
 
     readonly_condition=$(check_keyfile_condition "${login}")
     if [ -n "${readonly_condition}" ]; then
@@ -283,6 +301,15 @@ handle_set_authorized_keyfile() {
     cd "${home}/.ssh" || { echo "Couldn't enter ${home}/.ssh"; exit 1; }
     if [ "$(pwd -P)" != "$(cd "${home}" && pwd -P)/.ssh" ]; then
         echo "Keyfile is unsafe (ssh_dir), aborting."
+        exit 1
+    fi
+
+    # Another name for the connecting user's own file (same ~/.ssh, e.g.
+    # toor next to root): ssm writes that file only under the connecting
+    # user's own name, where it always adds its own key (no lock-out).
+    if [ "$(pwd -P)" = "$(cd "${HOME}/.ssh" 2>/dev/null && pwd -P)" ] \
+        && [ "${login}" != "$(id -un)" ]; then
+        echo "Keyfile is unsafe (own_login), aborting."
         exit 1
     fi
 

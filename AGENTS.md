@@ -63,6 +63,11 @@ symlink target is `rm`'d first, then plain `mv` (a real directory there is refus
 link-to-dir`, a per-login skip). An unsafe `~/.ssh` also sets the login's `read_error` (API diff);
 `SyncCheck` keeps it as blocked drift, not a host error. Reads: time-bounded; on Linux the opened fd is checked via
 `/proc` (same inode as the entry, one link).
+Logins: `Ssm.Authorizations.Login` refuses all-digit logins (getent reads a uid), a leading `-`,
+whitespace, `:` and `/` (AD/SSSD names with `@`, `\`, dots, uppercase allowed; a strict POSIX
+charset is an open decision); `script.sh` `set_authorized_keyfile` refuses empty, all-digit and `-`
+logins, matches `/etc/passwd` literally without getent, and refuses another name for the
+connecting user's `~/.ssh` (`unsafe: own_login`) so only `host.username` — written with ssm's own key — reaches it.
 Every sync outcome is audit-logged (`Ssm.Diffs.SyncAudit`).
 
 **Web login** (ADR-0011, `lib/ssm/oidc/`, `ssm_web/oidc_controller.ex`): `.htpasswd`

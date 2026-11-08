@@ -148,7 +148,7 @@ defmodule SsmWeb.KeysLive do
   end
 
   def handle_event("edit", %{"id" => id}, socket) do
-    case Users.get_key(String.to_integer(id)) do
+    case fetch_key(id) do
       nil ->
         {:noreply, put_flash(socket, :error, "Key not found.")}
 
@@ -160,7 +160,7 @@ defmodule SsmWeb.KeysLive do
   end
 
   def handle_event("view", %{"id" => id}, socket) do
-    case Users.get_key(String.to_integer(id)) do
+    case fetch_key(id) do
       nil -> {:noreply, put_flash(socket, :error, "Key not found.")}
       key -> {:noreply, assign(socket, :viewing, key)}
     end
@@ -200,7 +200,7 @@ defmodule SsmWeb.KeysLive do
   end
 
   def handle_event("delete", %{"id" => id}, socket) do
-    with %UserKey{} = key <- Users.get_key(String.to_integer(id)),
+    with %UserKey{} = key <- fetch_key(id),
          {:ok, _} <- Users.delete_key(scope(socket), key) do
       log_key_activity(socket, "delete", key)
 
@@ -311,6 +311,16 @@ defmodule SsmWeb.KeysLive do
 
     {paste, parsed, attrs}
   end
+
+  # ids from client events: anything but a plain integer is "not found"
+  defp fetch_key(id) when is_binary(id) do
+    case Integer.parse(id) do
+      {id, ""} -> Users.get_key(id)
+      _ -> nil
+    end
+  end
+
+  defp fetch_key(_id), do: nil
 
   defp override_or(override, comment) when override in [nil, ""], do: comment
   defp override_or(override, _comment), do: override

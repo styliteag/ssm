@@ -5,7 +5,9 @@ defmodule Ssm.Hosts.Host do
 
   `disabled` blocks every SSH operation (non-negotiable rule: each SSH code
   path checks it first). `jump_via` points at another host used as a jump
-  host; chains are allowed (jump host may itself have a jump host).
+  host; chains are allowed (jump host may itself have a jump host), loops
+  and chains longer than `Ssm.Ssh.Target.max_hops/0` are refused by
+  `Ssm.Hosts.create_host/1` / `update_host/2`.
 
   Host-key pinning (ADR-0008): `key_fingerprint` is the pin every connect is
   verified against (`<type> SHA256:<base64>`, or a bare legacy `SHA256:…`);
@@ -67,7 +69,8 @@ defmodule Ssm.Hosts.Host do
     |> validate_required([:name, :username, :address, :port])
     |> validate_length(:name, min: 1, max: 255)
     |> validate_number(:port, greater_than: 0, less_than: 65_536)
-    |> ControlChars.validate([:name, :username])
+    |> validate_length(:comment, max: 1024)
+    |> ControlChars.validate([:name, :username, :comment])
     # Both reach the local ssh command line (jump chains): no option-like or
     # separator characters (see Ssm.Hosts.SshFields).
     |> validate_change(:username, &ssh_field(&1, &2, SshFields.valid_username?(&2)))

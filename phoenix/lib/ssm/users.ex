@@ -157,7 +157,8 @@ defmodule Ssm.Users do
   def create_key(attrs), do: %UserKey{} |> UserKey.changeset(attrs) |> Repo.insert()
 
   @spec update_key(UserKey.t(), map()) :: {:ok, UserKey.t()} | {:error, Ecto.Changeset.t()}
-  def update_key(%UserKey{} = key, attrs), do: key |> UserKey.changeset(attrs) |> Repo.update()
+  def update_key(%UserKey{} = key, attrs),
+    do: key |> UserKey.edit_changeset(attrs) |> Repo.update()
 
   @spec delete_key(UserKey.t()) :: {:ok, UserKey.t()} | {:error, Ecto.Changeset.t()}
   def delete_key(%UserKey{} = key), do: Repo.delete(key)
@@ -177,7 +178,7 @@ defmodule Ssm.Users do
   @spec update_key(Ssm.Scope.t(), UserKey.t(), map()) ::
           {:ok, UserKey.t()} | {:error, Ecto.Changeset.t() | :out_of_scope}
   def update_key(%Ssm.Scope{} = scope, %UserKey{} = key, attrs) do
-    new_owner = key |> UserKey.changeset(attrs) |> Ecto.Changeset.get_field(:user_id)
+    new_owner = key |> UserKey.edit_changeset(attrs) |> Ecto.Changeset.get_field(:user_id)
 
     if writable?(scope, key.user_id) and writable?(scope, new_owner),
       do: update_key(key, attrs),
@@ -190,6 +191,9 @@ defmodule Ssm.Users do
   def delete_key(%Ssm.Scope{} = scope, %UserKey{} = key),
     do: if(writable?(scope, key.user_id), do: delete_key(key), else: {:error, :out_of_scope})
 
+  @doc "Form changeset: a new key (no id) or an edit of a stored one (`UserKey.edit_changeset/2`)."
   @spec change_key(UserKey.t(), map()) :: Ecto.Changeset.t()
-  def change_key(%UserKey{} = key, attrs \\ %{}), do: UserKey.changeset(key, attrs)
+  def change_key(key, attrs \\ %{})
+  def change_key(%UserKey{id: nil} = key, attrs), do: UserKey.changeset(key, attrs)
+  def change_key(%UserKey{} = key, attrs), do: UserKey.edit_changeset(key, attrs)
 end

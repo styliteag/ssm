@@ -4,13 +4,15 @@ defmodule Ssm.Diffs.SyncCheck do
   stores (`result/2`) and into the status the diff page shows (`status/1`).
 
   The stored drift never contains key material: a key is labelled by its
-  type, SHA256 fingerprint and comment. A line that is not a plain key line
+  type, SHA256 fingerprint and comment (control and bidi characters
+  stripped, at most #{200} characters). A line that is not a plain key line
   (authorized_keys options, odd text) is labelled `"unparsable key line"`
   and nothing of it is kept. A drift entry whose extra keys a sync cannot
   remove (the login's `user_readonly`) carries `"blocked"`. Read failures are reduced to a fixed sentence
   (`Ssm.Ssh.ErrorCode`); the raw text (addresses, SSH output) stays out.
   """
 
+  alias Ssm.ControlChars
   alias Ssm.Diffs.{HostDiff, LoginDiff}
   alias Ssm.Ssh.ErrorCode
   alias Ssm.Users.UserKey
@@ -25,6 +27,7 @@ defmodule Ssm.Diffs.SyncCheck do
         }
 
   @unparsable "unparsable key line"
+  @max_comment 200
   @blocked "revocation blocked by user_readonly"
 
   @doc """
@@ -139,7 +142,15 @@ defmodule Ssm.Diffs.SyncCheck do
     end
   end
 
-  defp comment([comment]) when comment != "", do: " (#{String.trim(comment)})"
+  # the comment is read from the host (user-writable): no control or bidi
+  # characters, bounded
+  defp comment([comment]) do
+    case comment |> ControlChars.strip() |> String.trim() |> String.slice(0, @max_comment) do
+      "" -> ""
+      clean -> " (#{clean})"
+    end
+  end
+
   defp comment(_), do: ""
 
   # OpenSSH style SHA256 fingerprint of the key blob; text that is no valid

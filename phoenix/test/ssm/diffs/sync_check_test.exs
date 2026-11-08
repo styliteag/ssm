@@ -69,6 +69,16 @@ defmodule Ssm.Diffs.SyncCheckTest do
       assert %{drift: [%{"user" => "bob", "missing" => [_, _]}]} = SyncCheck.result(d, owners)
     end
 
+    test "a host-read comment loses control and bidi characters and is capped" do
+      comment = "evil\u202Egnp.exe\u0007\u2066x" <> String.duplicate("c", 500)
+      d = diff([login("root", [item(:extra_on_host, "ssh-rsa AAAA " <> comment)])])
+
+      assert %{drift: [%{"extra" => [label]}]} = SyncCheck.result(d, %{})
+      refute label =~ ~r/[\x{202E}\x{2066}\x{0007}]/u
+      assert label =~ "(evilgnp.exex"
+      assert String.length(label) < 200 + 80
+    end
+
     test "a line that is no key is labelled without leaking its content" do
       d = diff([login("root", [item(:extra_on_host, ~s(command="rm -rf /" ssh-ed25519 AAAA x))])])
       assert %{drift: [%{"extra" => [label]}]} = SyncCheck.result(d, %{})

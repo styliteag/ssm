@@ -146,6 +146,39 @@ defmodule SsmWeb.KeysLiveTest do
     assert updated.key_base64 == key.key_base64
   end
 
+  test "a crafted edit event cannot change the key material", %{conn: conn} do
+    user = user_fixture()
+    key = key_fixture(user, %{name: "old"})
+
+    {:ok, view, _html} = live(conn, ~p"/keys")
+    view |> element("#edit-key-#{key.id}") |> render_click()
+
+    render_submit(view, "save", %{
+      "user_key" => %{
+        "name" => "renamed",
+        "key_type" => "ssh-ed25519 AAAAOTHERKEY x",
+        "key_base64" => "AAAAOTHERKEY"
+      }
+    })
+
+    updated = Users.get_key(key.id)
+    assert updated.name == "renamed"
+    assert updated.key_type == key.key_type
+    assert updated.key_base64 == key.key_base64
+  end
+
+  test "an event with a non-numeric id is a no-op, not a crash", %{conn: conn} do
+    key = key_fixture(user_fixture())
+    {:ok, view, _html} = live(conn, ~p"/keys")
+
+    for event <- ~w(edit view delete), id <- ["abc", "1x", ""] do
+      render_click(view, event, %{"id" => id})
+    end
+
+    assert Process.alive?(view.pid)
+    assert Users.get_key(key.id)
+  end
+
   test "view modal shows the full authorized_keys line", %{conn: conn} do
     user = user_fixture()
     key = key_fixture(user, %{name: "laptop", key_base64: "FULLKEYMATERIAL"})

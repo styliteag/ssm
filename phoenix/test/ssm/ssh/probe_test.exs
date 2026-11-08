@@ -85,6 +85,21 @@ defmodule Ssm.Ssh.ProbeTest do
       jump = %Target{host_id: 1, name: "gw", address: "203.0.113.5", port: 22, username: "root"}
       assert {:error, {:validation, _}} = Probe.run("169.254.0.9", [22], jump)
     end
+
+    test "loopback names are refused like loopback literals" do
+      Application.put_env(:ssm, :probe_allow_loopback, false)
+      on_exit(fn -> Application.put_env(:ssm, :probe_allow_loopback, true) end)
+      jump = %Target{host_id: 1, name: "gw", address: "203.0.113.5", port: 22, username: "root"}
+
+      for name <- ~w(localhost LOCALHOST. db.localhost localhost.localdomain ip6-localhost) do
+        assert {:error, {:validation, %{"address" => [reason]}}} = Probe.run(name, [22], jump),
+               name
+
+        assert reason =~ "loopback"
+      end
+
+      refute_received {:banner_via, _, _, _}
+    end
   end
 
   test "ssh -W argv: target as -W spec, jump host as destination, outer hops as -J" do

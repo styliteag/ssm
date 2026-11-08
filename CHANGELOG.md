@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- Editing a key changes only its name, comment and owner; key type and
+  material can no longer be changed after creation (UI and API). A new key's
+  type must be a known SSH key type, and `POST /api/v2/keys` also checks that
+  the material is a key of that type (422 `VALIDATION_FAILED`). Key names are
+  limited to 128 and comments to 1024 characters everywhere, as in the API.
+- Authorization logins are refused when a host could read them as something
+  else: all digits (a uid — `0` is root), a leading `-`, whitespace, `:` or
+  `/`. Directory-service names (`user@corp.example`, `CORP\user`, dots,
+  uppercase) stay allowed. Stored grants are not changed.
+- The host script (`script.sh`, re-uploaded automatically) refuses such logins
+  too, looks a login up in `/etc/passwd` by its exact name (never as a
+  pattern) when `getent` is missing, and refuses to write the file of the
+  user ssm connects as under another name (e.g. `toor` next to `root`), so a
+  grant can no longer remove ssm's own key; the sync skips that login as
+  `unsafe: own_login`.
+- A host's jump host can no longer form a loop (A via B via A) or a chain of
+  more than 16 jump hosts; a loop already stored no longer exhausts memory.
+- Host listings from a host are checked entry by entry; malformed entries are
+  dropped and logged. Remote error output in messages is capped at 500
+  characters.
+- `probe_ssh` through a jump host refuses loopback names (`localhost`,
+  `*.localhost`, …) and names that resolve, from ssm, to a refused range.
+- Host comments refuse control characters and are limited to 1024
+  characters. Key comments read from hosts are stored and shown in the
+  periodic check without control or bidi characters, at most 200 characters.
+- SSO profile claims: names lose control and bidi characters and are capped
+  at 255 characters; an e-mail with control characters or over 320 characters
+  is ignored.
+- The authorizations CSV export prefixes cells that a spreadsheet would run as
+  a formula (`= + - @`) with `'`; malformed filter parameters are ignored
+  instead of failing.
+
+### Fixed
+
+- Web pages no longer crash on a malformed id in a click event (users, keys,
+  authorizations), and "Load more" in the activity log stops at the newest
+  1000 entries.
+
 ## [4.11.0] - 2026-11-08
 
 ### Security

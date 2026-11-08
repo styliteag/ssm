@@ -86,7 +86,7 @@ defmodule Ssm.Hosts do
 
   @spec create_host(map()) :: {:ok, Host.t()} | {:error, Ecto.Changeset.t()}
   def create_host(attrs) do
-    %Host{} |> Host.changeset(attrs) |> Repo.insert()
+    %Host{} |> Host.changeset(attrs) |> validate_jump_chain() |> Repo.insert()
   end
 
   @doc """
@@ -108,8 +108,44 @@ defmodule Ssm.Hosts do
 
   @spec update_host(Host.t(), map()) :: {:ok, Host.t()} | {:error, Ecto.Changeset.t()}
   def update_host(%Host{} = host, attrs) do
-    host |> Host.changeset(attrs) |> Repo.update()
+    host |> Host.changeset(attrs) |> validate_jump_chain() |> Repo.update()
   end
+
+  # A new `jump_via` must not lead back to the host itself (A -> B -> A) nor
+  # make a chain longer than `Target.max_hops/0`: the target builder walks
+  # the chain on every connect.
+  defp validate_jump_chain(changeset) do
+    case Ecto.Changeset.fetch_change(changeset, :jump_via) do
+      {:ok, jump_id} when is_integer(jump_id) ->
+        seen = if changeset.data.id, do: MapSet.new([changeset.data.id]), else: MapSet.new()
+
+        if jump_chain_ok?(jump_id, seen, 1),
+          do: changeset,
+          else:
+            Ecto.Changeset.add_error(
+              changeset,
+              :jump_via,
+              "would make the jump chain loop or longer than #{Target.max_hops()} hosts"
+            )
+
+      _ ->
+        changeset
+    end
+  end
+
+  defp jump_chain_ok?(nil, _seen, _hops), do: true
+
+  defp jump_chain_ok?(id, seen, hops) do
+    cond do
+      MapSet.member?(seen, id) -> false
+      hops > Target.max_hops() -> false
+      true -> id |> get_host() |> next_hop(MapSet.put(seen, id), hops)
+    end
+  end
+
+  # a missing jump host is the foreign key's error, not a loop
+  defp next_hop(nil, _seen, _hops), do: true
+  defp next_hop(%Host{jump_via: next}, seen, hops), do: jump_chain_ok?(next, seen, hops + 1)
 
   # Where ssm connects to (and as whom): changing them retargets every sync of
   # the host, so only a global user may (ADR-0012 review).

@@ -11,9 +11,14 @@ defmodule Ssm.Ssh.ScriptRunner do
   and enforce the readonly flag.
   """
 
+  require Logger
+
+  alias Ssm.Authorizations.Login
   alias Ssm.Ssh.{Result, Shell, Target}
 
   @remote_path ".ssm/script.sh"
+  # remote stderr/stdout quoted in an error message (flash, API) is capped
+  @max_output 500
 
   defmodule LoginKeyfile do
     @moduledoc "One login's authorized_keys as reported by script.sh."
@@ -72,8 +77,7 @@ defmodule Ssm.Ssh.ScriptRunner do
 
       {:ok, %Result{} = result} ->
         {:error,
-         {:ssh_connect_failed,
-          "script upload failed on #{target.name}: #{String.trim(result.stderr)}"}}
+         {:ssh_connect_failed, "script upload failed on #{target.name}: #{output(result.stderr)}"}}
 
       {:error, _} = error ->
         error
@@ -90,7 +94,7 @@ defmodule Ssm.Ssh.ScriptRunner do
         result.exit_code != 0 ->
           {:error,
            {:ssh_connect_failed,
-            "script.sh get_ssh_keyfiles failed on #{target.name}: #{String.trim(result.stderr)}"}}
+            "script.sh get_ssh_keyfiles failed on #{target.name}: #{output(result.stderr)}"}}
 
         String.trim(result.stdout) == "" ->
           {:ok, []}
@@ -108,7 +112,7 @@ defmodule Ssm.Ssh.ScriptRunner do
   defp parse_keyfiles(stdout, target) do
     case stdout |> String.replace_invalid() |> String.trim() |> Jason.decode() do
       {:ok, entries} when is_list(entries) ->
-        {:ok, Enum.map(entries, &parse_entry/1)}
+        {:ok, entries |> Enum.filter(&valid_entry?(&1, target)) |> Enum.map(&parse_entry/1)}
 
       {:ok, _other} ->
         {:error, {:ssh_connect_failed, "script.sh returned non-list on #{target.name}"}}
@@ -119,6 +123,26 @@ defmodule Ssm.Ssh.ScriptRunner do
     end
   end
 
+  # The listing comes from the host: an entry of another shape, or whose
+  # login ssm would never pass back to the host (`Ssm.Authorizations.Login`),
+  # is dropped (and logged) — the diff, sync and people jobs act only on
+  # well-formed entries.
+  defp valid_entry?(raw, target) do
+    valid =
+      is_map(raw) and Login.valid?(raw["login"]) and is_binary(Map.get(raw, "keyfile", "")) and
+        is_boolean(Map.get(raw, "has_pragma", false)) and
+        Enum.all?(~w(readonly_condition readonly_scope readonly_ignored unsafe), fn field ->
+          value = raw[field]
+          is_nil(value) or is_binary(value)
+        end)
+
+    if not valid do
+      Logger.warning("script.sh listing on #{target.name}: dropped a malformed entry")
+    end
+
+    valid
+  end
+
   defp parse_entry(raw) do
     readonly =
       case raw["readonly_condition"] do
@@ -127,8 +151,8 @@ defmodule Ssm.Ssh.ScriptRunner do
       end
 
     %LoginKeyfile{
-      login: to_string(raw["login"]),
-      has_pragma: !!raw["has_pragma"],
+      login: raw["login"],
+      has_pragma: raw["has_pragma"] == true,
       readonly_condition: readonly,
       readonly_scope: readonly_scope(readonly, raw["readonly_scope"]),
       # a user_readonly the login's user owns: not honoured, but reported
@@ -189,10 +213,19 @@ defmodule Ssm.Ssh.ScriptRunner do
   end
 
   defp refusal_reason(%Result{} = result) do
-    case String.trim(result.stderr) do
-      "" -> String.trim(result.stdout)
+    case output(result.stderr) do
+      "" -> output(result.stdout)
       stderr -> stderr
     end
+  end
+
+  # remote text for a message: trimmed, invalid UTF-8 replaced, capped
+  defp output(text) do
+    text = text |> to_string() |> String.replace_invalid() |> String.trim()
+
+    if String.length(text) > @max_output,
+      do: String.slice(text, 0, @max_output) <> "… (truncated)",
+      else: text
   end
 
   defp unsafe_refusal?(%Result{} = result),
@@ -218,7 +251,7 @@ defmodule Ssm.Ssh.ScriptRunner do
       else
         {:error,
          {:ssh_connect_failed,
-          "script.sh version failed on #{target.name}: #{String.trim(result.stderr)}"}}
+          "script.sh version failed on #{target.name}: #{output(result.stderr)}"}}
       end
     end
   end

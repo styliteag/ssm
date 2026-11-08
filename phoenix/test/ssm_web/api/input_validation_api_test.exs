@@ -60,6 +60,57 @@ defmodule SsmWeb.Api.InputValidationApiTest do
     end
   end
 
+  describe "key material" do
+    defp ed25519_material,
+      do: Base.encode64(<<11::32, "ssh-ed25519", 32::32>> <> :binary.copy(<<7>>, 32))
+
+    defp key_attrs(attrs),
+      do: Map.merge(%{"user_id" => user_fixture().id, "key_base64" => ed25519_material()}, attrs)
+
+    test "a key type outside the allow-list is 422", %{conn: conn} do
+      for bad <- ["ssh-ed25519 AAAAOTHER x", ~s(command="sh" ssh-ed25519), "rsa"] do
+        conn
+        |> post(~p"/api/v2/keys", key_attrs(%{"key_type" => bad}))
+        |> assert_422("key_type")
+      end
+    end
+
+    test "material of another type than declared is 422", %{conn: conn} do
+      conn
+      |> post(~p"/api/v2/keys", key_attrs(%{"key_type" => "ssh-rsa"}))
+      |> assert_422("key_base64")
+    end
+
+    test "matching type and material is 201", %{conn: conn} do
+      body =
+        conn
+        |> post(~p"/api/v2/keys", key_attrs(%{"key_type" => "ssh-ed25519"}))
+        |> json_response(201)
+
+      assert body["success"] == true
+      assert body["data"]["key_type"] == "ssh-ed25519"
+    end
+
+    test "PATCH cannot change the key material", %{conn: conn} do
+      key = key_fixture(user_fixture())
+
+      body =
+        conn
+        |> patch(~p"/api/v2/keys/#{key.id}", %{"key_type" => "ssh-rsa", "key_base64" => "AAAAX"})
+        |> json_response(200)
+
+      assert body["data"]["key_type"] == key.key_type
+      assert body["data"]["key_base64"] == key.key_base64
+    end
+  end
+
+  describe "authorization login" do
+    test "an all-numeric login (a uid on the host) is 422", %{conn: conn} do
+      base = %{"host_id" => host_fixture().id, "user_id" => user_fixture().id}
+      conn |> post(~p"/api/v2/authorizations", Map.put(base, "login", "0")) |> assert_422("login")
+    end
+  end
+
   describe "control characters" do
     test "in a key name is 422 on create and update", %{conn: conn} do
       user = user_fixture()

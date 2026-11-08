@@ -10,11 +10,14 @@ defmodule Ssm.OIDC.Flow do
 
   require Logger
 
-  alias Ssm.Accounts
+  alias Ssm.{Accounts, ControlChars}
   alias Ssm.OIDC.{Config, Jwks, Roles}
 
   @max_iat_age 600
   @max_iat_skew 120
+  @max_name 255
+  # RFC 5321 path limit
+  @max_email 320
 
   @type pending :: %{state: String.t(), nonce: String.t(), verifier: String.t()}
   @type login :: %{
@@ -117,7 +120,7 @@ defmodule Ssm.OIDC.Flow do
   defp upsert(claims, config, sub, role, scope) do
     attrs = %{
       name: display_name(claims, sub),
-      email: string(claims["email"]),
+      email: email(claims["email"]),
       # only `true` counts (OIDC Core 5.1: boolean)
       email_verified: claims["email_verified"] == true,
       role: role,
@@ -135,15 +138,31 @@ defmodule Ssm.OIDC.Flow do
   defp ensure_enabled(%{disabled_at: nil}), do: :ok
   defp ensure_enabled(operator), do: {:error, {:disabled, operator.oidc_subject}}
 
+  # Profile claims are the provider's (and often the user's own) text, shown
+  # in the UI and the audit log: control and bidi characters are stripped,
+  # the name is capped; an e-mail that needs either is not used at all (it
+  # is an identity for offboarding, `Ssm.People`).
   defp display_name(claims, sub) do
     Enum.find_value(["name", "preferred_username", "email"], sub, fn key ->
       case string(claims[key]) do
         nil -> nil
-        "" -> nil
-        value -> value
+        value -> clean_name(value)
       end
     end)
   end
+
+  defp clean_name(value) do
+    case value |> ControlChars.strip() |> String.trim() |> String.slice(0, @max_name) do
+      "" -> nil
+      clean -> clean
+    end
+  end
+
+  defp email(value) when is_binary(value) do
+    if ControlChars.present?(value) or String.length(value) > @max_email, do: nil, else: value
+  end
+
+  defp email(_value), do: nil
 
   defp sid(claims), do: string(claims["sid"])
   defp amr(%{"amr" => amr}) when is_list(amr), do: Enum.filter(amr, &is_binary/1)

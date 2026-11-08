@@ -29,6 +29,24 @@ defmodule SsmWeb.AuthorizationExportControllerTest do
     assert line == ~s("alice","web1","deploy","no-pty,from=""x""","Yes","10.0.0.1")
   end
 
+  test "cells a spreadsheet would run as a formula are neutralised", %{conn: conn} do
+    user = user_fixture(%{username: "=HYPERLINK(\"http://x\")"})
+    host = host_fixture(%{name: "+cmd"})
+    _auth = authorization_fixture(user, host, %{login: "@sum", comment: "c"})
+    {:ok, _} = Ssm.Users.update_user(user, %{username: "-2+3"})
+
+    conn = get(conn, ~p"/authorizations/export")
+    [_header, line] = String.split(response(conn, 200), "\n")
+    assert line == ~s("'-2+3","'+cmd","'@sum","","Yes","#{host.address}")
+  end
+
+  test "a filter of the wrong type is ignored, not a crash", %{conn: conn} do
+    _auth = authorization_fixture(user_fixture(), host_fixture())
+
+    conn = get(conn, "/authorizations/export?user_id[]=1&host_id[x]=2")
+    assert [_header, _line] = String.split(response(conn, 200), "\n")
+  end
+
   test "honors the user_id filter", %{conn: conn} do
     alice = user_fixture(%{username: "alice"})
     bob = user_fixture(%{username: "bob"})

@@ -17,7 +17,11 @@ defmodule Ssm.Ssh.Probe do
 
   Through a jump host the jump host connects (`ssh -W`, see
   `Ssm.Ssh.ErlangClient.banner_via/4`); a DNS name is then resolved by the
-  jump host, an address literal is checked against the same ranges.
+  jump host. An address literal is checked against the same ranges, a
+  loopback name (`localhost`, `*.localhost`, `localhost.localdomain`,
+  `ip6-localhost`, `ip6-loopback`) counts as loopback, and a name that
+  resolves here is checked with the addresses it resolves to here. A name
+  only the jump host can resolve is left to it.
   """
 
   alias Ssm.Ssh.Target
@@ -50,7 +54,7 @@ defmodule Ssm.Ssh.Probe do
   end
 
   def run(address, ports, %Target{} = jump) do
-    with :ok <- literal_allowed(address) do
+    with :ok <- via_jump_allowed(address) do
       client = Application.get_env(:ssm, :probe_jump_client, Ssm.Ssh.ErlangClient)
       {:ok, Enum.map(ports, &via_jump(client, jump, address, &1))}
     end
@@ -87,11 +91,25 @@ defmodule Ssm.Ssh.Probe do
     end
   end
 
-  defp literal_allowed(address) do
-    case :inet.parse_address(String.to_charlist(address)) do
-      {:ok, ip} -> allowed([ip])
-      {:error, _} -> :ok
+  defp via_jump_allowed(address) do
+    charlist = String.to_charlist(address)
+
+    case :inet.parse_address(charlist) do
+      {:ok, ip} ->
+        allowed([ip])
+
+      {:error, _} ->
+        if loopback_name?(address) and not allow_loopback?(),
+          do: refused("#{address} is not a probe target (loopback)"),
+          else: allowed(lookup(charlist, :inet) ++ lookup(charlist, :inet6))
     end
+  end
+
+  @loopback_names ~w(localhost localhost.localdomain ip6-localhost ip6-loopback)
+
+  defp loopback_name?(address) do
+    name = address |> String.downcase() |> String.trim_trailing(".")
+    name in @loopback_names or String.ends_with?(name, ".localhost")
   end
 
   @doc false

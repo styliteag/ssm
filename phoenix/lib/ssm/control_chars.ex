@@ -30,6 +30,15 @@ defmodule Ssm.ControlChars do
   @spec check(term()) :: :ok | {:error, String.t()}
   def check(value), do: if(present?(value), do: {:error, @message}, else: :ok)
 
+  @doc """
+  `value` without the characters `present?/1` refuses (invalid UTF-8 bytes
+  become U+FFFD first) — for text read from elsewhere (a host, an identity
+  provider) that is shown or stored, not written to a host.
+  """
+  @spec strip(String.t()) :: String.t()
+  def strip(value) when is_binary(value),
+    do: value |> String.replace_invalid() |> then(&Regex.replace(@pattern, &1, ""))
+
   @doc "Add a changeset error to every field in `fields` that holds a control character."
   @spec validate(Ecto.Changeset.t(), [atom()]) :: Ecto.Changeset.t()
   def validate(changeset, fields) do

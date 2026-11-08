@@ -9,6 +9,8 @@ defmodule Ssm.Accounts.Operator do
   use Ecto.Schema
   import Ecto.Changeset
 
+  alias Ssm.ControlChars
+
   @type t :: %__MODULE__{}
   @roles ~w(admin operator viewer)
 
@@ -53,6 +55,10 @@ defmodule Ssm.Accounts.Operator do
     ])
     |> validate_required([:oidc_issuer, :oidc_subject, :name, :role])
     |> validate_inclusion(:role, @roles)
+    # Ssm.OIDC.Flow already cleans the claims; this is the backstop
+    |> validate_length(:name, max: 255)
+    |> validate_length(:email, max: 320)
+    |> ControlChars.validate([:name, :email])
     |> unique_constraint([:oidc_issuer, :oidc_subject])
   end
 

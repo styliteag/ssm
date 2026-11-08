@@ -59,7 +59,7 @@ defmodule SsmWeb.AuthorizationsLive do
   # rows on out-of-scope hosts are invisible and act as missing.
   defp scope(socket), do: Ssm.Scope.of(socket.assigns.current_user)
 
-  defp parse_id(nil), do: nil
+  defp parse_id(value) when not is_binary(value), do: nil
 
   defp parse_id(value) do
     case Integer.parse(value) do
@@ -216,7 +216,7 @@ defmodule SsmWeb.AuthorizationsLive do
   end
 
   def handle_event("edit", %{"id" => id}, socket) do
-    case Authorizations.get_authorization(scope(socket), String.to_integer(id)) do
+    case Authorizations.get_authorization(scope(socket), parse_id(id)) do
       nil ->
         {:noreply, put_flash(socket, :error, "Authorization not found.")}
 
@@ -267,7 +267,7 @@ defmodule SsmWeb.AuthorizationsLive do
 
   def handle_event("delete", %{"id" => id}, socket) do
     with %Authorization{} = auth <-
-           Authorizations.get_authorization(scope(socket), String.to_integer(id)),
+           Authorizations.get_authorization(scope(socket), parse_id(id)),
          {:ok, _} <- Authorizations.delete_authorization(scope(socket), auth) do
       log_auth_activity(socket, "delete", auth)
 
@@ -312,7 +312,7 @@ defmodule SsmWeb.AuthorizationsLive do
   def handle_event("matrix-toggle", %{"user-id" => user_id, "host-id" => host_id}, socket) do
     case socket.assigns.matrix_login do
       "all" -> {:noreply, socket}
-      login -> toggle_grant(socket, String.to_integer(user_id), String.to_integer(host_id), login)
+      login -> matrix_toggle(socket, parse_id(user_id), parse_id(host_id), login)
     end
   end
 
@@ -494,9 +494,17 @@ defmodule SsmWeb.AuthorizationsLive do
   end
 
   defp toggle(set, id) do
-    id = String.to_integer(id)
-    if MapSet.member?(set, id), do: MapSet.delete(set, id), else: MapSet.put(set, id)
+    case parse_id(id) do
+      nil -> set
+      id -> if MapSet.member?(set, id), do: MapSet.delete(set, id), else: MapSet.put(set, id)
+    end
   end
+
+  defp matrix_toggle(socket, user_id, host_id, _login) when is_nil(user_id) or is_nil(host_id),
+    do: {:noreply, socket}
+
+  defp matrix_toggle(socket, user_id, host_id, login),
+    do: toggle_grant(socket, user_id, host_id, login)
 
   defp presence(value) do
     case String.trim(value) do

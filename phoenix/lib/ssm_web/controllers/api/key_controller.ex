@@ -2,7 +2,8 @@ defmodule SsmWeb.Api.KeyController do
   @moduledoc """
   `/api/v2/keys` CRUD — python `api/v2/keys.py`: `?user_id=` list filter,
   owner existence check on create (404 USER_NOT_FOUND), PATCH restricted to
-  `name`/`extra_comment`.
+  `name`/`extra_comment`. On create the type must be a known key type and
+  the material a wire-format key of that type (`Ssm.Users.KeyParser`).
   """
 
   use SsmWeb, :controller
@@ -12,7 +13,7 @@ defmodule SsmWeb.Api.KeyController do
   alias Ssm.ControlChars
   alias Ssm.Repo
   alias Ssm.Users
-  alias Ssm.Users.UserKey
+  alias Ssm.Users.{KeyParser, UserKey}
   alias SsmWeb.Api.Errors
   alias SsmWeb.Api.Envelope
   alias SsmWeb.Api.Params
@@ -65,6 +66,7 @@ defmodule SsmWeb.Api.KeyController do
 
   def create(conn, params) do
     with {:ok, attrs} <- Params.validate(params, @create_spec),
+         :ok <- check_material(attrs),
          :ok <- ensure_owner_exists(attrs.user_id) do
       case Users.create_key(attrs) do
         {:ok, key} -> Envelope.ok(conn, key_json(key), status: 201)
@@ -99,6 +101,17 @@ defmodule SsmWeb.Api.KeyController do
       nil -> Errors.key_not_found(conn)
       {:error, errors} when is_list(errors) -> Envelope.validation_failed(conn, errors)
       {:error, _changeset} -> Envelope.fail(conn, 409, "CONFLICT", "key cannot be deleted")
+    end
+  end
+
+  # the material must be a key of the declared type; an unknown type is the
+  # changeset's error (UserKey.key_types/0)
+  defp check_material(%{key_type: type, key_base64: base64}) do
+    with true <- type in UserKey.key_types(),
+         {:error, message} <- KeyParser.check_material(type, String.trim(base64)) do
+      {:error, [%{field: :key_base64, message: message}]}
+    else
+      _ -> :ok
     end
   end
 
