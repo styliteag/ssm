@@ -6,10 +6,12 @@ defmodule SsmWeb.HostsLive do
   host) — the React HostsPage. Every SSH action checks `host.disabled`
   first (non-negotiable rule #4).
 
-  Online/offline is fed from two sources: the diff viewer's `StatusCache`
-  (a host whose keys were readable is online) and this page's own
-  connection tests. Rows are a plain assign, not a stream — filtering and
-  status overlays must re-render rows.
+  The badge is `Ssm.HostStatus`: derived from the status cache, else the
+  stored key check (so it survives a restart), overlaid by this page's own
+  connection tests. Read keys or a passed test is "online"; a refused key
+  ("auth failed") and a changed host key are named, any other failure is
+  "offline". Rows are a plain assign, not a stream — filtering and status
+  overlays must re-render rows.
 
   "Refresh all" runs the same connection test for every enabled host the
   current filter lists (after a confirm), `SSH_CONCURRENCY` at a time, and
@@ -29,8 +31,10 @@ defmodule SsmWeb.HostsLive do
   alias Ssm.Diffs.HostChecks
   alias Ssm.Diffs.StatusCache
   alias Ssm.Hosts
+  alias Ssm.HostStatus
   alias Ssm.Hosts.Host
   alias Ssm.Hosts.ManagedLogins
+  alias Ssm.Hosts.PinState
   alias Ssm.Scope
   alias SsmWeb.Layouts
 
@@ -75,10 +79,11 @@ defmodule SsmWeb.HostsLive do
   end
 
   defp refilter(socket) do
-    %{all_hosts: hosts, conn_results: conn_results, filter: filter} = socket.assigns
+    %{all_hosts: hosts, conn_results: tests, filter: filter, stored_checks: stored} =
+      socket.assigns
 
     cached = StatusCache.all()
-    statuses = Map.new(hosts, &{&1.id, host_status(&1, conn_results, cached)})
+    statuses = Map.new(hosts, &{&1.id, host_status(&1, tests[&1.id], cached, stored)})
 
     rows =
       hosts
@@ -102,31 +107,28 @@ defmodule SsmWeb.HostsLive do
     }
   end
 
-  defp status_rank(:online), do: 0
-  defp status_rank({:offline, _message}), do: 1
-  defp status_rank(:unknown), do: 2
-  defp status_rank(:disabled), do: 3
-
-  # disabled beats everything; an explicit connection test beats the diff
-  # sweep's cached result; no signal at all is "unknown" (React parity).
-  defp host_status(%Host{disabled: true}, _conn_results, _cached), do: :disabled
-
-  defp host_status(host, conn_results, cached) do
-    case {conn_results[host.id], cached[host.id]} do
-      {:online, _} -> :online
-      {{:offline, message}, _} -> {:offline, message}
-      {nil, {:synced, _at}} -> :online
-      {nil, {{:needs_sync, _, _}, _at}} -> :online
-      {nil, {{:error, message}, _at}} -> {:offline, message}
-      _ -> :unknown
+  defp status_rank(status) do
+    cond do
+      HostStatus.reachable?(status) -> 0
+      HostStatus.error?(status) -> 1
+      status == :unchecked -> 2
+      true -> 3
     end
   end
 
+  # disabled beats everything; a connection test on this page beats the
+  # last key check (cache, else stored row); no signal is "unknown".
+  defp host_status(%Host{} = host, nil, cached, stored),
+    do: HostStatus.derive(host, cached[host.id], stored[host.id])
+
+  defp host_status(%Host{disabled: true}, _tested, _cached, _stored), do: :disabled
+  defp host_status(_host, tested, _cached, _stored), do: tested
+
   defp matches_filter?("active", host, _status), do: not host.disabled
   defp matches_filter?("all", _host, _status), do: true
-  defp matches_filter?("online", _host, status), do: status == :online
-  defp matches_filter?("offline", _host, status), do: match?({:offline, _}, status)
-  defp matches_filter?("unknown", _host, status), do: status == :unknown
+  defp matches_filter?("online", _host, status), do: HostStatus.reachable?(status)
+  defp matches_filter?("offline", _host, status), do: HostStatus.error?(status)
+  defp matches_filter?("unknown", _host, status), do: status == :unchecked
   defp matches_filter?("disabled", _host, status), do: status == :disabled
 
   defp pill_count(hosts, statuses, filter) do
@@ -233,7 +235,6 @@ defmodule SsmWeb.HostsLive do
     with %Host{} = host <- Hosts.get_host(scope(socket), parse_id(id)),
          {:ok, _} <- Hosts.delete_host(scope(socket), host) do
       log_host_activity(socket, :delete, host)
-      StatusCache.delete(host.id)
 
       {:noreply,
        socket
@@ -262,8 +263,11 @@ defmodule SsmWeb.HostsLive do
       action = if updated.disabled, do: :disable, else: :enable
       log_host_activity(socket, action, updated)
 
+      # the host's status was forgotten (Ssm.HostStatus); so is its test here
       {:noreply,
        socket
+       |> update(:conn_results, &Map.delete(&1, updated.id))
+       |> update(:tested_at, &Map.delete(&1, updated.id))
        |> put_flash(:info, "Host #{updated.name} #{action}d.")
        |> reload_hosts()}
     else
@@ -415,24 +419,14 @@ defmodule SsmWeb.HostsLive do
       |> assign(:testing_id, nil)
       |> update(:tested_at, &Map.put(&1, host.id, DateTime.utc_now()))
 
-    case result do
-      :ok ->
-        {:noreply,
-         socket
-         |> put_conn_result(host.id, :online)
-         |> put_flash(:info, "Connection to #{host.name} succeeded.")}
+    socket = put_conn_result(socket, host.id, HostStatus.from_connection(result))
 
-      {:error, {_code, message}} ->
-        {:noreply,
-         socket
-         |> put_conn_result(host.id, {:offline, message})
-         |> put_flash(:error, "Connection to #{host.name} failed: #{message}")}
+    case socket.assigns.conn_results[host.id] do
+      :reachable ->
+        {:noreply, put_flash(socket, :info, "Connection to #{host.name} succeeded.")}
 
-      {:error, reason} ->
-        {:noreply,
-         socket
-         |> put_conn_result(host.id, {:offline, inspect(reason)})
-         |> put_flash(:error, "Connection to #{host.name} failed: #{inspect(reason)}")}
+      {_tag, message} ->
+        {:noreply, put_flash(socket, :error, "Connection to #{host.name} failed: #{message}")}
     end
   end
 
@@ -496,7 +490,7 @@ defmodule SsmWeb.HostsLive do
       targets
       |> Task.async_stream(
         fn {id, target} ->
-          send(parent, {:refresh_result, id, conn_status(Ssm.Ssh.connect(target))})
+          send(parent, {:refresh_result, id, HostStatus.from_connection(Ssm.Ssh.connect(target))})
         end,
         max_concurrency: concurrency,
         ordered: false,
@@ -514,17 +508,15 @@ defmodule SsmWeb.HostsLive do
     |> Keyword.get(:check_concurrency, 32)
   end
 
-  defp conn_status(:ok), do: :online
-  defp conn_status({:error, {_code, message}}) when is_binary(message), do: {:offline, message}
-  defp conn_status({:error, reason}), do: {:offline, inspect(reason)}
-
   defp refresh_counts(%{assigns: %{refresh_ids: ids, conn_results: results}}) do
     ids
     |> Enum.map(&results[&1])
-    |> Enum.reduce({0, 0}, fn
-      :online, {on, off} -> {on + 1, off}
-      {:offline, _}, {on, off} -> {on, off + 1}
-      _, acc -> acc
+    |> Enum.reduce({0, 0}, fn status, {on, off} ->
+      cond do
+        status == :reachable -> {on + 1, off}
+        HostStatus.error?(status) -> {on, off + 1}
+        true -> {on, off}
+      end
     end)
   end
 
@@ -608,20 +600,53 @@ defmodule SsmWeb.HostsLive do
   defp log_host_activity(socket, action, host),
     do: Entries.host(action, host, socket.assigns.current_user.actor)
 
-  defp status_label(:online), do: "online"
-  defp status_label({:offline, _message}), do: "offline"
-  defp status_label(:unknown), do: "unknown"
   defp status_label(:disabled), do: "disabled"
+  defp status_label(:unchecked), do: "unknown"
+  defp status_label({:auth_failed, _message}), do: "auth failed"
+  defp status_label({:host_key_changed, _message}), do: "host key changed"
+  defp status_label({:unreachable, _message}), do: "offline"
+  defp status_label(_reachable), do: "online"
 
-  defp status_class(:online), do: "badge-success"
-  defp status_class({:offline, _message}), do: "badge-error"
-  defp status_class(:unknown), do: "badge-ghost"
   defp status_class(:disabled), do: "badge-neutral"
+  defp status_class(:unchecked), do: "badge-ghost"
+  defp status_class({:host_key_changed, _message}), do: "badge-error"
+  defp status_class({:auth_failed, _message}), do: "badge-error"
+  defp status_class({:unreachable, _message}), do: "badge-error"
+  defp status_class(_reachable), do: "badge-success"
 
-  defp status_title({:offline, message}), do: message
-  defp status_title(:online), do: "Reachable (last diff check or connection test)"
-  defp status_title(:unknown), do: "Not checked yet — run the diff viewer or a connection test"
   defp status_title(:disabled), do: "Disabled — all SSH operations blocked"
+  defp status_title(:unchecked), do: "Not checked yet — run the diff viewer or a connection test"
+  defp status_title({:auth_failed, message}), do: "The host refused ssm's key: #{message}"
+
+  defp status_title({:host_key_changed, message}),
+    do: "The host presented a different host key than the pinned one: #{message}"
+
+  defp status_title({:unreachable, message}), do: message
+  defp status_title(_reachable), do: "Reachable (last key check or connection test)"
+
+  # Host-key pin: unpinned / pre-seeded (not confirmed) / confirmed.
+  attr :host, Host, required: true
+
+  defp pin_icon(assigns) do
+    assigns = assign(assigns, :state, PinState.of(assigns.host))
+
+    ~H"""
+    <span
+      data-pin-state={@state}
+      data-pinned={@state != :unpinned}
+      title={PinState.title(@host)}
+    >
+      <.icon name={pin_icon_name(@state)} class={["size-3.5", pin_icon_class(@state)]} />
+    </span>
+    """
+  end
+
+  defp pin_icon_name(:unpinned), do: "hero-lock-open"
+  defp pin_icon_name(_pinned), do: "hero-finger-print"
+
+  defp pin_icon_class(:unpinned), do: "text-warning"
+  defp pin_icon_class(:preseeded), do: "opacity-30"
+  defp pin_icon_class(:confirmed), do: "opacity-60"
 
   # Non-root login: reduced functionality, explained in the tooltip.
   attr :host, Host, required: true
@@ -790,13 +815,7 @@ defmodule SsmWeb.HostsLive do
         >
           <:col :let={host} label="Name" sort="name">
             <span class="font-medium">{host.name}</span>
-            <span
-              :if={Ssm.Ssh.HostKey.pinned?(host.key_fingerprint)}
-              data-pinned
-              title={"Host key pinned: #{host.key_fingerprint}"}
-            >
-              <.icon name="hero-finger-print" class="size-3.5 opacity-60" />
-            </span>
+            <.pin_icon host={host} />
             <p :if={host.comment} class="text-xs opacity-60">{host.comment}</p>
           </:col>
           <:col :let={host} label="Address" sort="address">{host.address}:{host.port}</:col>

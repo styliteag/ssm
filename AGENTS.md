@@ -237,6 +237,20 @@ every connect verifies `host.key_fingerprint`; unpinned hosts are refused.
 `Ssm.Hosts.HostKeys` (`pin/2`, `accept/3`, `pin_all/1`) is the only place that stores
 keys; `probe_host_key/2` on the SSH client is the only trust-on-first-use path.
 
+**State machines**: a host's status is one tagged value from `Ssm.HostStatus`
+(`lib/ssm/host_status.ex`, pure): `:disabled | :unchecked | :synced | {:drift, missing, extra} |
+:reachable | {:auth_failed, msg} | {:host_key_changed, msg} | {:unreachable, msg}`.
+`derive(host, cache_entry, stored_check)` picks disabled, then this node's
+`Ssm.Diffs.StatusCache` entry, then the stored `HostCheck`, else unchecked; `from_connection/1`
+maps a connection test (`:reachable` = connected, keys not compared). Errors are tagged only
+through `Ssm.Ssh.ErrorCode` codes. HostsLive and DiffLive render this value (DiffLive adds a
+transient `:loading`); do not add another status shape in a LiveView. Status is dropped at the
+context level: `Hosts.delete_host/1` (every delete path, jump cascade included) evicts cache
+entries, `Hosts.update_host/2` calls `HostChecks.forget/1` (row + cache) when `disabled` changes.
+The host-key pin is `Ssm.Hosts.PinState.of/1` (pure, read-only): `:unpinned` (no fingerprint),
+`:preseeded` (fingerprint, no `host_key` yet), `:confirmed` (both, from a probe); only
+`Ssm.Hosts.HostKeys` moves it.
+
 **mctl API** (`/api/mctl/v1`): `MctlContract.Plug` from the path dependency
 `mctl_contract` with `SsmWeb.MctlProvider`; own `ssm_` bearer tokens, own envelope.
 Conformance test: `test/ssm_web/mctl_conformance_test.exs`. `POST /hosts` runs
@@ -245,7 +259,7 @@ Conformance test: `test/ssm_web/mctl_conformance_test.exs`. `POST /hosts` runs
 (`config :ssm, :mctl_login_wait`, 10 min) until mctl has authorized that key. Host summaries (C4,
 `/host-summaries`, `/hosts/{id}/summary`) read `host_checks`, which `Ssm.Diffs.SyncScheduler`
 refreshes every `SSM_SYNC_INTERVAL` through `Ssm.Diffs.HostChecks.sweep/1` (disabled hosts
-are never touched and keep no row; the stored drift holds fingerprints and comments only).
+are never touched and keep no row — disabling forgets it; the stored drift holds fingerprints and comments only).
 Contract section 10: `DELETE /hosts/{id}` (refused for a jump host in use — `jump_via` cascades)
 and people (`Ssm.People` matches operator by issuer+subject, SSH users and key comments by e-mail;
 `SsmWeb.Mctl.People` removes only the person's key lines per login through `script.sh`).

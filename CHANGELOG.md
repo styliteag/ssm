@@ -107,6 +107,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Upgrading cannot be rolled back with `ecto.rollback` (SQLite cannot drop the
   new `authorization.grant_id` column); restore the backup taken before the
   upgrade instead.
+- The host-key icon on the hosts page shows three states with a tooltip each:
+  no key pinned (open lock: ssm refuses to connect), a fingerprint set but not
+  yet confirmed by a connection (faded), and a key pinned and confirmed.
 
 ### Fixed
 
@@ -125,6 +128,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   another operator, "Sync all") is refused with "A sync of <host> is already
   running." instead of running twice and losing the first result; "Sync all"
   reports how many hosts it skipped for that reason.
+- The hosts page status badge no longer says "unknown" after a restart while
+  "checked … ago" shows a recent check: it falls back to the stored key check.
+  A host that refuses ssm's key shows "auth failed" and a changed host key
+  shows "host key changed" (hosts page and diff viewer) instead of a plain
+  "offline"/"error".
+- Disabling or re-enabling a host drops its last check result, so a re-enabled
+  host starts as "unknown" instead of showing a stale status. Deleting a host
+  through `/api/v2` or Mission Control (and the hosts behind a deleted jump
+  host) now also clears its cached status, so a later host that reuses the id
+  does not inherit it.
 
 ### Security
 
