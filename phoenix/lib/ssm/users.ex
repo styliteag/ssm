@@ -31,7 +31,9 @@ defmodule Ssm.Users do
   A global scope may always. A scoped one only when the user has at least
   one authorization and all of them are on hosts in scope: a user without
   authorizations is read-only until it is authorized in scope. Grants of
-  deleted hosts count as outside.
+  deleted hosts count as outside. A grant (ADR-0012 §5) whose reach is not
+  inside the scope also makes the user read-only: its future hosts would get
+  the user's keys too.
   """
   @spec writable?(Ssm.Scope.t(), User.t() | integer()) :: boolean()
   def writable?(%Ssm.Scope{} = scope, %User{id: id}), do: writable?(scope, id)
@@ -42,10 +44,17 @@ defmodule Ssm.Users do
          not Repo.exists?(
            from a in Authorization,
              where: a.user_id == ^user_id and a.host_id not in subquery(Ssm.Scope.host_ids(scope))
-         ))
+         ) and
+         grants_inside?(scope, user_id))
   end
 
   def writable?(_scope, _user_id), do: false
+
+  defp grants_inside?(scope, user_id) do
+    from(g in Ssm.Grants.Grant, where: g.ssh_user_id == ^user_id)
+    |> Repo.all()
+    |> Enum.all?(&Ssm.Grants.manageable?(scope, &1))
+  end
 
   @spec create_user(map()) :: {:ok, User.t()} | {:error, Ecto.Changeset.t()}
   def create_user(attrs), do: %User{} |> User.changeset(attrs) |> Repo.insert()
@@ -53,8 +62,22 @@ defmodule Ssm.Users do
   @spec update_user(User.t(), map()) :: {:ok, User.t()} | {:error, Ecto.Changeset.t()}
   def update_user(%User{} = user, attrs), do: user |> User.changeset(attrs) |> Repo.update()
 
+  @doc """
+  Delete an SSH user (keys and authorizations cascade). Its grants are
+  dropped first through `Ssm.Grants.drop_for_users/2` in the same
+  transaction: audited, hosts marked "revocation pending".
+  """
   @spec delete_user(User.t()) :: {:ok, User.t()} | {:error, Ecto.Changeset.t()}
-  def delete_user(%User{} = user), do: Repo.delete(user)
+  def delete_user(%User{} = user) do
+    Ssm.Grants.transaction(fn ->
+      with {:ok, _} <- Ssm.Grants.drop_for_users([user.id], %{trigger: "user_delete"}),
+           {:ok, deleted} <- Repo.delete(user) do
+        deleted
+      else
+        {:error, reason} -> Repo.rollback(reason)
+      end
+    end)
+  end
 
   @doc "`update_user/2` for a web user: only a `writable?/2` user."
   @spec update_user(Ssm.Scope.t(), User.t(), map()) ::

@@ -14,7 +14,7 @@ defmodule Ssm.Hosts.Host do
   user input.
 
   mctl contract v1: a host belongs to at most one customer and any number of
-  groups (`host_groups`), assigned only through `Ssm.Hosts.update_membership/2`.
+  groups (`host_groups`), assigned only through `Ssm.Hosts.update_membership/3`.
 
   `machine_id` is the identity-claims-v1 HMAC of the machine's raw id, set
   only by `Ssm.Hosts.MachineId` (`machine_id_changeset/2`), never cast from

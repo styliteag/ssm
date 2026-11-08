@@ -90,15 +90,17 @@ defmodule Ssm.Hosts do
   end
 
   @doc """
-  Create a host and assign its customer/groups (slugs) in one transaction;
-  unknown slugs roll the insert back (see `update_membership/2`).
+  Create a host and assign its customer/groups (slugs) in one IMMEDIATE
+  transaction; unknown slugs roll the insert back (see
+  `update_membership/3`, which also expands the grants that reach the host).
   """
-  @spec create_host_with_membership(map(), map()) ::
+  @spec create_host_with_membership(map(), map(), Ssm.Grants.Expansion.ctx()) ::
           {:ok, Host.t()} | {:error, Ecto.Changeset.t() | {:validation, map()}}
-  def create_host_with_membership(attrs, membership) do
-    Repo.transaction(fn ->
+  def create_host_with_membership(attrs, membership, ctx \\ %{}) do
+    Ssm.Grants.transaction(fn ->
       with {:ok, host} <- create_host(attrs),
-           {:ok, host} <- update_membership(host, membership) do
+           {:ok, host} <-
+             update_membership(host, membership, Map.put(ctx, :trigger, "host_create")) do
         host
       else
         {:error, reason} -> Repo.rollback(reason)
@@ -174,13 +176,20 @@ defmodule Ssm.Hosts do
     )
   end
 
+  def delete_host(%Host{} = host, ctx) when is_map(ctx), do: do_delete_host(host, ctx)
+
   @doc """
   Delete a host. Its activity entries keep their text but lose the host id:
   SQLite reuses ids, and a later host must not inherit them (scope filter).
+  Its grant rows go with it and are audited as removed (`host_delete`).
   """
   @spec delete_host(Host.t()) :: {:ok, Host.t()} | {:error, Ecto.Changeset.t()}
-  def delete_host(%Host{} = host) do
-    Repo.transaction(fn ->
+  def delete_host(%Host{} = host), do: do_delete_host(host, %{})
+
+  defp do_delete_host(host, ctx) do
+    Ssm.Grants.transaction(fn ->
+      :ok = Ssm.Grants.Expansion.forget_host(host.id, ctx)
+
       case Repo.delete(host) do
         {:ok, deleted} ->
           detach_activity(deleted.id)
@@ -264,26 +273,39 @@ defmodule Ssm.Hosts do
   only the keys present in `attrs`. Unknown slugs are refused with
   `{:error, {:validation, %{"customer" | "groups" => [message]}}}`; a name
   conflict returns the changeset. Always bumps `updated_at`.
+
+  The host's grant rows are reconciled in the same IMMEDIATE transaction
+  (`Ssm.Grants.Expansion`, trigger `host_membership` unless `ctx` names
+  one): a host that leaves a grant's customer or group loses those rows and
+  is marked "revocation pending".
   """
-  @spec update_membership(Host.t(), map()) ::
+  @spec update_membership(Host.t(), map(), Ssm.Grants.Expansion.ctx()) ::
           {:ok, Host.t()}
           | {:error, {:validation, map()}}
           | {:error, Ecto.Changeset.t()}
-  def update_membership(%Host{} = host, attrs) do
+  def update_membership(%Host{} = host, attrs, ctx \\ %{}) do
     host = Repo.preload(host, [:customer, :groups])
+    ctx = Map.put_new(ctx, :trigger, "host_membership")
 
     with {:ok, changes} <- resolve_customer(%{}, attrs),
          {:ok, changes} <- resolve_groups(changes, attrs) do
-      host
-      |> Host.changeset(Map.take(attrs, [:name]))
-      |> Ecto.Changeset.force_change(:updated_at, DateTime.utc_now(:second))
-      |> put_membership(changes)
-      |> Repo.update()
-      |> case do
-        {:ok, updated} -> {:ok, Repo.preload(updated, [:customer, :groups], force: true)}
-        {:error, _} = error -> error
-      end
+      Ssm.Grants.transaction(fn ->
+        with {:ok, updated} <- write_membership(host, attrs, changes),
+             {:ok, _counts} <- Ssm.Grants.Expansion.reconcile([updated.id], ctx) do
+          Repo.preload(updated, [:customer, :groups], force: true)
+        else
+          {:error, reason} -> Repo.rollback(reason)
+        end
+      end)
     end
+  end
+
+  defp write_membership(host, attrs, changes) do
+    host
+    |> Host.changeset(Map.take(attrs, [:name]))
+    |> Ecto.Changeset.force_change(:updated_at, DateTime.utc_now(:second))
+    |> put_membership(changes)
+    |> Repo.update()
   end
 
   defp resolve_customer(changes, %{customer: nil}), do: {:ok, Map.put(changes, :customer, nil)}

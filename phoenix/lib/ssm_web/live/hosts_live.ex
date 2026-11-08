@@ -60,6 +60,7 @@ defmodule SsmWeb.HostsLive do
     |> assign(:all_hosts, hosts)
     |> assign(:host_names, Map.new(hosts, &{&1.id, &1.name}))
     |> assign(:stored_checks, HostChecks.stored(scope))
+    |> assign(:pending_revocations, Ssm.Diffs.Revocations.pending(scope))
     |> assign(
       :auth_counts,
       Enum.frequencies_by(Authorizations.list_authorizations(scope, []), & &1.host_id)
@@ -576,6 +577,25 @@ defmodule SsmWeb.HostsLive do
     """
   end
 
+  # ADR-0012 §6: a grant reconcile removed access here; the keys stay on the
+  # host until a sync succeeds.
+  attr :pending, :any, default: nil
+  attr :host, Host, required: true
+
+  defp revocation_badge(assigns) do
+    ~H"""
+    <.link
+      :if={@pending}
+      id={"revocation-pending-#{@host.id}"}
+      navigate={~p"/diff?host_id=#{@host.id}"}
+      class="badge badge-error badge-sm align-middle"
+      title={"Revocation pending (#{@pending.reason}): removed access is still on the host until a sync succeeds"}
+    >
+      revocation pending
+    </.link>
+    """
+  end
+
   ## Render
 
   @impl true
@@ -678,6 +698,7 @@ defmodule SsmWeb.HostsLive do
           <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs opacity-70">
             <span>login {host.username}</span>
             <.limited_badge host={host} />
+            <.revocation_badge host={host} pending={@pending_revocations[host.id]} />
             <span :if={host.jump_via}>via {Map.get(@host_names, host.jump_via)}</span>
             <span :if={not host.disabled} id={"card-checked-#{host.id}"}>
               {checked_label(host.id, @tested_at, @stored_checks)}
@@ -739,6 +760,7 @@ defmodule SsmWeb.HostsLive do
             >
               {status_label(@statuses[host.id])}
             </span>
+            <.revocation_badge host={host} pending={@pending_revocations[host.id]} />
             <p :if={not host.disabled} id={"checked-#{host.id}"} class="text-xs opacity-60">
               {checked_label(host.id, @tested_at, @stored_checks)}
             </p>

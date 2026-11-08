@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Grants (ADR-0012 phase 2): SSH access for an SSH user on every host of a
+  customer or host group, on the new Grants page (`/grants`, also per SSH user
+  from the Users page and per customer or group). A grant creates a normal
+  authorization on each host of its target, now and for hosts that join
+  later; a host that leaves the customer or group loses it. Diff, sync,
+  `/api/v2` and Mission Control see these rows like any other.
+- An authorization made by a grant is read-only and shows "via customer X" or
+  "via group Y" on the Authorizations page. `/api/v2` answers 409 `CONFLICT`
+  when such a row is changed or deleted; change the grant instead. A manual
+  authorization for the same user, host and login wins and is kept; deleting
+  it brings the grant's authorization back.
+- Admins create any grant. A scoped operator creates grants only for its own
+  customers or groups, and the grant keeps the operator's scope, so it never
+  reaches a host outside it. A scoped operator sees and deletes only grants
+  inside its scope. Viewers cannot change grants.
+- "Revocation pending" on the Hosts page: a host that lost access through a
+  grant (grant deleted, host moved to another customer or out of a group,
+  customer merged) keeps the removed keys until a sync succeeds there. The
+  mark clears after the next successful sync; ssm does not sync on its own.
+- The activity log records grant create and delete, and every authorization a
+  grant adds, removes or hands over to another grant (`grant_add`,
+  `grant_remove`, `grant_move`) with the trigger, the grant id, the actor and
+  the request id.
+- A periodic check (every 15 minutes) compares grants and authorizations and
+  logs differences as warnings. It changes nothing.
+
+### Changed
+
+- Splitting or merging SSH users copies only manual authorizations. Grants
+  stay with their SSH user; a merged user's grants are deleted with it.
+- Deleting an SSH user, merging it into another, or removing a person through
+  Mission Control (offboarding) also deletes the user's grants, also when the
+  removal names single hosts: a kept grant would bring the access back. Each
+  removal is in the activity log and marks the hosts "revocation pending".
+- A scoped account cannot change an SSH user (or its keys) that holds a grant
+  reaching beyond the account's scope, because the user's keys would also land
+  on future hosts of that grant.
+- Upgrading cannot be rolled back with `ecto.rollback` (SQLite cannot drop the
+  new `authorization.grant_id` column); restore the backup taken before the
+  upgrade instead.
+
 ## [4.11.0] - 2026-11-08
 
 ### Security

@@ -97,6 +97,7 @@ defmodule SsmWeb.Api.AuthorizationController do
          {:ok, attrs} <- Params.validate_partial(params, @update_spec) do
       case Authorizations.update_authorization(auth, attrs) do
         {:ok, updated} -> Envelope.ok(conn, auth_json(updated))
+        {:error, :grant_row} -> Errors.grant_row(conn)
         {:error, changeset} -> Errors.changeset(conn, changeset, "authorization")
       end
     else
@@ -113,6 +114,7 @@ defmodule SsmWeb.Api.AuthorizationController do
     else
       nil -> Errors.authorization_not_found(conn)
       {:error, errors} when is_list(errors) -> Envelope.validation_failed(conn, errors)
+      {:error, :grant_row} -> Errors.grant_row(conn)
       {:error, _} -> Envelope.fail(conn, 409, "CONFLICT", "authorization cannot be deleted")
     end
   end

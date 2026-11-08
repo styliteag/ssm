@@ -12,6 +12,7 @@ defmodule Ssm.Authorizations do
   import Ecto.Query
 
   alias Ssm.Authorizations.{Authorization, ManagedLogin, Options}
+  alias Ssm.Grants.Expansion
   alias Ssm.{Repo, Scope}
 
   @spec list_authorizations(keyword()) :: [Authorization.t()]
@@ -154,20 +155,27 @@ defmodule Ssm.Authorizations do
     |> write_managed(&Repo.insert/1)
   end
 
-  @doc "`update_authorization/2` for a web user: old and new host must be in `scope`."
+  @doc """
+  `update_authorization/2` for a web user: old and new host must be in
+  `scope`. A row made by a grant is read-only (`{:error, :grant_row}`).
+  """
   @spec update_authorization(Scope.t(), Authorization.t(), map()) ::
-          {:ok, Authorization.t()} | {:error, Ecto.Changeset.t()}
+          {:ok, Authorization.t()} | {:error, Ecto.Changeset.t() | :grant_row}
+  def update_authorization(%Scope{}, %Authorization{grant_id: grant_id}, _attrs)
+      when not is_nil(grant_id),
+      do: {:error, :grant_row}
+
   def update_authorization(%Scope{} = scope, %Authorization{} = auth, attrs) do
     changeset = auth |> Authorization.changeset(attrs) |> check_scope(scope)
 
     if Scope.in_scope?(scope, auth.host_id),
-      do: write_managed(changeset, &Repo.update/1),
+      do: write_managed(changeset, &Repo.update/1, auth.host_id),
       else: {:error, Ecto.Changeset.add_error(changeset, :host_id, "does not exist")}
   end
 
   @doc "`delete_authorization/1` for a web user: the grant's host must be in `scope`."
   @spec delete_authorization(Scope.t(), Authorization.t()) ::
-          {:ok, Authorization.t()} | {:error, :not_found | Ecto.Changeset.t()}
+          {:ok, Authorization.t()} | {:error, :not_found | :grant_row | Ecto.Changeset.t()}
   def delete_authorization(%Scope{} = scope, %Authorization{} = auth) do
     if Scope.in_scope?(scope, auth.host_id),
       do: delete_authorization(auth),
@@ -182,24 +190,55 @@ defmodule Ssm.Authorizations do
       else: Ecto.Changeset.add_error(changeset, :host_id, "does not exist")
   end
 
-  @doc "Update a grant; a new host/login pair is recorded as managed too."
+  @doc """
+  Update a grant; a new host/login pair is recorded as managed too. A row
+  made by a grant (`grant_id`) is read-only: `{:error, :grant_row}`. The
+  old host is reconciled in the same transaction (a grant row comes back
+  when this manual row had won over a grant).
+  """
   @spec update_authorization(Authorization.t(), map()) ::
-          {:ok, Authorization.t()} | {:error, Ecto.Changeset.t()}
+          {:ok, Authorization.t()} | {:error, Ecto.Changeset.t() | :grant_row}
+  def update_authorization(%Authorization{grant_id: grant_id}, _attrs) when not is_nil(grant_id),
+    do: {:error, :grant_row}
+
   def update_authorization(%Authorization{} = auth, attrs),
-    do: auth |> Authorization.changeset(attrs) |> write_managed(&Repo.update/1)
+    do: auth |> Authorization.changeset(attrs) |> write_managed(&Repo.update/1, auth.host_id)
 
   # an invalid changeset never reaches the DB: no transaction, so a caller's
   # outer transaction is not rolled back by a plain validation error
-  defp write_managed(%Ecto.Changeset{valid?: false} = changeset, write), do: write.(changeset)
+  defp write_managed(changeset, write, reconcile_host_id \\ nil)
 
-  defp write_managed(changeset, write) do
-    Repo.transaction(fn ->
-      case write.(changeset) do
-        {:ok, auth} -> tap(auth, &record_managed_login(&1.host_id, &1.login))
+  defp write_managed(%Ecto.Changeset{valid?: false} = changeset, write, _host_id),
+    do: write.(changeset)
+
+  defp write_managed(changeset, write, reconcile_host_id) do
+    Ssm.Grants.transaction(fn ->
+      with :ok <- ensure_manual(reconcile_host_id, changeset.data),
+           {:ok, auth} <- write.(changeset),
+           :ok <- record_managed_login(auth.host_id, auth.login),
+           {:ok, _} <- reconcile_after_manual(reconcile_host_id, auth) do
+        auth
+      else
         {:error, failed} -> Repo.rollback(failed)
       end
     end)
   end
+
+  # an update re-reads the row in the write transaction: a stale struct must
+  # not overwrite a row that is (now) made by a grant
+  defp ensure_manual(nil, _data), do: :ok
+
+  defp ensure_manual(_host_id, %Authorization{id: id}) do
+    case Repo.one(from a in Authorization, where: a.id == ^id, select: a.grant_id) do
+      nil -> :ok
+      _grant_id -> {:error, :grant_row}
+    end
+  end
+
+  defp reconcile_after_manual(nil, _auth), do: {:ok, nil}
+
+  defp reconcile_after_manual(host_id, auth),
+    do: Expansion.reconcile([host_id, auth.host_id], %{trigger: "authorization_update"})
 
   @doc """
   Mark `login` on `host_id` as managed by ssm (idempotent). A sync keeps
@@ -261,9 +300,29 @@ defmodule Ssm.Authorizations do
     )
   end
 
+  @doc """
+  Delete a manual row. A row made by a grant is read-only (`{:error,
+  :grant_row}`; delete the grant instead). The host is reconciled in the
+  same transaction: when this manual row had won over a grant, the grant
+  row comes back.
+  """
   @spec delete_authorization(Authorization.t()) ::
-          {:ok, Authorization.t()} | {:error, Ecto.Changeset.t()}
-  def delete_authorization(%Authorization{} = auth), do: Repo.delete(auth)
+          {:ok, Authorization.t()} | {:error, Ecto.Changeset.t() | :grant_row}
+  def delete_authorization(%Authorization{} = auth) do
+    Ssm.Grants.transaction(fn ->
+      stored = Repo.one(from a in Authorization, where: a.id == ^auth.id, select: a.grant_id)
+
+      with nil <- stored || auth.grant_id,
+           {:ok, deleted} <- Repo.delete(auth),
+           {:ok, _} <-
+             Expansion.reconcile([deleted.host_id], %{trigger: "authorization_delete"}) do
+        deleted
+      else
+        grant_id when is_integer(grant_id) -> Repo.rollback(:grant_row)
+        {:error, reason} -> Repo.rollback(reason)
+      end
+    end)
+  end
 
   @spec change_authorization(Authorization.t(), map()) :: Ecto.Changeset.t()
   def change_authorization(%Authorization{} = auth, attrs \\ %{}),

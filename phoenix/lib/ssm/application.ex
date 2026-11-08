@@ -40,6 +40,7 @@ defmodule Ssm.Application do
         mctl_boot() ++
         ssh_children() ++
         sync_children() ++
+        drift_children() ++
         [
           # Start to serve requests, typically the last entry
           SsmWeb.Endpoint
@@ -108,6 +109,14 @@ defmodule Ssm.Application do
       end
     else
       []
+    end
+  end
+
+  # The periodic grant drift check (logs only, never writes); off in tests.
+  defp drift_children do
+    case Ssm.Grants.DriftCheck.child_opts() do
+      nil -> []
+      opts -> [{Ssm.Grants.DriftCheck, opts}]
     end
   end
 

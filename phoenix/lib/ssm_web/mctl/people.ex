@@ -49,7 +49,10 @@ defmodule SsmWeb.Mctl.People do
     with {:ok, match} <- People.find(key),
          {:ok, host_ids} <- host_ids(params["hosts"]) do
       plan = plan(match, host_ids)
-      {:ok, touched} = People.remove_authorizations(match, host_ids)
+
+      {:ok, touched} =
+        People.remove_authorizations(match, host_ids, %{actor: Audit.actor(principal)})
+
       audit(principal, match, host_ids)
       work = &run(&1, match, plan, targets(host_ids, touched ++ plan.deployed))
 

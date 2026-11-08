@@ -5,6 +5,10 @@ defmodule Ssm.Authorizations.Authorization do
   allow-listed by `Ssm.Authorizations.Options`). Login and comment refuse
   control characters.
   Unique per (user, host, login).
+
+  `grant_id` is set on rows expanded from a grant (`Ssm.Grants.Expansion`,
+  ADR-0012 §5): such rows are read-only and follow the grant; nil marks a
+  manual row. Never cast from user input.
   """
 
   use Ecto.Schema
@@ -20,6 +24,7 @@ defmodule Ssm.Authorizations.Authorization do
 
     belongs_to :host, Ssm.Hosts.Host
     belongs_to :user, Ssm.Users.User
+    belongs_to :grant, Ssm.Grants.Grant
   end
 
   def changeset(authorization, attrs) do

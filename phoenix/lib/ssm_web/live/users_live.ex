@@ -31,9 +31,12 @@ defmodule SsmWeb.UsersLive do
   end
 
   defp reload_users(socket) do
+    scope = Ssm.Scope.of(socket.assigns.current_user)
+    grant_counts = scope |> Ssm.Grants.list_grants() |> Enum.frequencies_by(& &1.ssh_user_id)
+
     rows =
-      Users.list_users_with_counts(Ssm.Scope.of(socket.assigns.current_user))
-      |> Enum.map(&Map.put(&1, :id, &1.user.id))
+      Users.list_users_with_counts(scope)
+      |> Enum.map(&Map.merge(&1, %{id: &1.user.id, grant_count: grant_counts[&1.user.id] || 0}))
       |> SsmWeb.TableSort.sort(socket.assigns.sort, user_sorters())
 
     ids = MapSet.new(rows, & &1.id)
@@ -49,7 +52,8 @@ defmodule SsmWeb.UsersLive do
       "username" => &SsmWeb.TableSort.string(&1.user.username),
       "status" => &if(&1.user.enabled, do: 0, else: 1),
       "keys" => & &1.key_count,
-      "access" => & &1.authorization_count
+      "access" => & &1.authorization_count,
+      "grants" => & &1.grant_count
     }
   end
 
@@ -531,6 +535,9 @@ defmodule SsmWeb.UsersLive do
             <.link navigate={~p"/authorizations?user_id=#{row.id}"} class="link link-hover">
               {row.authorization_count} grant(s)
             </.link>
+            <.link navigate={~p"/grants?user_id=#{row.id}"} class="link link-hover">
+              {row.grant_count} customer/group grant(s)
+            </.link>
           </div>
           <p :if={row.user.comment} class="mt-1 truncate text-xs opacity-60">{row.user.comment}</p>
           <div class="mt-2 flex gap-1">
@@ -574,6 +581,16 @@ defmodule SsmWeb.UsersLive do
           <:col :let={row} label="Access" sort="access">
             <.link navigate={~p"/authorizations?user_id=#{row.user.id}"} class="link link-hover">
               {row.authorization_count}
+            </.link>
+          </:col>
+          <:col :let={row} label="Grants" sort="grants">
+            <.link
+              id={"user-grants-#{row.user.id}"}
+              navigate={~p"/grants?user_id=#{row.user.id}"}
+              class="link link-hover"
+              title="Grants per customer or host group"
+            >
+              {row.grant_count}
             </.link>
           </:col>
           <:action :let={row}>

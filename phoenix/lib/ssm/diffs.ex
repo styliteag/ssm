@@ -139,6 +139,9 @@ defmodule Ssm.Diffs do
   @spec sync_host_reported(module(), integer()) ::
           {{:ok, [SyncedLogin.t()]} | {:error, term()}, map()}
   def sync_host_reported(client \\ Ssm.Ssh, host_id) do
+    # before any read of the grants (ADR-0012 §6, Ssm.Diffs.Revocations.seen/1)
+    revocation = Ssm.Diffs.Revocations.seen(host_id)
+
     case prepare_sync(client, host_id) do
       {:ok, %{host: host, logins: logins, target: target, ctx: ctx}} ->
         logins
@@ -148,6 +151,7 @@ defmodule Ssm.Diffs do
           skipped: Enum.reverse(ctx.skipped)
         })
         |> tap(fn {result, _report} -> learn_machine_id(result, host, client) end)
+        |> tap(fn {result, _report} -> clear_revocation(result, host.id, revocation) end)
 
       {:error, _} = error ->
         {error, %{written: [], skipped: [], ignored: []}}
@@ -179,6 +183,13 @@ defmodule Ssm.Diffs do
   # its machine-id claim (best effort, never changes the sync result).
   defp learn_machine_id({:ok, _}, host, client), do: MachineId.refresh(host, client: client)
   defp learn_machine_id(_other, _host, _client), do: :ok
+
+  # ADR-0012 §6: a fully successful sync has written the removals the mark
+  # it saw at its start stands for; a partial or failed one leaves it pending
+  defp clear_revocation({:ok, _}, host_id, seen),
+    do: Ssm.Diffs.Revocations.clear(host_id, seen)
+
+  defp clear_revocation(_other, _host_id, _seen), do: :ok
 
   # a host-wide marker (system_readonly, vendor platform) blocks every login
   defp ensure_no_host_readonly(host, entries, logins) do

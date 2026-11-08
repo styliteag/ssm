@@ -3,6 +3,8 @@ defmodule Ssm.Groups do
 
   import Ecto.Query
 
+  alias Ssm.Grants
+  alias Ssm.Grants.{Expansion, Grant}
   alias Ssm.Groups.Group
   alias Ssm.Repo
 
@@ -24,10 +26,31 @@ defmodule Ssm.Groups do
     %Group{} |> Group.create_changeset(attrs) |> Repo.insert()
   end
 
-  @doc "Rename only — the slug is fixed after create."
-  @spec update_group(Group.t(), map()) :: {:ok, Group.t()} | {:error, Ecto.Changeset.t()}
-  def update_group(%Group{} = group, attrs) do
-    group |> Group.update_changeset(attrs) |> Repo.update()
+  @doc """
+  Rename only — the slug is fixed after create. Grants reference groups by
+  id, so a rename changes no access; the group's hosts are still reconciled
+  in the same transaction (trigger `group_rename`).
+  """
+  @spec update_group(Group.t(), map(), Expansion.ctx()) ::
+          {:ok, Group.t()} | {:error, Ecto.Changeset.t()}
+  def update_group(%Group{} = group, attrs, ctx \\ %{}) do
+    Grants.transaction(fn ->
+      with {:ok, updated} <- group |> Group.update_changeset(attrs) |> Repo.update(),
+           {:ok, _} <-
+             Expansion.reconcile(host_ids(group.id), Map.put(ctx, :trigger, "group_rename")) do
+        updated
+      else
+        {:error, reason} -> Repo.rollback(reason)
+      end
+    end)
+  end
+
+  defp host_ids(group_id) do
+    Repo.all(
+      from hg in "host_groups",
+        where: hg.group_id == ^group_id,
+        select: type(hg.host_id, :integer)
+    )
   end
 
   @doc """
@@ -36,22 +59,41 @@ defmodule Ssm.Groups do
   hosts are never taken out of a group. `{:error, :not_found}` for an
   unknown slug (also on a repeat).
   """
-  @spec delete_group(String.t()) :: :ok | {:error, :not_found | {:conflict, String.t()}}
-  def delete_group(slug) do
-    case get_group_by_slug(slug) do
-      nil ->
-        {:error, :not_found}
+  @spec delete_group(String.t(), Expansion.ctx()) ::
+          :ok | {:error, :not_found | {:conflict, String.t()}}
+  def delete_group(slug, ctx \\ %{}) do
+    Grants.transaction(fn ->
+      case get_group_by_slug(slug) do
+        nil ->
+          Repo.rollback(:not_found)
 
-      group ->
-        case Repo.aggregate(from(hg in "host_groups", where: hg.group_id == ^group.id), :count) do
-          0 ->
-            {:ok, _} = Repo.delete(group)
-            :ok
+        group ->
+          case Repo.aggregate(from(hg in "host_groups", where: hg.group_id == ^group.id), :count) do
+            0 ->
+              {:ok, _} = drop_grants_of(group.id, Map.put(ctx, :trigger, "group_delete"))
+              {:ok, _} = Repo.delete(group)
+              :ok
 
-          n ->
-            {:error, {:conflict, "group #{slug} is used by #{n} hosts"}}
-        end
+            n ->
+              Repo.rollback({:conflict, "group #{slug} is used by #{n} hosts"})
+          end
+      end
+    end)
+    |> case do
+      {:ok, :ok} -> :ok
+      {:error, _} = error -> error
     end
+  end
+
+  # grants that target the group go with it (ON DELETE CASCADE): reconcile
+  # their hosts without them first, so the removals are audited and marked
+  defp drop_grants_of(group_id, ctx) do
+    grants = Repo.all(from g in Grant, where: g.group_id == ^group_id)
+
+    Expansion.reconcile(
+      Expansion.affected_host_ids(grants),
+      Map.put(ctx, :exclude, Enum.map(grants, & &1.id))
+    )
   end
 
   @doc "Groups after `after_slug` (exclusive), sorted by slug; next key or nil."

@@ -47,6 +47,14 @@ defmodule SsmWeb.Api.Errors do
     end
   end
 
+  @doc """
+  `{:error, :grant_row}`: the authorization row was made by a grant
+  (ADR-0012 §5) and is read-only; change or delete the grant instead.
+  409 CONFLICT, an existing code.
+  """
+  def grant_row(conn),
+    do: Envelope.fail(conn, 409, "CONFLICT", "authorization is managed by a grant (read-only)")
+
   defp constraint_error?(changeset) do
     Enum.any?(changeset.errors, fn {_field, {_message, meta}} ->
       meta[:constraint] in [:unique, :foreign]

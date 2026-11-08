@@ -176,15 +176,21 @@ defmodule Ssm.Users.BulkOps do
     end
   end
 
-  # Copies every authorization of `source_ids` onto `target_id`, skipping
-  # duplicates. Returns {:ok, {copied, skipped}} or {:error, changeset}.
+  # Copies every manual authorization of `source_ids` onto `target_id`,
+  # skipping duplicates. Rows made by a grant (ADR-0012 §5) are not copied:
+  # they follow their grant, which stays with its SSH user.
+  # Returns {:ok, {copied, skipped}} or {:error, changeset}.
   defp copy_authorizations(repo, source_ids, target_id) do
     target_auths = repo.all(from a in Authorization, where: a.user_id == ^target_id)
     seen = MapSet.new(target_auths, &fingerprint/1)
     taken = MapSet.new(target_auths, &{&1.host_id, &1.login})
 
     source_auths =
-      repo.all(from a in Authorization, where: a.user_id in ^source_ids, order_by: a.id)
+      repo.all(
+        from a in Authorization,
+          where: a.user_id in ^source_ids and is_nil(a.grant_id),
+          order_by: a.id
+      )
 
     source_auths
     |> Enum.reduce_while(
@@ -237,7 +243,10 @@ defmodule Ssm.Users.BulkOps do
           {:halt, {:error, {:user_not_found, user.username}}}
 
         current ->
-          case repo.delete(current) do
+          # grants first, so their removals carry the merge as trigger
+          {:ok, _} = Ssm.Grants.drop_for_users([current.id], %{trigger: "user_merge"})
+
+          case Ssm.Users.delete_user(current) do
             {:ok, gone} -> {:cont, {:ok, [gone.username | deleted]}}
             {:error, changeset} -> {:halt, {:error, changeset}}
           end
@@ -279,7 +288,7 @@ defmodule Ssm.Users.BulkOps do
         {deleted, [{user, :not_found} | failed]}
 
       current ->
-        case Repo.delete(current) do
+        case Ssm.Users.delete_user(current) do
           {:ok, gone} -> {[gone | deleted], failed}
           {:error, reason} -> {deleted, [{user, reason} | failed]}
         end

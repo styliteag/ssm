@@ -146,6 +146,7 @@ defmodule SsmWeb.Router do
       live "/users", UsersLive
       live "/keys", KeysLive
       live "/authorizations", AuthorizationsLive
+      live "/grants", GrantsLive
       live "/diff", DiffLive
       live "/activities", ActivitiesLive
       live "/settings/api-tokens", ApiTokensLive

@@ -25,9 +25,9 @@ recreated.
 
 | Path | What lives there |
 |------|------------------|
-| `phoenix/lib/ssm/` | Domain contexts: `hosts.ex`, `users.ex` (+ `user_key`, `key_parser`, `bulk_ops`), `authorizations.ex`, `diffs.ex` (+ `status_cache`, and the persisted periodic check: `host_checks`, `sync_check`, `sync_scheduler`), `activity.ex`, `auth/` (htpasswd, JWT token), `release.ex` (prod migrate) |
+| `phoenix/lib/ssm/` | Domain contexts: `hosts.ex`, `users.ex` (+ `user_key`, `key_parser`, `bulk_ops`), `authorizations.ex`, `grants.ex` (+ `expansion`, `drift_check`), `diffs.ex` (+ `status_cache`, and the persisted periodic check: `host_checks`, `sync_check`, `sync_scheduler`), `activity.ex`, `auth/` (htpasswd, JWT token), `release.ex` (prod migrate) |
 | `phoenix/lib/ssm/ssh/` | `client.ex` (behaviour), `erlang_client.ex` (prod), `mock_client.ex` (tests), `safety.ex` (readonly markers), `script_runner.ex`, `cache.ex` |
-| `phoenix/lib/ssm_web/live/` | One LiveView per page: dashboard, hosts, users, keys, authorizations, diff, activities, login |
+| `phoenix/lib/ssm_web/live/` | One LiveView per page: dashboard, hosts, users, keys, authorizations, grants, diff, activities, login |
 | `phoenix/lib/ssm_web/api/` | `/api/v2` plumbing: `auth_plug.ex` (bearer JWT), `envelope.ex`, `errors.ex` (stable error codes), `params.ex` |
 | `phoenix/lib/ssm_web/controllers/api/` | One controller per API domain: auth, hosts, users, keys, authorizations, diffs, activity_log, info |
 | `phoenix/priv/repo/migrations/` | Ecto migrations. `20260101000000_baseline_schema.exs` **adopts** Diesel-/Alembic-era DBs in place (fills gaps, stamps) — read it before touching the schema. |
@@ -45,6 +45,21 @@ the `mctl_contract` library's `mctl_tokens`, `mctl_jobs`, `mctl_idempotency`, an
 (last result of the periodic key check per host, `ON DELETE CASCADE`), and `managed_logins`
 (every `(host, login)` that ever held a grant; written by `Authorizations.create_authorization/1`,
 never pruned, `ON DELETE CASCADE` — a sync empties such a login's file after its last grant is gone).
+**Grants** (ADR-0012 phase 2, `Ssm.Grants`, `Ssm.Grants.Expansion`, page `/grants`): table `grants`
+(`ssh_user_id`, `customer_id` XOR `group_id`, the creator's scope as id lists `scope_customer_ids` /
+`scope_group_ids` — nil = all, `login`, `comment`, `created_by`; all FKs `ON DELETE CASCADE`) is
+expanded into `authorization` rows with `grant_id` (FK cascade; nil = manual row). Every trigger
+(grant create/delete, `Hosts.update_membership/3` incl. host create, host delete, contract customer
+merge/delete/rename and group delete/rename, manual row update/delete) runs
+`Expansion.reconcile/2` — a full, idempotent per-host reconcile — in its own IMMEDIATE transaction
+(`Ssm.Grants.transaction/1`). A manual row wins; grant rows are read-only (`{:error, :grant_row}`,
+API 409 `CONFLICT`). Rows a reconcile removes mark the host in `pending_revocations`
+(`Ssm.Diffs.Revocations`, Hosts page badge) until a fully successful `sync_host` that started after
+the mark; nothing syncs automatically. Audit: `grant_create|grant_delete`,
+`grant_add|grant_remove|grant_move` (trigger, `grant_id`, `job_id`, `request_id`).
+`Ssm.Grants.DriftCheck` logs drift every 15 min (`config :ssm, :grants_drift_check`, off in tests).
+Who may create: admin any; operator only targets in its scope (`{:error, :out_of_scope}`); others
+`{:error, :forbidden}`. Migration `20261109100000` has no `down` (SQLite cannot drop an FK column).
 Sync and readonly markers (`Ssm.Diffs.sync_host/2`): a host-wide marker (`system_readonly`, vendor
 platform) stops a sync before any write; a login's own `~/.ssh/user_readonly` counts only when root
 owns it (`script.sh` `user_readonly_state`, `find -user 0`) and then skips only that login, the
