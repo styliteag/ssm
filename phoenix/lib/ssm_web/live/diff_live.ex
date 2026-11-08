@@ -359,7 +359,7 @@ defmodule SsmWeb.DiffLive do
   def handle_event("allow-key", %{"login" => login, "index" => index}, socket) do
     with %Host{disabled: false} = host <- socket.assigns.selected,
          {:ok, item} <- find_extra_item(socket, login, index),
-         {:ok, parsed} <- KeyParser.parse(item.line),
+         {:ok, parsed} <- KeyParser.parse_authorized_line(item.line),
          %UserKey{} = key <- Users.get_key_by_base64(parsed.key_base64) do
       allow_grant(socket, host, key.user, login)
     else
@@ -370,7 +370,7 @@ defmodule SsmWeb.DiffLive do
   def handle_event("unknown-key-open", %{"login" => login, "index" => index}, socket) do
     with %Host{disabled: false} <- socket.assigns.selected,
          {:ok, item} <- find_extra_item(socket, login, index),
-         {:ok, parsed} <- KeyParser.parse(item.line) do
+         {:ok, parsed} <- KeyParser.parse_authorized_line(item.line) do
       {:noreply,
        assign(socket, :unknown_key, %{
          login: login,
@@ -564,7 +564,7 @@ defmodule SsmWeb.DiffLive do
 
   # {:known, user} | :unknown | :invalid for an extra_on_host line.
   defp extra_key_info(line, owners) do
-    case KeyParser.parse(line) do
+    case KeyParser.parse_authorized_line(line) do
       {:ok, parsed} ->
         case Map.get(owners, parsed.key_base64) do
           nil -> :unknown

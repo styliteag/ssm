@@ -22,7 +22,7 @@ defmodule Ssm.Diffs do
   alias Ssm.Hosts.{Host, MachineId}
   alias Ssm.Repo
   alias Ssm.Ssh.ScriptRunner
-  alias Ssm.Users.UserKey
+  alias Ssm.Users.{KeyParser, UserKey}
 
   defmodule KeyDiff do
     @moduledoc "One key line and its presence status."
@@ -97,14 +97,18 @@ defmodule Ssm.Diffs do
           {:ok, [SyncedLogin.t()]} | {:error, term()}
   def sync_host(client \\ Ssm.Ssh, host_id) do
     with {:ok, host} <- Hosts.fetch_host(host_id),
-         :ok <- ensure_not_disabled(host) do
-      target = Hosts.target_for(host)
+         :ok <- ensure_not_disabled(host),
+         target = Hosts.target_for(host),
+         # read first: a granted key keeps the host's line (options, comment);
+         # no write when the files cannot be read
+         {:ok, entries} <- ScriptRunner.get_ssh_keyfiles(client, target) do
       own = own_key_for(host)
+      on_host = Map.new(entries, &{&1.login, parse_authorized_keys(&1.keyfile)})
 
       host_id
       |> expected_logins()
       |> Enum.sort()
-      |> sync_logins(client, target, host_id, own, [])
+      |> sync_logins(client, target, %{host_id: host_id, own: own, on_host: on_host}, [])
       |> tap(&learn_machine_id(&1, host, client))
     end
   end
@@ -114,16 +118,21 @@ defmodule Ssm.Diffs do
   defp learn_machine_id({:ok, _}, host, client), do: MachineId.refresh(host, client: client)
   defp learn_machine_id(_other, _host, _client), do: :ok
 
-  defp sync_logins([], _client, _target, _host_id, _own, acc), do: {:ok, Enum.reverse(acc)}
+  defp sync_logins([], _client, _target, _ctx, acc), do: {:ok, Enum.reverse(acc)}
 
-  defp sync_logins([login | rest], client, target, host_id, own, acc) do
-    expected = host_id |> expected_keys_for_login(login) |> with_own_key(own[login])
+  defp sync_logins([login | rest], client, target, ctx, acc) do
+    expected =
+      ctx.host_id
+      |> expected_keys_for_login(login)
+      |> lines_to_write(Map.get(ctx.on_host, login, []))
+      |> with_own_key(ctx.own[login])
+
     content = Enum.map_join(expected, "", &(&1 <> "\n"))
 
     case ScriptRunner.set_authorized_keyfile(client, target, login, content) do
       :ok ->
         synced = %SyncedLogin{login: login, written_keys: length(expected)}
-        sync_logins(rest, client, target, host_id, own, [synced | acc])
+        sync_logins(rest, client, target, ctx, [synced | acc])
 
       {:error, _} = error ->
         error
@@ -180,16 +189,41 @@ defmodule Ssm.Diffs do
     rest ++ [format_key_line(type, base64, "ssm")]
   end
 
+  # Lines are compared by their key (`KeyParser.identity/1`: type + base64),
+  # never as whole lines: the comment on the host (or ssm's key name) and an
+  # options prefix do not make a granted key "missing" and "not authorized" at
+  # once. A present key shows the host's line. A line without a key compares
+  # as its trimmed text.
   @doc false
   def compute_diff(expected, actual) do
-    exp = MapSet.new(expected)
-    act = MapSet.new(actual)
+    exp = index_by_key(expected)
+    act = index_by_key(actual)
 
-    present = exp |> MapSet.intersection(act) |> to_sorted(:present)
-    missing = exp |> MapSet.difference(act) |> to_sorted(:missing_on_host)
-    extra = act |> MapSet.difference(exp) |> to_sorted(:extra_on_host)
+    present = for {id, line} <- act, Map.has_key?(exp, id), do: line
+    missing = for {id, line} <- exp, not Map.has_key?(act, id), do: line
+    extra = for {id, line} <- act, not Map.has_key?(exp, id), do: line
 
-    present ++ missing ++ extra
+    to_sorted(present, :present) ++
+      to_sorted(missing, :missing_on_host) ++ to_sorted(extra, :extra_on_host)
+  end
+
+  # %{key identity => first line with that key}
+  defp index_by_key(lines) do
+    Enum.reduce(lines, %{}, fn line, acc -> Map.put_new(acc, key_id(line), line) end)
+  end
+
+  defp key_id(line), do: KeyParser.identity(line) || {:line, String.trim(line)}
+
+  # the DB's lines for a login, one per key, each replaced by the host's line
+  # of that key when the host has it: a sync keeps the host's options and
+  # comment of a granted key and never writes a key twice
+  defp lines_to_write(expected, host_lines) do
+    on_host = index_by_key(host_lines)
+
+    expected
+    |> index_by_key()
+    |> Enum.sort_by(fn {_id, line} -> Enum.find_index(expected, &(&1 == line)) end)
+    |> Enum.map(fn {id, line} -> Map.get(on_host, id, line) end)
   end
 
   defp to_sorted(set, status) do
