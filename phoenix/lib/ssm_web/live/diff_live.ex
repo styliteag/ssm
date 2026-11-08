@@ -24,6 +24,7 @@ defmodule SsmWeb.DiffLive do
   alias Ssm.Hosts
   alias Ssm.Hosts.Host
   alias Ssm.Users
+  alias Ssm.Users.KeyAssignment
   alias Ssm.Users.KeyParser
   alias Ssm.Users.UserKey
   alias SsmWeb.Layouts
@@ -375,7 +376,12 @@ defmodule SsmWeb.DiffLive do
          login: login,
          line: item.line,
          parsed: parsed,
-         users: Users.list_users()
+         users: Users.list_users(),
+         # "Create user" is the default, prefilled from the key comment
+         user_id: "new",
+         username: KeyAssignment.suggest_username(parsed.name),
+         key_name: parsed.name || "",
+         error: nil
        })}
     else
       _ -> {:noreply, put_flash(socket, :error, "Cannot assign this key.")}
@@ -386,12 +392,18 @@ defmodule SsmWeb.DiffLive do
     {:noreply, assign(socket, :unknown_key, nil)}
   end
 
-  def handle_event("unknown-key-assign", %{"assign" => %{"user_id" => user_id}}, socket) do
+  def handle_event("unknown-key-change", %{"assign" => params}, socket) do
+    case socket.assigns.unknown_key do
+      %{} = unknown -> {:noreply, assign(socket, :unknown_key, put_form(unknown, params))}
+      _ -> {:noreply, socket}
+    end
+  end
+
+  def handle_event("unknown-key-assign", %{"assign" => params}, socket) do
     with %Host{disabled: false} = host <- socket.assigns.selected,
          %{} = unknown <- socket.assigns.unknown_key,
-         {:ok, id} <- parse_id(user_id),
-         user when user != nil <- Users.get_user(id) do
-      assign_unknown_key(socket, host, user, unknown)
+         {:ok, user} <- assign_target(params["user_id"]) do
+      assign_unknown_key(socket, host, user, put_form(unknown, params))
     else
       _ -> {:noreply, put_flash(socket, :error, "Select a user to assign this key to.")}
     end
@@ -464,37 +476,57 @@ defmodule SsmWeb.DiffLive do
     end
   end
 
-  defp assign_unknown_key(socket, host, user, unknown) do
-    case create_or_adopt_key(user, unknown.parsed) do
-      {:ok, key} ->
-        log_key_assign(socket, user, key)
-        {_reply, socket} = allow_grant(socket, host, user, unknown.login)
-        {:noreply, assign(socket, :unknown_key, nil)}
+  # "new" creates a user in the same transaction; otherwise an existing one
+  defp assign_target("new"), do: {:ok, :new}
 
-      {:error, message} ->
-        {:noreply, put_flash(socket, :error, message)}
+  defp assign_target(user_id) do
+    with {:ok, id} <- parse_id(user_id),
+         %Ssm.Users.User{} = user <- Users.get_user(id) do
+      {:ok, user}
+    else
+      _ -> :error
     end
   end
 
-  # The key may already exist in the DB (assigned to someone) — then it is
-  # adopted as-is instead of failing, mirroring the React DiffPage.
-  defp create_or_adopt_key(user, parsed) do
-    attrs = %{
-      user_id: user.id,
-      key_type: parsed.key_type,
-      key_base64: parsed.key_base64,
-      name: parsed.name
+  defp put_form(unknown, params) do
+    %{
+      unknown
+      | user_id: Map.get(params, "user_id", unknown.user_id),
+        username: Map.get(params, "username", unknown.username),
+        key_name: Map.get(params, "key_name", unknown.key_name)
     }
+  end
 
-    case Users.create_key(attrs) do
-      {:ok, key} ->
-        {:ok, key}
+  # User (when new), key and grant in one transaction (Ssm.Users.KeyAssignment);
+  # an error keeps the dialog open with the message.
+  defp assign_unknown_key(socket, host, user, unknown) do
+    result =
+      KeyAssignment.assign(%{
+        user: user,
+        username: unknown.username,
+        key_name: unknown.key_name,
+        parsed: unknown.parsed,
+        host_id: host.id,
+        login: unknown.login
+      })
 
-      {:error, changeset} ->
-        case {changeset.errors[:key_base64], Users.get_key_by_base64(parsed.key_base64)} do
-          {{"has already been taken", _}, %UserKey{} = key} -> {:ok, key}
-          _ -> {:error, "Could not save the key — check the key line."}
-        end
+    case result do
+      {:ok, %{user: user, key: key} = done} ->
+        if done.user_created?, do: log_user_create(socket, user)
+        log_key_assign(socket, user, key)
+        if done.granted?, do: log_allow(socket, user, host, unknown.login)
+
+        {:noreply,
+         socket
+         |> assign(:unknown_key, nil)
+         |> put_flash(
+           :info,
+           "Assigned the key to #{user.username} for #{unknown.login} on #{host.name}."
+         )
+         |> start_detail_async(host)}
+
+      {:error, {_field, message}} ->
+        {:noreply, assign(socket, :unknown_key, %{unknown | error: message})}
     end
   end
 
@@ -505,6 +537,17 @@ defmodule SsmWeb.DiffLive do
       target: "#{user.username}@#{host.name}:#{login}",
       actor_username: socket.assigns.current_user.actor,
       user_id: user.id
+    })
+  end
+
+  defp log_user_create(socket, user) do
+    Activity.log(%{
+      activity_type: "user",
+      action: "create",
+      target: user.username,
+      actor_username: socket.assigns.current_user.actor,
+      user_id: user.id,
+      details: %{via: "assign unknown key"}
     })
   end
 
@@ -850,16 +893,37 @@ defmodule SsmWeb.DiffLive do
 
         <pre class="mb-2 max-h-24 overflow-auto whitespace-pre-wrap break-all rounded bg-base-300 p-2 font-mono text-xs">{@unknown_key.line}</pre>
 
-        <form id="unknown-key-form" phx-submit="unknown-key-assign" class="space-y-2">
+        <form
+          id="unknown-key-form"
+          phx-change="unknown-key-change"
+          phx-submit="unknown-key-assign"
+          class="space-y-2"
+        >
           <.input
             type="select"
             name="assign[user_id]"
-            value={nil}
+            value={@unknown_key.user_id}
             label="Assign to user"
-            prompt="Select a user"
-            options={Enum.map(@unknown_key.users, &{&1.username, &1.id})}
+            options={[{"Create user", "new"} | Enum.map(@unknown_key.users, &{&1.username, &1.id})]}
             required
           />
+          <.input
+            :if={@unknown_key.user_id == "new"}
+            type="text"
+            name="assign[username]"
+            value={@unknown_key.username}
+            label="New user name"
+            required
+          />
+          <.input
+            type="text"
+            name="assign[key_name]"
+            value={@unknown_key.key_name}
+            label="Key name"
+          />
+          <p :if={@unknown_key.error} id="unknown-key-error" class="text-sm text-error">
+            {@unknown_key.error}
+          </p>
 
           <div class="modal-action">
             <button type="button" class="btn btn-ghost" phx-click="unknown-key-cancel">
