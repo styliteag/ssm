@@ -28,6 +28,7 @@ defmodule Ssm.People do
 
   alias Ssm.Accounts.Operator
   alias Ssm.Authorizations.Authorization
+  alias Ssm.Diffs.Revocations
   alias Ssm.Repo
   alias Ssm.Users.{User, UserKey}
 
@@ -129,7 +130,8 @@ defmodule Ssm.People do
 
   @doc """
   Deletes the authorizations of the person's own users (on `host_ids`, or
-  all when nil); returns the ids of the hosts that held one. Shared keys
+  all when nil); returns the ids of the hosts that held one, each marked
+  "revocation pending" (ADR-0012 §6). Shared keys
   are not touched here: `delete_keys/1` removes them only after every host
   was scrubbed.
 
@@ -149,6 +151,7 @@ defmodule Ssm.People do
 
     Ssm.Grants.transaction(fn ->
       hosts = Repo.all(from a in query, distinct: true, select: a.host_id)
+      Enum.each(hosts, &Revocations.mark(&1, "person removed"))
 
       {:ok, _} =
         Ssm.Grants.drop_for_users(user_ids, Map.put(ctx, :trigger, "person_remove"))
@@ -158,9 +161,23 @@ defmodule Ssm.People do
     end)
   end
 
-  @doc "Delete `user_key` rows by id."
+  @doc """
+  Delete `user_key` rows by id; the hosts of their owners are marked
+  "revocation pending" in the same transaction.
+  """
   @spec delete_keys([integer()]) :: {non_neg_integer(), nil}
-  def delete_keys(ids), do: Repo.delete_all(from k in UserKey, where: k.id in ^ids)
+  def delete_keys(ids) do
+    {:ok, deleted} =
+      Ssm.Grants.transaction(fn ->
+        owners =
+          Repo.all(from k in UserKey, where: k.id in ^ids, distinct: true, select: k.user_id)
+
+        :ok = Revocations.mark_user_hosts(owners, "person's shared key deleted")
+        Repo.delete_all(from k in UserKey, where: k.id in ^ids)
+      end)
+
+    deleted
+  end
 
   defp operator_and_email("oidc:" <> rest) do
     case String.split(rest, "|", parts: 2) do

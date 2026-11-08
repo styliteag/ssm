@@ -115,8 +115,9 @@ defmodule Ssm.Diffs.RevocationSyncTest do
     refute content =~ "BOBNEW"
     refute Revocations.pending?(ctx.host.id)
 
-    [entry] = Repo.all(from l in ActivityLog, where: l.action == "sync")
+    [entry] = Repo.all(from l in ActivityLog, where: l.action == "sync_revocation")
     assert entry.actor_username == "ssm (revocation sync)"
+    assert Repo.all(from l in ActivityLog, where: l.action == "sync") == []
     assert Jason.decode!(entry.meta)["mode"] == "removal_only"
   end
 
@@ -139,7 +140,7 @@ defmodule Ssm.Diffs.RevocationSyncTest do
 
     assert MockClient.calls().exec_inputs == []
     assert Revocations.pending?(ctx.host.id)
-    assert [_] = Repo.all(from l in ActivityLog, where: l.action == "sync_failed")
+    assert [_] = Repo.all(from l in ActivityLog, where: l.action == "sync_revocation_failed")
   end
 
   test "a root-owned user_readonly skips the login and stays pending", ctx do

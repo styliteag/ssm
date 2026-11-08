@@ -14,6 +14,7 @@ defmodule Ssm.Users.BulkOps do
   alias Ecto.Multi
   alias Ssm.Authorizations
   alias Ssm.Authorizations.Authorization
+  alias Ssm.Diffs.Revocations
   alias Ssm.Repo
   alias Ssm.Users.{User, UserKey}
 
@@ -54,8 +55,10 @@ defmodule Ssm.Users.BulkOps do
 
   @doc """
   Moves the keys in `key_ids` from `user` to a freshly created user named
-  `new_username` and copies **all** of the original user's authorizations to
-  the new user. At least one key must remain with the original user.
+  `new_username` and copies the original user's manual authorizations to
+  the new user. Rows made by a grant stay with the original user, so the
+  moved keys lose those hosts: they are marked "revocation pending". At
+  least one key must remain with the original user.
   """
   @spec split_user(User.t(), String.t(), [integer()]) :: {:ok, split_result()} | {:error, term()}
   def split_user(%User{} = user, new_username, key_ids) when is_list(key_ids) do
@@ -72,6 +75,7 @@ defmodule Ssm.Users.BulkOps do
     |> Multi.run(:authorizations, fn repo, %{new_user: new_user} ->
       copy_authorizations(repo, [user.id], new_user.id)
     end)
+    |> Multi.run(:revocations, fn _repo, _changes -> mark_grant_hosts(user.id) end)
     |> Ssm.Grants.transaction()
     |> case do
       {:ok, changes} ->
@@ -82,6 +86,19 @@ defmodule Ssm.Users.BulkOps do
       {:error, _step, reason, _changes} ->
         {:error, reason}
     end
+  end
+
+  # grant rows are not copied: the moved keys lose the user's grant hosts
+  defp mark_grant_hosts(user_id) do
+    from(a in Authorization,
+      where: a.user_id == ^user_id and not is_nil(a.grant_id),
+      distinct: true,
+      select: a.host_id
+    )
+    |> Repo.all()
+    |> Enum.each(&Revocations.mark(&1, "SSH user split"))
+
+    {:ok, nil}
   end
 
   defp validate_split_keys(repo, user, key_ids) do

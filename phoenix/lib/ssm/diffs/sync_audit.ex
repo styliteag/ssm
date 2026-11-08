@@ -5,7 +5,9 @@ defmodule Ssm.Diffs.SyncAudit do
   logins skipped with their reason, and the logins whose `user_readonly`
   was ignored because root does not own it. Action `sync` (success), `sync_partial`
   (failed after some logins were written) or `sync_failed` (nothing
-  written). Marker text from a host is quoted and bounded.
+  written); the removal-only sync of `Ssm.Diffs.RevocationSync` logs
+  `sync_revocation`, `sync_revocation_partial` and `sync_revocation_failed`.
+  Marker text from a host is quoted and bounded.
   """
 
   alias Ssm.Activity
@@ -15,13 +17,14 @@ defmodule Ssm.Diffs.SyncAudit do
   @doc """
   Log the outcome for `host` (name and id) and return the sync result
   unchanged. `extra` is merged into the details (the removal-only sync adds
-  `mode: "removal_only"`).
+  `mode: "removal_only"`); `base` names the action (`"sync"`, or
+  `"sync_revocation"` for the removal-only sync).
   """
-  @spec log(String.t(), Ssm.Hosts.Host.t(), {term(), map()}, map()) :: term()
-  def log(actor, %Ssm.Hosts.Host{} = host, {result, report}, extra \\ %{}) do
+  @spec log(String.t(), Ssm.Hosts.Host.t(), {term(), map()}, map(), String.t()) :: term()
+  def log(actor, %Ssm.Hosts.Host{} = host, {result, report}, extra \\ %{}, base \\ "sync") do
     Activity.log(%{
       activity_type: "host",
-      action: action(result, report),
+      action: action(base, result, report),
       target: host.name,
       host_id: host.id,
       actor_username: actor,
@@ -31,9 +34,9 @@ defmodule Ssm.Diffs.SyncAudit do
     result
   end
 
-  defp action({:ok, _}, _report), do: "sync"
-  defp action({:error, _}, %{written: []}), do: "sync_failed"
-  defp action({:error, _}, _report), do: "sync_partial"
+  defp action(base, {:ok, _}, _report), do: base
+  defp action(base, {:error, _}, %{written: []}), do: base <> "_failed"
+  defp action(base, {:error, _}, _report), do: base <> "_partial"
 
   defp details(result, %{written: written, skipped: skipped} = report) do
     base = %{

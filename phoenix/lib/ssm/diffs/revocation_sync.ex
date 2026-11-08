@@ -12,7 +12,8 @@ defmodule Ssm.Diffs.RevocationSync do
   `Ssm.Grants.transaction/1` after its commit (dropped on rollback). Each
   sync runs in a task under `Ssm.Diffs.TaskSupervisor`, under the host's
   `Ssm.Hosts.WriteLock` (one host write at a time), only removes lines, is
-  audited as actor `ssm (revocation sync)` with `mode: removal_only`, and
+  audited as actor `ssm (revocation sync)` with action `sync_revocation`
+  (`_partial`, `_failed`) and `mode: removal_only`, and
   clears the mark only after full success. When off, the mark and the
   Hosts page badge are the only effect.
   """
@@ -98,7 +99,7 @@ defmodule Ssm.Diffs.RevocationSync do
       case Hosts.fetch_host(host_id) do
         {:ok, host} ->
           outcome = Diffs.removal_sync_reported(client, host_id)
-          SyncAudit.log(@actor, host, outcome, %{mode: "removal_only"})
+          SyncAudit.log(@actor, host, outcome, %{mode: "removal_only"}, "sync_revocation")
 
         {:error, :not_found} ->
           :ok

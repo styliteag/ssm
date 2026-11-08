@@ -1,7 +1,11 @@
 defmodule Ssm.Diffs.Revocations do
   @moduledoc """
-  "Revocation pending" (ADR-0012 §6): a host whose `authorization` rows a
-  grant reconcile removed is marked until a sync succeeds there. The keys
+  "Revocation pending" (ADR-0012 §6): a host where a write took access away
+  (a grant reconcile removed rows, a manual row deleted or moved, an SSH
+  user disabled, deleted or split, a key deleted, moved or re-keyed, a
+  person offboarded) is marked until a sync succeeds there. The owner of
+  this state machine together with `Ssm.Diffs.RevocationSync` and
+  `Ssm.Hosts.WriteLock` (AGENTS.md "State machines"). The keys
   stay on the host until then; a sync removes them (also for a login whose
   last row is gone, through `managed_logins`). The mark is shown on the
   Hosts page; it never triggers an SSH write by itself.
@@ -12,6 +16,7 @@ defmodule Ssm.Diffs.Revocations do
 
   import Ecto.Query
 
+  alias Ssm.Authorizations.Authorization
   alias Ssm.Diffs.{PendingRevocation, RevocationSync}
   alias Ssm.{Repo, Scope}
 
@@ -29,6 +34,17 @@ defmodule Ssm.Diffs.Revocations do
     if Repo.in_transaction?(),
       do: RevocationSync.collect(host_id),
       else: RevocationSync.request([host_id])
+  end
+
+  @doc """
+  Mark every host where one of `user_ids` holds an authorization (manual or
+  grant row): their keys lose access there. Call it before the rows go.
+  """
+  @spec mark_user_hosts([integer()], String.t()) :: :ok
+  def mark_user_hosts(user_ids, reason) when is_list(user_ids) do
+    from(a in Authorization, where: a.user_id in ^user_ids, distinct: true, select: a.host_id)
+    |> Repo.all()
+    |> Enum.each(&mark(&1, reason))
   end
 
   @doc """

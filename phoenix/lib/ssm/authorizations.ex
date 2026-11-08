@@ -241,6 +241,7 @@ defmodule Ssm.Authorizations do
     Ssm.Grants.transaction(fn ->
       with :ok <- ensure_manual(reconcile_host_id, changeset.data),
            {:ok, auth} <- write.(changeset),
+           :ok <- mark_moved(changeset.data, auth),
            :ok <- record_managed_login(auth.host_id, auth.login),
            {:ok, _} <- reconcile_after_manual(reconcile_host_id, auth) do
         auth
@@ -259,6 +260,16 @@ defmodule Ssm.Authorizations do
       nil -> :ok
       _grant_id -> {:error, :grant_row}
     end
+  end
+
+  # a row that leaves its (user, host, login) takes that access away: the old
+  # host is "revocation pending" (ADR-0012 §6). A new row has no old place.
+  defp mark_moved(%Authorization{id: nil}, _auth), do: :ok
+
+  defp mark_moved(%Authorization{} = old, auth) do
+    if {old.user_id, old.host_id, old.login} == {auth.user_id, auth.host_id, auth.login},
+      do: :ok,
+      else: Revocations.mark(old.host_id, "authorization moved")
   end
 
   defp reconcile_after_manual(nil, _auth), do: {:ok, nil}

@@ -70,6 +70,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The removal-only sync is in the activity log as `sync_revocation`,
+  `sync_revocation_partial` or `sync_revocation_failed`, so it can be told apart from
+  a manual sync (`sync`, `sync_partial`, `sync_failed`, unchanged).
 - Splitting or merging SSH users copies only manual authorizations. Grants
   stay with their SSH user; a merged user's grants are deleted with it.
 - Deleting an authorization now also marks its host "revocation pending" until
@@ -99,6 +102,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   or a symlink) is skipped with that reason; the other logins are still written.
 
 ### Security
+
+- "Revocation pending" now covers every change that takes SSH access away, not only
+  grants and deleted authorizations: an authorization moved to another host, login or
+  SSH user (the old host), an SSH user disabled, deleted, merged away or split (the
+  hosts of its grants), a key deleted, moved to another SSH user or given new key
+  material, and the authorizations and shared keys removed when a person is offboarded
+  through Mission Control. With `SSM_REVOCATION_SYNC=on` each of them also starts the
+  removal-only sync. Changing only the options of an authorization is not marked; a
+  normal sync applies it.
 
 - A sync, "Remove key", offboarding through Mission Control and "Forget" of a managed
   login no longer run at the same time on one host: each takes the host's write lock,

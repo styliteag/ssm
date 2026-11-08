@@ -60,14 +60,15 @@ merge/delete/rename and group delete/rename, manual row update/delete) runs
 `Expansion.reconcile/2` — a full, idempotent per-host reconcile — in its own IMMEDIATE transaction
 (`Ssm.Grants.transaction/1`). A manual row wins; grant rows are read-only (`{:error, :grant_row}`,
 API 409 `CONFLICT`). Rows a reconcile removes mark the host in `pending_revocations`
-(`Ssm.Diffs.Revocations`, Hosts page badge; also a deleted manual row) until a fully successful sync
-clears exactly the mark it read at its start. `SSM_REVOCATION_SYNC=on` (default off) adds the
+(`Ssm.Diffs.Revocations`, Hosts page badge; every other access-reducing write too — see "State
+machines") until a fully successful sync clears exactly the mark it read at its start. `SSM_REVOCATION_SYNC=on` (default off) adds the
 removal-only sync (`Ssm.Diffs.RevocationSync`, `Diffs.removal_sync_reported/2`): marks made in a
 transaction are collected per process and started by the outermost `Ssm.Grants.transaction/1` after
 commit (dropped on rollback), async under `Ssm.Diffs.TaskSupervisor`, under `Ssm.Hosts.WriteLock`;
 it keeps the host's own lines whose key is still authorized, never adds, skips logins without a file
 and unread (linked) files, honours disabled/readonly/unsafe/own-key; audited as `ssm (revocation
-sync)`, `mode: removal_only`. Tests: `config :ssm, :revocation_sync_runner, :inline`. Every outer
+sync)`, action `sync_revocation|sync_revocation_partial|sync_revocation_failed` (a manual sync stays
+`sync|sync_partial|sync_failed`), `mode: removal_only`. Tests: `config :ssm, :revocation_sync_runner, :inline`. Every outer
 transaction that touches authorizations uses `Ssm.Grants.transaction/1` (IMMEDIATE). Audit:
 `grant_create|grant_delete`, `grant_add|grant_remove|grant_move` (trigger, `grant_id`, `job_id`,
 `request_id`); the actor is the ctx actor, else the process actor (`Ssm.Grants.put_actor/1`, set by
@@ -115,6 +116,24 @@ the login. Diff page "Remove" / "Remove all extra keys"
 re-diffs it (`Diffs.login_diff_for_write/2`, refuses without the own key like a sync), drops
 only lines still `extra_on_host` and writes the rest through `set_authorized_keyfile`;
 readonly/unsafe logins refused, audited (`remove_keys`/`remove_keys_failed`, fingerprints only).
+
+**State machines**. *Revocation pending* (ADR-0012 §6) is owned by `Ssm.Diffs.Revocations`
+(the state, table `pending_revocations`, one row per host), `Ssm.Diffs.RevocationSync` (the opt-in
+removal-only sync) and `Ssm.Hosts.WriteLock` (one host write at a time); nothing else writes the
+table. States: none → pending(reason, t) → none. `Revocations.mark/2` (or `mark_user_hosts/2`)
+enters or re-enters pending — a new mark replaces reason and t. Only a fully successful sync (full
+or removal-only) leaves it: under the write lock it reads the mark (`seen/1`) before any grant, and
+afterwards `clear/2` deletes exactly that (host, t), so a mark committed while it ran stays. A
+partial/failed sync, `KeyRemoval`, offboarding scrub and `forget` never clear. Marks are made in the
+domain function, inside the write's `Ssm.Grants.transaction/1`, and hand off to `RevocationSync`
+only after commit. Marking writes: manual row delete and move (host, login or SSH user changed —
+the old host), every reconcile that removes grant rows (grant delete, host leaves customer/group,
+customer merge/delete, group delete, user delete/merge, offboarding), SSH user disabled or deleted
+(also bulk delete and merge sources: every host of the user), split (the user's grant hosts — grant
+rows are not copied), key deleted, moved or re-keyed (the old owner's hosts), `People.remove_authorizations/3`
+and `People.delete_keys/1`. An options-only change of a row is not marked (a removal-only sync could
+not apply it; a full sync does). `test/ssm/diffs/revocation_marks_test.exs` has one row per
+access-reducing operation — a new one adds its row.
 
 **Web login** (ADR-0011, `lib/ssm/oidc/`, `ssm_web/oidc_controller.ex`): `.htpasswd`
 users are local admins (session `ssm_user`). With `OIDC_ISSUER` set, SSO users are

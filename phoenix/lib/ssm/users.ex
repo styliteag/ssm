@@ -15,12 +15,17 @@ defmodule Ssm.Users do
   included: the scoped writes also take `opts` (`role:`, `actor:`) and
   refuse a non-admin a key added, moved or re-keyed into a user holding a
   grant with admin-only options (`check_admin_only/3`).
+
+  Every write that takes access away (disable or delete a user, delete,
+  move or re-key a key) marks the user's hosts "revocation pending"
+  (`Ssm.Diffs.Revocations.mark_user_hosts/2`) in the same transaction.
   """
 
   import Ecto.Query
 
   alias Ssm.Activity
   alias Ssm.Authorizations.{Authorization, Options}
+  alias Ssm.Diffs.Revocations
   alias Ssm.Repo
   alias Ssm.Users.{User, UserKey}
 
@@ -65,17 +70,44 @@ defmodule Ssm.Users do
   @spec create_user(map()) :: {:ok, User.t()} | {:error, Ecto.Changeset.t()}
   def create_user(attrs), do: %User{} |> User.changeset(attrs) |> Repo.insert()
 
+  @doc "Update an SSH user; disabling it marks its hosts \"revocation pending\"."
   @spec update_user(User.t(), map()) :: {:ok, User.t()} | {:error, Ecto.Changeset.t()}
-  def update_user(%User{} = user, attrs), do: user |> User.changeset(attrs) |> Repo.update()
+  def update_user(%User{} = user, attrs) do
+    changeset = User.changeset(user, attrs)
+
+    if Ecto.Changeset.get_change(changeset, :enabled) == false,
+      do: write_revoking(changeset, &Repo.update/1, [user.id], "SSH user disabled"),
+      else: Repo.update(changeset)
+  end
+
+  # `write` and the marks commit together; the marks are made first, while
+  # the user's authorizations and keys are still where they were. An invalid
+  # changeset never opens a transaction (a caller's would roll back).
+  defp write_revoking(%Ecto.Changeset{valid?: false} = changeset, write, _user_ids, _reason),
+    do: write.(changeset)
+
+  defp write_revoking(changeset, write, user_ids, reason) do
+    Ssm.Grants.transaction(fn ->
+      :ok = Revocations.mark_user_hosts(user_ids, reason)
+
+      case write.(changeset) do
+        {:ok, written} -> written
+        {:error, failed} -> Repo.rollback(failed)
+      end
+    end)
+  end
 
   @doc """
   Delete an SSH user (keys and authorizations cascade). Its grants are
   dropped first through `Ssm.Grants.drop_for_users/2` in the same
-  transaction: audited, hosts marked "revocation pending".
+  transaction: audited, hosts marked "revocation pending" — every host of
+  the user, also those of its manual rows.
   """
   @spec delete_user(User.t()) :: {:ok, User.t()} | {:error, Ecto.Changeset.t()}
   def delete_user(%User{} = user) do
     Ssm.Grants.transaction(fn ->
+      :ok = Revocations.mark_user_hosts([user.id], "SSH user deleted")
+
       with {:ok, _} <- Ssm.Grants.drop_for_users([user.id], %{trigger: "user_delete"}),
            {:ok, deleted} <- Repo.delete(user) do
         deleted
@@ -185,11 +217,23 @@ defmodule Ssm.Users do
   @spec create_key(map()) :: {:ok, UserKey.t()} | {:error, Ecto.Changeset.t()}
   def create_key(attrs), do: %UserKey{} |> UserKey.changeset(attrs) |> Repo.insert()
 
+  @doc """
+  Update a key; a move to another user or new key material takes the old
+  key away from the old owner's hosts: they are marked "revocation pending".
+  """
   @spec update_key(UserKey.t(), map()) :: {:ok, UserKey.t()} | {:error, Ecto.Changeset.t()}
-  def update_key(%UserKey{} = key, attrs), do: key |> UserKey.changeset(attrs) |> Repo.update()
+  def update_key(%UserKey{} = key, attrs) do
+    changeset = UserKey.changeset(key, attrs)
 
+    if Enum.any?([:user_id, :key_type, :key_base64], &Map.has_key?(changeset.changes, &1)),
+      do: write_revoking(changeset, &Repo.update/1, [key.user_id], "key moved or replaced"),
+      else: Repo.update(changeset)
+  end
+
+  @doc "Delete a key; the owner's hosts are marked \"revocation pending\"."
   @spec delete_key(UserKey.t()) :: {:ok, UserKey.t()} | {:error, Ecto.Changeset.t()}
-  def delete_key(%UserKey{} = key), do: Repo.delete(key)
+  def delete_key(%UserKey{} = key),
+    do: write_revoking(key, &Repo.delete/1, [key.user_id], "key deleted")
 
   @doc """
   `create_key/1` for a web user: the owner must be `writable?/2`, and for
