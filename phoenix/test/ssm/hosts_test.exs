@@ -102,4 +102,29 @@ defmodule Ssm.HostsTest do
       refute "a" in names
     end
   end
+
+  describe "delete_host/2 (web UI, ADR-0012)" do
+    test "checks for jump dependents and deletes in one step" do
+      scope = Ssm.Scope.global()
+      jump = host_fixture(%{name: "jump"})
+      # struct read before the dependent appears: the check must use the DB
+      stale = Hosts.get_host(jump.id)
+      dependent = host_fixture(%{name: "behind", jump_via: jump.id})
+
+      assert {:error, {:jump_host_in_use, ["behind"]}} = Hosts.delete_host(scope, stale)
+      assert Hosts.get_host(jump.id)
+      assert Hosts.get_host(dependent.id)
+
+      {:ok, _} = Hosts.delete_host(scope, dependent)
+      assert {:ok, %{id: id}} = Hosts.delete_host(scope, stale)
+      assert id == jump.id
+      refute Hosts.get_host(jump.id)
+    end
+
+    test "an out-of-scope host is not found" do
+      host = host_fixture()
+      assert {:error, :not_found} = Hosts.delete_host(Ssm.Scope.none(), host)
+      assert Hosts.get_host(host.id)
+    end
+  end
 end

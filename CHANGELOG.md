@@ -34,7 +34,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   that other hosts use as their jump host; otherwise it could point a host in
   its scope at another machine and reach it through a sync.
 - A jump host that other hosts still use can no longer be deleted from the web
-  UI (deleting it also deleted those hosts); remove the dependency first.
+  UI (deleting it also deleted those hosts); remove the dependency first. The
+  check and the delete run in one locked transaction, so a host that starts
+  using it as a jump host meanwhile is not deleted along with it.
 
 ### Added
 

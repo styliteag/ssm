@@ -157,12 +157,21 @@ defmodule Ssm.Hosts do
           {:ok, Host.t()}
           | {:error, Ecto.Changeset.t() | :not_found | {:jump_host_in_use, [String.t()]}}
   def delete_host(%Scope{} = scope, %Host{id: id}) do
-    with {:ok, host} <- Scope.fetch_host(scope, id) do
-      case jump_dependents(host) do
-        [] -> delete_host(host)
-        names -> {:error, {:jump_host_in_use, names}}
-      end
-    end
+    # Check and delete in one IMMEDIATE transaction (SQLite write lock from
+    # BEGIN): no dependent can appear between the check and the cascade.
+    Repo.transaction(
+      fn ->
+        with {:ok, host} <- Scope.fetch_host(scope, id),
+             [] <- jump_dependents(host),
+             {:ok, deleted} <- delete_host(host) do
+          deleted
+        else
+          names when is_list(names) -> Repo.rollback({:jump_host_in_use, names})
+          {:error, reason} -> Repo.rollback(reason)
+        end
+      end,
+      mode: :immediate
+    )
   end
 
   @doc """
