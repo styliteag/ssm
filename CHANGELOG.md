@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Hosts page: "Refresh all (N)" tests the SSH connection of every enabled
+  host the current filter lists (after a confirm; disabled hosts are never
+  contacted), `SSH_CONCURRENCY` at a time, and shows each result in its row as
+  it arrives, then a summary (online/offline). Nothing is written to the hosts.
+  Each row also shows "checked … ago" from the last stored key check, or
+  "checked just now" after a test on this page.
+
 ## [4.9.1] - 2026-11-08
 
 ### Changed

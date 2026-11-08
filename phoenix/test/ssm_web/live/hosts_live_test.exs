@@ -249,6 +249,62 @@ defmodule SsmWeb.HostsLiveTest do
     end
   end
 
+  describe "refresh all" do
+    setup do
+      start_supervised!(MockClient)
+      :ok
+    end
+
+    test "asks before it connects and names the number of hosts", %{conn: conn} do
+      host_fixture(%{name: "web1"})
+      host_fixture(%{name: "web2"})
+
+      {:ok, view, _html} = live(conn, ~p"/hosts")
+
+      button = element(view, "#refresh-all")
+      assert render(button) =~ "Refresh all (2)"
+      assert render(button) =~ ~s(data-confirm="Refresh 2 hosts?)
+      assert MockClient.calls().connect == []
+    end
+
+    test "tests every listed enabled host once and streams the results", %{conn: conn} do
+      ok = host_fixture(%{name: "web1"})
+      bad = host_fixture(%{name: "web2"})
+      off = host_fixture(%{name: "web3"})
+      {:ok, _} = Hosts.update_host(off, %{disabled: true})
+      MockClient.fail_connect(bad.id)
+
+      {:ok, view, _html} = live(conn, ~p"/hosts")
+      # "All" lists the disabled host too: it is skipped all the same
+      view |> element("#filter-all") |> render_click()
+      assert render(element(view, "#refresh-all")) =~ "Refresh all (2)"
+
+      view |> element("#refresh-all") |> render_click()
+      render_async(view)
+
+      assert Enum.sort(MockClient.calls().connect) == Enum.sort([ok.id, bad.id])
+      assert has_element?(view, "#hosts-#{ok.id} .badge", "online")
+      assert has_element?(view, "#hosts-#{bad.id} .badge", "offline")
+      assert has_element?(view, "#hosts-#{off.id} .badge", "disabled")
+      assert has_element?(view, "#checked-#{ok.id}", "checked just now")
+      assert render(view) =~ "Refreshed 2 hosts: 1 online, 1 offline"
+    end
+
+    test "only the hosts the filter lists", %{conn: conn} do
+      up = host_fixture(%{name: "up"})
+      other = host_fixture(%{name: "other"})
+      Ssm.Diffs.StatusCache.put(up.id, :synced)
+
+      {:ok, view, _html} = live(conn, ~p"/hosts")
+      view |> element("#filter-online") |> render_click()
+      view |> element("#refresh-all") |> render_click()
+      render_async(view)
+
+      assert MockClient.calls().connect == [up.id]
+      refute other.id in MockClient.calls().connect
+    end
+  end
+
   describe "pin host keys now" do
     setup do
       start_supervised!(MockClient)

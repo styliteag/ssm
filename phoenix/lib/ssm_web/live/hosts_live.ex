@@ -10,12 +10,19 @@ defmodule SsmWeb.HostsLive do
   (a host whose keys were readable is online) and this page's own
   connection tests. Rows are a plain assign, not a stream — filtering and
   status overlays must re-render rows.
+
+  "Refresh all" runs the same connection test for every enabled host the
+  current filter lists (after a confirm), `SSH_CONCURRENCY` at a time, and
+  each result lands in its row as it arrives. A connection test is not a
+  key check, so it is not written to `host_checks`; the row shows "checked
+  … ago" from the stored key check, or "checked just now" after a test.
   """
 
   use SsmWeb, :live_view
 
   alias Ssm.Activity
   alias Ssm.Authorizations
+  alias Ssm.Diffs.HostChecks
   alias Ssm.Diffs.StatusCache
   alias Ssm.Hosts
   alias Ssm.Hosts.Host
@@ -30,6 +37,8 @@ defmodule SsmWeb.HostsLive do
      |> assign(page_title: "Hosts")
      |> assign(form: nil, editing: nil, testing_id: nil, pinning: false)
      |> assign(filter: "active", conn_results: %{}, sort: nil, view: "list")
+     |> assign(refreshing: false, refresh_done: 0, refresh_total: 0, refresh_ids: [])
+     |> assign(:tested_at, %{})
      |> reload_hosts()}
   end
 
@@ -39,6 +48,7 @@ defmodule SsmWeb.HostsLive do
     socket
     |> assign(:all_hosts, hosts)
     |> assign(:host_names, Map.new(hosts, &{&1.id, &1.name}))
+    |> assign(:stored_checks, HostChecks.stored())
     |> assign(
       :auth_counts,
       Enum.frequencies_by(Authorizations.list_authorizations(), & &1.host_id)
@@ -242,6 +252,23 @@ defmodule SsmWeb.HostsLive do
     end
   end
 
+  def handle_event("refresh_all", _params, %{assigns: %{refreshing: true}} = socket),
+    do: {:noreply, socket}
+
+  def handle_event("refresh_all", _params, socket) do
+    case refresh_targets(socket.assigns.rows) do
+      [] ->
+        {:noreply, put_flash(socket, :error, "No enabled host to refresh in this list.")}
+
+      targets ->
+        {:noreply,
+         socket
+         |> assign(refreshing: true, refresh_done: 0, refresh_total: length(targets))
+         |> assign(:refresh_ids, Enum.map(targets, &elem(&1, 0)))
+         |> start_refresh(targets)}
+    end
+  end
+
   def handle_event("pin_host_keys", _params, socket) do
     actor = socket.assigns.current_user.actor
 
@@ -251,7 +278,37 @@ defmodule SsmWeb.HostsLive do
      |> start_async(:pin_host_keys, fn -> Hosts.pin_host_keys_now(actor: actor) end)}
   end
 
+  # each host's result is shown the moment it is known (the diff page's
+  # streaming pattern), not after the whole batch
   @impl true
+  def handle_info({:refresh_result, host_id, result}, socket) do
+    {:noreply,
+     socket
+     |> update(:refresh_done, &(&1 + 1))
+     |> update(:tested_at, &Map.put(&1, host_id, DateTime.utc_now()))
+     |> put_conn_result(host_id, result)}
+  end
+
+  @impl true
+  def handle_async(:refresh_all, {:ok, :done}, socket) do
+    {online, offline} = refresh_counts(socket)
+
+    {:noreply,
+     socket
+     |> assign(:refreshing, false)
+     |> put_flash(
+       if(offline == 0, do: :info, else: :error),
+       "Refreshed #{online + offline} hosts: #{online} online, #{offline} offline."
+     )}
+  end
+
+  def handle_async(:refresh_all, {:exit, reason}, socket) do
+    {:noreply,
+     socket
+     |> assign(:refreshing, false)
+     |> put_flash(:error, "Refresh crashed: #{inspect(reason)}")}
+  end
+
   def handle_async(:pin_host_keys, {:ok, report}, socket) do
     {:noreply,
      socket
@@ -268,7 +325,10 @@ defmodule SsmWeb.HostsLive do
   end
 
   def handle_async(:test_connection, {:ok, {host, result}}, socket) do
-    socket = assign(socket, :testing_id, nil)
+    socket =
+      socket
+      |> assign(:testing_id, nil)
+      |> update(:tested_at, &Map.put(&1, host.id, DateTime.utc_now()))
 
     case result do
       :ok ->
@@ -302,6 +362,78 @@ defmodule SsmWeb.HostsLive do
     socket
     |> update(:conn_results, &Map.put(&1, host_id, result))
     |> refilter()
+  end
+
+  ## Refresh all
+
+  # every enabled host the current filter lists; disabled hosts are never
+  # contacted (rule #4), whatever the filter shows
+  defp refresh_targets(rows) do
+    rows
+    |> Enum.reject(& &1.disabled)
+    |> Enum.map(&{&1.id, Hosts.target_for(&1)})
+  end
+
+  defp start_refresh(socket, targets) do
+    parent = self()
+    concurrency = check_concurrency()
+
+    start_async(socket, :refresh_all, fn ->
+      targets
+      |> Task.async_stream(
+        fn {id, target} ->
+          send(parent, {:refresh_result, id, conn_status(Ssm.Ssh.connect(target))})
+        end,
+        max_concurrency: concurrency,
+        ordered: false,
+        timeout: :infinity
+      )
+      |> Stream.run()
+
+      :done
+    end)
+  end
+
+  # SSH_CONCURRENCY (default 32), as the diff page's checks
+  defp check_concurrency do
+    Application.get_env(:ssm, :ssh, [])
+    |> Keyword.get(:check_concurrency, 32)
+  end
+
+  defp conn_status(:ok), do: :online
+  defp conn_status({:error, {_code, message}}) when is_binary(message), do: {:offline, message}
+  defp conn_status({:error, reason}), do: {:offline, inspect(reason)}
+
+  defp refresh_counts(%{assigns: %{refresh_ids: ids, conn_results: results}}) do
+    ids
+    |> Enum.map(&results[&1])
+    |> Enum.reduce({0, 0}, fn
+      :online, {on, off} -> {on + 1, off}
+      {:offline, _}, {on, off} -> {on, off + 1}
+      _, acc -> acc
+    end)
+  end
+
+  defp refreshable_count(rows), do: Enum.count(rows, &(not &1.disabled))
+
+  # "checked … ago": a test on this page wins over the stored key check
+  defp checked_label(host_id, tested_at, stored) do
+    case {tested_at[host_id], stored[host_id]} do
+      {%DateTime{}, _} -> "checked just now"
+      {nil, %{checked_at: %DateTime{} = at}} -> "checked #{ago(at)}"
+      _ -> "never checked"
+    end
+  end
+
+  defp ago(at) do
+    seconds = max(DateTime.diff(DateTime.utc_now(), at), 0)
+
+    cond do
+      seconds < 60 -> "just now"
+      seconds < 3600 -> "#{div(seconds, 60)} min ago"
+      seconds < 86_400 -> "#{div(seconds, 3600)} h ago"
+      true -> "#{div(seconds, 86_400)} d ago"
+    end
   end
 
   ## Helpers
@@ -389,6 +521,23 @@ defmodule SsmWeb.HostsLive do
         <:subtitle>{@host_count} managed SSH hosts</:subtitle>
         <:actions>
           <.button
+            id="refresh-all"
+            phx-click="refresh_all"
+            disabled={@refreshing or refreshable_count(@rows) == 0}
+            data-confirm={"Refresh #{refreshable_count(@rows)} hosts? ssm connects to each over SSH and reads nothing but the connection/host key — nothing is written."}
+            title="Test the SSH connection of every enabled host in this list"
+          >
+            <.icon
+              name="hero-arrow-path"
+              class={["size-4", @refreshing && "motion-safe:animate-spin"]}
+            />
+            <%= if @refreshing do %>
+              Refreshing {@refresh_done}/{@refresh_total}
+            <% else %>
+              Refresh all ({refreshable_count(@rows)})
+            <% end %>
+          </.button>
+          <.button
             id="pin-host-keys"
             phx-click="pin_host_keys"
             disabled={@pinning}
@@ -463,6 +612,9 @@ defmodule SsmWeb.HostsLive do
             <span>login {host.username}</span>
             <.limited_badge host={host} />
             <span :if={host.jump_via}>via {Map.get(@host_names, host.jump_via)}</span>
+            <span :if={not host.disabled} id={"card-checked-#{host.id}"}>
+              {checked_label(host.id, @tested_at, @stored_checks)}
+            </span>
             <.link
               navigate={~p"/authorizations?host_id=#{host.id}"}
               class="link link-hover"
@@ -520,6 +672,9 @@ defmodule SsmWeb.HostsLive do
             >
               {status_label(@statuses[host.id])}
             </span>
+            <p :if={not host.disabled} id={"checked-#{host.id}"} class="text-xs opacity-60">
+              {checked_label(host.id, @tested_at, @stored_checks)}
+            </p>
           </:col>
           <:action :let={host}>
             <.host_actions host={host} testing_id={@testing_id} />
