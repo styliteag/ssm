@@ -47,6 +47,7 @@ defmodule Ssm.Diffs do
 
   defmodule LoginDiff do
     @moduledoc "Per-login diff of authorized_keys."
+    @type t :: %__MODULE__{}
     defstruct login: nil,
               has_pragma: false,
               readonly_condition: nil,

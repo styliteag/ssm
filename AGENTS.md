@@ -350,7 +350,10 @@ meta{total,page,page_size}}`.
 Diff/sync outcomes (wire changes approved 2026-11-08): unreadable listing → 502
 `SSH_CONNECT_FAILED`; partial sync (root-owned `user_readonly`) or host-wide readonly → 409
 `SSH_READONLY`; own key (`SSH_KEY`) unavailable → 500 `INTERNAL_ERROR`; stored key row with control
-characters → 422 `VALIDATION_FAILED`. Contract tests: `test/ssm_web/api/diffs_api_test.exs`.
+characters → 422 `VALIDATION_FAILED`. Each diff login carries an additive `notes` list
+(`Ssm.Diffs.Notes`: `{kind, text, line}`, kinds `unsafe|revocation_blocked|readonly_ignored|
+drops_host_restriction|invalid_stored_options|note`). Contract tests:
+`test/ssm_web/api/diffs_api_test.exs`, `diff_notes_api_test.exs`.
 
 **Auth quick test** (dev server):
 ```bash

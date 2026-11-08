@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `GET /api/v2/diffs/{host_id}`: every login now has a `notes` list with the notes the
+  diff page shows — unsafe files, blocked revocations ("revocation blocked …"), an
+  ignored `user_readonly` not owned by root, "drops host restriction: …" and "invalid
+  stored options". Each note is `{kind, text, line}`; `kind` is a stable code to switch
+  on, `line` names the key line an item note belongs to. Existing fields are unchanged.
+
 ### Security
 
 - ssm no longer writes the `authorized_keys` of a login that shares the home of the
