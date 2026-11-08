@@ -201,4 +201,24 @@ defmodule Ssm.Ssh.ScriptHardeningTest do
       assert Path.wildcard(Path.join(ctx.dir, "homedirs.*")) == []
     end
   end
+
+  describe "logins that look like options (L7)" do
+    test "a login starting with - never reaches getent as an argument", ctx do
+      log = Path.join(ctx.dir, "getent.log")
+
+      fake_bin(ctx, "getent", """
+      echo "$*" >> "#{log}"
+      if [ -n "$2" ]; then grep "^$2:" "#{ctx.dir}/passwd"; else cat "#{ctx.dir}/passwd"; fi\
+      """)
+
+      for login <- ["-s", "--service=files", "-"] do
+        assert {out, 1} = write(ctx, login, "ssh-ed25519 K x\n")
+        assert out =~ "unsafe (home)", login
+        assert {"unknown\n", 1} = run(ctx, ["has_keyfile", login])
+      end
+
+      calls = if File.exists?(log), do: File.read!(log), else: ""
+      refute calls =~ ~r/(^|\s)-/m
+    end
+  end
 end

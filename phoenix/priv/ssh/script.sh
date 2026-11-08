@@ -23,8 +23,14 @@ do_getent_passwd_all() {
 
 # Without getent (busybox) the login must match field 1 exactly: a regex
 # would let "roo." match root. ENVIRON, not awk -v (no escape processing).
+# A login starting with "-" (or empty) is never looked up: getent would read
+# it as an option. Not "getent passwd -- login": BSD getent takes "--" as a
+# key and stops at the first one it does not find.
 do_getent_passwd() {
   login="$1"
+  case "${login}" in
+    ""|-*) return 2 ;;
+  esac
   if have_getent; then
     getent passwd "${login}"
   else

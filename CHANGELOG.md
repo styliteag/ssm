@@ -128,6 +128,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   now check the file before and after the read.
 - The host listing no longer writes a predictable temp file (`$TMPDIR/homedirs.<pid>`)
   as root.
+- A new or changed login of an authorization or grant must be a user name: a letter
+  or `_` first, then letters, digits, `_`, `.` or `-`, at most 32 characters, an
+  optional trailing `$` (upper case is allowed, e.g. `Administrator`). A login starting
+  with `-` could be read as an option by tools on the host. Existing authorizations
+  with other logins keep working and stay editable. On the host, `script.sh` never
+  looks up a login that starts with `-`.
 - Merging SSH users is refused when their authorizations for the same host and login
   carry different key options ("Not merged: … different key options …", naming each
   login@host). Before, one row was kept silently and the other user's keys got its

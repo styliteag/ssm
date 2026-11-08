@@ -13,6 +13,7 @@ defmodule Ssm.Grants.Grant do
   use Ecto.Schema
   import Ecto.Changeset
 
+  alias Ssm.Authorizations.Login
   alias Ssm.ControlChars
 
   @type t :: %__MODULE__{}
@@ -40,6 +41,7 @@ defmodule Ssm.Grants.Grant do
     |> validate_length(:login, min: 1, max: 255)
     |> validate_length(:comment, max: 1000)
     |> ControlChars.validate([:login, :comment])
+    |> Login.validate()
     |> validate_one_target()
     |> foreign_key_constraint(:ssh_user_id)
     |> foreign_key_constraint(:customer_id)

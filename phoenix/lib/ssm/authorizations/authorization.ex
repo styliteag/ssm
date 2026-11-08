@@ -3,7 +3,8 @@ defmodule Ssm.Authorizations.Authorization do
   Grants one managed user access to one host under a remote `login`, with
   optional authorized_keys `options` (e.g. `no-pty,from="10.0.0.0/8"`,
   allow-listed by `Ssm.Authorizations.Options`). Login and comment refuse
-  control characters.
+  control characters; a new or changed login must be a POSIX-style user
+  name (`Ssm.Authorizations.Login`).
   Unique per (user, host, login).
 
   `grant_id` is set on rows expanded from a grant (`Ssm.Grants.Expansion`,
@@ -14,7 +15,7 @@ defmodule Ssm.Authorizations.Authorization do
   use Ecto.Schema
   import Ecto.Changeset
 
-  alias Ssm.Authorizations.Options
+  alias Ssm.Authorizations.{Login, Options}
   alias Ssm.ControlChars
 
   schema "authorization" do
@@ -30,13 +31,14 @@ defmodule Ssm.Authorizations.Authorization do
   def changeset(authorization, attrs) do
     authorization
     |> base_changeset(attrs)
+    |> Login.validate()
     |> Options.validate_changeset()
   end
 
   @doc """
   For copies of grants that are already stored (user split/merge): the
-  options are copied as they are, without today's options validation, so a
-  legacy option never blocks a merge. The sync treats such options as
+  options (and the login) are copied as they are, without today's
+  validation, so a legacy option or login never blocks a merge. The sync treats such options as
   invalid stored options (keeps the host's line of the key).
   """
   def copy_changeset(authorization, attrs), do: base_changeset(authorization, attrs)

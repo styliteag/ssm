@@ -39,7 +39,10 @@ recreated.
 
 **Data model** (SQLite, table names are singular — Diesel parity): `host`, `user`,
 `user_key`, `authorization`, `activity_log`. `authorization` links user↔host with a
-remote `login`. `host.disabled` blocks all SSH operations. `operators` (OIDC web accounts) and newer tables for the mctl
+remote `login` — a new or changed login (authorization or grant) must match
+`Ssm.Authorizations.Login` (`\A[A-Za-z_][A-Za-z0-9_.-]{0,31}\$?\z`); stored legacy logins stay
+editable and are copied by split/merge; `script.sh` never looks up a login starting with `-`.
+`host.disabled` blocks all SSH operations. `operators` (OIDC web accounts) and newer tables for the mctl
 contract are plural (contract spec names): `customers`, `groups`, `host_groups`, plus
 the `mctl_contract` library's `mctl_tokens`, `mctl_jobs`, `mctl_idempotency`, and `host_checks`
 (last result of the periodic key check per host, `ON DELETE CASCADE`), and `managed_logins`
