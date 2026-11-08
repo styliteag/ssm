@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.12.1] - 2026-11-08
+
 ### Fixed
 
 - Splitting or merging SSH users no longer crashes on an authorization whose host was
