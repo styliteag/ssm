@@ -147,6 +147,11 @@ defmodule Ssm.Diffs do
   @spec sync_host_reported(module(), integer()) ::
           {{:ok, [SyncedLogin.t()]} | {:error, term()}, map()}
   def sync_host_reported(client \\ Ssm.Ssh, host_id) do
+    Ssm.Hosts.WriteLock.run(host_id, fn -> locked_sync(client, host_id) end)
+  end
+
+  # under the host's write lock (Ssm.Hosts.WriteLock): read, then write
+  defp locked_sync(client, host_id) do
     case prepare_sync(client, host_id) do
       {:ok, %{host: host, logins: logins, target: target, ctx: ctx}} ->
         logins
@@ -178,7 +183,17 @@ defmodule Ssm.Diffs do
       ignored =
         for e <- entries, e.readonly_ignored, e.login in logins, do: {e.login, e.readonly_ignored}
 
-      ctx = %{host: host, own: own, on_host: on_host, skipped: skipped, ignored: ignored}
+      shas = Map.new(entries, &{&1.login, &1.sha256})
+
+      ctx = %{
+        host: host,
+        own: own,
+        on_host: on_host,
+        shas: shas,
+        skipped: skipped,
+        ignored: ignored
+      }
+
       {:ok, %{host: host, logins: to_write, target: target, ctx: ctx}}
     end
   end
@@ -241,7 +256,9 @@ defmodule Ssm.Diffs do
 
     content = Enum.map_join(lines, "", &(&1 <> "\n"))
 
-    case ScriptRunner.set_authorized_keyfile(client, target, login, content) do
+    opts = [expected_sha256: ctx.shas[login]]
+
+    case ScriptRunner.set_authorized_keyfile(client, target, login, content, opts) do
       :ok ->
         done = %SyncedLogin{login: login, written_keys: length(lines)}
         acc = %{acc | synced: [done | acc.synced], refused: acc.refused ++ expected.refused}
@@ -251,6 +268,11 @@ defmodule Ssm.Diffs do
       # user_readonly surfaces only now: skip it like a listed one
       {:error, {:ssh_readonly, reason}} ->
         sync_logins(rest, client, target, ctx, %{acc | skipped: [{login, reason} | acc.skipped]})
+
+      # the file changed on the host since the listing: not overwritten
+      {:error, {:ssh_stale, _}} ->
+        skipped = [{login, "changed on the host since it was read; not written"} | acc.skipped]
+        sync_logins(rest, client, target, ctx, %{acc | skipped: skipped})
 
       # the script refused a link only now (no listing entry, link-to-dir)
       {:error, {:ssh_unsafe, reason}} ->
@@ -273,6 +295,7 @@ defmodule Ssm.Diffs do
     case Regex.run(~r/unsafe \(([^)]+)\)/, message) do
       [_, "ssh_dir"] -> @ssh_dir_blocked
       [_, "home"] -> "no usable home (missing or a symlink)"
+      [_, "ssh_user"] -> "the SSH user is unknown on the host; nothing written"
       [_, "shared_home"] -> "not managed: shares the SSH user's home (ssm's own key)"
       [_, kind] -> "unsafe: " <> kind
       nil -> "unsafe"

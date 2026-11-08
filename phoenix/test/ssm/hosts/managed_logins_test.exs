@@ -110,4 +110,15 @@ defmodule Ssm.Hosts.ManagedLoginsTest do
     assert {:error, :managed_login_not_found} = ManagedLogins.forget(MockClient, host, "x", "a")
     assert MockClient.calls().exec == []
   end
+
+  test "the host is asked again right before the delete" do
+    host = host_fixture()
+    revoked(host, "old")
+    has_keyfile(host, "old", "no")
+
+    assert {:ok, "old"} = ManagedLogins.forget(MockClient, host, "old", "admin")
+
+    asks = Enum.count(MockClient.calls().exec, fn {_, cmd} -> cmd =~ "has_keyfile old" end)
+    assert asks == 2
+  end
 end

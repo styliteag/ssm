@@ -127,4 +127,11 @@ defmodule Ssm.HostsTest do
       assert Hosts.get_host(host.id)
     end
   end
+
+  test "a host needs an SSH user (the alias check in script.sh depends on it)" do
+    assert {:error, changeset} =
+             Ssm.Hosts.create_host(%{name: "nouser", address: "10.9.9.9", port: 22, username: ""})
+
+    assert %{username: [_ | _]} = errors_on(changeset)
+  end
 end

@@ -171,6 +171,15 @@ bounded() {
     fi
 }
 
+# sha256 (hex) of stdin; "" without sha256sum (no check then).
+content_sha() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum | awk '{ print $1 }'
+    else
+        cat >/dev/null
+    fi
+}
+
 # Print a plain authorized_keys. On Linux the opened file itself is checked
 # (/proc/<pid>/fd): it must be the very inode of the directory entry (not a
 # link swapped in after the checks) with one link; elsewhere only the checks
@@ -276,6 +285,18 @@ get_authorized_keyfile_for() {
 # makes it fail); ssm then enters the new directory, re-checks it with
 # pwd -P (a link swapped in after the mkdir resolves elsewhere) and chowns
 # its cwd ("."), never a path. An existing ~/.ssh is left alone.
+# True when the login (uid $2, gid $3) could rename its home $1 away: the
+# parent is the user's own and owner-writable, group-writable with the
+# login's primary group, or world-writable (sticky or not: the user owns the
+# home entry). Supplementary groups are not checked. Root (uid 0) is exempt.
+home_parent_writable() {
+    [ "$2" != "0" ] || return 1
+    parent="${1%/*}"
+    [ -n "${parent}" ] || parent="/"
+    [ -n "$(find "${parent}" -prune \( \( -user "$2" -perm -200 \) -o \( -group "$3" -perm -020 \) \
+        -o -perm -002 \) -print 2>/dev/null)" ]
+}
+
 ensure_ssh_dir() {
     entry=$(do_getent_passwd "$1") || entry=""
     home=$(printf "%s" "${entry}" | cut -d: -f6)
@@ -286,20 +307,30 @@ ensure_ssh_dir() {
         echo "Keyfile is unsafe (home), aborting."
         exit 1
     fi
-    owner="$(printf "%s" "${entry}" | cut -d: -f3):$(printf "%s" "${entry}" | cut -d: -f4)"
-    case "${owner}" in
+    uid=$(printf "%s" "${entry}" | cut -d: -f3)
+    gid=$(printf "%s" "${entry}" | cut -d: -f4)
+    case "${uid}:${gid}" in
         :*|*:|*[!0-9:]*) echo "Keyfile is unsafe (home), aborting."; exit 1 ;;
     esac
+    real_home=$(cd "${home}" 2>/dev/null && pwd -P) || real_home=""
+    if [ -z "${real_home}" ] || home_parent_writable "${real_home}" "${uid}" "${gid}"; then
+        echo "Keyfile is unsafe (home), aborting."
+        exit 1
+    fi
     if ! (
         cd "${home}" || exit 1
-        real_home=$(pwd -P) || exit 1
+        # still the home resolved above (not swapped since)
+        [ "$(pwd -P)" = "${real_home}" ] || exit 1
         (umask 077 && mkdir .ssh) || exit 1
         cd .ssh || exit 1
         [ "$(pwd -P)" = "${real_home}/.ssh" ] || exit 1
-        # still ssm's fresh directory (empty, root-owned 0700), not one the
-        # user renamed in after the mkdir: the cwd is pinned, no new window
-        [ -z "$(ls -A)" ] && [ -n "$(find . -prune -user 0 -perm 700)" ] || exit 1
-        chown "${owner}" . || exit 1
+        # still ssm's fresh directory (empty, root-owned, rwx for root, nothing
+        # for group/other; a setgid bit inherited from the home is fine), not
+        # one the user renamed in after the mkdir: the cwd is pinned
+        [ -z "$(ls -A)" ] || exit 1
+        [ -n "$(find . -prune -user 0 -perm -700 ! -perm -040 ! -perm -020 ! -perm -010 \
+            ! -perm -004 ! -perm -002 ! -perm -001)" ] || exit 1
+        chown "${uid}:${gid}" . || exit 1
     ); then
         echo "Keyfile is unsafe (ssh_dir), aborting."
         exit 1
@@ -318,13 +349,19 @@ handle_set_authorized_keyfile() {
     # A login that is not the SSH user ($2, the login ssm connects with) but
     # resolves to its home (a uid-0 alias such as toor in root's home) would
     # replace the file that holds ssm's own key: refused, never managed.
+    # The check is never skipped: without a known SSH user it is impossible.
     ssh_user="${2:-}"
-    if [ -n "${ssh_user}" ] && [ "${ssh_user}" != "${login}" ]; then
+    own_home=""
+    if [ -n "${ssh_user}" ]; then
         own_home=$(resolved_home "${ssh_user}")
-        if [ -n "${own_home}" ] && [ "$(resolved_home "${login}")" = "${own_home}" ]; then
-            echo "Keyfile is unsafe (shared_home), aborting."
-            exit 1
-        fi
+    fi
+    if [ -z "${own_home}" ]; then
+        echo "Keyfile is unsafe (ssh_user), aborting."
+        exit 1
+    fi
+    if [ "${ssh_user}" != "${login}" ] && [ "$(resolved_home "${login}")" = "${own_home}" ]; then
+        echo "Keyfile is unsafe (shared_home), aborting."
+        exit 1
     fi
 
     # a login without ~/.ssh gets one (never through a link)
@@ -346,6 +383,21 @@ handle_set_authorized_keyfile() {
     if [ "$(pwd -P)" != "$(cd "${home}" && pwd -P)/.ssh" ]; then
         echo "Keyfile is unsafe (ssh_dir), aborting."
         exit 1
+    fi
+
+    # $3: the sha256 of the file as the listing read it. A file changed or
+    # removed since is not overwritten (the caller decides on fresh data).
+    expected_sha="${3:-}"
+    if [ -n "${expected_sha}" ]; then
+        current_sha="absent"
+        if [ -z "${unsafe}" ] && [ -f authorized_keys ]; then
+            current=$(read_keyfile authorized_keys) || current=""
+            current_sha=$(printf "%s" "${current}" | content_sha)
+        fi
+        if [ "${current_sha}" != "${expected_sha}" ]; then
+            echo "Keyfile changed since it was read (stale), aborting."
+            exit 1
+        fi
     fi
 
     # every name ssm creates here must be unpredictable
@@ -463,6 +515,9 @@ handle_get_ssh_keyfiles() {
             esac
             unsafe=$(keyfile_unsafe "${login}")
             [ -n "${unsafe}" ] || unsafe="${raced}"
+            # sha256 of exactly what was read: a write can check it is unchanged
+            sha=""
+            [ -n "${unsafe}" ] || sha=$(printf "%s" "${keyfile}" | content_sha)
 
             printf '{"login":"%s", "has_pragma": %s, "readonly_condition": "%s", "readonly_scope": "%s", "readonly_ignored": "%s", "unsafe": "%s",' \
                 "$(printf "%s" "${login}" | json_escape)" "${has_pragma}" \
@@ -470,6 +525,7 @@ handle_get_ssh_keyfiles() {
                 "${readonly_ignored}" "${unsafe}"
 
             # every string field is JSON-escaped (json_escape)
+            printf '"sha256":"%s",' "${sha}"
             printf '"keyfile":"%s"}' "$(printf "%s" "${keyfile}" | json_escape)"
       done
     printf "]"

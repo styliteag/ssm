@@ -119,4 +119,35 @@ defmodule Ssm.Ssh.ScriptSshDirTest do
     assert out =~ "unsafe (ssh_dir)"
     assert File.lstat!(Path.join(home, ".ssh")).uid == 0
   end
+
+  test "a setgid home: the new ~/.ssh inherits g+s and is still accepted", ctx do
+    home = add_user(ctx, "sgid")
+    File.chmod!(home, 0o2755)
+
+    assert {_, 0} = write(ctx, "sgid", "ssh-ed25519 K x\n")
+    ssh = File.lstat!(Path.join(home, ".ssh"))
+    assert Bitwise.band(ssh.mode, 0o077) == 0
+    assert ssh.uid == 1000
+  end
+
+  test "a home whose parent the user can write is refused, nothing created", ctx do
+    owned = Path.join(ctx.dir, "userparent")
+    File.mkdir_p!(Path.join(owned, "a"))
+    {_, 0} = System.cmd("chown", ["1000", owned])
+    passwd_entry(ctx, "ownparent", 1000, 1000, Path.join(owned, "a"))
+
+    open = Path.join(ctx.dir, "worldparent")
+    File.mkdir_p!(Path.join(open, "b"))
+    File.chmod!(open, 0o1777)
+    passwd_entry(ctx, "openparent", 1000, 1000, Path.join(open, "b"))
+
+    for {login, home} <- [
+          {"ownparent", Path.join(owned, "a")},
+          {"openparent", Path.join(open, "b")}
+        ] do
+      assert {out, 1} = write(ctx, login, "ssh-ed25519 K x\n")
+      assert out =~ "unsafe (home)"
+      refute File.exists?(Path.join(home, ".ssh"))
+    end
+  end
 end

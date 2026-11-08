@@ -48,7 +48,9 @@ defmodule Ssm.Ssh.ScriptNoGetentTest do
     keys = "/root/.ssh/authorized_keys"
     before = File.read(keys)
 
-    assert {out, 1} = sh(ctx, ["set_authorized_keyfile", "roo."], "ssh-ed25519 ATTACKER x\n")
+    assert {out, 1} =
+             sh(ctx, ["set_authorized_keyfile", "roo.", "root"], "ssh-ed25519 ATTACKER x\n")
+
     assert out =~ "unsafe (home)"
     assert File.read(keys) == before
   end

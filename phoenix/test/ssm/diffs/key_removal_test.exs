@@ -229,4 +229,38 @@ defmodule Ssm.Diffs.KeyRemovalTest do
                "admin"
              )
   end
+
+  test "the write names the sha256 the file had when read" do
+    sha = String.duplicate("cd", 32)
+    host = host_fixture(%{username: "root"})
+    stub_host(host, [Map.put(entry("deploy", ["ssh-rsa ROGUE x"]), :sha256, sha)])
+
+    assert {:ok, _} = KeyRemoval.remove(MockClient, host, "deploy", :all_extra, "admin")
+
+    assert Enum.any?(MockClient.calls().exec, fn {_, cmd} ->
+             cmd == "sh .ssm/script.sh set_authorized_keyfile deploy root #{sha}"
+           end)
+  end
+
+  test "a removal waits for the host's write lock" do
+    host = host_fixture(%{username: "root"})
+    stub_host(host, [entry("deploy", ["ssh-rsa ROGUE x"])])
+    test = self()
+
+    holder =
+      spawn(fn ->
+        Ssm.Hosts.WriteLock.run(host.id, fn ->
+          send(test, :locked)
+          receive do: (:release -> :ok)
+        end)
+      end)
+
+    assert_receive :locked
+    task = Task.async(fn -> KeyRemoval.remove(MockClient, host, "deploy", :all_extra, "a") end)
+    assert Task.yield(task, 200) == nil
+    assert MockClient.calls().exec == []
+
+    send(holder, :release)
+    assert {:ok, %{removed: 1}} = Task.await(task)
+  end
 end

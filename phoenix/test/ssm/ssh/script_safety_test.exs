@@ -27,6 +27,8 @@ defmodule Ssm.Ssh.ScriptSafetyTest do
     """)
 
     File.chmod!(Path.join(dir, "bin/getent"), 0o755)
+    # the SSH user every write names (set_authorized_keyfile <login> root)
+    File.write!(Path.join(dir, "passwd"), "root:x:0:0::#{Path.join(dir, "root")}:/bin/sh\n")
 
     # root's own file, as onboarding leaves it: ssm's header plus its key
     root_keys = Path.join(dir, "root/.ssh/authorized_keys")
@@ -75,7 +77,7 @@ defmodule Ssm.Ssh.ScriptSafetyTest do
 
     System.cmd(
       "sh",
-      ["-c", ~s(sh "$0" set_authorized_keyfile "$1" < "$2"), ctx.script, login, input],
+      ["-c", ~s(sh "$0" set_authorized_keyfile "$1" root < "$2"), ctx.script, login, input],
       env: env(ctx),
       stderr_to_stdout: true
     )

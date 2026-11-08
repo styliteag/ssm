@@ -20,7 +20,7 @@ defmodule Ssm.Hosts.ManagedLogins do
   alias Ssm.Activity
   alias Ssm.Authorizations.{Authorization, ManagedLogin}
   alias Ssm.Hosts
-  alias Ssm.Hosts.Host
+  alias Ssm.Hosts.{Host, WriteLock}
   alias Ssm.Repo
   alias Ssm.Ssh.ScriptRunner
 
@@ -56,11 +56,18 @@ defmodule Ssm.Hosts.ManagedLogins do
     end
   end
 
+  # The host is asked twice: once up front, then again under the host's
+  # write lock right before the delete — no sync, removal or offboarding of
+  # ssm can create the file in between. A file created on the host by
+  # someone else after that last answer is not seen (residual race,
+  # AGENTS.md).
   defp do_forget(host, client, login) do
     with :ok <- no_authorizations(host.id, login),
          :ok <- ensure_enabled(host),
          :ok <- no_file(client, host, login) do
-      delete(host.id, login)
+      WriteLock.run(host.id, fn ->
+        with :ok <- no_file(client, host, login), do: delete(host.id, login)
+      end)
     end
   end
 

@@ -63,7 +63,12 @@ defmodule Ssm.FakeScriptHost do
     ]
   end
 
-  @doc "`set_authorized_keyfile <args…>` with `content` on stdin: `{output, exit}`."
+  @doc """
+  `set_authorized_keyfile <args…>` with `content` on stdin: `{output,
+  exit}`. A bare login writes as SSH user `root`.
+  """
+  def write(ctx, login, content) when is_binary(login), do: write(ctx, [login, "root"], content)
+
   def write(ctx, args, content) do
     input = Path.join(ctx.dir, "input")
     File.write!(input, content)

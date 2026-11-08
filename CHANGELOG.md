@@ -41,6 +41,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- A sync, "Remove key", offboarding through Mission Control and "Forget" of a managed
+  login no longer run at the same time on one host: each takes the host's write lock,
+  so one cannot undo another's change. Each write also checks that the
+  `authorized_keys` is still what ssm read; a file the user changed in between is
+  not overwritten — the login is skipped ("changed on the host since it was read").
+- ssm refuses every write when it cannot confirm that the login is not an alias of the
+  host's SSH user: a host without SSH user, or an SSH user the host does not know.
+- Creating a missing `~/.ssh` is refused when the user could swap their home (its
+  parent is writable by them); a home with the setgid bit is now handled.
+- "Forget" asks the host once more right before deleting the login.
+
 - An SSO operator can no longer give a key the permissions of an admin's grant by
   moving it: adding, importing, moving or re-keying a key, splitting or merging users,
   and assigning a diff-page key are refused (and logged) for an SSH user that holds a

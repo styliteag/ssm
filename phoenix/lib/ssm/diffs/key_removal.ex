@@ -15,7 +15,11 @@ defmodule Ssm.Diffs.KeyRemoval do
   marker or root-owned `user_readonly`) and an unsafe one (linked file or
   `~/.ssh`, not read) are refused before the write; the script's own
   refusals (shared home, …) are passed on. Like a sync, a login whose file
-  holds ssm's own key is not written while that key is unavailable.
+  holds ssm's own key is not written while that key is unavailable. The
+  read and the write run under the host's write lock
+  (`Ssm.Hosts.WriteLock`), and the write names the sha256 of the file as
+  read, so a file changed on the host meanwhile is not overwritten
+  (`:ssh_stale`).
 
   Every attempt is audit-logged (`activity_type` `host`, action
   `remove_keys` or `remove_keys_failed`) with the login, the number of
@@ -25,7 +29,7 @@ defmodule Ssm.Diffs.KeyRemoval do
   """
 
   alias Ssm.{Activity, Diffs, Hosts, People}
-  alias Ssm.Hosts.Host
+  alias Ssm.Hosts.{Host, WriteLock}
   alias Ssm.Ssh.ScriptRunner
   alias Ssm.Users.KeyParser
 
@@ -56,7 +60,11 @@ defmodule Ssm.Diffs.KeyRemoval do
   defp do_remove(%Host{disabled: true} = host, _client, _login, _selector),
     do: {:error, {:host_disabled, "host #{inspect(host.name)} is disabled"}}
 
-  defp do_remove(host, client, login, selector) do
+  # under the host's write lock (shared with sync and offboarding)
+  defp do_remove(host, client, login, selector),
+    do: WriteLock.run(host.id, fn -> locked_remove(host, client, login, selector) end)
+
+  defp locked_remove(host, client, login, selector) do
     target = Hosts.target_for(host)
 
     with {:ok, entries} <- ScriptRunner.get_ssh_keyfiles(client, target),
@@ -65,7 +73,10 @@ defmodule Ssm.Diffs.KeyRemoval do
          {:ok, diff} <- Diffs.login_diff_for_write(host, entry),
          {:ok, drop_ids} <- selected_extras(diff, selector, host, login),
          {:ok, keep, dropped} <- split_file(entry.keyfile, drop_ids),
-         :ok <- ScriptRunner.set_authorized_keyfile(client, target, login, content(keep)) do
+         :ok <-
+           ScriptRunner.set_authorized_keyfile(client, target, login, content(keep),
+             expected_sha256: entry.sha256
+           ) do
       {:ok, dropped}
     end
   end

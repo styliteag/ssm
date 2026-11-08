@@ -25,6 +25,7 @@ defmodule Ssm.Ssh.ScriptRunner do
       :readonly_scope,
       :readonly_ignored,
       :unsafe,
+      :sha256,
       :keyfile
     ]
 
@@ -35,6 +36,7 @@ defmodule Ssm.Ssh.ScriptRunner do
             readonly_scope: :user | :host | nil,
             readonly_ignored: String.t() | nil,
             unsafe: String.t() | nil,
+            sha256: String.t() | nil,
             keyfile: String.t()
           }
   end
@@ -135,11 +137,19 @@ defmodule Ssm.Ssh.ScriptRunner do
       readonly_ignored: blank_to_nil(raw["readonly_ignored"]),
       # "symlink" | "hardlink" | "special": not read (keyfile empty), not written
       unsafe: blank_to_nil(raw["unsafe"]),
+      # sha256 of the file as read (passed back by a write: stale check)
+      sha256: sha(raw["sha256"]),
       # script.sh (json_escape) emits a proper JSON string: backslashes,
       # quotes and newlines arrive decoded; nothing to unescape here.
       keyfile: raw |> Map.get("keyfile", "") |> to_string()
     }
   end
+
+  # host output goes into a command line: 64 hex digits or nothing
+  defp sha(value) when is_binary(value),
+    do: if(Regex.match?(~r/\A[0-9a-f]{64}\z/, value), do: value)
+
+  defp sha(_value), do: nil
 
   defp blank_to_nil(value) when value in [nil, ""], do: nil
   defp blank_to_nil(value), do: to_string(value)
@@ -158,14 +168,31 @@ defmodule Ssm.Ssh.ScriptRunner do
   The SSH user (`target.username`) is passed along: the script refuses a
   login that is not the SSH user but resolves to its home (a uid-0 alias
   like `toor` in root's home) — `Keyfile is unsafe (shared_home)` — since
-  that file holds ssm's own key.
+  that file holds ssm's own key. A target without SSH user is refused
+  before any SSH (the check would be impossible); so does the script for
+  an SSH user it does not know (`unsafe (ssh_user)`).
+
+  `opts[:expected_sha256]` (from `LoginKeyfile.sha256`) makes the script
+  refuse a file that changed since it was read: `{:error, {:ssh_stale, _}}`.
   """
-  @spec set_authorized_keyfile(module(), Target.t(), String.t(), String.t()) ::
+  @spec set_authorized_keyfile(module(), Target.t(), String.t(), String.t(), keyword()) ::
           :ok | {:error, term()}
-  def set_authorized_keyfile(client \\ Ssm.Ssh, target, login, content) do
+  def set_authorized_keyfile(client \\ Ssm.Ssh, target, login, content, opts \\ [])
+
+  def set_authorized_keyfile(_client, %Target{username: user} = target, login, _content, _opts)
+      when user in [nil, ""] do
+    {:error,
+     {:ssh_unsafe,
+      "host #{inspect(target.name)} has no SSH user; refusing to write #{inspect(login)}"}}
+  end
+
+  def set_authorized_keyfile(client, target, login, content, opts) do
     command =
-      "sh #{Shell.quote(@remote_path)} set_authorized_keyfile #{Shell.quote(login)} " <>
-        Shell.quote(target.username || "")
+      Enum.join(
+        ["sh #{Shell.quote(@remote_path)} set_authorized_keyfile", Shell.quote(login)] ++
+          [Shell.quote(target.username)] ++ List.wrap(sha(opts[:expected_sha256])),
+        " "
+      )
 
     with :ok <- ensure_uploaded(client, target),
          {:ok, %Result{} = result} <- client.exec(target, command, input: content) do
@@ -177,6 +204,13 @@ defmodule Ssm.Ssh.ScriptRunner do
         unsafe_refusal?(result) ->
           {:error,
            {:ssh_unsafe,
+            "host #{inspect(target.name)} refused write for #{inspect(login)}: " <>
+              refusal_reason(result)}}
+
+        # the file changed on the host since the listing read it
+        result |> refusal_reason() |> String.contains?("(stale)") ->
+          {:error,
+           {:ssh_stale,
             "host #{inspect(target.name)} refused write for #{inspect(login)}: " <>
               refusal_reason(result)}}
 

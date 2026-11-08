@@ -70,4 +70,60 @@ defmodule Ssm.Diffs.WriteRefusalsTest do
     assert message =~ "shares the SSH user's home"
     assert Enum.map(report.written, & &1.login) == ["root"]
   end
+
+  @sha String.duplicate("ab", 32)
+
+  test "a sync names the sha256 of each listed file; a stale refusal skips that login" do
+    host = host_fixture(%{username: "ssm-admin"})
+    grant(host, "aaa", "STALE1")
+    grant(host, "zzz", "STALE2")
+
+    stub_host(host, [
+      %{login: "aaa", has_pragma: true, keyfile: "", sha256: @sha},
+      %{login: "zzz", has_pragma: true, keyfile: ""}
+    ])
+
+    MockClient.set_exec(
+      host.id,
+      "sh .ssm/script.sh set_authorized_keyfile aaa ssm-admin #{@sha}",
+      %Result{stdout: "Keyfile changed since it was read (stale), aborting.", exit_code: 1}
+    )
+
+    assert {{:error, {:ssh_readonly, _}}, report} = Diffs.sync_host_reported(MockClient, host.id)
+    assert [{"aaa", "changed on the host since it was read; not written"}] = report.skipped
+    assert Enum.map(report.written, & &1.login) == ["zzz"]
+  end
+
+  test "an unknown SSH user is a per-login skip with a readable reason" do
+    host = host_fixture(%{username: "ssm-admin"})
+    grant(host, "aaa", "SSHU1")
+    stub_host(host, [])
+    refuse(host, "sh .ssm/script.sh set_authorized_keyfile aaa ssm-admin", "ssh_user")
+
+    assert {{:error, {:ssh_readonly, _}}, report} = Diffs.sync_host_reported(MockClient, host.id)
+    assert [{"aaa", "the SSH user is unknown on the host; nothing written"}] = report.skipped
+  end
+
+  test "a sync waits for the host's write lock" do
+    host = host_fixture(%{username: "ssm-admin"})
+    grant(host, "aaa", "LOCK1")
+    stub_host(host, [])
+    test = self()
+
+    holder =
+      spawn(fn ->
+        Ssm.Hosts.WriteLock.run(host.id, fn ->
+          send(test, :locked)
+          receive do: (:release -> :ok)
+        end)
+      end)
+
+    assert_receive :locked
+    task = Task.async(fn -> Diffs.sync_host(MockClient, host.id) end)
+    assert Task.yield(task, 200) == nil
+    assert MockClient.calls().exec == []
+
+    send(holder, :release)
+    assert {:ok, _} = Task.await(task)
+  end
 end

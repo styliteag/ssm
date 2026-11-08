@@ -48,16 +48,24 @@ defmodule Ssm.Ssh.ScriptSharedHomeTest do
     assert File.read!(Path.join(home, ".ssh/authorized_keys")) =~ "ssh-ed25519 A x"
   end
 
-  test "without the SSH user argument the write behaves as before", ctx do
+  test "without the SSH user argument the write is refused: the check is never skipped",
+       ctx do
     passwd_entry(ctx, "toor", 0, 0, root_home(ctx))
+    before = File.read!(ctx.root_keys)
 
-    assert {_, 0} = write(ctx, "toor", "ssh-ed25519 SSMKEY ssm\n")
+    for args <- [["toor"], ["toor", ""]] do
+      assert {out, 1} = write(ctx, args, "ssh-ed25519 OTHER x\n")
+      assert out =~ "unsafe (ssh_user)"
+    end
+
+    assert File.read!(ctx.root_keys) == before
   end
 
-  test "an SSH user unknown to getent does not abort the write", ctx do
+  test "an SSH user unknown to getent refuses the write (alias check impossible)", ctx do
     home = add_user(ctx, "alice")
 
-    assert {_, 0} = write(ctx, ["alice", "no-such-user"], "ssh-ed25519 A x\n")
-    assert File.read!(Path.join(home, ".ssh/authorized_keys")) =~ "ssh-ed25519 A x"
+    assert {out, 1} = write(ctx, ["alice", "no-such-user"], "ssh-ed25519 A x\n")
+    assert out =~ "unsafe (ssh_user)"
+    refute File.exists?(Path.join(home, ".ssh"))
   end
 end

@@ -48,7 +48,9 @@ the `mctl_contract` library's `mctl_tokens`, `mctl_jobs`, `mctl_idempotency`, an
 `Ssm.Hosts.ManagedLogins.forget/4`: admin "Managed logins" on the hosts page or `DELETE
 /api/v2/hosts/{id}/managed-logins/{login}`, only without authorizations and when `script.sh
 has_keyfile` says the host has no file for it — an unknown login or missing home answers `unknown`,
-exit 1, never "no" — audited `forget_login`).
+exit 1, never "no"; asked again under the host lock right before the delete — audited
+`forget_login`; residual race: a file someone creates on the host after that last answer is not
+seen).
 Sync and readonly markers (`Ssm.Diffs.sync_host/2`): a host-wide marker (`system_readonly`, vendor
 platform) stops a sync before any write; a login's own `~/.ssh/user_readonly` counts only when root
 owns it (`script.sh` `user_readonly_state`, `find -user 0`) and then skips only that login, the
@@ -61,9 +63,12 @@ is reported `unsafe` (`symlink|hardlink|special`), not read, but still written: 
 replaced, never written through, so revocation reaches it. A login without `~/.ssh` gets one at write time
 (`script.sh` `ensure_ssh_dir`: only in a home that exists and is no symlink, `mkdir` under
 umask 077, then a `pwd -P` re-check inside the new directory and `chown` of the cwd to the
-getent uid:gid — never a path — only while the cwd is still empty, root-owned and 0700); a missing or symlinked home is refused `unsafe (home)`, a sync
+getent uid:gid — never a path — only while the cwd is still empty, root-owned, owner rwx and no
+group/other bits; refused when the home's parent is writable by the login (owner, primary group
+or world; uid 0 exempt)); a missing or symlinked home is refused `unsafe (home)`, a sync
 skips that login ("no usable home"). `set_authorized_keyfile <login> <ssh_user>` (`ScriptRunner` passes
-`target.username`) refuses a login other than the SSH user whose resolved home (`pwd -P`) is
+`target.username`; a blank one is refused before SSH, an SSH user getent does not know is
+`unsafe (ssh_user)`) refuses a login other than the SSH user whose resolved home (`pwd -P`) is
 the SSH user's (`unsafe (shared_home)`, uid-0 aliases like `toor`): that file holds ssm's own
 key, which ssm places by login name (`host.username`) — a sync skips such a login ("not
 managed: shares the SSH user's home"). A symlinked `~/.ssh` (or one resolving
@@ -75,7 +80,11 @@ symlink target is `rm`'d first, then plain `mv` (a real directory there is refus
 link-to-dir`, a per-login skip). An unsafe `~/.ssh` also sets the login's `read_error` (API diff);
 `SyncCheck` keeps it as blocked drift, not a host error. Reads: time-bounded; on Linux the opened fd is checked via
 `/proc` (same inode as the entry, one link).
-Every sync outcome is audit-logged (`Ssm.Diffs.SyncAudit`). Diff page "Remove" / "Remove all extra keys"
+Every sync outcome is audit-logged (`Ssm.Diffs.SyncAudit`). Sync, `KeyRemoval`, `Mctl.People`
+scrub and `ManagedLogins.forget` run under one per-host lock (`Ssm.Hosts.WriteLock`, `:global`);
+the listing reports each file's `sha256` and a write passes it back (`set_authorized_keyfile
+<login> <ssh_user> <sha256>`): a file changed since the read is refused `(stale)`, a sync skips
+the login. Diff page "Remove" / "Remove all extra keys"
 (`Ssm.Diffs.KeyRemoval`, events `remove-key`/`remove-extra-keys`): reads the login fresh,
 re-diffs it (`Diffs.login_diff_for_write/2`, refuses without the own key like a sync), drops
 only lines still `extra_on_host` and writes the rest through `set_authorized_keyfile`;
