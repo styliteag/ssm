@@ -235,6 +235,72 @@ defmodule SsmWeb.Api.DiffsApiTest do
     end
   end
 
+  describe "a host already syncing is refused (approved wire change, Ssm.Diffs.SyncRunner)" do
+    # two logins; the second authorized_keys write pauses, so the first
+    # sync is caught half-way and holds the host in the runner
+    defp two_login_host do
+      host = host_fixture(%{name: "busy1"})
+
+      for login <- ["deploy", "app"] do
+        user = user_fixture()
+        key_fixture(user, %{key_type: "ssh-ed25519", key_base64: "BUSY#{login}", name: nil})
+        authorization_fixture(user, host, %{login: login})
+      end
+
+      stub_keyfiles(host.id, [])
+      MockClient.set_default_exec(%Result{exit_code: 0})
+      on_exit(Ssm.Test.PausingClient.setup(self(), 2))
+      host
+    end
+
+    defp sync_rows(target),
+      do:
+        Ssm.Activity.list()
+        |> Enum.filter(&(&1.target == target and String.starts_with?(&1.action, "sync")))
+        |> Enum.map(&{&1.action, &1.actor_username})
+        |> Enum.sort()
+
+    defp assert_sync_running(conn, host) do
+      conn = post(conn, ~p"/api/v2/diffs/#{host.id}/sync")
+      body = json_response(conn, 409)
+      assert body["success"] == false
+      assert body["data"] == nil
+      assert body["error"]["code"] == "SYNC_RUNNING"
+      assert body["error"]["message"] =~ "busy1"
+      assert get_resp_header(conn, "retry-after") == ["5"]
+    end
+
+    test "while the UI syncs the host: 409 SYNC_RUNNING, then 200 again", %{conn: conn} do
+      host = two_login_host()
+      ui = Task.async(fn -> Ssm.Diffs.SyncRunner.run([host], "ui-user") end)
+      assert_receive {:paused, writer}, 2_000
+
+      assert_sync_running(conn, host)
+
+      send(writer, :go)
+      assert {:ok, %{results: [{_, {:ok, _}}], busy: []}} = Task.await(ui)
+
+      body = conn |> post(~p"/api/v2/diffs/#{host.id}/sync") |> json_response(200)
+      assert body["data"]["host_name"] == "busy1"
+      assert length(body["data"]["logins"]) == 2
+      # the refused request is not a sync: no audit row of its own
+      assert sync_rows("busy1") == [{"sync", "admin"}, {"sync", "ui-user"}]
+    end
+
+    test "while another API call syncs the host: 409 SYNC_RUNNING", %{conn: conn} do
+      host = two_login_host()
+      first = Task.async(fn -> post(conn, ~p"/api/v2/diffs/#{host.id}/sync") end)
+      assert_receive {:paused, writer}, 2_000
+
+      assert_sync_running(conn, host)
+
+      send(writer, :go)
+      assert %{"success" => true} = first |> Task.await() |> json_response(200)
+      assert Ssm.Diffs.SyncRunner.status(host.id) == :idle
+      assert sync_rows("busy1") == [{"sync", "admin"}]
+    end
+  end
+
   test "an unsafe ~/.ssh shows its note in the API diff (per-login read_error)", %{conn: conn} do
     host = host_fixture(%{name: "symssh"})
 

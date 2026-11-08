@@ -1,6 +1,7 @@
 defmodule Ssm.Diffs.SyncRunner do
   @moduledoc """
-  Owner of the manual sync (diff page "Sync", per-row sync, "Sync all"):
+  Owner of the manual sync (diff page "Sync", per-row sync, "Sync all",
+  `POST /api/v2/diffs/{host_id}/sync`):
   runs `Ssm.Diffs.sync_host_reported/2` and writes its audit entry
   (`Ssm.Diffs.SyncAudit`) in a task under `Ssm.Diffs.TaskSupervisor`, not
   linked to the page — closing the tab mid-sync no longer kills a
@@ -15,8 +16,8 @@ defmodule Ssm.Diffs.SyncRunner do
   for the result (a reply message); if the caller dies, the run still
   finishes and audits.
 
-  The `/api/v2` sync still runs in the request (`SsmWeb.Api.DiffController`),
-  serialized with this one only by the write lock.
+  The `/api/v2` sync (`SsmWeb.Api.DiffController`) runs here too, as the
+  token subject: a busy host is answered 409 SYNC_RUNNING with `Retry-After`.
   """
 
   use GenServer
