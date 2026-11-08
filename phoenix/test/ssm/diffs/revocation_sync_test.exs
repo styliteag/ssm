@@ -1,3 +1,25 @@
+defmodule Ssm.Diffs.RevocationSyncTest.PausingClient do
+  @moduledoc false
+  # MockClient, but the first authorized_keys write of a run pauses until the
+  # test sends :go — a sync is caught while it holds the host's write lock
+  alias Ssm.Ssh.MockClient
+
+  def connect(target), do: MockClient.connect(target)
+  def read_file(target, path), do: MockClient.read_file(target, path)
+  def write_file(target, path, content), do: MockClient.write_file(target, path, content)
+  def probe_host_key(target, opts), do: MockClient.probe_host_key(target, opts)
+  def close, do: MockClient.close()
+
+  def exec(target, command, opts) do
+    if String.contains?(command, "set_authorized_keyfile") do
+      send(:persistent_term.get({__MODULE__, :test}), {:paused, self()})
+      receive do: (:go -> :ok)
+    end
+
+    MockClient.exec(target, command, opts)
+  end
+end
+
 defmodule Ssm.Diffs.RevocationSyncTest do
   @moduledoc """
   ADR-0012 §6: with `SSM_REVOCATION_SYNC=on`, every revoking change starts a
@@ -13,7 +35,9 @@ defmodule Ssm.Diffs.RevocationSyncTest do
   import Ssm.Fixtures
 
   alias Ssm.Activity.ActivityLog
+  alias Ssm.Diffs
   alias Ssm.Diffs.{RevocationSync, Revocations}
+  alias Ssm.Diffs.RevocationSyncTest.PausingClient
   alias Ssm.Ssh.{MockClient, Result}
   alias Ssm.{Authorizations, Customers, Grants, Hosts, Repo, Scope}
 
@@ -174,6 +198,67 @@ defmodule Ssm.Diffs.RevocationSyncTest do
 
     assert MockClient.calls().exec_inputs == []
     assert Revocations.pending?(ctx.host.id)
+  end
+
+  describe "one write at a time per host (Ssm.Hosts.WriteLock)" do
+    defp listings(host_id) do
+      Enum.count(MockClient.calls().exec, fn {id, cmd} ->
+        id == host_id and String.contains?(cmd, "get_ssh_keyfiles")
+      end)
+    end
+
+    defp removal_sync(client, host_id), do: RevocationSync.run(client, host_id)
+    defp manual_sync(client, host_id), do: Diffs.sync_host(client, host_id)
+
+    for {first, second} <- [
+          {:removal_sync, :manual_sync},
+          {:manual_sync, :removal_sync}
+        ] do
+      test "#{first} holds the lock: #{second} waits until it is done", ctx do
+        authorization_fixture(ctx.alice, ctx.host, %{login: "deploy"})
+        stub_host(ctx.host.id, "ssh-ed25519 ALICE alice\nssh-ed25519 BOB bob\n")
+        :persistent_term.put({PausingClient, :test}, self())
+        on_exit(fn -> :persistent_term.erase({PausingClient, :test}) end)
+
+        running = Task.async(fn -> unquote(first)(PausingClient, ctx.host.id) end)
+        assert_receive {:paused, writer}, 2_000
+
+        waiting = Task.async(fn -> unquote(second)(MockClient, ctx.host.id) end)
+        assert Task.yield(waiting, 300) == nil
+        # the waiting sync has not even read the host
+        assert listings(ctx.host.id) == 1
+
+        send(writer, :go)
+        Task.await(running)
+        Task.await(waiting)
+        assert listings(ctx.host.id) == 2
+      end
+    end
+
+    test "a removal sync waits for any other writer of the host, audit included", ctx do
+      authorization_fixture(ctx.alice, ctx.host, %{login: "deploy"})
+      stub_host(ctx.host.id, "ssh-ed25519 ALICE alice\nssh-ed25519 BOB bob\n")
+      test = self()
+
+      # KeyRemoval, offboarding and ManagedLogins.forget hold this lock
+      holder =
+        spawn(fn ->
+          Ssm.Hosts.WriteLock.run(ctx.host.id, fn ->
+            send(test, :locked)
+            receive do: (:release -> :ok)
+          end)
+        end)
+
+      assert_receive :locked, 2_000
+      waiting = Task.async(fn -> RevocationSync.run(MockClient, ctx.host.id) end)
+      assert Task.yield(waiting, 300) == nil
+      assert MockClient.calls().exec == []
+      assert Repo.all(from l in ActivityLog, where: l.host_id == ^ctx.host.id) == []
+
+      send(holder, :release)
+      Task.await(waiting)
+      assert [_] = writes(ctx.host.id)
+    end
   end
 
   test "parses SSM_REVOCATION_SYNC" do

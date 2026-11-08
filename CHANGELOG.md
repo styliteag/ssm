@@ -110,6 +110,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Creating a missing `~/.ssh` is refused when the user could swap their home (its
   parent is writable by them); a home with the setgid bit is now handled.
 - "Forget" asks the host once more right before deleting the login.
+- The removal-only sync (`SSM_REVOCATION_SYNC=on`) now waits for the same host write
+  lock as a manual sync, "Remove key", offboarding and "Forget", so it can no longer
+  run at the same time as one of them on a host and undo its change. A write that
+  takes the lock again inside its own run no longer releases it early.
 
 - An SSO operator can no longer give a key the permissions of an admin's grant by
   moving it: adding, importing, moving or re-keying a key, splitting or merging users,

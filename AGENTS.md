@@ -64,7 +64,7 @@ API 409 `CONFLICT`). Rows a reconcile removes mark the host in `pending_revocati
 clears exactly the mark it read at its start. `SSM_REVOCATION_SYNC=on` (default off) adds the
 removal-only sync (`Ssm.Diffs.RevocationSync`, `Diffs.removal_sync_reported/2`): marks made in a
 transaction are collected per process and started by the outermost `Ssm.Grants.transaction/1` after
-commit (dropped on rollback), async under `Ssm.Diffs.TaskSupervisor`, one per host (`:global.trans`);
+commit (dropped on rollback), async under `Ssm.Diffs.TaskSupervisor`, under `Ssm.Hosts.WriteLock`;
 it keeps the host's own lines whose key is still authorized, never adds, skips logins without a file
 and unread (linked) files, honours disabled/readonly/unsafe/own-key; audited as `ssm (revocation
 sync)`, `mode: removal_only`. Tests: `config :ssm, :revocation_sync_runner, :inline`. Every outer
@@ -104,8 +104,10 @@ symlink target is `rm`'d first, then plain `mv` (a real directory there is refus
 link-to-dir`, a per-login skip). An unsafe `~/.ssh` also sets the login's `read_error` (API diff);
 `SyncCheck` keeps it as blocked drift, not a host error. Reads: time-bounded; on Linux the opened fd is checked via
 `/proc` (same inode as the entry, one link).
-Every sync outcome is audit-logged (`Ssm.Diffs.SyncAudit`). Sync, `KeyRemoval`, `Mctl.People`
-scrub and `ManagedLogins.forget` run under one per-host lock (`Ssm.Hosts.WriteLock`, `:global`);
+Every sync outcome is audit-logged (`Ssm.Diffs.SyncAudit`). Sync (full and removal-only,
+`RevocationSync.run/2` incl. its audit), `KeyRemoval`, `Mctl.People` scrub and
+`ManagedLogins.forget` run under one per-host lock (`Ssm.Hosts.WriteLock`, `:global`, re-entrant
+for the holder through the process dictionary — a bare nested `:global.trans` releases early);
 the listing reports each file's `sha256` and a write passes it back (`set_authorized_keyfile
 <login> <ssh_user> <sha256>`): a file changed since the read is refused `(stale)`, a sync skips
 the login. Diff page "Remove" / "Remove all extra keys"

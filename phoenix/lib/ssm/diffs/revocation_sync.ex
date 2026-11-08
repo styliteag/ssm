@@ -10,15 +10,17 @@ defmodule Ssm.Diffs.RevocationSync do
   for that host once the change is committed: marks made inside a
   transaction are collected per process and requested by the outermost
   `Ssm.Grants.transaction/1` after its commit (dropped on rollback). Each
-  sync runs in a task under `Ssm.Diffs.TaskSupervisor`, one at a time per
-  host, only removes lines, is audited as actor `ssm (revocation sync)` with
-  `mode: removal_only`, and clears the mark only after full success. When
-  off, the mark and the Hosts page badge are the only effect.
+  sync runs in a task under `Ssm.Diffs.TaskSupervisor`, under the host's
+  `Ssm.Hosts.WriteLock` (one host write at a time), only removes lines, is
+  audited as actor `ssm (revocation sync)` with `mode: removal_only`, and
+  clears the mark only after full success. When off, the mark and the
+  Hosts page badge are the only effect.
   """
 
   alias Ssm.Diffs
   alias Ssm.Diffs.SyncAudit
   alias Ssm.Hosts
+  alias Ssm.Hosts.WriteLock
 
   require Logger
 
@@ -85,12 +87,14 @@ defmodule Ssm.Diffs.RevocationSync do
   end
 
   @doc """
-  Run the removal-only sync for one host and audit it; one run per host at a
-  time (a later request waits for the running one).
+  Run the removal-only sync for one host and audit it under the host's
+  write lock (`Ssm.Hosts.WriteLock`, shared with every other host write:
+  a manual sync, "Remove key", offboarding, forgetting a managed login),
+  so a later request waits for whatever runs on that host.
   """
   @spec run(module(), integer()) :: term()
   def run(client \\ Ssm.Ssh, host_id) do
-    :global.trans({{__MODULE__, host_id}, self()}, fn ->
+    WriteLock.run(host_id, fn ->
       case Hosts.fetch_host(host_id) do
         {:ok, host} ->
           outcome = Diffs.removal_sync_reported(client, host_id)
