@@ -70,6 +70,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `DELETE /api/v2/hosts/{id}/managed-logins/{login}` (new error code
   `MANAGED_LOGIN_NOT_FOUND`). Each forget is in the activity log.
 
+### Changed (API)
+
+- **`/api/v2` wire change**, approved by the user 2026-11-08 (AGENTS.md rule 3):
+  `POST /diffs/{id}/sync` for a host that is already syncing (diff page,
+  "Sync all" or another API call) now answers at once with 409
+  `SYNC_RUNNING` and a `Retry-After: 5` header, in the usual error envelope.
+  Nothing is read or written on the host and no activity-log entry is made;
+  retry after the given seconds. Before, the request waited for the other
+  sync and then synced the host a second time. 409 `SSH_READONLY` keeps its
+  meaning (partial sync, or a readonly marker refused the sync): clients
+  tell the two apart by `error.code`. A sync that is not refused answers
+  and is logged exactly as before (actor = token subject).
+
 ### Changed
 
 - The removal-only sync is in the activity log as `sync_revocation`,
@@ -105,6 +118,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   writes the file. It does so only inside a home that exists and is not a symlink,
   and never follows a link planted at `~/.ssh`. A login without a usable home (missing
   or a symlink) is skipped with that reason; the other logins are still written.
+- Closing the diff page (or losing the connection) during a sync no longer stops
+  the sync half-way without an audit entry: the sync runs on the server, finishes
+  and is recorded in the activity log as before.
+- A second sync of a host that is already syncing (a double click, a second tab,
+  another operator, "Sync all") is refused with "A sync of <host> is already
+  running." instead of running twice and losing the first result; "Sync all"
+  reports how many hosts it skipped for that reason.
 
 ### Security
 
@@ -147,6 +167,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   "revocation pending" on the periodic check's schedule (`SSM_SYNC_INTERVAL`): one
   interval after the mark, then after 2, 4, … up to 16 intervals.
 
+- `/api/v2` writes are now in the activity log: every successful create, update
+  or delete of a host, SSH user, key or authorization records one entry with the
+  API user as actor and `via: api` in its details, like the same change made in
+  the web UI. Before, only API syncs were recorded.
 - "Revocation pending" now covers every change that takes SSH access away, not only
   grants and deleted authorizations: an authorization moved to another host, login or
   SSH user (the old host), an SSH user disabled, deleted, merged away or split (the

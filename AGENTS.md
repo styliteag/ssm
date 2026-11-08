@@ -152,6 +152,23 @@ and `People.delete_keys/1`, and a row whose new options grant less (`Options.wea
 restriction entry added or changed, a permissive option removed). An options change that only widens
 is not marked. `test/ssm/diffs/revocation_marks_test.exs` has one row per
 access-reducing operation — a new one adds its row.
+*Manual sync* (diff page "Sync", per-row sync, "Sync all", `/api/v2` sync) is owned by `Ssm.Diffs.SyncRunner`
+(a GenServer; pure transitions in `Ssm.Diffs.SyncRunner.State`, table-tested). Per host: idle →
+running(run) → idle. `SyncRunner.run/3` claims only idle hosts (a running one comes back as
+`busy`: the page shows "A sync of <host> is already running."), runs sync and `SyncAudit` entry
+under the host's `WriteLock` in a task under `Ssm.Diffs.TaskSupervisor` (not linked to the
+LiveView — closing the page mid-sync still finishes and audits), frees each host when its audit
+is written and the rest when the run ends or crashes; the caller only waits for the reply.
+`DiffLive` keeps `syncing` as a page flag and refuses a second start server-side. The `/api/v2`
+sync (`POST /diffs/{host_id}/sync`, `DiffController`) goes through `SyncRunner.run/3` too, actor =
+token subject; a busy host is 409 `SYNC_RUNNING` with `Retry-After` at once (no audit row).
+*Audit actions* are owned by `Ssm.Activity.Actions` (catalog atom → stored string; stored
+strings never change — `test/ssm/activity/actions_test.exs` snapshots them and fails on an
+uncataloged `action: "…"` literal in `lib/`) and `Ssm.Activity.Entries` (the host/user/key/
+authorization write entries, shared by the hosts/users/keys/authorizations pages and `/api/v2`).
+Every successful `/api/v2` host, user, key and authorization create/update/delete logs exactly one
+entry there, actor = token subject, details `via: "api"` (logged in the controllers; the context
+functions take no actor).
 
 **Web login** (ADR-0011, `lib/ssm/oidc/`, `ssm_web/oidc_controller.ex`): `.htpasswd`
 users are local admins (session `ssm_user`). With `OIDC_ISSUER` set, SSO users are
@@ -437,12 +454,15 @@ meta{total,page,page_size}}`.
 
 **Error codes** (`ssm_web/api/errors.ex`): `AUTH_REQUIRED` 401, `INVALID_CREDENTIALS`
 401, `VALIDATION_FAILED` 422, `{HOST,USER,KEY,AUTHORIZATION}_NOT_FOUND` 404,
-`MANAGED_LOGIN_NOT_FOUND` 404, `RATE_LIMITED` 429 (failed-login lock, `Retry-After`), `HOST_DISABLED` 409, `SSH_READONLY` 409, `CONFLICT` 409, `SSH_CONNECT_FAILED` 502,
+`MANAGED_LOGIN_NOT_FOUND` 404, `RATE_LIMITED` 429 (failed-login lock, `Retry-After`), `HOST_DISABLED` 409, `SSH_READONLY` 409, `SYNC_RUNNING` 409 (`Retry-After`), `CONFLICT` 409, `SSH_CONNECT_FAILED` 502,
 `INTERNAL_ERROR` 500.
 Diff/sync outcomes (wire changes approved 2026-11-08): unreadable listing → 502
 `SSH_CONNECT_FAILED`; partial sync (root-owned `user_readonly`) or host-wide readonly → 409
 `SSH_READONLY`; own key (`SSH_KEY`) unavailable → 500 `INTERNAL_ERROR`; stored key row with control
-characters → 422 `VALIDATION_FAILED`. Each diff login carries an additive `notes` list
+characters → 422 `VALIDATION_FAILED`; host already syncing in `Ssm.Diffs.SyncRunner` (diff page,
+"Sync all", another API call) → 409 `SYNC_RUNNING` + `Retry-After: 5`, nothing read, written or
+audited — retry later. Two 409s on sync: `SYNC_RUNNING` = nothing done, `SSH_READONLY` = done
+partly or refused by a marker. Each diff login carries an additive `notes` list
 (`Ssm.Diffs.Notes`: `{kind, text, line}`, kinds `unsafe|revocation_blocked|readonly_ignored|
 drops_host_restriction|invalid_stored_options|note`). Contract tests:
 `test/ssm_web/api/diffs_api_test.exs`, `diff_notes_api_test.exs`.

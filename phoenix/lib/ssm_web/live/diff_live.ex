@@ -7,8 +7,10 @@ defmodule SsmWeb.DiffLive do
   readonly marker stops a sync before any write; a login's own
   `user_readonly` skips only that login, the others are written and the
   sync reports as failed naming the skipped logins (a partial sync,
-  `Ssm.Diffs.sync_host/2`). Every sync outcome is audit-logged
-  (`Ssm.Diffs.SyncAudit`).
+  `Ssm.Diffs.sync_host/2`). Syncs run in `Ssm.Diffs.SyncRunner`, unlinked
+  from the page, which audit-logs every outcome (`Ssm.Diffs.SyncAudit`) even
+  when the page is closed mid-sync and refuses a host that is already
+  syncing.
 
   Unauthorized keys found on a host can be legitimized in place (database
   writes only, the host itself is untouched until the next sync): a key
@@ -26,6 +28,7 @@ defmodule SsmWeb.DiffLive do
   use SsmWeb, :live_view
 
   alias Ssm.Activity
+  alias Ssm.Activity.Actions
   alias Ssm.Authorizations
   alias Ssm.Diffs
   alias Ssm.Diffs.HostCheck
@@ -33,8 +36,8 @@ defmodule SsmWeb.DiffLive do
   alias Ssm.Diffs.HostDiff
   alias Ssm.Diffs.KeyRemoval
   alias Ssm.Diffs.StatusCache
-  alias Ssm.Diffs.SyncAudit
   alias Ssm.Diffs.SyncCheck
+  alias Ssm.Diffs.SyncRunner
   alias Ssm.Hosts
   alias Ssm.Hosts.Host
   alias Ssm.Users
@@ -219,10 +222,14 @@ defmodule SsmWeb.DiffLive do
      |> assign(detail_loading: false, detail_error: "Diff crashed: #{inspect(reason)}")}
   end
 
-  def handle_async(:sync, {:ok, {host, outcome}}, socket) do
+  # the runner (Ssm.Diffs.SyncRunner) has audited the outcome already
+  def handle_async(:sync, {:ok, {host, run}}, socket) do
     socket = assign(socket, :syncing, false)
 
-    case log_sync(socket, host, outcome) do
+    case sync_outcome(run) do
+      :busy ->
+        {:noreply, put_flash(socket, :error, already_running(host))}
+
       {:ok, synced} ->
         keys = synced |> Enum.map(& &1.written_keys) |> Enum.sum()
 
@@ -271,11 +278,15 @@ defmodule SsmWeb.DiffLive do
      |> put_flash(:error, "Sync crashed: #{inspect(reason)}")}
   end
 
-  def handle_async(:sync_all, {:ok, outcomes}, socket) do
-    socket = assign(socket, :syncing, false)
+  def handle_async(:sync_all, {:ok, {:error, reason}}, socket) do
+    {:noreply,
+     socket
+     |> assign(:syncing, false)
+     |> put_flash(:error, "Sync all crashed: #{inspect(reason)}")}
+  end
 
-    results =
-      Enum.map(outcomes, fn {host, outcome} -> {host, log_sync(socket, host, outcome)} end)
+  def handle_async(:sync_all, {:ok, {:ok, %{results: results, busy: busy}}}, socket) do
+    socket = assign(socket, :syncing, false)
 
     ok = Enum.count(results, fn {_host, result} -> match?({:ok, _}, result) end)
     failed = length(results) - ok
@@ -289,6 +300,8 @@ defmodule SsmWeb.DiffLive do
       else
         "Sync all done: #{ok} synced, #{failed} failed."
       end
+
+    message = if busy == [], do: message, else: message <> " #{length(busy)} already running."
 
     kind = if failed == 0, do: :info, else: :error
 
@@ -388,10 +401,7 @@ defmodule SsmWeb.DiffLive do
   def handle_event("sync-row", %{"id" => id}, socket) do
     case fresh_host(socket, id) do
       %Host{disabled: false} = host ->
-        {:noreply,
-         socket
-         |> assign(:syncing, true)
-         |> start_async(:sync, fn -> {host, Diffs.sync_host_reported(host.id)} end)}
+        {:noreply, start_sync(socket, host)}
 
       %Host{disabled: true} = host ->
         {:noreply, put_flash(socket, :error, "Host #{host.name} is disabled.")}
@@ -417,10 +427,7 @@ defmodule SsmWeb.DiffLive do
   def handle_event("sync", _params, socket) do
     case fresh_selected(socket) do
       %Host{disabled: false} = host ->
-        {:noreply,
-         socket
-         |> assign(:syncing, true)
-         |> start_async(:sync, fn -> {host, Diffs.sync_host_reported(host.id)} end)}
+        {:noreply, start_sync(socket, host)}
 
       %Host{disabled: true} = host ->
         {:noreply, put_flash(socket, :error, "Host #{host.name} is disabled.")}
@@ -505,7 +512,13 @@ defmodule SsmWeb.DiffLive do
     end
   end
 
+  def handle_event("sync_all", %{}, %{assigns: %{syncing: true}} = socket) do
+    {:noreply, put_flash(socket, :error, "A sync is already running.")}
+  end
+
   def handle_event("sync_all", _params, socket) do
+    actor = socket.assigns.current_user.actor
+
     to_sync =
       socket
       |> fresh_hosts()
@@ -520,11 +533,30 @@ defmodule SsmWeb.DiffLive do
       {:noreply,
        socket
        |> assign(:syncing, true)
-       |> start_async(:sync_all, fn ->
-         Enum.map(to_sync, fn host -> {host, Diffs.sync_host_reported(host.id)} end)
-       end)}
+       |> start_async(:sync_all, fn -> SyncRunner.run(to_sync, actor) end)}
     end
   end
+
+  # The sync and its audit entry run in Ssm.Diffs.SyncRunner, not in this
+  # page's task: closing the page only stops the waiting. The runner refuses
+  # a host that is already syncing (another page, another tab); this page
+  # also refuses a second start while it waits for one.
+  defp start_sync(%{assigns: %{syncing: true}} = socket, host),
+    do: put_flash(socket, :error, already_running(host))
+
+  defp start_sync(socket, host) do
+    actor = socket.assigns.current_user.actor
+
+    socket
+    |> assign(:syncing, true)
+    |> start_async(:sync, fn -> {host, SyncRunner.run([host], actor)} end)
+  end
+
+  defp already_running(host), do: "A sync of #{host.name} is already running."
+
+  defp sync_outcome({:ok, %{results: [{_host, outcome}]}}), do: outcome
+  defp sync_outcome({:ok, %{results: [], busy: [_ | _]}}), do: :busy
+  defp sync_outcome({:error, _} = error), do: error
 
   ## Scope: every event re-reads its host through the user's scope (ADR-0012),
   ## never from the mount-time list, so a host that left the scope is missing.
@@ -669,7 +701,7 @@ defmodule SsmWeb.DiffLive do
   defp log_allow(socket, user, host, login) do
     Activity.log(%{
       activity_type: "auth",
-      action: "create",
+      action: Actions.name(:create),
       target: "#{user.username}@#{host.name}:#{login}",
       host_id: host.id,
       actor_username: socket.assigns.current_user.actor,
@@ -680,7 +712,7 @@ defmodule SsmWeb.DiffLive do
   defp log_user_create(socket, user) do
     Activity.log(%{
       activity_type: "user",
-      action: "create",
+      action: Actions.name(:create),
       target: user.username,
       actor_username: socket.assigns.current_user.actor,
       user_id: user.id,
@@ -691,7 +723,7 @@ defmodule SsmWeb.DiffLive do
   defp log_key_assign(socket, user, key) do
     Activity.log(%{
       activity_type: "key",
-      action: "create",
+      action: Actions.name(:create),
       target: key.name || key.key_type,
       actor_username: socket.assigns.current_user.actor,
       user_id: user.id,
@@ -714,10 +746,6 @@ defmodule SsmWeb.DiffLive do
   end
 
   ## Helpers
-
-  # every sync outcome (success, partial, failure) goes to the audit log
-  defp log_sync(socket, host, outcome),
-    do: SyncAudit.log(socket.assigns.current_user.actor, host, outcome)
 
   defp format_reason({_code, message}) when is_binary(message), do: message
   defp format_reason(:not_found), do: "host not found"

@@ -34,8 +34,11 @@ defmodule Ssm.Application do
         Ssm.OIDC.TokenStore,
         # mctl contract: create_host job work (host-key probe + pin).
         {Task.Supervisor, name: Ssm.Mctl.TaskSupervisor},
-        # Periodic key check sweeps (Ssm.Diffs.SyncScheduler).
-        {Task.Supervisor, name: Ssm.Diffs.TaskSupervisor}
+        # Periodic key check sweeps (Ssm.Diffs.SyncScheduler), manual syncs
+        # (Ssm.Diffs.SyncRunner) and the removal-only sync.
+        {Task.Supervisor, name: Ssm.Diffs.TaskSupervisor},
+        # Manual syncs (diff page): per-host state, runs under the supervisor above.
+        Ssm.Diffs.SyncRunner
       ] ++
         oidc_children() ++
         mctl_boot() ++
