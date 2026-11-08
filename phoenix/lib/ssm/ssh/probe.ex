@@ -18,8 +18,8 @@ defmodule Ssm.Ssh.Probe do
   Through a jump host the jump host connects (`ssh -W`, see
   `Ssm.Ssh.ErlangClient.banner_via/4`); a DNS name is then resolved by the
   jump host. An address literal is checked against the same ranges, a
-  loopback name (`localhost`, `*.localhost`, `localhost.localdomain`,
-  `ip6-localhost`, `ip6-loopback`) counts as loopback, and a name that
+  loopback name (`localhost`, `*.localhost` and the usual `/etc/hosts`
+  aliases) counts as loopback, and a name that
   resolves here is checked with the addresses it resolves to here. A name
   only the jump host can resolve is left to it.
   """
@@ -105,7 +105,8 @@ defmodule Ssm.Ssh.Probe do
     end
   end
 
-  @loopback_names ~w(localhost localhost.localdomain ip6-localhost ip6-loopback)
+  @loopback_names ~w(localhost localhost.localdomain ip6-localhost ip6-loopback localhost4
+                     localhost6 localhost4.localdomain4 localhost6.localdomain6)
 
   defp loopback_name?(address) do
     name = address |> String.downcase() |> String.trim_trailing(".")

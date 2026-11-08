@@ -104,6 +104,25 @@ defmodule SsmWeb.KeysLiveTest do
     assert Users.count_keys() == 0
   end
 
+  test "bulk import cuts a comment longer than a key name may be", %{conn: conn} do
+    user = user_fixture()
+    {:ok, view, _html} = live(conn, ~p"/keys")
+    view |> element("#import-keys") |> render_click()
+
+    view
+    |> form("#key-import-form",
+      import: %{
+        user_id: user.id,
+        keys_text: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAALONG " <> String.duplicate("c", 300)
+      }
+    )
+    |> render_submit()
+
+    assert has_element?(view, "#import-results", "Line 1: imported")
+    assert [key] = Users.list_keys(user_id: user.id)
+    assert String.length(key.name) == 128
+  end
+
   test "bulk import reports one result per line", %{conn: conn} do
     user = user_fixture(%{username: "alice"})
 
@@ -171,7 +190,8 @@ defmodule SsmWeb.KeysLiveTest do
     key = key_fixture(user_fixture())
     {:ok, view, _html} = live(conn, ~p"/keys")
 
-    for event <- ~w(edit view delete), id <- ["abc", "1x", ""] do
+    for event <- ~w(edit view delete),
+        id <- ["abc", "1x", "", "0", "-1", "99999999999999999999"] do
       render_click(view, event, %{"id" => id})
     end
 

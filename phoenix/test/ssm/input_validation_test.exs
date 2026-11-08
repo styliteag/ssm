@@ -125,6 +125,24 @@ defmodule Ssm.InputValidationTest do
       assert Repo.get!(Host, a.id).jump_via == nil
     end
 
+    test "hosts behind the changed one count towards the chain limit" do
+      [top | _] = above = Enum.map(1..9, fn _ -> host_fixture() end)
+
+      above
+      |> Enum.chunk_every(2, 1, :discard)
+      |> Enum.each(fn [h, next] -> {:ok, _} = Hosts.update_host(next, %{jump_via: h.id}) end)
+
+      middle = host_fixture()
+
+      Enum.reduce(1..9, middle, fn _, prev ->
+        host_fixture(%{jump_via: prev.id})
+      end)
+
+      assert {:error, cs} = Hosts.update_host(middle, %{jump_via: List.last(above).id})
+      assert %{jump_via: [_ | _]} = errors_on(cs)
+      assert top.jump_via == nil
+    end
+
     test "a valid chain is accepted" do
       a = host_fixture()
       b = host_fixture(%{jump_via: a.id})

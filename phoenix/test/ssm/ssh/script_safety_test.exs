@@ -297,6 +297,58 @@ defmodule Ssm.Ssh.ScriptSafetyTest do
     end
   end
 
+  describe "login guards" do
+    test "a login getent could read as a uid, an option or a separator is refused", ctx do
+      before = File.read!(ctx.root_keys)
+
+      for login <- ["0", "1000", "+0", "+1000", "-x", "", " root", "a b", "a:b", "a/b", "a\tb"] do
+        assert {out, 1} = write(ctx, login, "ssh-ed25519 ATTACKER x\n")
+        assert out =~ "unsafe (invalid_login)", "login #{inspect(login)}: #{out}"
+      end
+
+      assert File.read!(ctx.root_keys) == before
+    end
+
+    test "an alias resolving to $HOME is refused even when getent puts the SSH user elsewhere",
+         ctx do
+      elsewhere = Path.join(ctx.dir, "elsewhere")
+      File.mkdir_p!(Path.join(elsewhere, ".ssh"))
+
+      File.write!(
+        Path.join(ctx.dir, "passwd"),
+        "root:x:0:0::#{elsewhere}:/bin/sh\ntoor:x:0:0::#{Path.join(ctx.dir, "root")}:/bin/sh\n"
+      )
+
+      before = File.read!(ctx.root_keys)
+      assert {out, 1} = write(ctx, "toor", "ssh-ed25519 ATTACKER x\n")
+      assert out =~ "unsafe (shared_home)"
+      assert File.read!(ctx.root_keys) == before
+    end
+
+    test "the SSH user's own write must land in $HOME/.ssh", ctx do
+      elsewhere = Path.join(ctx.dir, "elsewhere")
+      File.mkdir_p!(Path.join(elsewhere, ".ssh"))
+      File.write!(Path.join(ctx.dir, "passwd"), "root:x:0:0::#{elsewhere}:/bin/sh\n")
+
+      assert {out, 1} = write(ctx, "root", "ssh-ed25519 SSMKEY ssm\n")
+      assert out =~ "unsafe (ssh_user)"
+      refute File.exists?(Path.join(elsewhere, ".ssh/authorized_keys"))
+    end
+
+    test "a login without an absolute home is refused, nothing written relative to $HOME",
+         ctx do
+      File.mkdir_p!(Path.join(ctx.dir, "root/rel/.ssh"))
+
+      File.write!(Path.join(ctx.dir, "passwd"), "rel:x:#{@uid}:#{@uid}::rel:/bin/sh\n", [
+        :append
+      ])
+
+      assert {out, 1} = write(ctx, "rel", "ssh-ed25519 X x\n")
+      assert out =~ "unsafe (home)"
+      refute File.exists?(Path.join(ctx.dir, "root/rel/.ssh/authorized_keys"))
+    end
+  end
+
   describe "user_readonly" do
     test "a hardlinked root-owned marker is ignored and its content never shown", ctx do
       secret = Path.join(ctx.dir, "secret")

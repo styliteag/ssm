@@ -249,17 +249,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   material can no longer be changed after creation (UI and API). A new key's
   type must be a known SSH key type, and `POST /api/v2/keys` also checks that
   the material is a key of that type (422 `VALIDATION_FAILED`). Key names are
-  limited to 128 and comments to 1024 characters everywhere, as in the API.
+  limited to 128 and comments to 1024 characters everywhere, as in the API;
+  a longer comment from a key import or a host line is cut to 128 characters.
 - A host's jump host can no longer form a loop (A via B via A) or a chain of
-  more than 16 jump hosts; a loop already stored no longer exhausts memory.
+  more than 16 jump hosts, counting the hosts that already jump through it; a
+  loop already stored no longer exhausts memory.
+- ssm never sends a host a login it could read as a uid or an option: empty,
+  all digits, a leading `+` (`getent passwd +0` is root) or `-`, or one with
+  whitespace, `:`, `/` or control characters. A stored login like that is
+  skipped by a sync ("invalid login"), the other logins are still written;
+  `script.sh` refuses it as well. Before, such a refusal stopped the whole
+  host's sync.
+- `script.sh` writes the file of the SSH user ssm connects as only for that
+  user and only in `$HOME`; any other login that resolves to `$HOME` is
+  refused like the shared-home aliases. A login whose home is unknown or not
+  an absolute path is refused ("no usable home") instead of being resolved
+  against the script's working directory.
 - Host listings from a host are checked entry by entry; malformed entries are
   dropped and logged. Remote error output in messages is capped at 500
   characters.
 - `probe_ssh` through a jump host refuses loopback names (`localhost`,
-  `*.localhost`, …) and names that resolve, from ssm, to a refused range.
+  `*.localhost`, `localhost4`, `localhost6`, …) and names that resolve, from
+  ssm, to a refused range.
 - Host comments refuse control characters and are limited to 1024
   characters. Key comments read from hosts are stored and shown in the
   periodic check without control or bidi characters, at most 200 characters.
+  Zero-width characters and bidi marks (U+200B–U+200F, U+2060, U+061C) now
+  count as control characters everywhere.
 - SSO profile claims: names lose control and bidi characters and are capped
   at 255 characters; an e-mail with control characters or over 320 characters
   is ignored.

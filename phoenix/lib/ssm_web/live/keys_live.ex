@@ -16,6 +16,9 @@ defmodule SsmWeb.KeysLive do
   alias Ssm.Users.UserKey
   alias SsmWeb.Layouts
 
+  # ids from params and events: a positive 64-bit row id, else "not found"
+  @max_id 9_223_372_036_854_775_807
+
   @type_filters ~w(all rsa ed25519 ecdsa other)
 
   @admin_only_owner "Only an admin may add or move keys to this SSH user: it holds key options " <>
@@ -48,7 +51,7 @@ defmodule SsmWeb.KeysLive do
   def handle_params(params, _uri, socket) do
     filter_user_id =
       case Integer.parse(params["user_id"] || "") do
-        {id, ""} -> id
+        {id, ""} when id in 1..@max_id -> id
         _ -> nil
       end
 
@@ -323,7 +326,7 @@ defmodule SsmWeb.KeysLive do
   # ids from client events: anything but a plain integer is "not found"
   defp fetch_key(id) when is_binary(id) do
     case Integer.parse(id) do
-      {id, ""} -> Users.get_key(id)
+      {id, ""} when id in 1..@max_id -> Users.get_key(id)
       _ -> nil
     end
   end
@@ -360,7 +363,7 @@ defmodule SsmWeb.KeysLive do
                "user_id" => user_id,
                "key_type" => parsed.key_type,
                "key_base64" => parsed.key_base64,
-               "name" => parsed.name
+               "name" => UserKey.fit_name(parsed.name)
              },
              role_opts(socket)
            ) do

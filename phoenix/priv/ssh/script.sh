@@ -34,7 +34,7 @@ do_getent_passwd() {
   if have_getent; then
     getent passwd "${login}"
   else
-    ssm_login="${login}" awk -F: \
+    ssm_login="${login}" LC_ALL=C awk -F: \
       'BEGIN { r = 2 } $1 == ENVIRON["ssm_login"] { print; r = 0; exit } END { exit r }' /etc/passwd
   fi
 }
@@ -385,8 +385,34 @@ ensure_ssh_dir() {
     fi
 }
 
+# A login ssm may write: not empty, not all digits, no leading "+" or "-"
+# (getent would read a uid, "+0" is root, or an option), no ":", "/",
+# whitespace or control character. Ssm.Authorizations.Login.host_safe?/1
+# refuses the same. tr instead of [[:cntrl:]]: old busybox ash.
+login_ok() {
+    case "$1" in
+        ""|-*|+*|*[:/]*) return 1 ;;
+    esac
+    [ "$(printf "%s" "$1" | tr -d '\000-\040\177')" = "$1" ] || return 1
+    case "$1" in
+        *[!0-9]*) return 0 ;;
+    esac
+    return 1
+}
+
 handle_set_authorized_keyfile() {
-    login="$1"
+    login="${1:-}"
+
+    if ! login_ok "${login}"; then
+        echo "Keyfile is unsafe (invalid_login), aborting."
+        exit 1
+    fi
+    # an unknown login or a relative home would resolve against the cwd
+    home=$(login_home "${login}") || home=""
+    case "${home}" in
+        /*) ;;
+        *) echo "Keyfile is unsafe (home), aborting."; exit 1 ;;
+    esac
 
     readonly_condition=$(check_keyfile_condition "${login}")
     if [ -n "${readonly_condition}" ]; then
@@ -394,20 +420,32 @@ handle_set_authorized_keyfile() {
         exit 1
     fi
 
-    # A login that is not the SSH user ($2, the login ssm connects with) but
-    # resolves to its home (a uid-0 alias such as toor in root's home) would
-    # replace the file that holds ssm's own key: refused, never managed.
-    # The check is never skipped: without a known SSH user it is impossible.
+    # The file in $HOME holds ssm's own key. Only a write for the SSH user
+    # ($2, the login ssm connects with; ssm adds its key to that content)
+    # may land there, and that write must land there. Any other login that
+    # resolves to $HOME or to the SSH user's home (a uid-0 alias such as
+    # toor in root's home) is refused, never managed. The check is never
+    # skipped: without a known SSH user and $HOME it is impossible.
     ssh_user="${2:-}"
     own_home=""
+    env_home=""
     if [ -n "${ssh_user}" ]; then
         own_home=$(resolved_home "${ssh_user}")
     fi
-    if [ -z "${own_home}" ]; then
+    if [ -n "${HOME:-}" ]; then
+        env_home=$(cd "${HOME}" 2>/dev/null && pwd -P) || env_home=""
+    fi
+    if [ -z "${own_home}" ] || [ -z "${env_home}" ]; then
         echo "Keyfile is unsafe (ssh_user), aborting."
         exit 1
     fi
-    if [ "${ssh_user}" != "${login}" ] && [ "$(resolved_home "${login}")" = "${own_home}" ]; then
+    target_home=$(resolved_home "${login}")
+    if [ "${ssh_user}" = "${login}" ]; then
+        if [ "${target_home}" != "${env_home}" ]; then
+            echo "Keyfile is unsafe (ssh_user), aborting."
+            exit 1
+        fi
+    elif [ "${target_home}" = "${own_home}" ] || [ "${target_home}" = "${env_home}" ]; then
         echo "Keyfile is unsafe (shared_home), aborting."
         exit 1
     fi

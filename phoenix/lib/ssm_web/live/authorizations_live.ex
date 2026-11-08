@@ -67,11 +67,14 @@ defmodule SsmWeb.AuthorizationsLive do
   # permissive authorized_keys options are admin-only (Options.validate_role/2)
   defp role(socket), do: [role: socket.assigns.current_user.role]
 
+  # ids from client events: a positive 64-bit row id, anything else is "not found"
+  @max_id 9_223_372_036_854_775_807
+
   defp parse_id(value) when not is_binary(value), do: nil
 
   defp parse_id(value) do
     case Integer.parse(value) do
-      {id, ""} -> id
+      {id, ""} when id in 1..@max_id -> id
       _ -> nil
     end
   end

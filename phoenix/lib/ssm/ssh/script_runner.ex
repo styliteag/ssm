@@ -131,7 +131,7 @@ defmodule Ssm.Ssh.ScriptRunner do
   # well-formed entries.
   defp valid_entry?(raw, target) do
     valid =
-      is_map(raw) and Login.valid?(raw["login"]) and is_binary(Map.get(raw, "keyfile", "")) and
+      is_map(raw) and Login.host_safe?(raw["login"]) and is_binary(Map.get(raw, "keyfile", "")) and
         is_boolean(Map.get(raw, "has_pragma", false)) and
         Enum.all?(~w(readonly_condition readonly_scope readonly_ignored unsafe), fn field ->
           value = raw[field]

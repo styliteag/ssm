@@ -126,4 +126,40 @@ defmodule Ssm.Diffs.WriteRefusalsTest do
     send(holder, :release)
     assert {:ok, _} = Task.await(task)
   end
+
+  test "a stored login a host would misread is skipped without asking the host" do
+    host = host_fixture(%{username: "root"})
+    grant(host, "deploy", "LEGACY1")
+    legacy = grant(host, "legacy", "LEGACY2")
+
+    {1, _} =
+      Ssm.Repo.update_all(
+        from(a in Ssm.Authorizations.Authorization, where: a.id == ^legacy.id),
+        set: [login: "0"]
+      )
+
+    stub_host(host, [])
+
+    assert {{:error, {:ssh_readonly, _}}, report} = Diffs.sync_host_reported(MockClient, host.id)
+    assert [{"0", reason}] = report.skipped
+    assert reason =~ "invalid login"
+    assert Enum.map(report.written, & &1.login) == ["deploy"]
+
+    refute Enum.any?(MockClient.calls().exec, fn {_id, cmd} ->
+             cmd =~ "set_authorized_keyfile 0"
+           end)
+  end
+
+  test "a login the script refuses as invalid is a per-login skip" do
+    host = host_fixture(%{username: "ssm-admin"})
+    grant(host, "aaa", "INVAL1")
+    grant(host, "zzz", "INVAL2")
+    stub_host(host, [])
+    refuse(host, "sh .ssm/script.sh set_authorized_keyfile aaa ssm-admin", "invalid_login")
+
+    assert {{:error, {:ssh_readonly, _}}, report} = Diffs.sync_host_reported(MockClient, host.id)
+    assert [{"aaa", reason}] = report.skipped
+    assert reason =~ "invalid login"
+    assert Enum.map(report.written, & &1.login) == ["zzz"]
+  end
 end

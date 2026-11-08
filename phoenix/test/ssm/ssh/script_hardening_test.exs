@@ -213,7 +213,7 @@ defmodule Ssm.Ssh.ScriptHardeningTest do
 
       for login <- ["-s", "--service=files", "-"] do
         assert {out, 1} = write(ctx, login, "ssh-ed25519 K x\n")
-        assert out =~ "unsafe (home)", login
+        assert out =~ "unsafe (invalid_login)", login
         assert {"unknown\n", 1} = run(ctx, ["has_keyfile", login])
       end
 

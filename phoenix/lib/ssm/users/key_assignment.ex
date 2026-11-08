@@ -115,7 +115,7 @@ defmodule Ssm.Users.KeyAssignment do
       user_id: user.id,
       key_type: parsed.key_type,
       key_base64: parsed.key_base64,
-      name: key_name(params)
+      name: params |> key_name() |> UserKey.fit_name()
     }
 
     case Users.create_key(attrs) do

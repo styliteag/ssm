@@ -473,6 +473,7 @@ defmodule Ssm.Ssh.ScriptRunnerTest do
           %{login: 0, has_pragma: false, keyfile: ""},
           %{login: "0", has_pragma: false, keyfile: "root's keys"},
           %{login: "-x", has_pragma: false, keyfile: ""},
+          %{login: "+0", has_pragma: false, keyfile: ""},
           %{login: "a/b", has_pragma: false, keyfile: ""},
           %{login: "evil", has_pragma: "yes", keyfile: ""},
           %{login: "evil2", has_pragma: false, keyfile: %{}},
@@ -483,6 +484,15 @@ defmodule Ssm.Ssh.ScriptRunnerTest do
       MockClient.set_exec(7, "#{@remote} get_ssh_keyfiles", %Result{stdout: json})
 
       assert {:ok, [%LoginKeyfile{login: "deploy"}]} =
+               ScriptRunner.get_ssh_keyfiles(MockClient, target())
+    end
+
+    test "a host name outside today's login rule (winbind DOMAIN\\user) is still listed" do
+      stub_version_current()
+      json = Jason.encode!([%{login: "CORP\\jdoe", has_pragma: false, keyfile: ""}])
+      MockClient.set_exec(7, "#{@remote} get_ssh_keyfiles", %Result{stdout: json})
+
+      assert {:ok, [%LoginKeyfile{login: "CORP\\jdoe"}]} =
                ScriptRunner.get_ssh_keyfiles(MockClient, target())
     end
   end

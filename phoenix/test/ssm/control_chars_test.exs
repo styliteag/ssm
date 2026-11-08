@@ -14,6 +14,13 @@ defmodule Ssm.ControlCharsTest do
 
   @injected "laptop\nssh-ed25519 AAAAINJECTED evil"
 
+  test "zero-width characters and bidi marks count as control characters" do
+    for c <- [0x200B, 0x200C, 0x200D, 0x200E, 0x200F, 0x2060, 0x061C] do
+      assert Ssm.ControlChars.present?("a" <> <<c::utf8>> <> "b"), Integer.to_string(c, 16)
+      assert Ssm.ControlChars.strip("a" <> <<c::utf8>> <> "b") == "ab"
+    end
+  end
+
   test "UserKey refuses control characters in name and extra_comment" do
     user = user_fixture()
     base = %{user_id: user.id, key_type: "ssh-ed25519", key_base64: "AAAACTRL1"}

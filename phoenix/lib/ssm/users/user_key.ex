@@ -12,6 +12,8 @@ defmodule Ssm.Users.UserKey do
 
   @key_types ~w(ssh-rsa ssh-ed25519 ecdsa-sha2-nistp256 ecdsa-sha2-nistp384 ecdsa-sha2-nistp521 ssh-dss sk-ssh-ed25519@openssh.com sk-ecdsa-sha2-nistp256@openssh.com)
 
+  @max_name 128
+
   schema "user_key" do
     field :key_type, :string
     field :key_base64, :string
@@ -57,11 +59,16 @@ defmodule Ssm.Users.UserKey do
     |> foreign_key_constraint(:user_id)
   end
 
+  @doc "A key comment read from a host or an import, cut to the name limit."
+  @spec fit_name(String.t() | nil) :: String.t() | nil
+  def fit_name(nil), do: nil
+  def fit_name(name), do: String.slice(name, 0, @max_name)
+
   # the same caps as /api/v2 (KeyController)
   defp text_fields(changeset) do
     changeset
     |> ControlChars.validate([:name, :extra_comment])
-    |> validate_length(:name, max: 128)
+    |> validate_length(:name, max: @max_name)
     |> validate_length(:extra_comment, max: 1024)
   end
 end

@@ -25,7 +25,7 @@ defmodule Ssm.Diffs do
   replace each other's grants in their one file on every sync.
   """
 
-  alias Ssm.Authorizations.Options
+  alias Ssm.Authorizations.{Login, Options}
   alias Ssm.Diffs.{Compare, Expected, KeyLine}
   alias Ssm.Hosts
   alias Ssm.Hosts.{Host, MachineId}
@@ -34,6 +34,7 @@ defmodule Ssm.Diffs do
 
   @blocked_note "revocation blocked by user_readonly"
   @ssh_dir_blocked "revocation blocked: unsafe ~/.ssh"
+  @invalid_login "invalid login (a uid, an option or a separator); nothing written"
 
   defmodule KeyDiff do
     @moduledoc """
@@ -199,7 +200,9 @@ defmodule Ssm.Diffs do
          on_host = Map.new(entries, &{&1.login, parse_authorized_keys(&1.keyfile)}),
          logins = logins_for(mode, Expected.logins_to_sync(host_id, on_host), on_host),
          :ok <- ensure_no_host_readonly(host, entries, logins),
-         skipped = logins_to_skip(entries, logins) ++ unread_logins(mode, entries, logins),
+         skipped =
+           unsafe_logins(logins) ++
+             logins_to_skip(entries, logins) ++ unread_logins(mode, entries, logins),
          to_write = logins -- Enum.map(skipped, &elem(&1, 0)),
          {:ok, own} <- own_key_for_sync(host, to_write) do
       ignored =
@@ -220,6 +223,11 @@ defmodule Ssm.Diffs do
       {:ok, %{host: host, logins: to_write, target: target, ctx: ctx}}
     end
   end
+
+  # a stored login (legacy row) a host would misread – a uid, an option –
+  # is never sent to it; the other logins are written
+  defp unsafe_logins(logins),
+    do: for(login <- logins, not Login.host_safe?(login), do: {login, @invalid_login})
 
   # a removal-only sync touches only logins that have a file on the host
   defp logins_for(:full, logins, _on_host), do: logins
@@ -376,6 +384,7 @@ defmodule Ssm.Diffs do
       [_, "home"] -> "no usable home (missing or a symlink)"
       [_, "ssh_user"] -> "the SSH user is unknown on the host; nothing written"
       [_, "shared_home"] -> "not managed: shares the SSH user's home (ssm's own key)"
+      [_, "invalid_login"] -> @invalid_login
       [_, kind] -> "unsafe: " <> kind
       nil -> "unsafe"
     end

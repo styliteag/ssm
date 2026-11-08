@@ -48,6 +48,23 @@ defmodule Ssm.Users.KeyAssignmentTest do
       assert Ssm.Authorizations.exists?(user.id, host.id, "deploy")
     end
 
+    test "a host comment longer than a key name may be is cut, not refused" do
+      host = host_fixture(%{name: "web1"})
+      long = String.duplicate("c", 300)
+
+      assert {:ok, %{key: key}} =
+               KeyAssignment.assign(%{
+                 user: :new,
+                 username: "longc",
+                 key_name: nil,
+                 parsed: parsed(valid_material(<<9>>), long),
+                 host_id: host.id,
+                 login: "deploy"
+               })
+
+      assert key.name == String.duplicate("c", 128)
+    end
+
     test "a taken name fails and leaves nothing behind" do
       user_fixture(%{username: "ot"})
       host = host_fixture(%{name: "web1"})

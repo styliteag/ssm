@@ -43,7 +43,12 @@ remote `login` — a new or changed login (authorization or grant) must match
 `Ssm.Authorizations.Login`: a POSIX name (`[A-Za-z_][A-Za-z0-9_.-]{0,31}\$?`) or an SSSD/AD
 `user@domain` (local part as before without `$`, up to 64 characters, then `@` and dot-separated
 labels `[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?`, 128 characters in all; `DOMAIN\user` refused);
-stored legacy logins stay editable and are copied by split/merge; `script.sh` never looks up a login starting with `-`.
+stored legacy logins stay editable and are copied by split/merge. Anything sent to a host must pass
+the weaker `Login.host_safe?/1` (not empty, not all digits, no leading `+`/`-` — getent reads `+0` as
+uid 0 — no whitespace, `:`, `/` or control character): a sync skips a stored login that fails it
+("invalid login"), the listing drops such entries, and `script.sh` (`login_ok`) refuses it as
+`unsafe (invalid_login)`. Key type and material are immutable after creation
+(`UserKey.edit_changeset/2`); imported/host-read comments are cut to the 128-character name limit.
 `host.disabled` blocks all SSH operations. `operators` (OIDC web accounts) and newer tables for the mctl
 contract are plural (contract spec names): `customers`, `groups`, `host_groups`, plus
 the `mctl_contract` library's `mctl_tokens`, `mctl_jobs`, `mctl_idempotency`, and `host_checks`
@@ -106,11 +111,12 @@ replaced, never written through, so revocation reaches it. A login without `~/.s
 umask 077, then a `pwd -P` re-check inside the new directory and `chown` of the cwd to the
 getent uid:gid — never a path — only while the cwd is still empty, root-owned, owner rwx and no
 group/other bits; refused when the home's parent is writable by the login (owner, primary group
-or world; uid 0 exempt)); a missing or symlinked home is refused `unsafe (home)`, a sync
+or world; uid 0 exempt)); an unknown login, a relative, missing or symlinked home is refused `unsafe (home)`, a sync
 skips that login ("no usable home"). `set_authorized_keyfile <login> <ssh_user>` (`ScriptRunner` passes
 `target.username`; a blank one is refused before SSH, an SSH user getent does not know is
-`unsafe (ssh_user)`) refuses a login other than the SSH user whose resolved home (`pwd -P`) is
-the SSH user's (`unsafe (shared_home)`, uid-0 aliases like `toor`): that file holds ssm's own
+`unsafe (ssh_user)`, as is the SSH user's own write when its home is not `$HOME`) refuses a login
+other than the SSH user whose resolved home (`pwd -P`) is the SSH user's or `$HOME`
+(`unsafe (shared_home)`, uid-0 aliases like `toor`): that file holds ssm's own
 key, which ssm places by login name (`host.username`) — a sync skips such a login ("not
 managed: shares the SSH user's home"). A symlinked `~/.ssh` (or one resolving
 outside the home) is `unsafe: ssh_dir`: not read, not written, skipped by a sync as "revocation
@@ -149,7 +155,7 @@ only after commit. Marking writes: manual row delete and move (host, login or SS
 the old host), every reconcile that removes grant rows (grant delete, host leaves customer/group,
 customer merge/delete, group delete, user delete/merge, offboarding), SSH user disabled or deleted
 (also bulk delete and merge sources: every host of the user), split (the user's grant hosts — grant
-rows are not copied), key deleted, moved or re-keyed (the old owner's hosts), `People.remove_authorizations/3`
+rows are not copied), key deleted or moved (the old owner's hosts), `People.remove_authorizations/3`
 and `People.delete_keys/1`, and a row whose new options grant less (`Options.weaker?(old, new)`: a
 restriction entry added or changed, a permissive option removed). An options change that only widens
 is not marked. `test/ssm/diffs/revocation_marks_test.exs` has one row per

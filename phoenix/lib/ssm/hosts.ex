@@ -121,14 +121,16 @@ defmodule Ssm.Hosts do
   end
 
   # A new `jump_via` must not lead back to the host itself (A -> B -> A) nor
-  # make a chain longer than `Target.max_hops/0`: the target builder walks
-  # the chain on every connect.
+  # make a chain longer than `Target.max_hops/0`, counting the hosts that
+  # already jump through this one: the target builder walks the chain on
+  # every connect.
   defp validate_jump_chain(changeset) do
     case Ecto.Changeset.fetch_change(changeset, :jump_via) do
       {:ok, jump_id} when is_integer(jump_id) ->
-        seen = if changeset.data.id, do: MapSet.new([changeset.data.id]), else: MapSet.new()
+        id = changeset.data.id
+        seen = if id, do: MapSet.new([id]), else: MapSet.new()
 
-        if jump_chain_ok?(jump_id, seen, 1),
+        if jump_chain_ok?(jump_id, seen, 1 + dependents_depth(id, MapSet.new())),
           do: changeset,
           else:
             Ecto.Changeset.add_error(
@@ -149,6 +151,22 @@ defmodule Ssm.Hosts do
       MapSet.member?(seen, id) -> false
       hops > Target.max_hops() -> false
       true -> id |> get_host() |> next_hop(MapSet.put(seen, id), hops)
+    end
+  end
+
+  # longest chain of hosts that jump through `id` (stops past the limit)
+  defp dependents_depth(nil, _seen), do: 0
+
+  defp dependents_depth(id, seen) do
+    if MapSet.member?(seen, id) or MapSet.size(seen) > Target.max_hops() do
+      0
+    else
+      seen = MapSet.put(seen, id)
+
+      from(h in Host, where: h.jump_via == ^id, select: h.id)
+      |> Repo.all()
+      |> Enum.map(&(1 + dependents_depth(&1, seen)))
+      |> Enum.max(fn -> 0 end)
     end
   end
 

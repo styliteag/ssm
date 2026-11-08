@@ -347,10 +347,11 @@ defmodule SsmWeb.UsersLive do
   defp role_opts(socket),
     do: [role: socket.assigns.current_user.role, actor: socket.assigns.current_user.actor]
 
-  # ids from client events: anything but a plain integer is "not found"
+  # ids from client events: a positive 64-bit row id, anything else is "not found"
+  @max_id 9_223_372_036_854_775_807
   defp parse_id(value) when is_binary(value) do
     case Integer.parse(value) do
-      {id, ""} -> id
+      {id, ""} when id in 1..@max_id -> id
       _ -> nil
     end
   end

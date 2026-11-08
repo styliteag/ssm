@@ -5,7 +5,7 @@ defmodule Ssm.Diffs.SyncCheck do
 
   The stored drift never contains key material: a key is labelled by its
   type, SHA256 fingerprint and comment (control and bidi characters
-  stripped, at most #{200} characters). A line that is not a plain key line
+  stripped, at most 200 characters). A line that is not a plain key line
   (authorized_keys options, odd text) is labelled `"unparsable key line"`
   and nothing of it is kept. A drift entry whose extra keys a sync cannot
   remove (the login's `user_readonly`) carries `"blocked"`. Read failures are reduced to a fixed sentence

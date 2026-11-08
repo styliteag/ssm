@@ -18,7 +18,7 @@ defmodule SsmWeb.UsersLiveTest do
     {:ok, view, _html} = live(conn, ~p"/users")
 
     for event <- ~w(edit delete toggle_enabled toggle-select split-open),
-        id <- ["abc", "1x", ""] do
+        id <- ["abc", "1x", "", "-1", "99999999999999999999"] do
       render_click(view, event, %{"id" => id})
     end
 

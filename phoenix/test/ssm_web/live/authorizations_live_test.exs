@@ -17,7 +17,7 @@ defmodule SsmWeb.AuthorizationsLiveTest do
     auth = authorization_fixture(user_fixture(), host_fixture())
     {:ok, view, _html} = live(conn, ~p"/authorizations")
 
-    for event <- ~w(edit delete), id <- ["abc", "1x", ""] do
+    for event <- ~w(edit delete), id <- ["abc", "1x", "", "-1", "99999999999999999999"] do
       render_click(view, event, %{"id" => id})
     end
 

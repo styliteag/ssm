@@ -91,7 +91,9 @@ defmodule Ssm.Ssh.ProbeTest do
       on_exit(fn -> Application.put_env(:ssm, :probe_allow_loopback, true) end)
       jump = %Target{host_id: 1, name: "gw", address: "203.0.113.5", port: 22, username: "root"}
 
-      for name <- ~w(localhost LOCALHOST. db.localhost localhost.localdomain ip6-localhost) do
+      for name <-
+            ~w(localhost LOCALHOST. db.localhost localhost.localdomain ip6-localhost) ++
+              ~w(localhost4 localhost6 localhost4.localdomain4 localhost6.localdomain6) do
         assert {:error, {:validation, %{"address" => [reason]}}} = Probe.run(name, [22], jump),
                name
 

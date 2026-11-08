@@ -19,6 +19,8 @@ defmodule Ssm.Authorizations.Login do
   split/merge copy them unchanged.
   """
 
+  alias Ssm.ControlChars
+
   # POSIX name (optional trailing $) | local@label(.label)*, a label never
   # starting or ending in "-"; 128 characters at most in all
   @format ~r/\A(?=.{1,128}\z)(?:[A-Za-z_][A-Za-z0-9_.-]{0,31}\$?|[A-Za-z_][A-Za-z0-9_.-]{0,63}@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*)\z/
@@ -31,6 +33,21 @@ defmodule Ssm.Authorizations.Login do
   @spec valid?(term()) :: boolean()
   def valid?(login) when is_binary(login), do: Regex.match?(@format, login)
   def valid?(_login), do: false
+
+  @doc """
+  May ssm pass `login` to a host at all? The weaker check for logins read
+  from a host or stored before `valid?/1` existed (`DOMAIN\\user` stays
+  usable): never empty, never all digits or a leading `+` (getent reads a
+  uid: `+0` is root), never a leading `-` (an option), no whitespace, `:`,
+  `/` or control characters. `script.sh` (`login_ok`) refuses the same.
+  """
+  @spec host_safe?(term()) :: boolean()
+  def host_safe?(login) when is_binary(login),
+    do:
+      Regex.match?(~r/\A(?![0-9]+\z)[^\s:\/+-][^\s:\/]{0,254}\z/u, login) and
+        not ControlChars.present?(login)
+
+  def host_safe?(_login), do: false
 
   @doc """
   Changeset check of a changed `:login` (an unchanged one is not checked;
