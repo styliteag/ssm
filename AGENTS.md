@@ -71,7 +71,11 @@ symlink target is `rm`'d first, then plain `mv` (a real directory there is refus
 link-to-dir`, a per-login skip). An unsafe `~/.ssh` also sets the login's `read_error` (API diff);
 `SyncCheck` keeps it as blocked drift, not a host error. Reads: time-bounded; on Linux the opened fd is checked via
 `/proc` (same inode as the entry, one link).
-Every sync outcome is audit-logged (`Ssm.Diffs.SyncAudit`).
+Every sync outcome is audit-logged (`Ssm.Diffs.SyncAudit`). Diff page "Remove" / "Remove all extra keys"
+(`Ssm.Diffs.KeyRemoval`, events `remove-key`/`remove-extra-keys`): reads the login fresh,
+re-diffs it (`Diffs.login_diff_for_write/2`, refuses without the own key like a sync), drops
+only lines still `extra_on_host` and writes the rest through `set_authorized_keyfile`;
+readonly/unsafe logins refused, audited (`remove_keys`/`remove_keys_failed`, fingerprints only).
 
 **Web login** (ADR-0011, `lib/ssm/oidc/`, `ssm_web/oidc_controller.ex`): `.htpasswd`
 users are local admins (session `ssm_user`). With `OIDC_ISSUER` set, SSO users are

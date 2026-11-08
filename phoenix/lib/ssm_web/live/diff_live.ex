@@ -15,6 +15,12 @@ defmodule SsmWeb.DiffLive do
   belonging to a known user gets an "Allow" button that grants that user the
   login; an unknown key can be assigned to a user, which also grants the
   login if missing.
+
+  "Remove key" on an unauthorized line, and "Remove all extra keys" per
+  login, take those lines off the host right away (`Ssm.Diffs.KeyRemoval`:
+  read fresh, only lines still unauthorized, through `script.sh`,
+  readonly/unsafe logins refused, audited) — admins and operators on hosts
+  in their scope, never viewers.
   """
 
   use SsmWeb, :live_view
@@ -25,6 +31,7 @@ defmodule SsmWeb.DiffLive do
   alias Ssm.Diffs.HostCheck
   alias Ssm.Diffs.HostChecks
   alias Ssm.Diffs.HostDiff
+  alias Ssm.Diffs.KeyRemoval
   alias Ssm.Diffs.StatusCache
   alias Ssm.Diffs.SyncAudit
   alias Ssm.Diffs.SyncCheck
@@ -235,6 +242,28 @@ defmodule SsmWeb.DiffLive do
     end
   end
 
+  def handle_async(:remove_keys, {:ok, {host, login, result}}, socket) do
+    socket = assign(socket, :syncing, false)
+
+    case result do
+      {:ok, %{removed: n}} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "Removed #{n} key line(s) from #{login} on #{host.name}.")
+         |> refresh_after_sync(host)}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Nothing removed: #{format_reason(reason)}")}
+    end
+  end
+
+  def handle_async(:remove_keys, {:exit, reason}, socket) do
+    {:noreply,
+     socket
+     |> assign(:syncing, false)
+     |> put_flash(:error, "Remove crashed: #{inspect(reason)}")}
+  end
+
   def handle_async(:sync, {:exit, reason}, socket) do
     {:noreply,
      socket
@@ -412,6 +441,28 @@ defmodule SsmWeb.DiffLive do
     end
   end
 
+  # Takes the line off the host now (not a database change): fresh read,
+  # only if still unauthorized; viewers never (also refused by ReadOnly).
+  def handle_event("remove-key", %{"login" => login, "index" => index}, socket) do
+    with false <- read_only?(socket),
+         %Host{disabled: false} = host <- fresh_selected(socket),
+         {:ok, item} <- find_extra_item(socket, login, index) do
+      {:noreply, start_remove(socket, host, login, {:lines, [item.line]})}
+    else
+      _ -> {:noreply, put_flash(socket, :error, "Cannot remove this key.")}
+    end
+  end
+
+  def handle_event("remove-extra-keys", %{"login" => login}, socket) do
+    with false <- read_only?(socket),
+         %Host{disabled: false} = host <- fresh_selected(socket),
+         true <- is_binary(login) do
+      {:noreply, start_remove(socket, host, login, :all_extra)}
+    else
+      _ -> {:noreply, put_flash(socket, :error, "Cannot remove these keys.")}
+    end
+  end
+
   def handle_event("unknown-key-open", %{"login" => login, "index" => index}, socket) do
     with %Host{disabled: false} <- fresh_selected(socket),
          {:ok, item} <- find_extra_item(socket, login, index),
@@ -495,6 +546,21 @@ defmodule SsmWeb.DiffLive do
 
   defp fresh_selected(%{assigns: %{selected: %Host{id: id}}} = socket), do: fresh_host(socket, id)
   defp fresh_selected(_socket), do: nil
+
+  defp start_remove(socket, host, login, selector) do
+    actor = socket.assigns.current_user.actor
+
+    socket
+    |> assign(:syncing, true)
+    |> start_async(:remove_keys, fn ->
+      {host, login, KeyRemoval.remove(host, login, selector, actor)}
+    end)
+  end
+
+  # a readonly or unsafe login is not written: no remove buttons
+  defp removable?(login), do: is_nil(login.readonly_condition) and is_nil(login.unsafe)
+
+  defp has_extra?(login), do: Enum.any?(login.items, &(&1.status == :extra_on_host))
 
   ## Allow / assign helpers (database-only; the host is untouched until sync)
 
@@ -1032,6 +1098,20 @@ defmodule SsmWeb.DiffLive do
               </span>
               <span :if={login.unsafe} class="badge badge-warning badge-xs">{login.unsafe}</span>
               <span :if={login.blocked} class="badge badge-error badge-xs">{login.blocked}</span>
+              <button
+                :if={
+                  not @selected.disabled and removable?(login) and has_extra?(login) and
+                    not @syncing
+                }
+                id={"remove-extra-#{login.login}"}
+                class="btn btn-ghost btn-xs ml-auto text-error"
+                phx-click="remove-extra-keys"
+                phx-value-login={login.login}
+                data-confirm={"Remove every unauthorized key line from #{login.login}'s authorized_keys on #{@selected.name} now?"}
+                title="Take every line marked not authorized off the host now"
+              >
+                <.icon name="hero-trash" class="size-4" /> Remove all extra keys
+              </button>
             </div>
 
             <div :if={login.read_error} class="alert alert-warning py-2 text-xs">
@@ -1059,6 +1139,24 @@ defmodule SsmWeb.DiffLive do
                   login={login.login}
                   index={index}
                 />
+                <button
+                  :if={
+                    item.status == :extra_on_host and not @selected.disabled and
+                      removable?(login) and not @syncing
+                  }
+                  id={"remove-key-#{login.login}-#{index}"}
+                  class={[
+                    "btn btn-ghost btn-xs flex-none text-error",
+                    extra_key_info(item.line, @key_owners) == :invalid && "ml-auto"
+                  ]}
+                  phx-click="remove-key"
+                  phx-value-login={login.login}
+                  phx-value-index={index}
+                  data-confirm={"Remove this key line from #{login.login}'s authorized_keys on #{@selected.name} now?"}
+                  title="Take this line off the host now"
+                >
+                  <.icon name="hero-trash" class="size-4" /> Remove
+                </button>
               </li>
             </ul>
           </div>

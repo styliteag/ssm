@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Diff page: "Remove" on a line marked "not authorized" takes that key off the host
+  right away, and "Remove all extra keys" does so for every such line of a login —
+  without a full sync. ssm reads the login fresh, removes only lines that are still
+  unauthorized (never a granted key or ssm's own key), keeps every other line, and
+  writes through the same safe path as a sync; readonly and unsafe logins are refused.
+  Each removal is in the activity log with the key fingerprints. Admins and operators
+  on hosts in their scope only, never viewers.
+
 - `GET /api/v2/diffs/{host_id}`: every login now has a `notes` list with the notes the
   diff page shows — unsafe files, blocked revocations ("revocation blocked …"), an
   ignored `user_readonly` not owned by root, "drops host restriction: …" and "invalid

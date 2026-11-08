@@ -352,6 +352,20 @@ defmodule Ssm.Diffs do
 
   defp blocked_by_user_readonly(items, _entry), do: items
 
+  @doc """
+  The diff of one listed login (`entry` from `ScriptRunner.get_ssh_keyfiles/2`)
+  for a write that removes lines (`Ssm.Diffs.KeyRemoval`). Like a sync, it
+  refuses (`{:error, {:own_key_unavailable, _}}`) when the login is the
+  host's login user and ssm's own key cannot be read: the own key line
+  would otherwise look unauthorized.
+  """
+  @spec login_diff_for_write(Host.t(), map()) :: {:ok, LoginDiff.t()} | {:error, term()}
+  def login_diff_for_write(%Host{} = host, entry) do
+    with {:ok, own} <- own_key_for_sync(host, [entry.login]) do
+      {:ok, build_login_diff(host.id, entry.login, entry, nil, own[entry.login])}
+    end
+  end
+
   @doc false
   def compute_diff(expected, actual), do: Compare.diff(expected, actual)
 
