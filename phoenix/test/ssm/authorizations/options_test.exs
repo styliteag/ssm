@@ -1,5 +1,5 @@
 defmodule Ssm.Authorizations.OptionsTest do
-  use Ssm.DataCase, async: true
+  use Ssm.DataCase
 
   import Ssm.Fixtures
 

@@ -8,7 +8,7 @@ defmodule Ssm.Users.AdminOnlyTargetsTest do
   admins are unaffected, the scope-less API path is unchanged.
   """
 
-  use Ssm.DataCase, async: true
+  use Ssm.DataCase
 
   import Ssm.Fixtures
 

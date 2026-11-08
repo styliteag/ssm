@@ -6,7 +6,7 @@ defmodule Ssm.Authorizations.LoginTest do
   the login and the copies made by split/merge are not checked.
   """
 
-  use Ssm.DataCase, async: true
+  use Ssm.DataCase
 
   import Ssm.Fixtures
 

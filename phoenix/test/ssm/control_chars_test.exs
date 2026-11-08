@@ -5,7 +5,7 @@ defmodule Ssm.ControlCharsTest do
   refuse them; the key parser refuses a multi-line single key.
   """
 
-  use Ssm.DataCase, async: true
+  use Ssm.DataCase
 
   import Ssm.Fixtures
 

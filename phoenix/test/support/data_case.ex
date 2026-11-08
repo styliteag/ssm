@@ -9,9 +9,7 @@ defmodule Ssm.DataCase do
   Finally, if the test case interacts with the database,
   we enable the SQL sandbox, so changes done to the database
   are reverted at the end of every test. If you are using
-  PostgreSQL, you can even run database tests asynchronously
-  by setting `use Ssm.DataCase, async: true`, although
-  this option is not recommended for other databases.
+  SQLite: database tests must be `async: false` (see `setup_sandbox/1`).
   """
 
   use ExUnit.CaseTemplate
@@ -33,11 +31,23 @@ defmodule Ssm.DataCase do
   end
 
   @doc """
-  Sets up the sandbox based on the test tags.
+  Sets up the sandbox for `async: false` tests only.
+
+  SQLite has a single writer, and every sandboxed test runs inside one
+  long DEFERRED transaction. Two async tests deadlock when one holds the
+  write lock and the other, after a read, upgrades to write: SQLite returns
+  `Database busy` at once, without waiting `busy_timeout`. Async tests
+  therefore get no connection: a database call there fails with
+  `DBConnection.OwnershipError`. Use `async: false` for tests that touch
+  the database.
   """
   def setup_sandbox(tags) do
-    pid = Ecto.Adapters.SQL.Sandbox.start_owner!(Ssm.Repo, shared: not tags[:async])
-    on_exit(fn -> Ecto.Adapters.SQL.Sandbox.stop_owner(pid) end)
+    unless tags[:async] do
+      pid = Ecto.Adapters.SQL.Sandbox.start_owner!(Ssm.Repo, shared: true)
+      on_exit(fn -> Ecto.Adapters.SQL.Sandbox.stop_owner(pid) end)
+    end
+
+    :ok
   end
 
   @doc """

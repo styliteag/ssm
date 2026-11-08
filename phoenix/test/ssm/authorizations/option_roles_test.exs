@@ -8,7 +8,7 @@ defmodule Ssm.Authorizations.OptionRolesTest do
   scope-less API path is unchanged.
   """
 
-  use Ssm.DataCase, async: true
+  use Ssm.DataCase
 
   import Ssm.Fixtures
 
