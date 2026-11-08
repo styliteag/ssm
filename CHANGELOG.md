@@ -45,6 +45,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   moving it: adding, importing, moving or re-keying a key, splitting or merging users,
   and assigning a diff-page key are refused (and logged) for an SSH user that holds a
   grant with admin-only options. Renaming a key stays possible; admins are unaffected.
+- On hosts without `getent` (busybox), ssm now matches a login in `/etc/passwd`
+  exactly. Before, a login name containing a `.` (for example `roo.`) could match
+  `root` and have ssm read or write root's `authorized_keys`.
 
 - Permissive `authorized_keys` options can be set from the web UI by admins only:
   `environment`, `cert-authority`, `user-rc`, `permitopen`, `permitlisten`, and the

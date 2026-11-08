@@ -412,7 +412,8 @@ key check is separate (`SSM_SYNC_INTERVAL`) and never writes to a host;
 `.secrets-whitelist` still carries Rust- and Python-era
 path entries (harmless, narrow — cleaning it needs user approval per rule #6);
 `./ssm.db` at the repo root is the final snapshot of the python stack's data, kept as
-the dev-DB import source (`just import-db`). Known limitations of the `script.sh`
+the dev-DB import source (`just import-db`). Without `getent` (busybox) `script.sh` reads `/etc/passwd` with an exact awk field match
+(`ENVIRON`, no regex). Known limitations of the `script.sh`
 link checks: a root-owned file an admin left in a user's home can be moved by that user to
 `~/.ssh/user_readonly` and then freezes the login (the check sees a plain root-owned
 file); and without `/proc` (FreeBSD/pfSense) the read side checks before it reads, so a user

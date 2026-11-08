@@ -28,12 +28,15 @@ do_getent_passwd_all() {
   fi
 }
 
+# Without getent (busybox) the login must match field 1 exactly: a regex
+# would let "roo." match root. ENVIRON, not awk -v (no escape processing).
 do_getent_passwd() {
   login="$1"
   if have_getent; then
     getent passwd "${login}"
   else
-    grep "^${login}:" /etc/passwd
+    ssm_login="${login}" awk -F: \
+      'BEGIN { r = 2 } $1 == ENVIRON["ssm_login"] { print; r = 0; exit } END { exit r }' /etc/passwd
   fi
 }
 
