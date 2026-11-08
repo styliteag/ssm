@@ -163,7 +163,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   as root.
 - A new or changed login of an authorization or grant must be a user name: a letter
   or `_` first, then letters, digits, `_`, `.` or `-`, at most 32 characters, an
-  optional trailing `$` (upper case is allowed, e.g. `Administrator`). A login starting
+  optional trailing `$` (upper case is allowed, e.g. `Administrator`), or an SSSD/AD
+  login `user@domain` (up to 64 characters before the `@`, a domain such as
+  `ad.corp.example`, 128 characters in all). `DOMAIN\user` is refused. A login starting
   with `-` could be read as an option by tools on the host. Existing authorizations
   with other logins keep working and stay editable. On the host, `script.sh` never
   looks up a login that starts with `-`.

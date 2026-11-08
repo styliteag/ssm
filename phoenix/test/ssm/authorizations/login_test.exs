@@ -1,7 +1,8 @@
 defmodule Ssm.Authorizations.LoginTest do
   @moduledoc """
   The remote login of an authorization or grant must be a POSIX-style user
-  name (`Ssm.Authorizations.Login`) when it is set or changed. Rows already
+  name or an SSSD/AD `user@domain` (`Ssm.Authorizations.Login`) when it is
+  set or changed. Rows already
   stored with another login (legacy data) stay usable: a change that keeps
   the login and the copies made by split/merge are not checked.
   """
@@ -16,8 +17,15 @@ defmodule Ssm.Authorizations.LoginTest do
   alias Ssm.Repo
   alias Ssm.Users.BulkOps
 
-  @valid ~w(deploy root a _svc Administrator infectopharm.com fail2ban-qa web_dev01 machine$) ++
-           [String.duplicate("a", 32)]
+  @valid ~w(deploy root a _svc Administrator infectopharm.com fail2ban-qa web_dev01 machine$
+            user@corp.example jane.doe@ad.corp.example J_Doe@CORP.LOCAL svc-x@a a@b-c.d
+            a@1corp.example _x@x9) ++
+           [
+             String.duplicate("a", 32),
+             String.duplicate("a", 64) <> "@corp.example",
+             # 128 characters in all: 64 + "@" + 63
+             String.duplicate("a", 64) <> "@" <> String.duplicate("b", 59) <> ".com"
+           ]
 
   @invalid [
     "",
@@ -28,17 +36,43 @@ defmodule Ssm.Authorizations.LoginTest do
     "9user",
     ".hidden",
     "a b",
-    "user@corp.example",
     "CORP\\user",
+    "corp.example\\user@x",
+    "@corp.example",
+    "user@",
+    "user@@corp.example",
+    "user@corp@example",
+    "1234@corp.example",
+    "-x@corp.example",
+    ".x@corp.example",
+    "machine$@corp.example",
+    "user@corp.example$",
+    "user@-corp.example",
+    "user@corp-.example",
+    "user@corp..example",
+    "user@.corp",
+    "user@corp.",
+    "user@corp_x.example",
+    "user@corp example",
+    "user@corp:22",
+    "user@corp/x",
+    "user name@corp",
+    "user@corp\nroot",
+    "user@corp\texample",
+    "user@corp\0",
+    "user@corp.example\n",
+    String.duplicate("a", 33),
+    String.duplicate("a", 65) <> "@corp.example",
+    # 129 characters in all
+    String.duplicate("a", 64) <> "@" <> String.duplicate("b", 60) <> ".com",
     "../etc",
     "a/b",
     "x$y",
     "$",
-    String.duplicate("a", 33),
     "deploy\nroot"
   ]
 
-  test "valid?/1 accepts POSIX-style names (upper case allowed) and rejects the rest" do
+  test "valid?/1 accepts POSIX-style names and user@domain (upper case allowed), rejects the rest" do
     for login <- @valid, do: assert(Login.valid?(login), inspect(login))
     for login <- @invalid, do: refute(Login.valid?(login), inspect(login))
   end
@@ -73,8 +107,29 @@ defmodule Ssm.Authorizations.LoginTest do
     assert Authorizations.exists?(target.id, host.id, "CORP\\user")
   end
 
+  test "a user@domain login (SSSD/AD) is accepted for authorizations and grants" do
+    user = user_fixture()
+    host = host_fixture()
+
+    assert {:ok, %{login: "jane.doe@ad.corp.example"}} =
+             Authorizations.create_authorization(%{
+               user_id: user.id,
+               host_id: host.id,
+               login: "jane.doe@ad.corp.example"
+             })
+
+    cs =
+      Grant.create_changeset(
+        %Grant{},
+        %{ssh_user_id: 1, customer_id: 1, login: "svc@corp.example"},
+        %{created_by: "t"}
+      )
+
+    assert cs.valid?
+  end
+
   test "a grant login is validated" do
-    for login <- ["-x", "1234", "user@corp"] do
+    for login <- ["-x", "1234", "CORP\\user", "user@-corp"] do
       cs =
         Grant.create_changeset(%Grant{}, %{ssh_user_id: 1, customer_id: 1, login: login}, %{
           created_by: "t"
