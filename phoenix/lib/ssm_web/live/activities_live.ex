@@ -221,7 +221,7 @@ defmodule SsmWeb.ActivitiesLive do
     assigns = assign(assigns, :json, Jason.encode!(map, pretty: true))
 
     ~H"""
-    <details class="mt-1.5" data-details="raw">
+    <details class="mt-1.5" data-details="raw" phx-mounted={JS.ignore_attributes(["open"])}>
       <summary class="cursor-pointer text-xs opacity-60">Details</summary>
       <pre class="mt-1 overflow-x-auto rounded bg-base-300 p-2 font-mono text-xs">{@json}</pre>
     </details>

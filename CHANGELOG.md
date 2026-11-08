@@ -18,6 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Build: one source for the Elixir/OTP versions, `.tool-versions`. a test (`test/tool_versions_test.exs`) fails when the Dockerfile ARGs drift from it.
 
+### Fixed
+
+- Open popovers (theme switcher, mobile menu) and expanded activity details
+  stay open when the page re-renders (e.g. the activity list refresh).
+
+
 ## [4.7.0] - 2026-11-08
 
 ### Added

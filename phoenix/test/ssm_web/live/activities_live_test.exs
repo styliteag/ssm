@@ -78,6 +78,28 @@ defmodule SsmWeb.ActivitiesLiveTest do
     assert has_element?(view, "#activities-#{entry.id} details[data-details=raw] pre", "value")
   end
 
+  test "open details and popovers keep their open state across re-renders", %{conn: conn} do
+    entry = log_entry(%{details: %{nested: %{deep: "value"}}})
+
+    {:ok, view, _html} = live(conn, ~p"/activities")
+
+    # the stream is reset on every refresh; `open` must stay client-owned
+    selectors = [
+      "#activities-#{entry.id} details[data-details=raw]",
+      "details#theme-switcher"
+    ]
+
+    for selector <- selectors do
+      mounted = view |> element(selector) |> render() |> attribute("phx-mounted")
+      assert mounted =~ "ignore_attrs", "#{selector} lacks JS.ignore_attributes"
+      assert mounted =~ "open"
+    end
+  end
+
+  defp attribute(html, name) do
+    html |> LazyHTML.from_fragment() |> LazyHTML.attribute(name) |> List.first("")
+  end
+
   test "search narrows by action, target, or actor", %{conn: conn} do
     hit = log_entry(%{target: "prod-web1"})
     miss = log_entry(%{target: "db-box"})

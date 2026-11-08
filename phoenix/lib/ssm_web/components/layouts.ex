@@ -71,7 +71,13 @@ defmodule SsmWeb.Layouts do
       <div class="flex min-w-0 flex-1 flex-col">
         <header class="navbar border-b border-base-300 bg-base-100 px-4 sm:px-6">
           <div class="flex flex-1 items-center gap-2">
-            <details :if={@current_user} data-popover class="relative sm:hidden">
+            <details
+              :if={@current_user}
+              id="mobile-nav-menu"
+              data-popover
+              class="relative sm:hidden"
+              phx-mounted={JS.ignore_attributes(["open"])}
+            >
               <summary class="btn btn-ghost btn-sm list-none" aria-label="Navigation">
                 <.icon name="hero-bars-3" class="size-5" />
               </summary>
@@ -196,7 +202,12 @@ defmodule SsmWeb.Layouts do
   """
   def theme_switcher(assigns) do
     ~H"""
-    <details data-popover class="relative">
+    <details
+      id="theme-switcher"
+      data-popover
+      class="relative"
+      phx-mounted={JS.ignore_attributes(["open"])}
+    >
       <summary class="btn btn-ghost btn-sm list-none" title="Theme">
         <.icon name="hero-swatch" class="size-4" />
         <span class="hidden sm:inline">Theme</span>
