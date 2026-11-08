@@ -113,6 +113,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `script.sh` login check works on old busybox (1.01, e.g. QNAP): its `tr` ignores octal ranges, so TAB, newline and ESC in a login were not refused there. Every refused byte is now listed on its own.
 - Writes wait up to 15 seconds for SQLite's write lock instead of failing with
   "Database busy" after 2 seconds when another write runs at the same time.
 

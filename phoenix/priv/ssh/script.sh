@@ -388,12 +388,12 @@ ensure_ssh_dir() {
 # A login ssm may write: not empty, not all digits, no leading "+" or "-"
 # (getent would read a uid, "+0" is root, or an option), no ":", "/",
 # whitespace or control character. Ssm.Authorizations.Login.host_safe?/1
-# refuses the same. tr instead of [[:cntrl:]]: old busybox ash.
+# refuses the same. tr with every byte listed: busybox 1.01 tr ignores octal ranges and old ash lacks [[:cntrl:]].
 login_ok() {
     case "$1" in
         ""|-*|+*|*[:/]*) return 1 ;;
     esac
-    [ "$(printf "%s" "$1" | tr -d '\000-\040\177')" = "$1" ] || return 1
+    [ "$(printf "%s" "$1" | tr -d '\001\002\003\004\005\006\007\010\011\012\013\014\015\016\017\020\021\022\023\024\025\026\027\030\031\032\033\034\035\036\037\040\177')" = "$1" ] || return 1
     case "$1" in
         *[!0-9]*) return 0 ;;
     esac
