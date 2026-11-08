@@ -57,8 +57,8 @@ defmodule Ssm.Activity do
 
   @doc """
   `list/1` for a web user with `scope` (ADR-0012): a scoped user sees the
-  entries of hosts in scope plus its own (`:actor`, its audit label);
-  entries without a host are for global users only.
+  entries of hosts in scope plus its own hostless ones (`:actor`, its audit
+  label); other entries without a host are for global users only.
   """
   @spec list(Scope.t(), keyword()) :: [ActivityLog.t()]
   def list(%Scope{} = scope, opts) do
@@ -83,7 +83,12 @@ defmodule Ssm.Activity do
     else
       hosts = Scope.host_ids(scope)
       actor = actor || ""
-      where(query, [l], l.host_id in subquery(hosts) or l.actor_username == ^actor)
+      # own entries too, but never those of a host outside the scope
+      where(
+        query,
+        [l],
+        l.host_id in subquery(hosts) or (l.actor_username == ^actor and is_nil(l.host_id))
+      )
     end
   end
 

@@ -30,6 +30,8 @@ defmodule SsmWeb.HostsLive do
   alias SsmWeb.Layouts
 
   @filters ~w(active all online offline unknown disabled)
+  @jump_host_locked "Read-only: this host is the jump host of other hosts, " <>
+                      "so only an account that sees all hosts may change it."
   @outside_scope "Not available: your account is limited to some customers or host groups, " <>
                    "and this would act outside your scope."
 
@@ -162,12 +164,16 @@ defmodule SsmWeb.HostsLive do
         {:noreply, put_flash(socket, :error, "Host not found.")}
 
       host ->
-        {:noreply,
-         assign(socket,
-           form: to_form(Hosts.change_host(host)),
-           editing: host,
-           jump_candidates: Hosts.jump_candidates(scope(socket), host)
-         )}
+        if Hosts.editable?(scope(socket), host) do
+          {:noreply,
+           assign(socket,
+             form: to_form(Hosts.change_host(host)),
+             editing: host,
+             jump_candidates: Hosts.jump_candidates(scope(socket), host)
+           )}
+        else
+          {:noreply, put_flash(socket, :error, @jump_host_locked)}
+        end
     end
   end
 
@@ -207,14 +213,18 @@ defmodule SsmWeb.HostsLive do
          |> put_flash(:info, "Host #{host.name} #{action}d.")
          |> reload_hosts()}
 
-      {:error, changeset} ->
+      {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply, assign(socket, form: to_form(changeset))}
+
+      {:error, reason} ->
+        {:noreply,
+         socket |> assign(form: nil, editing: nil) |> put_flash(:error, host_error(reason))}
     end
   end
 
   def handle_event("delete", %{"id" => id}, socket) do
     with %Host{} = host <- Hosts.get_host(scope(socket), parse_id(id)),
-         {:ok, _} <- Hosts.delete_host(host) do
+         {:ok, _} <- Hosts.delete_host(scope(socket), host) do
       log_host_activity(socket, "delete", host)
       StatusCache.delete(host.id)
 
@@ -225,6 +235,9 @@ defmodule SsmWeb.HostsLive do
     else
       nil ->
         {:noreply, put_flash(socket, :error, "Host not found.")}
+
+      {:error, reason} when is_atom(reason) or is_tuple(reason) ->
+        {:noreply, put_flash(socket, :error, host_error(reason))}
 
       {:error, _changeset} ->
         {:noreply,
@@ -238,7 +251,7 @@ defmodule SsmWeb.HostsLive do
 
   def handle_event("toggle_disabled", %{"id" => id}, socket) do
     with %Host{} = host <- Hosts.get_host(scope(socket), parse_id(id)),
-         {:ok, updated} <- Hosts.update_host(host, %{disabled: !host.disabled}) do
+         {:ok, updated} <- Hosts.update_host(scope(socket), host, %{disabled: !host.disabled}) do
       action = if updated.disabled, do: "disable", else: "enable"
       log_host_activity(socket, action, updated)
 
@@ -247,7 +260,11 @@ defmodule SsmWeb.HostsLive do
        |> put_flash(:info, "Host #{updated.name} #{action}d.")
        |> reload_hosts()}
     else
-      _ -> {:noreply, put_flash(socket, :error, "Host not found.")}
+      {:error, reason} when is_atom(reason) ->
+        {:noreply, put_flash(socket, :error, host_error(reason))}
+
+      _ ->
+        {:noreply, put_flash(socket, :error, "Host not found.")}
     end
   end
 
@@ -273,7 +290,12 @@ defmodule SsmWeb.HostsLive do
     do: {:noreply, socket}
 
   def handle_event("refresh_all", _params, socket) do
-    case refresh_targets(socket.assigns.rows) do
+    # re-read through the scope: the listed rows may be stale
+    in_scope = socket |> scope() |> Hosts.list_hosts() |> MapSet.new(& &1.id)
+
+    case socket.assigns.rows
+         |> Enum.filter(&MapSet.member?(in_scope, &1.id))
+         |> refresh_targets() do
       [] ->
         {:noreply, put_flash(socket, :error, "No enabled host to refresh in this list.")}
 
@@ -502,17 +524,15 @@ defmodule SsmWeb.HostsLive do
   defp jump_via_for(params, %{assigns: %{admin: true}}), do: params
   defp jump_via_for(params, _socket), do: Map.delete(params, "jump_via")
 
-  # Re-read through the scope: the host may have left it since the form opened.
-  defp update_in_scope(socket, host, params) do
-    case Hosts.get_host(scope(socket), host.id) do
-      nil ->
-        {:error,
-         Hosts.change_host(host, params) |> Ecto.Changeset.add_error(:name, "host not found")}
+  # Re-read through the scope (`Hosts.update_host/3`): the host may have left
+  # it since the form opened; a scoped user's connection fields are dropped.
+  defp update_in_scope(socket, host, params), do: Hosts.update_host(scope(socket), host, params)
 
-      current ->
-        Hosts.update_host(current, params)
-    end
-  end
+  defp host_error(:not_found), do: "Host not found."
+  defp host_error(:jump_host), do: @jump_host_locked
+
+  defp host_error({:jump_host_in_use, names}),
+    do: "Cannot delete this host: it is the jump host of #{Enum.join(names, ", ")}."
 
   defp log_host_activity(socket, action, host) do
     Activity.log(%{
@@ -736,6 +756,7 @@ defmodule SsmWeb.HostsLive do
           editing={@editing}
           jump_candidates={@jump_candidates}
           admin={@admin}
+          global={@global}
         />
       </.modal>
     </Layouts.app>
@@ -807,6 +828,7 @@ defmodule SsmWeb.HostsLive do
   attr :editing, :any, required: true
   attr :jump_candidates, :list, required: true
   attr :admin, :boolean, required: true
+  attr :global, :boolean, required: true
 
   defp host_modal_body(assigns) do
     ~H"""
@@ -815,11 +837,26 @@ defmodule SsmWeb.HostsLive do
         <.input field={@form[:name]} type="text" label="Name" required />
         <div class="grid grid-cols-3 gap-3">
           <div class="col-span-2">
-            <.input field={@form[:address]} type="text" label="Address" required />
+            <.input
+              field={@form[:address]}
+              type="text"
+              label="Address"
+              required
+              readonly={!@global}
+            />
           </div>
-          <.input field={@form[:port]} type="number" label="Port" required />
+          <.input field={@form[:port]} type="number" label="Port" required readonly={!@global} />
         </div>
-        <.input field={@form[:username]} type="text" label="SSH login user" required />
+        <.input
+          field={@form[:username]}
+          type="text"
+          label="SSH login user"
+          required
+          readonly={!@global}
+        />
+        <p :if={!@global} id="host-form-connection-hint" class="-mt-1 text-xs opacity-70">
+          Address, port and login user are set by an account that sees all hosts.
+        </p>
         <p
           :if={@form[:username].value not in [nil, "", "root"]}
           id="host-form-limited-hint"

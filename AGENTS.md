@@ -101,13 +101,18 @@ functions that take a `%Ssm.Scope{}` first (`Hosts.list_hosts/1`, `get_host/2`,
 `Authorizations.list_authorizations/2`, `create_/update_/delete_authorization`, `bulk_grant/5`,
 `Activity.list/2`, `HostChecks.stored/1`, counts) serve the web UI; the scope-less ones stay
 global for `/api/v2`, the mctl contract and background jobs. Every LiveView passes
-`Scope.of(current_user)`; an out-of-scope id acts as a missing one ("not found"). Scoped users
-cannot create hosts or pin all host keys; only admins set `jump_via` (jump hosts are global).
+`Scope.of(current_user)` and re-reads the host through the scope in every event (never from
+mount-time assigns); an out-of-scope id acts as a missing one ("not found"). Scoped users
+cannot create hosts or pin all host keys, and `Hosts.update_host/3` drops their changes to the
+connection fields (`address`, `port`, `username`, `key_fingerprint`, `jump_via`) and refuses a
+host other hosts jump through (`:jump_host`); only admins set `jump_via` (jump hosts are global).
+`Hosts.delete_host/2` refuses a jump host in use for every UI user (`jump_via` cascades), as mctl
+does. Bulk grant intersects client-sent host ids with the scope.
 Activity entries of a host carry `activity_log.host_id` (cleared by `Hosts.delete_host/1`, SQLite
-reuses ids); a scoped user sees those of hosts in scope plus its own. SSH user catalog: every web user
+reuses ids); a scoped user sees those of hosts in scope plus its own hostless ones. SSH user catalog: every web user
 reads all SSH users and keys; a scoped user changes a user, its keys, split/merge/bulk delete and
-diff-page key assignment only for SSH users that are `Users.writable?/2` (all authorizations in
-scope, none counts) — scoped writes in `Users`, `BulkOps` and `KeyAssignment` (`:scope`) return
+diff-page key assignment only for SSH users that are `Users.writable?/2` (≥1 authorization, all
+in scope; a user without authorizations is read-only until authorized in scope) — scoped writes in `Users`, `BulkOps` and `KeyAssignment` (`:scope`) return
 `{:error, :out_of_scope}` otherwise; creating SSH users stays allowed. `test/ssm_web/scope_live_test.exs`
 enumerates every LiveView route: a new page fails the suite until it is classified there.
 

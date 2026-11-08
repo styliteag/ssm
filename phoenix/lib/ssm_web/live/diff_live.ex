@@ -59,7 +59,7 @@ defmodule SsmWeb.DiffLive do
   # Only hosts in the user's scope (ADR-0012) are listed, and every action
   # picks its host from that list: an out-of-scope id acts as a missing one.
   def mount(_params, _session, socket) do
-    scope = Ssm.Scope.of(socket.assigns.current_user)
+    scope = scope(socket)
     hosts = Hosts.list_hosts(scope)
     cached = StatusCache.all()
     checks = HostChecks.stored(scope)
@@ -98,13 +98,7 @@ defmodule SsmWeb.DiffLive do
 
   @impl true
   def handle_params(params, _uri, socket) do
-    selected =
-      with raw when is_binary(raw) <- params["host_id"],
-           {id, ""} <- Integer.parse(raw) do
-        Enum.find(socket.assigns.hosts, &(&1.id == id))
-      else
-        _ -> nil
-      end
+    selected = fresh_host(socket, params["host_id"])
 
     view = if params["view"] == "cards", do: "cards", else: "list"
 
@@ -321,7 +315,7 @@ defmodule SsmWeb.DiffLive do
   end
 
   def handle_event("refresh", _params, socket) do
-    case socket.assigns.selected do
+    case fresh_selected(socket) do
       %Host{disabled: false} = host -> {:noreply, start_detail_async(socket, host)}
       _ -> {:noreply, socket}
     end
@@ -350,7 +344,7 @@ defmodule SsmWeb.DiffLive do
   end
 
   def handle_event("recheck-row", %{"id" => id}, socket) do
-    case Enum.find(socket.assigns.hosts, &(&1.id == String.to_integer(id))) do
+    case fresh_host(socket, id) do
       %Host{disabled: false} = host ->
         {:noreply,
          socket
@@ -363,7 +357,7 @@ defmodule SsmWeb.DiffLive do
   end
 
   def handle_event("sync-row", %{"id" => id}, socket) do
-    case Enum.find(socket.assigns.hosts, &(&1.id == String.to_integer(id))) do
+    case fresh_host(socket, id) do
       %Host{disabled: false} = host ->
         {:noreply,
          socket
@@ -380,7 +374,7 @@ defmodule SsmWeb.DiffLive do
 
   # "Check all" (asks first in the page): reads every enabled host over SSH.
   def handle_event("recheck", _params, socket) do
-    hosts = Enum.reject(socket.assigns.hosts, & &1.disabled)
+    hosts = socket |> fresh_hosts() |> Enum.reject(& &1.disabled)
 
     statuses =
       Enum.reduce(hosts, socket.assigns.statuses, &Map.put(&2, &1.id, :loading))
@@ -392,7 +386,7 @@ defmodule SsmWeb.DiffLive do
   end
 
   def handle_event("sync", _params, socket) do
-    case socket.assigns.selected do
+    case fresh_selected(socket) do
       %Host{disabled: false} = host ->
         {:noreply,
          socket
@@ -408,7 +402,7 @@ defmodule SsmWeb.DiffLive do
   end
 
   def handle_event("allow-key", %{"login" => login, "index" => index}, socket) do
-    with %Host{disabled: false} = host <- socket.assigns.selected,
+    with %Host{disabled: false} = host <- fresh_selected(socket),
          {:ok, item} <- find_extra_item(socket, login, index),
          {:ok, parsed} <- KeyParser.parse_authorized_line(item.line),
          %UserKey{} = key <- Users.get_key_by_base64(parsed.key_base64) do
@@ -419,7 +413,7 @@ defmodule SsmWeb.DiffLive do
   end
 
   def handle_event("unknown-key-open", %{"login" => login, "index" => index}, socket) do
-    with %Host{disabled: false} <- socket.assigns.selected,
+    with %Host{disabled: false} <- fresh_selected(socket),
          {:ok, item} <- find_extra_item(socket, login, index),
          {:ok, parsed} <- KeyParser.parse_authorized_line(item.line) do
       {:noreply,
@@ -451,7 +445,7 @@ defmodule SsmWeb.DiffLive do
   end
 
   def handle_event("unknown-key-assign", %{"assign" => params}, socket) do
-    with %Host{disabled: false} = host <- socket.assigns.selected,
+    with %Host{disabled: false} = host <- fresh_selected(socket),
          %{} = unknown <- socket.assigns.unknown_key,
          {:ok, user} <- assign_target(params["user_id"]) do
       assign_unknown_key(socket, host, user, put_form(unknown, params))
@@ -462,7 +456,8 @@ defmodule SsmWeb.DiffLive do
 
   def handle_event("sync_all", _params, socket) do
     to_sync =
-      socket.assigns.hosts
+      socket
+      |> fresh_hosts()
       |> Enum.reject(& &1.disabled)
       |> Enum.filter(fn host ->
         match?({:needs_sync, _, _}, socket.assigns.statuses[host.id])
@@ -479,6 +474,27 @@ defmodule SsmWeb.DiffLive do
        end)}
     end
   end
+
+  ## Scope: every event re-reads its host through the user's scope (ADR-0012),
+  ## never from the mount-time list, so a host that left the scope is missing.
+
+  defp scope(socket), do: Ssm.Scope.of(socket.assigns.current_user)
+
+  defp fresh_hosts(socket), do: Hosts.list_hosts(scope(socket))
+
+  defp fresh_host(socket, id) when is_integer(id), do: Hosts.get_host(scope(socket), id)
+
+  defp fresh_host(socket, id) when is_binary(id) do
+    case parse_id(id) do
+      {:ok, id} -> fresh_host(socket, id)
+      :error -> nil
+    end
+  end
+
+  defp fresh_host(_socket, _id), do: nil
+
+  defp fresh_selected(%{assigns: %{selected: %Host{id: id}}} = socket), do: fresh_host(socket, id)
+  defp fresh_selected(_socket), do: nil
 
   ## Allow / assign helpers (database-only; the host is untouched until sync)
 

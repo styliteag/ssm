@@ -8,7 +8,8 @@ defmodule Ssm.Users do
   user or its keys only when the user is `writable?/2` – every one of its
   authorizations is on a host in scope, because a key change lands on every
   host of that user. Otherwise `{:error, :out_of_scope}`. The scope-less
-  writes stay global (`/api/v2`, mctl contract).
+  writes stay global (`/api/v2`, mctl contract). Creating an SSH user stays
+  open; its keys follow once it holds an authorization in scope.
   """
 
   import Ecto.Query
@@ -27,19 +28,21 @@ defmodule Ssm.Users do
 
   @doc """
   May a user with `scope` change this SSH user (or user id) and its keys?
-  True when none of its authorizations is on a host outside the scope (a
-  user without authorizations is writable). Grants of deleted hosts count
-  as outside.
+  A global scope may always. A scoped one only when the user has at least
+  one authorization and all of them are on hosts in scope: a user without
+  authorizations is read-only until it is authorized in scope. Grants of
+  deleted hosts count as outside.
   """
   @spec writable?(Ssm.Scope.t(), User.t() | integer()) :: boolean()
   def writable?(%Ssm.Scope{} = scope, %User{id: id}), do: writable?(scope, id)
 
   def writable?(%Ssm.Scope{} = scope, user_id) when is_integer(user_id) do
     Ssm.Scope.global?(scope) or
-      not Repo.exists?(
-        from a in Authorization,
-          where: a.user_id == ^user_id and a.host_id not in subquery(Ssm.Scope.host_ids(scope))
-      )
+      (Repo.exists?(from a in Authorization, where: a.user_id == ^user_id) and
+         not Repo.exists?(
+           from a in Authorization,
+             where: a.user_id == ^user_id and a.host_id not in subquery(Ssm.Scope.host_ids(scope))
+         ))
   end
 
   def writable?(_scope, _user_id), do: false

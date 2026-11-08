@@ -151,6 +151,99 @@ defmodule SsmWeb.ScopeLiveTest do
     end
   end
 
+  describe "host connection fields" do
+    test "a scoped operator cannot retarget an in-scope host", %{
+      conn: conn,
+      provider: p,
+      in_host: h
+    } do
+      {:ok, lv, _} = live(scoped(conn, p), ~p"/hosts")
+      html = render_click(lv, "edit", %{"id" => to_string(h.id)})
+      assert html =~ ~s(name="host[address]")
+
+      render_submit(lv, "save", %{
+        "host" => %{
+          "name" => h.name,
+          "address" => "evil.example",
+          "port" => "2222",
+          "username" => "admin",
+          "key_fingerprint" => "SHA256:evil",
+          "comment" => "noted"
+        }
+      })
+
+      host = Hosts.get_host(h.id)
+      assert {host.address, host.port, host.username} == {h.address, h.port, h.username}
+      assert host.key_fingerprint == h.key_fingerprint
+      assert host.comment == "noted"
+
+      scope = Ssm.Scope.new(["acme"], ["*"])
+      assert {:ok, same} = Hosts.update_host(scope, host, %{address: "evil.example", port: 1})
+      assert {same.address, same.port} == {h.address, h.port}
+    end
+
+    test "a scoped operator cannot re-pin host keys", %{conn: conn, provider: p} do
+      {:ok, lv, html} = live(scoped(conn, p), ~p"/hosts")
+      refute html =~ ~s(id="pin-host-keys")
+      assert render_click(lv, "pin_host_keys", %{}) =~ "outside your scope"
+      assert MockClient.calls().connect == []
+    end
+
+    test "an unscoped operator still can", %{conn: conn, provider: p, in_host: h} do
+      {:ok, lv, _} = live(unscoped(conn, p), ~p"/hosts")
+      render_click(lv, "edit", %{"id" => to_string(h.id)})
+
+      render_submit(lv, "save", %{
+        "host" => %{"name" => h.name, "address" => "moved.example", "port" => "22"}
+      })
+
+      assert Hosts.get_host(h.id).address == "moved.example"
+    end
+  end
+
+  describe "jump hosts" do
+    setup %{in_host: in_host, out_host: out_host} do
+      # the in-scope host is the jump host of an out-of-scope one
+      {:ok, _} = Hosts.update_host(out_host, %{jump_via: in_host.id})
+      :ok
+    end
+
+    test "a jump host in use is never deleted from the UI", %{
+      conn: conn,
+      provider: p,
+      in_host: jump,
+      out_host: dependent
+    } do
+      for conn <- [scoped(conn, p), unscoped(build_conn(), p)] do
+        {:ok, lv, _} = live(conn, ~p"/hosts")
+        assert render_click(lv, "delete", %{"id" => to_string(jump.id)}) =~ "jump host"
+      end
+
+      assert Hosts.get_host(jump.id)
+      assert Hosts.get_host(dependent.id)
+    end
+
+    test "a scoped operator cannot disable or edit a jump host", %{
+      conn: conn,
+      provider: p,
+      in_host: jump
+    } do
+      {:ok, lv, _} = live(scoped(conn, p), ~p"/hosts")
+      assert render_click(lv, "toggle_disabled", %{"id" => to_string(jump.id)}) =~ "jump host"
+      assert render_click(lv, "edit", %{"id" => to_string(jump.id)}) =~ "jump host"
+      refute Hosts.get_host(jump.id).disabled
+
+      scope = Ssm.Scope.new(["acme"], ["*"])
+      assert {:error, :jump_host} = Hosts.update_host(scope, jump, %{comment: "x"})
+    end
+
+    test "an unscoped operator may still disable it", %{conn: conn, provider: p, in_host: jump} do
+      {:ok, lv, _} = live(unscoped(conn, p), ~p"/hosts")
+      render_click(lv, "toggle_disabled", %{"id" => to_string(jump.id)})
+      assert Hosts.get_host(jump.id).disabled
+    end
+  end
+
   describe "authorizations" do
     test "filters and params cannot reach out-of-scope rows", %{
       conn: conn,
@@ -198,9 +291,29 @@ defmodule SsmWeb.ScopeLiveTest do
       render_click(lv, "bulk-toggle-host", %{"id" => to_string(out.id)})
       render_click(lv, "bulk-toggle-host", %{"id" => to_string(in_host.id)})
       render_change(lv, "bulk-change", %{"bulk" => %{"login" => "bulk"}})
-      assert render_click(lv, "bulk-save", %{}) =~ "outside your scope"
+      # an out-of-scope host id from the client is dropped, never granted
+      assert render_click(lv, "bulk-save", %{}) =~ "1 authorization(s) created"
       refute Authorizations.exists?(bob.id, out.id, "bulk")
-      refute Authorizations.exists?(bob.id, in_host.id, "bulk")
+      assert Authorizations.exists?(bob.id, in_host.id, "bulk")
+
+      assert {:error, :out_of_scope} =
+               Authorizations.bulk_grant(
+                 Ssm.Scope.new(["acme"], ["*"]),
+                 [bob.id],
+                 [out.id],
+                 "x",
+                 nil
+               )
+    end
+
+    test "the bulk preview counts only in-scope grants", %{out_auth: out_auth, out_host: out} do
+      scope = Ssm.Scope.new(["acme"], ["*"])
+
+      assert Authorizations.existing_grant_pairs(scope, [out_auth.user_id], [out.id], "out-login") ==
+               MapSet.new()
+
+      assert Authorizations.existing_grant_pairs([out_auth.user_id], [out.id], "out-login") ==
+               MapSet.new([{out_auth.user_id, out.id}])
     end
 
     test "matrix toggles on out-of-scope hosts do nothing", %{
@@ -272,6 +385,24 @@ defmodule SsmWeb.ScopeLiveTest do
     end
   end
 
+  describe "diff re-reads the host through the scope" do
+    test "a host that left the scope after mount is not synced or selected", %{
+      conn: conn,
+      provider: p,
+      in_host: h
+    } do
+      {:ok, lv, _} = live(scoped(conn, p), ~p"/diff")
+      {:ok, _} = Hosts.update_membership(h, %{customer: "beta"})
+
+      render_click(lv, "sync-row", %{"id" => to_string(h.id)})
+      render_click(lv, "recheck-row", %{"id" => to_string(h.id)})
+      render_patch(lv, ~p"/diff?host_id=#{h.id}")
+      render_click(lv, "sync", %{})
+      render_click(lv, "sync_all", %{})
+      assert MockClient.calls().connect == []
+    end
+  end
+
   describe "activities" do
     test "only entries of in-scope hosts and the operator's own entries", %{
       conn: conn,
@@ -288,6 +419,14 @@ defmodule SsmWeb.ScopeLiveTest do
       })
 
       Activity.log(%{
+        activity_type: "host",
+        action: "update",
+        target: "own-but-out-of-scope",
+        actor_username: Ssm.Accounts.actor_label(op),
+        host_id: Hosts.list_hosts() |> Enum.find(&(&1.name == @out_host)) |> Map.fetch!(:id)
+      })
+
+      Activity.log(%{
         activity_type: "user",
         action: "create",
         target: "hostless-entry",
@@ -299,6 +438,7 @@ defmodule SsmWeb.ScopeLiveTest do
       assert html =~ @in_host
       assert html =~ "own-entry"
       refute html =~ "hostless-entry"
+      refute html =~ "own-but-out-of-scope"
       refute html =~ @out_host
     end
   end

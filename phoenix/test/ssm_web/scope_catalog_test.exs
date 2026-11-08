@@ -57,14 +57,15 @@ defmodule SsmWeb.ScopeCatalogTest do
   defp unscoped(conn, p), do: sso_login(conn, p, %{"orbit_role" => "operator"})
 
   describe "context" do
-    test "writable?/2: all authorizations in scope (none counts)", c do
+    test "writable?/2: at least one authorization, all of them in scope", c do
       assert Users.writable?(c.scope, c.alice)
-      assert Users.writable?(c.scope, c.carol)
+      refute Users.writable?(c.scope, c.carol)
       refute Users.writable?(c.scope, c.bob)
       refute Users.writable?(c.scope, c.dave)
       assert Users.writable?(Scope.global(), c.dave)
+      assert Users.writable?(Scope.global(), c.carol)
       refute Users.writable?(Scope.none(), c.alice)
-      assert Users.writable?(Scope.none(), c.carol)
+      refute Users.writable?(Scope.none(), c.carol)
     end
 
     test "user and key writes are refused outside the scope", c do
@@ -84,9 +85,12 @@ defmodule SsmWeb.ScopeCatalogTest do
       assert {:error, :out_of_scope} =
                Users.update_key(c.scope, c.keys["alice"], %{user_id: c.bob.id})
 
+      # a user without authorizations is read-only until authorized in scope
+      assert {:error, :out_of_scope} = Users.delete_key(c.scope, c.keys["carol"])
+      assert {:error, :out_of_scope} = Users.delete_user(c.scope, c.carol)
+
       assert {:ok, _} = Users.update_user(c.scope, c.alice, %{comment: "ok"})
-      assert {:ok, _} = Users.delete_key(c.scope, c.keys["carol"])
-      assert {:ok, _} = Users.delete_user(c.scope, c.carol)
+      assert {:ok, _} = Users.delete_key(c.scope, c.keys["alice"])
     end
 
     test "bulk ops are refused when any user is outside the scope", c do
@@ -94,9 +98,12 @@ defmodule SsmWeb.ScopeCatalogTest do
       assert {:error, :out_of_scope} = BulkOps.merge_users(c.scope, [c.alice, c.bob], c.alice)
       assert {:error, :out_of_scope} = BulkOps.merge_users(c.scope, [c.alice, c.carol], c.bob)
 
-      result = BulkOps.bulk_delete(c.scope, [c.carol, c.bob])
-      assert Enum.map(result.deleted, & &1.username) == ["carol"]
-      assert [{%{username: "bob"}, :out_of_scope}] = result.failed
+      result = BulkOps.bulk_delete(c.scope, [c.alice, c.bob, c.carol])
+      assert Enum.map(result.deleted, & &1.username) == ["alice"]
+
+      assert [{%{username: "bob"}, :out_of_scope}, {%{username: "carol"}, :out_of_scope}] =
+               result.failed
+
       assert Users.get_user(c.bob.id)
     end
 
@@ -149,7 +156,12 @@ defmodule SsmWeb.ScopeCatalogTest do
       assert render_click(lv, "toggle_enabled", %{"id" => to_string(c.alice.id)}) =~ "disabled"
       render_click(lv, "new", %{})
       render_submit(lv, "save", %{"user" => %{"username" => "erin"}})
-      assert Enum.any?(Users.list_users(), &(&1.username == "erin"))
+      erin = Enum.find(Users.list_users(), &(&1.username == "erin"))
+      assert erin
+      # keys only after an in-scope authorization exists
+      refute Users.writable?(c.scope, erin)
+      authorization_fixture(erin, c.in_host)
+      assert Users.writable?(c.scope, erin)
     end
 
     test "an unscoped operator is unchanged", %{conn: conn, provider: p} = c do

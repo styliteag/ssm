@@ -111,6 +111,60 @@ defmodule Ssm.Hosts do
     host |> Host.changeset(attrs) |> Repo.update()
   end
 
+  # Where ssm connects to (and as whom): changing them retargets every sync of
+  # the host, so only a global user may (ADR-0012 review).
+  @connection_fields ~w(address port username key_fingerprint jump_via)a
+
+  @doc """
+  `update_host/2` for a web user. The host is re-read through `scope`
+  (`{:error, :not_found}` outside it). A scoped user cannot change the
+  connection fields (`address`, `port`, `username`, `key_fingerprint`,
+  `jump_via`; they are dropped from `attrs`) and cannot change a host that
+  other hosts use as their jump host (`{:error, :jump_host}`).
+  """
+  @spec update_host(Scope.t(), Host.t(), map()) ::
+          {:ok, Host.t()} | {:error, Ecto.Changeset.t() | :not_found | :jump_host}
+  def update_host(%Scope{} = scope, %Host{id: id}, attrs) do
+    with {:ok, host} <- Scope.fetch_host(scope, id),
+         :ok <- check_jump_host(scope, host) do
+      update_host(host, scoped_attrs(scope, attrs))
+    end
+  end
+
+  @doc "May a user with `scope` change this host at all (not a jump host in use)?"
+  @spec editable?(Scope.t(), Host.t()) :: boolean()
+  def editable?(%Scope{} = scope, %Host{} = host), do: check_jump_host(scope, host) == :ok
+
+  defp check_jump_host(scope, host) do
+    if Scope.global?(scope) or jump_dependents(host) == [], do: :ok, else: {:error, :jump_host}
+  end
+
+  defp scoped_attrs(scope, attrs) do
+    if Scope.global?(scope) do
+      attrs
+    else
+      Map.drop(attrs, @connection_fields ++ Enum.map(@connection_fields, &Atom.to_string/1))
+    end
+  end
+
+  @doc """
+  `delete_host/1` for a web user: the host must be in `scope`, and a host
+  that other hosts use as their jump host is never deleted here (the
+  `jump_via` cascade would delete them too) – `{:error, {:jump_host_in_use,
+  names}}`, for every user, as in the mctl contract.
+  """
+  @spec delete_host(Scope.t(), Host.t()) ::
+          {:ok, Host.t()}
+          | {:error, Ecto.Changeset.t() | :not_found | {:jump_host_in_use, [String.t()]}}
+  def delete_host(%Scope{} = scope, %Host{id: id}) do
+    with {:ok, host} <- Scope.fetch_host(scope, id) do
+      case jump_dependents(host) do
+        [] -> delete_host(host)
+        names -> {:error, {:jump_host_in_use, names}}
+      end
+    end
+  end
+
   @doc """
   Delete a host. Its activity entries keep their text but lose the host id:
   SQLite reuses ids, and a later host must not inherit them (scope filter).

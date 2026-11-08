@@ -26,8 +26,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   keys (edit, enable/disable, delete, add or import keys, split, merge, bulk
   delete, "Assign unknown key" on the diff page) only when all of that user's
   authorizations are on hosts in its scope; a key change reaches every host of
-  the user. Other SSH users are read-only for it. New SSH users can still be
-  created.
+  the user, and it needs at least one authorization in scope: a user without
+  authorizations is read-only until it is authorized on a host in scope. Other
+  SSH users are read-only for it. New SSH users can still be created.
+- A scoped account cannot change where ssm connects to (address, port, login
+  user, pinned host key, jump host) and cannot edit, disable or delete a host
+  that other hosts use as their jump host; otherwise it could point a host in
+  its scope at another machine and reach it through a sync.
+- A jump host that other hosts still use can no longer be deleted from the web
+  UI (deleting it also deleted those hosts); remove the dependency first.
 
 ### Added
 
@@ -43,8 +50,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   outside its scope). Only admins set a host's jump host; for other roles the
   field is read-only.
 - The activity log records the host of host-bearing entries. A scoped account
-  sees the entries of its hosts and its own; entries written before this
-  release have no host and are shown to global accounts only.
+  sees the entries of its hosts and its own entries without a host; entries
+  written before this release have no host and are shown to global accounts
+  only.
 - Upgrading ends every open SSO session once, so each operator signs in
   again and gets its scope from the new claims.
 

@@ -11,7 +11,7 @@ defmodule Ssm.Fixtures do
       |> Enum.into(%{
         name: "host-#{n}",
         username: "root",
-        address: "10.0.0.#{rem(n, 250) + 1}",
+        address: "h#{System.unique_integer([:positive, :monotonic])}.test",
         port: 22
       })
       |> Hosts.create_host()

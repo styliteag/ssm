@@ -79,6 +79,18 @@ defmodule Ssm.Authorizations do
     |> MapSet.new()
   end
 
+  @doc "`existing_grant_pairs/3` limited to hosts in `scope`."
+  @spec existing_grant_pairs(Scope.t(), [integer()], [integer()], String.t()) :: MapSet.t()
+  def existing_grant_pairs(%Scope{} = scope, user_ids, host_ids, login) do
+    from(a in Authorization,
+      where: a.user_id in ^user_ids and a.host_id in ^host_ids and a.login == ^login,
+      select: {a.user_id, a.host_id}
+    )
+    |> Scope.filter(scope)
+    |> Repo.all()
+    |> MapSet.new()
+  end
+
   @doc """
   Grant `login` (with optional `options`) to every user in `user_ids` on every
   host in `host_ids`. Pairs that already hold an identical (user, host, login)

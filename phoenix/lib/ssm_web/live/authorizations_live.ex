@@ -346,7 +346,8 @@ defmodule SsmWeb.AuthorizationsLive do
   end
 
   def handle_event("bulk-toggle-host", %{"id" => id}, socket) do
-    {:noreply, update_bulk(socket, &%{&1 | host_ids: toggle(&1.host_ids, id)})}
+    {:noreply,
+     update_bulk(socket, &%{&1 | host_ids: in_scope_ids(socket, toggle(&1.host_ids, id))})}
   end
 
   def handle_event("bulk-all-users", _params, socket) do
@@ -389,7 +390,8 @@ defmodule SsmWeb.AuthorizationsLive do
         {:noreply, put_flash(socket, :error, "The remote login must not be empty.")}
 
       true ->
-        bulk_save(socket, MapSet.to_list(user_ids), MapSet.to_list(host_ids), login, options)
+        host_ids = socket |> in_scope_ids(host_ids) |> MapSet.to_list()
+        bulk_save(socket, MapSet.to_list(user_ids), host_ids, login, options)
     end
   end
 
@@ -462,12 +464,12 @@ defmodule SsmWeb.AuthorizationsLive do
     bulk = fun.(socket.assigns.bulk)
 
     {new_count, existing_count} =
-      preview_counts(bulk.user_ids, bulk.host_ids, String.trim(bulk.login))
+      preview_counts(scope(socket), bulk.user_ids, bulk.host_ids, String.trim(bulk.login))
 
     assign(socket, :bulk, %{bulk | new_count: new_count, existing_count: existing_count})
   end
 
-  defp preview_counts(user_ids, host_ids, login) do
+  defp preview_counts(scope, user_ids, host_ids, login) do
     total = MapSet.size(user_ids) * MapSet.size(host_ids)
 
     if total == 0 or login == "" do
@@ -475,6 +477,7 @@ defmodule SsmWeb.AuthorizationsLive do
     else
       existing =
         Authorizations.existing_grant_pairs(
+          scope,
           MapSet.to_list(user_ids),
           MapSet.to_list(host_ids),
           login
@@ -482,6 +485,12 @@ defmodule SsmWeb.AuthorizationsLive do
 
       {total - MapSet.size(existing), MapSet.size(existing)}
     end
+  end
+
+  # Client-supplied host ids, intersected with the hosts in scope (re-read).
+  defp in_scope_ids(socket, host_ids) do
+    in_scope = socket |> scope() |> Hosts.list_hosts() |> MapSet.new(& &1.id)
+    MapSet.intersection(host_ids, in_scope)
   end
 
   defp toggle(set, id) do
