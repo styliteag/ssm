@@ -246,16 +246,82 @@ defmodule SsmWeb.DiffLiveTest do
     view |> element("[id^='assign-key-deploy-']") |> render_click()
     assert has_element?(view, "#unknown-key-modal", "stray@box")
 
+    # "Create user" is preselected, prefilled from the key comment
+    assert has_element?(view, "#unknown-key-form option[value=new][selected]")
+    assert has_element?(view, ~s(#unknown-key-form input[name="assign[username]"][value="stray"]))
+
+    assert has_element?(
+             view,
+             ~s(#unknown-key-form input[name="assign[key_name]"][value="stray@box"])
+           )
+
     view
-    |> form("#unknown-key-form", assign: %{user_id: adopter.id})
+    |> form("#unknown-key-form", assign: %{user_id: adopter.id, key_name: "build box"})
+    |> render_change()
+
+    refute has_element?(view, ~s(#unknown-key-form input[name="assign[username]"]))
+
+    view
+    |> form("#unknown-key-form", assign: %{user_id: adopter.id, key_name: "build box"})
     |> render_submit()
 
     render_async(view)
 
     key = Ssm.Users.get_key_by_base64(stray_material)
     assert key.user_id == adopter.id
-    assert key.name == "stray@box"
+    assert key.name == "build box"
     assert Ssm.Authorizations.exists?(adopter.id, host.id, "deploy")
+  end
+
+  test "an unknown extra key can create a new user with it", %{conn: conn} do
+    authorized = user_fixture(%{username: "expected"})
+    user_fixture(%{username: "taken"})
+    host = host_fixture(%{name: "web1"})
+
+    key_fixture(authorized, %{key_type: "ssh-ed25519", key_base64: "SYNCED", name: "laptop"})
+    authorization_fixture(authorized, host, %{login: "deploy"})
+
+    stray_material = valid_material(<<3>>)
+
+    stub_keyfiles(host.id, [
+      %{
+        login: "deploy",
+        has_pragma: true,
+        readonly_condition: nil,
+        keyfile:
+          "ssh-ed25519 SYNCED laptop\nssh-ed25519 #{stray_material} Oliver Tegeler ot@FW13-OT"
+      }
+    ])
+
+    {:ok, view, _html} = live(conn, ~p"/diff?host_id=#{host.id}")
+    render_async(view)
+    view |> element("[id^='assign-key-deploy-']") |> render_click()
+
+    # a taken name keeps the dialog open with the error
+    view
+    |> form("#unknown-key-form", assign: %{user_id: "new", username: "taken", key_name: "x"})
+    |> render_submit()
+
+    assert has_element?(view, "#unknown-key-modal #unknown-key-error", "already been taken")
+    assert Ssm.Users.get_key_by_base64(stray_material) == nil
+
+    view
+    |> form("#unknown-key-form",
+      assign: %{user_id: "new", username: "ot", key_name: "Oliver Tegeler ot@FW13-OT"}
+    )
+    |> render_submit()
+
+    render_async(view)
+
+    refute has_element?(view, "#unknown-key-modal")
+    key = Ssm.Users.get_key_by_base64(stray_material) |> Ssm.Repo.preload(:user)
+    assert key.user.username == "ot"
+    assert key.name == "Oliver Tegeler ot@FW13-OT"
+    assert Ssm.Authorizations.exists?(key.user_id, host.id, "deploy")
+
+    assert Enum.any?(Ssm.Activity.list(), fn entry ->
+             entry.activity_type == "user" and entry.action == "create" and entry.target == "ot"
+           end)
   end
 
   test "unparseable extra keys get no action button", %{conn: conn} do

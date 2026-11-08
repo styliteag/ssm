@@ -15,6 +15,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   of a host by its IPv6 address). A DNS name is tried over IPv4 first and
   over IPv6 when it has no IPv4 record; an unreachable IPv6 address now
   reports "the host is unreachable".
+### Added
+
+- Diff page, "Assign unknown key": "Create user" is the default choice.
+  It creates the user (name prefilled from the key comment: the part before
+  "@" of the last word, e.g. "ot" for "Oliver Tegeler ot@FW13-OT",
+  otherwise the comment as a slug), the key and the login grant on this host
+  in one step. The key name is editable (prefilled with the key comment),
+  also when assigning to an existing user. A taken or empty user name keeps
+  the dialog open with the error and saves nothing. The host itself still
+  changes only with a later sync.
 
 ## [4.8.0] - 2026-11-08
 
