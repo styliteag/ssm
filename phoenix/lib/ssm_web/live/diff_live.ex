@@ -82,7 +82,7 @@ defmodule SsmWeb.DiffLive do
       |> assign(page_title: "Diff Viewer")
       |> assign(hosts: hosts, statuses: statuses, checks: checks, syncing: false)
       |> assign(detail: nil, detail_error: nil, detail_loading: false)
-      |> assign(key_owners: %{}, unknown_key: nil)
+      |> assign(key_owners: %{}, host_auths: %{}, keyfiles: %{}, unknown_key: nil)
       |> assign(diff_search: "", diff_sort: nil, diff_filter: "all")
 
     {:ok, socket}
@@ -179,7 +179,8 @@ defmodule SsmWeb.DiffLive do
     case result do
       {:ok, %HostDiff{} = diff} ->
         statuses = Map.put(socket.assigns.statuses, diff.host_id, summarize(diff))
-        owners = Map.new(Users.list_keys(), &{&1.key_base64, &1.user})
+        # key base64 -> %UserKey{user: …}: who owns a line (links, Allow)
+        owners = Map.new(Users.list_keys(), &{&1.key_base64, &1})
 
         # the explicit read of this host is stored as its check
         checks =
@@ -194,7 +195,9 @@ defmodule SsmWeb.DiffLive do
            detail_error: nil,
            statuses: statuses,
            checks: checks,
-           key_owners: owners
+           key_owners: owners,
+           host_auths: host_auths(socket, diff),
+           keyfiles: keyfiles(socket, diff)
          )}
 
       {:error, reason} ->
@@ -442,6 +445,39 @@ defmodule SsmWeb.DiffLive do
       allow_grant(socket, host, key.user, login)
     else
       _ -> {:noreply, put_flash(socket, :error, "Cannot authorize this key.")}
+    end
+  end
+
+  # "missing on host": take the SSH user's access away in the database (a
+  # manual row; a grant row only through its grant), then reload the diff
+  def handle_event("revoke-auth", %{"id" => id}, socket) do
+    with false <- read_only?(socket),
+         {id, ""} <- Integer.parse(to_string(id)),
+         %Authorizations.Authorization{} = auth <-
+           Authorizations.get_authorization(scope(socket), id),
+         {:ok, _} <- Authorizations.delete_authorization(scope(socket), auth) do
+      Ssm.Activity.Entries.authorization(:delete, auth, socket.assigns.current_user.actor)
+      host = fresh_selected(socket)
+
+      {:noreply,
+       socket
+       |> put_flash(:info, "Access removed. Sync the host to update its authorized_keys.")
+       |> then(&if(host, do: start_detail_async(&1, host), else: &1))}
+    else
+      {:error, {:grant_takeover, _}} ->
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           "A grant covers this user and login without this row's restrictions; " <>
+             "remove the restrictions first or delete the grant."
+         )}
+
+      {:error, :grant_row} ->
+        {:noreply, put_flash(socket, :error, "This access comes from a grant; delete the grant.")}
+
+      _ ->
+        {:noreply, put_flash(socket, :error, "Cannot remove this access.")}
     end
   end
 
@@ -729,12 +765,76 @@ defmodule SsmWeb.DiffLive do
   end
 
   # {:known, user} | :unknown | :invalid for an extra_on_host line.
+  # {user_id, login} -> %Authorization{} of the shown host (in scope)
+  defp host_auths(socket, %HostDiff{host_id: id}) do
+    socket
+    |> scope()
+    |> Authorizations.list_authorizations(host_id: id)
+    |> Map.new(&{{&1.user_id, &1.login}, &1})
+  end
+
+  # login -> the authorized_keys a full sync would write (copy button)
+  defp keyfiles(socket, %HostDiff{} = diff) do
+    case socket.assigns.selected do
+      %Host{id: id} = host when id == diff.host_id ->
+        Map.new(diff.logins, fn login ->
+          host_lines = for i <- login.items, i.status != :missing_on_host, do: i.line
+          {login.login, Diffs.generated_keyfile(host, login.login, host_lines)}
+        end)
+
+      _other ->
+        %{}
+    end
+  end
+
+  defp owner_auth(%UserKey{user_id: uid}, login, auths), do: Map.get(auths, {uid, login})
+  defp owner_auth(_key, _login, _auths), do: nil
+
+  # a manual row can be deleted here; a grant row only through its grant
+  defp revocable?(%Authorizations.Authorization{grant_id: nil}), do: true
+  defp revocable?(_auth), do: false
+
+  # the database key behind a line (nil: unknown or unparsable)
+  defp line_key(line, owners) do
+    case KeyParser.parse_authorized_line(line) do
+      {:ok, parsed} -> Map.get(owners, parsed.key_base64)
+      {:error, _} -> nil
+    end
+  end
+
+  # "ssh-rsa AAAAB3Nz…Xyz12345 comment": the middle of a long key cut out
+  defp short_line(line) do
+    case KeyParser.parse_authorized_line(line) do
+      {:ok, parsed} ->
+        [
+          short_text(KeyParser.options(line) || "", 40),
+          parsed.key_type,
+          short_base64(parsed.key_base64),
+          parsed.name
+        ]
+        |> Enum.filter(&(is_binary(&1) and &1 != ""))
+        |> Enum.join(" ")
+
+      {:error, _} ->
+        short_text(line, 120)
+    end
+  end
+
+  defp short_base64(b64) when byte_size(b64) > 36,
+    do: binary_part(b64, 0, 12) <> "…" <> binary_part(b64, byte_size(b64) - 20, 20)
+
+  defp short_base64(b64), do: b64
+
+  defp short_text(text, max) do
+    if String.length(text) > max, do: String.slice(text, 0, max) <> "…", else: text
+  end
+
   defp extra_key_info(line, owners) do
     case KeyParser.parse_authorized_line(line) do
       {:ok, parsed} ->
         case Map.get(owners, parsed.key_base64) do
           nil -> :unknown
-          user -> {:known, user}
+          key -> {:known, key.user}
         end
 
       {:error, _reason} ->
@@ -1129,6 +1229,21 @@ defmodule SsmWeb.DiffLive do
               <span :if={login.unsafe} class="badge badge-warning badge-xs">{login.unsafe}</span>
               <span :if={login.blocked} class="badge badge-error badge-xs">{login.blocked}</span>
               <button
+                :if={@keyfiles[login.login]}
+                id={"copy-keyfile-#{login.login}"}
+                type="button"
+                class="btn btn-ghost btn-xs"
+                phx-hook="CopyToClipboard"
+                data-copy={@keyfiles[login.login]}
+                title={"Copy the authorized_keys a sync would write for #{login.login}"}
+              >
+                <.icon name="hero-clipboard-document" class="size-4 [[data-copied]_&]:hidden" />
+                <.icon
+                  name="hero-check"
+                  class="hidden size-4 text-success [[data-copied]_&]:inline-block"
+                /> Copy authorized_keys
+              </button>
+              <button
                 :if={
                   not @selected.disabled and removable?(login) and has_extra?(login) and
                     not @syncing
@@ -1156,13 +1271,57 @@ defmodule SsmWeb.DiffLive do
                 class="flex items-center gap-2 rounded bg-base-100 px-2 py-1"
               >
                 <.item_badge status={item.status} />
-                <code class="truncate font-mono text-xs" title={item.line}>{item.line}</code>
+                <code
+                  id={"key-line-#{login.login}-#{index}"}
+                  class="min-w-0 truncate font-mono text-xs"
+                  title={item.line}
+                >
+                  {short_line(item.line)}
+                </code>
+                <.key_owner
+                  key={line_key(item.line, @key_owners)}
+                  auth={owner_auth(line_key(item.line, @key_owners), login.login, @host_auths)}
+                  login={login.login}
+                  index={index}
+                />
+                <button
+                  id={"copy-line-#{login.login}-#{index}"}
+                  type="button"
+                  class="btn btn-ghost btn-xs flex-none"
+                  phx-hook="CopyToClipboard"
+                  data-copy={item.line}
+                  title="Copy the full key line"
+                >
+                  <.icon name="hero-clipboard" class="size-4 [[data-copied]_&]:hidden" />
+                  <.icon
+                    name="hero-check"
+                    class="hidden size-4 text-success [[data-copied]_&]:inline-block"
+                  />
+                </button>
                 <span
                   :if={item.note}
                   class="badge badge-ghost badge-sm shrink-0 whitespace-nowrap"
                 >
                   {item.note}
                 </span>
+                <button
+                  :if={
+                    item.status == :missing_on_host and not @syncing and
+                      revocable?(
+                        owner_auth(line_key(item.line, @key_owners), login.login, @host_auths)
+                      )
+                  }
+                  id={"revoke-#{login.login}-#{index}"}
+                  class="btn btn-ghost btn-xs ml-auto flex-none text-error"
+                  phx-click="revoke-auth"
+                  phx-value-id={
+                    owner_auth(line_key(item.line, @key_owners), login.login, @host_auths).id
+                  }
+                  data-confirm={"Remove #{line_key(item.line, @key_owners).user.username}'s access to #{login.login} on #{@selected.name}? (database only; the key is not on the host)"}
+                  title="Delete this authorization in ssm, then refresh"
+                >
+                  <.icon name="hero-user-minus" class="size-4" /> Remove user
+                </button>
                 <.extra_key_actions
                   :if={item.status == :extra_on_host and not @selected.disabled}
                   info={extra_key_info(item.line, @key_owners)}
@@ -1247,6 +1406,39 @@ defmodule SsmWeb.DiffLive do
     </Layouts.app>
     """
   end
+
+  attr :key, :any, required: true
+  attr :auth, :any, required: true
+  attr :login, :string, required: true
+  attr :index, :integer, required: true
+
+  # who a line belongs to: links to the SSH user's keys and to the grant
+  defp key_owner(%{key: %UserKey{}} = assigns) do
+    ~H"""
+    <span class="flex flex-none items-center gap-1 text-xs opacity-80">
+      <.link
+        id={"owner-#{@login}-#{@index}"}
+        navigate={~p"/keys?user_id=#{@key.user_id}"}
+        class="link link-hover"
+        title={"Keys of #{@key.user.username}"}
+      >
+        {@key.user.username}
+      </.link>
+      <span :if={@key.name} class="opacity-60">· {@key.name}</span>
+      <.link
+        :if={@auth && @auth.grant_id}
+        id={"grant-#{@login}-#{@index}"}
+        navigate={~p"/grants?user_id=#{@key.user_id}"}
+        class="badge badge-ghost badge-xs"
+        title="This access comes from a grant"
+      >
+        grant
+      </.link>
+    </span>
+    """
+  end
+
+  defp key_owner(assigns), do: ~H""
 
   attr :info, :any, required: true
   attr :login, :string, required: true

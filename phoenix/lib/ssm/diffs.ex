@@ -391,6 +391,22 @@ defmodule Ssm.Diffs do
   end
 
   @doc """
+  The `authorized_keys` content a full sync would write for `login` on
+  `host`, given the host's current lines of that login (as last read):
+  the database's lines by the options policy, legacy rows, and ssm's own
+  key for the host's login user. Reads the database, never the host.
+  """
+  @spec generated_keyfile(Host.t(), String.t(), [String.t()]) :: String.t()
+  def generated_keyfile(%Host{} = host, login, host_lines) do
+    expected = Expected.lines(host.id, login)
+
+    expected.lines
+    |> Compare.lines_to_write(expected.legacy, host_lines)
+    |> with_own_key(own_key_or_none(host)[login])
+    |> Enum.map_join("", &(&1 <> "\n"))
+  end
+
+  @doc """
   True for the error of a sync that wrote some logins and skipped others
   (`finish/4`: "…; written: a, b"), false for one that wrote nothing.
   """

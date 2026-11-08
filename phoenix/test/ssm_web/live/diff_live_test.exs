@@ -745,4 +745,62 @@ defmodule SsmWeb.DiffLiveTest do
       assert length(sync_entries("web1")) == 1
     end
   end
+
+  describe "key rows" do
+    defp blob(type, size),
+      do: Base.encode64(<<byte_size(type)::32>> <> type <> :binary.copy(<<7>>, size))
+
+    test "a long key is shortened, copyable, and links to its owner", %{conn: conn} do
+      long = blob("ssh-rsa", 300)
+      tail = binary_part(long, byte_size(long) - 20, 20)
+      owner = user_fixture(%{username: "wim"})
+      host = host_fixture(%{name: "web1"})
+      key_fixture(owner, %{key_type: "ssh-rsa", key_base64: long, name: "laptop"})
+      authorization_fixture(owner, host, %{login: "deploy"})
+
+      stub_keyfiles(host.id, [
+        %{login: "deploy", has_pragma: true, keyfile: "ssh-rsa #{long} wim@laptop"}
+      ])
+
+      {:ok, view, _html} = live(conn, ~p"/diff?host_id=#{host.id}")
+      render_async(view)
+
+      assert has_element?(
+               view,
+               "#key-line-deploy-0",
+               "ssh-rsa " <> binary_part(long, 0, 12) <> "…"
+             )
+
+      assert has_element?(view, "#key-line-deploy-0", tail <> " wim@laptop")
+      refute has_element?(view, "#key-line-deploy-0", long)
+      assert has_element?(view, ~s(#copy-line-deploy-0[data-copy="ssh-rsa #{long} wim@laptop"]))
+      assert has_element?(view, ~s(#owner-deploy-0[href="/keys?user_id=#{owner.id}"]), "wim")
+      assert has_element?(view, "#copy-keyfile-deploy")
+      assert render(element(view, "#copy-keyfile-deploy")) =~ long
+    end
+
+    test "a missing key's manual access can be removed from the diff", %{conn: conn} do
+      owner = user_fixture(%{username: "gone"})
+      host = host_fixture(%{name: "web1"})
+
+      key_fixture(owner, %{
+        key_type: "ssh-ed25519",
+        key_base64: blob("ssh-ed25519", 32),
+        name: "old"
+      })
+
+      auth = authorization_fixture(owner, host, %{login: "deploy"})
+      stub_keyfiles(host.id, [%{login: "deploy", has_pragma: true, keyfile: ""}])
+
+      {:ok, view, _html} = live(conn, ~p"/diff?host_id=#{host.id}")
+      render_async(view)
+
+      refute has_element?(view, "#remove-key-deploy-0")
+      view |> element("#revoke-deploy-0") |> render_click()
+      render_async(view)
+
+      refute Ssm.Repo.get(Ssm.Authorizations.Authorization, auth.id)
+      refute has_element?(view, "#revoke-deploy-0")
+    end
+  end
 end

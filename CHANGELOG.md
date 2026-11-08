@@ -12,6 +12,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A sync that wrote some logins and skipped others (e.g. a login that does not exist on
   the host) shows a yellow "Sync of … partly done" warning instead of a red "failed"
   error, and the diff refreshes.
+- Diff viewer key rows: long keys show only their start and end (`ssh-rsa AAAAB3NzaC1y…<last 20>
+  comment`, full line on hover), a copy button per line, the owner as a link to the SSH
+  user's keys plus the key name, and a "grant" badge linking to the user's grants when the
+  access comes from a grant. Each login has "Copy authorized_keys": the file a sync would
+  write. A key "missing on host" from a manual authorization gets "Remove user" (deletes
+  that access in ssm, then the diff reloads).
 
 ## [4.12.2] - 2026-11-08
 
