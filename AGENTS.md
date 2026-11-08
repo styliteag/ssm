@@ -134,7 +134,11 @@ reuses ids); a scoped user sees those of hosts in scope plus its own hostless on
 reads all SSH users and keys; a scoped user changes a user, its keys, split/merge/bulk delete and
 diff-page key assignment only for SSH users that are `Users.writable?/2` (≥1 authorization, all
 in scope; a user without authorizations is read-only until authorized in scope) — scoped writes in `Users`, `BulkOps` and `KeyAssignment` (`:scope`) return
-`{:error, :out_of_scope}` otherwise; creating SSH users stays allowed. `test/ssm_web/scope_live_test.exs`
+`{:error, :out_of_scope}` otherwise; creating SSH users stays allowed. For a non-admin, the same scoped writes (`Users.create_key/3`,
+`update_key/4` on a move or new key material, `BulkOps.split_user/5`, `merge_users/4`, `KeyAssignment.assign/1`
+with `:role`/`:actor`) also refuse an SSH user holding a grant with admin-only options
+(`Users.check_admin_only/3`, `{:error, :admin_only_options}`, fails closed without a role, audited
+`admin_only_refused`). `test/ssm_web/scope_live_test.exs`
 enumerates every LiveView route: a new page fails the suite until it is classified there.
 
 **Host keys** (ADR-0008, `lib/ssm/ssh/host_key*.ex`, `lib/ssm/hosts/host_keys.ex`):

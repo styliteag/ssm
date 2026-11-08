@@ -641,7 +641,9 @@ defmodule SsmWeb.DiffLive do
         parsed: unknown.parsed,
         host_id: host.id,
         login: unknown.login,
-        scope: Ssm.Scope.of(socket.assigns.current_user)
+        scope: Ssm.Scope.of(socket.assigns.current_user),
+        role: socket.assigns.current_user.role,
+        actor: socket.assigns.current_user.actor
       })
 
     case result do

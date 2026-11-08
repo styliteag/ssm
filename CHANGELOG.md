@@ -41,6 +41,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- An SSO operator can no longer give a key the permissions of an admin's grant by
+  moving it: adding, importing, moving or re-keying a key, splitting or merging users,
+  and assigning a diff-page key are refused (and logged) for an SSH user that holds a
+  grant with admin-only options. Renaming a key stays possible; admins are unaffected.
+
 - Permissive `authorized_keys` options can be set from the web UI by admins only:
   `environment`, `cert-authority`, `user-rc`, `permitopen`, `permitlisten`, and the
   re-enabling `pty`, `port-forwarding`, `agent-forwarding`, `X11-forwarding`, `tunnel`,

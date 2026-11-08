@@ -37,14 +37,19 @@ defmodule Ssm.Users.BulkOps do
 
   @doc """
   `split_user/3` for a web user (ADR-0012 §3): the user must be
-  `Ssm.Users.writable?/2` in `scope`, else `{:error, :out_of_scope}`.
+  `Ssm.Users.writable?/2` in `scope`, else `{:error, :out_of_scope}`; for
+  a non-admin (`opts[:role]`) it must hold no admin-only options
+  (`Ssm.Users.check_admin_only/3`), else `{:error, :admin_only_options}`.
   """
-  @spec split_user(Ssm.Scope.t(), User.t(), String.t(), [integer()]) ::
+  @spec split_user(Ssm.Scope.t(), User.t(), String.t(), [integer()], keyword()) ::
           {:ok, split_result()} | {:error, term()}
-  def split_user(%Ssm.Scope{} = scope, %User{} = user, new_username, key_ids) do
-    if Ssm.Users.writable?(scope, user),
-      do: split_user(user, new_username, key_ids),
-      else: {:error, :out_of_scope}
+  def split_user(%Ssm.Scope{} = scope, %User{} = user, new_username, key_ids, opts \\ []) do
+    cond do
+      not Ssm.Users.writable?(scope, user) -> {:error, :out_of_scope}
+      # the new user's keys would inherit the copied grants' options
+      :ok != Ssm.Users.check_admin_only([user], "split", opts) -> {:error, :admin_only_options}
+      true -> split_user(user, new_username, key_ids)
+    end
   end
 
   @doc """
@@ -106,16 +111,21 @@ defmodule Ssm.Users.BulkOps do
 
   @doc """
   `merge_users/2` for a web user: every source user and an existing target
-  must be `Ssm.Users.writable?/2` in `scope`, else `{:error, :out_of_scope}`.
+  must be `Ssm.Users.writable?/2` in `scope`, else `{:error, :out_of_scope}`;
+  for a non-admin none may hold admin-only options, else `{:error,
+  :admin_only_options}`.
   """
-  @spec merge_users(Ssm.Scope.t(), [User.t()], User.t() | map()) ::
+  @spec merge_users(Ssm.Scope.t(), [User.t()], User.t() | map(), keyword()) ::
           {:ok, merge_result()} | {:error, term()}
-  def merge_users(%Ssm.Scope{} = scope, users, target) do
+  def merge_users(%Ssm.Scope{} = scope, users, target, opts \\ []) do
     involved = if match?(%User{}, target), do: [target | users], else: users
 
-    if Enum.all?(involved, &Ssm.Users.writable?(scope, &1)),
-      do: merge_users(users, target),
-      else: {:error, :out_of_scope}
+    cond do
+      not Enum.all?(involved, &Ssm.Users.writable?(scope, &1)) -> {:error, :out_of_scope}
+      # keys and grants meet in the target: no admin-only options on either side
+      :ok != Ssm.Users.check_admin_only(involved, "merge", opts) -> {:error, :admin_only_options}
+      true -> merge_users(users, target)
+    end
   end
 
   @doc """
