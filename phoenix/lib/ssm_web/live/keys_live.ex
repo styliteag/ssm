@@ -18,6 +18,9 @@ defmodule SsmWeb.KeysLive do
 
   @type_filters ~w(all rsa ed25519 ecdsa other)
 
+  @read_only_owner "Read-only: the owner of this key has access outside your scope " <>
+                     "(customers and host groups); a key change would reach those hosts too."
+
   @impl true
   def mount(_params, _session, socket) do
     {:ok,
@@ -150,7 +153,9 @@ defmodule SsmWeb.KeysLive do
         {:noreply, put_flash(socket, :error, "Key not found.")}
 
       key ->
-        {:noreply, assign(socket, form: to_form(Users.change_key(key)), editing: key)}
+        if Users.writable?(scope(socket), key.user_id),
+          do: {:noreply, assign(socket, form: to_form(Users.change_key(key)), editing: key)},
+          else: {:noreply, put_flash(socket, :error, @read_only_owner)}
     end
   end
 
@@ -196,7 +201,7 @@ defmodule SsmWeb.KeysLive do
 
   def handle_event("delete", %{"id" => id}, socket) do
     with %UserKey{} = key <- Users.get_key(String.to_integer(id)),
-         {:ok, _} <- Users.delete_key(key) do
+         {:ok, _} <- Users.delete_key(scope(socket), key) do
       log_key_activity(socket, "delete", key)
 
       {:noreply,
@@ -204,6 +209,7 @@ defmodule SsmWeb.KeysLive do
        |> put_flash(:info, "Key #{key_label(key)} deleted.")
        |> reload_keys()}
     else
+      {:error, :out_of_scope} -> {:noreply, put_flash(socket, :error, @read_only_owner)}
       _ -> {:noreply, put_flash(socket, :error, "Key not found.")}
     end
   end
@@ -241,7 +247,7 @@ defmodule SsmWeb.KeysLive do
     socket = assign(socket, paste: paste, parsed: parsed)
 
     with {:ok, _} <- parsed,
-         {:ok, key} <- Users.create_key(attrs) do
+         {:ok, key} <- Users.create_key(scope(socket), attrs) do
       log_key_activity(socket, "create", key)
 
       {:noreply,
@@ -253,6 +259,9 @@ defmodule SsmWeb.KeysLive do
       {:error, reason} when is_binary(reason) ->
         {:noreply, socket}
 
+      {:error, :out_of_scope} ->
+        {:noreply, put_flash(socket, :error, @read_only_owner)}
+
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply,
          socket
@@ -262,7 +271,7 @@ defmodule SsmWeb.KeysLive do
   end
 
   defp save_edit(socket, key, params) do
-    case Users.update_key(key, params) do
+    case Users.update_key(scope(socket), key, params) do
       {:ok, updated} ->
         log_key_activity(socket, "update", updated)
 
@@ -271,6 +280,9 @@ defmodule SsmWeb.KeysLive do
          |> assign(form: nil, editing: nil)
          |> put_flash(:info, "Key #{key_label(updated)} updated.")
          |> reload_keys()}
+
+      {:error, :out_of_scope} ->
+        {:noreply, put_flash(socket, :error, @read_only_owner)}
 
       {:error, changeset} ->
         {:noreply, assign(socket, form: to_form(changeset))}
@@ -324,7 +336,7 @@ defmodule SsmWeb.KeysLive do
   defp import_line(socket, line, n, user_id) do
     with {:ok, parsed} <- KeyParser.parse(line),
          {:ok, key} <-
-           Users.create_key(%{
+           Users.create_key(scope(socket), %{
              "user_id" => user_id,
              "key_type" => parsed.key_type,
              "key_base64" => parsed.key_base64,
@@ -335,6 +347,9 @@ defmodule SsmWeb.KeysLive do
     else
       {:error, %Ecto.Changeset{} = changeset} ->
         %{line: n, status: :error, message: import_error(changeset)}
+
+      {:error, :out_of_scope} ->
+        %{line: n, status: :error, message: "owner has access outside your scope (read-only)"}
 
       {:error, reason} when is_binary(reason) ->
         %{line: n, status: :error, message: reason}
@@ -348,6 +363,10 @@ defmodule SsmWeb.KeysLive do
       nil -> "could not be saved"
     end
   end
+
+  # The catalog is readable in full; keys change only for owners whose
+  # authorizations are all in the user's scope (ADR-0012 §3).
+  defp scope(socket), do: Ssm.Scope.of(socket.assigns.current_user)
 
   ## Filtering & stats
 

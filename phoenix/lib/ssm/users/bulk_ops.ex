@@ -36,6 +36,18 @@ defmodule Ssm.Users.BulkOps do
   ## Split
 
   @doc """
+  `split_user/3` for a web user (ADR-0012 §3): the user must be
+  `Ssm.Users.writable?/2` in `scope`, else `{:error, :out_of_scope}`.
+  """
+  @spec split_user(Ssm.Scope.t(), User.t(), String.t(), [integer()]) ::
+          {:ok, split_result()} | {:error, term()}
+  def split_user(%Ssm.Scope{} = scope, %User{} = user, new_username, key_ids) do
+    if Ssm.Users.writable?(scope, user),
+      do: split_user(user, new_username, key_ids),
+      else: {:error, :out_of_scope}
+  end
+
+  @doc """
   Moves the keys in `key_ids` from `user` to a freshly created user named
   `new_username` and copies **all** of the original user's authorizations to
   the new user. At least one key must remain with the original user.
@@ -91,6 +103,20 @@ defmodule Ssm.Users.BulkOps do
   end
 
   ## Merge
+
+  @doc """
+  `merge_users/2` for a web user: every source user and an existing target
+  must be `Ssm.Users.writable?/2` in `scope`, else `{:error, :out_of_scope}`.
+  """
+  @spec merge_users(Ssm.Scope.t(), [User.t()], User.t() | map()) ::
+          {:ok, merge_result()} | {:error, term()}
+  def merge_users(%Ssm.Scope{} = scope, users, target) do
+    involved = if match?(%User{}, target), do: [target | users], else: users
+
+    if Enum.all?(involved, &Ssm.Users.writable?(scope, &1)),
+      do: merge_users(users, target),
+      else: {:error, :out_of_scope}
+  end
 
   @doc """
   Merges `users` into a target. The target is either one of the passed users
@@ -224,6 +250,17 @@ defmodule Ssm.Users.BulkOps do
   end
 
   ## Bulk delete
+
+  @doc """
+  `bulk_delete/1` for a web user: users that are not `Ssm.Users.writable?/2`
+  in `scope` are kept and reported as `{user, :out_of_scope}` failures.
+  """
+  @spec bulk_delete(Ssm.Scope.t(), [User.t()]) :: bulk_delete_result()
+  def bulk_delete(%Ssm.Scope{} = scope, users) do
+    {writable, refused} = Enum.split_with(users, &Ssm.Users.writable?(scope, &1))
+    result = bulk_delete(writable)
+    %{result | failed: result.failed ++ Enum.map(refused, &{&1, :out_of_scope})}
+  end
 
   @doc """
   Deletes every user in `users` (cascading keys and authorizations), one

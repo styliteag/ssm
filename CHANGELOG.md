@@ -22,6 +22,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   like a missing one. Hosts without a customer or group are visible only with
   `*` in that dimension. `.htpasswd` admins, SSO admins, `/api/v2` tokens and
   the Mission Control API stay global.
+- A scoped account still sees every SSH user and key, but changes a user or its
+  keys (edit, enable/disable, delete, add or import keys, split, merge, bulk
+  delete, "Assign unknown key" on the diff page) only when all of that user's
+  authorizations are on hosts in its scope; a key change reaches every host of
+  the user. Other SSH users are read-only for it. New SSH users can still be
+  created.
 
 ### Added
 

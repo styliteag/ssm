@@ -508,7 +508,7 @@ defmodule SsmWeb.DiffLive do
     if Authorizations.exists?(user.id, host.id, login) do
       {:noreply, put_flash(socket, :info, "#{user.username} already holds this grant.")}
     else
-      case Authorizations.create_authorization(%{
+      case Authorizations.create_authorization(Ssm.Scope.of(socket.assigns.current_user), %{
              user_id: user.id,
              host_id: host.id,
              login: login
@@ -558,7 +558,8 @@ defmodule SsmWeb.DiffLive do
         key_name: unknown.key_name,
         parsed: unknown.parsed,
         host_id: host.id,
-        login: unknown.login
+        login: unknown.login,
+        scope: Ssm.Scope.of(socket.assigns.current_user)
       })
 
     case result do

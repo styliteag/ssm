@@ -104,7 +104,11 @@ global for `/api/v2`, the mctl contract and background jobs. Every LiveView pass
 `Scope.of(current_user)`; an out-of-scope id acts as a missing one ("not found"). Scoped users
 cannot create hosts or pin all host keys; only admins set `jump_via` (jump hosts are global).
 Activity entries of a host carry `activity_log.host_id` (cleared by `Hosts.delete_host/1`, SQLite
-reuses ids); a scoped user sees those of hosts in scope plus its own. `test/ssm_web/scope_live_test.exs`
+reuses ids); a scoped user sees those of hosts in scope plus its own. SSH user catalog: every web user
+reads all SSH users and keys; a scoped user changes a user, its keys, split/merge/bulk delete and
+diff-page key assignment only for SSH users that are `Users.writable?/2` (all authorizations in
+scope, none counts) — scoped writes in `Users`, `BulkOps` and `KeyAssignment` (`:scope`) return
+`{:error, :out_of_scope}` otherwise; creating SSH users stays allowed. `test/ssm_web/scope_live_test.exs`
 enumerates every LiveView route: a new page fails the suite until it is classified there.
 
 **Host keys** (ADR-0008, `lib/ssm/ssh/host_key*.ex`, `lib/ssm/hosts/host_keys.ex`):

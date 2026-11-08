@@ -79,7 +79,9 @@ defmodule SsmWeb.UsersLive do
         {:noreply, put_flash(socket, :error, "User not found.")}
 
       user ->
-        {:noreply, assign(socket, form: to_form(Users.change_user(user)), editing: user)}
+        if Users.writable?(scope(socket), user),
+          do: {:noreply, assign(socket, form: to_form(Users.change_user(user)), editing: user)},
+          else: {:noreply, put_flash(socket, :error, bulk_error(:out_of_scope))}
     end
   end
 
@@ -101,7 +103,7 @@ defmodule SsmWeb.UsersLive do
     result =
       case socket.assigns.editing do
         nil -> Users.create_user(params)
-        user -> Users.update_user(user, params)
+        user -> Users.update_user(scope(socket), user, params)
       end
 
     case result do
@@ -115,6 +117,9 @@ defmodule SsmWeb.UsersLive do
          |> put_flash(:info, "User #{user.username} #{action}d.")
          |> reload_users()}
 
+      {:error, :out_of_scope} ->
+        {:noreply, put_flash(socket, :error, bulk_error(:out_of_scope))}
+
       {:error, changeset} ->
         {:noreply, assign(socket, form: to_form(changeset))}
     end
@@ -122,7 +127,7 @@ defmodule SsmWeb.UsersLive do
 
   def handle_event("delete", %{"id" => id}, socket) do
     with %User{} = user <- Users.get_user(String.to_integer(id)),
-         {:ok, _} <- Users.delete_user(user) do
+         {:ok, _} <- Users.delete_user(scope(socket), user) do
       log_user_activity(socket, "delete", user)
 
       {:noreply,
@@ -130,13 +135,14 @@ defmodule SsmWeb.UsersLive do
        |> put_flash(:info, "User #{user.username} deleted.")
        |> reload_users()}
     else
+      {:error, :out_of_scope} -> {:noreply, put_flash(socket, :error, bulk_error(:out_of_scope))}
       _ -> {:noreply, put_flash(socket, :error, "User not found.")}
     end
   end
 
   def handle_event("toggle_enabled", %{"id" => id}, socket) do
     with %User{} = user <- Users.get_user(String.to_integer(id)),
-         {:ok, updated} <- Users.update_user(user, %{enabled: !user.enabled}) do
+         {:ok, updated} <- Users.update_user(scope(socket), user, %{enabled: !user.enabled}) do
       action = if updated.enabled, do: "enable", else: "disable"
       log_user_activity(socket, action, updated)
 
@@ -145,6 +151,7 @@ defmodule SsmWeb.UsersLive do
        |> put_flash(:info, "User #{updated.username} #{action}d.")
        |> reload_users()}
     else
+      {:error, :out_of_scope} -> {:noreply, put_flash(socket, :error, bulk_error(:out_of_scope))}
       _ -> {:noreply, put_flash(socket, :error, "User not found.")}
     end
   end
@@ -180,11 +187,16 @@ defmodule SsmWeb.UsersLive do
   ## Events: split keys
 
   def handle_event("split-open", %{"id" => id}, socket) do
-    case Users.get_user(String.to_integer(id)) do
-      nil ->
+    user = Users.get_user(String.to_integer(id))
+
+    cond do
+      is_nil(user) ->
         {:noreply, put_flash(socket, :error, "User not found.")}
 
-      user ->
+      not Users.writable?(scope(socket), user) ->
+        {:noreply, put_flash(socket, :error, bulk_error(:out_of_scope))}
+
+      true ->
         {:noreply,
          assign(socket, :splitting, %{
            user: user,
@@ -216,7 +228,12 @@ defmodule SsmWeb.UsersLive do
   def handle_event("split-save", _params, socket) do
     %{user: user, username: username, selected_keys: selected_keys} = socket.assigns.splitting
 
-    case BulkOps.split_user(user, String.trim(username), MapSet.to_list(selected_keys)) do
+    case BulkOps.split_user(
+           scope(socket),
+           user,
+           String.trim(username),
+           MapSet.to_list(selected_keys)
+         ) do
       {:ok, result} ->
         log_split(socket, user, result)
 
@@ -270,7 +287,7 @@ defmodule SsmWeb.UsersLive do
     merging = socket.assigns.merging
     users = Enum.map(merging.rows, & &1.user)
 
-    case BulkOps.merge_users(users, merge_target(merging, users)) do
+    case BulkOps.merge_users(scope(socket), users, merge_target(merging, users)) do
       {:ok, result} ->
         log_merge(socket, result)
 
@@ -299,7 +316,7 @@ defmodule SsmWeb.UsersLive do
       socket
       |> selected_rows()
       |> Enum.map(& &1.user)
-      |> BulkOps.bulk_delete()
+      |> then(&BulkOps.bulk_delete(scope(socket), &1))
 
     Enum.each(result.deleted, &log_user_activity(socket, "delete", &1))
 
@@ -323,6 +340,10 @@ defmodule SsmWeb.UsersLive do
   end
 
   ## Helpers
+
+  # The SSH user catalog is readable in full; writes need a user whose
+  # authorizations are all in the user's scope (ADR-0012 §3, `Users.writable?/2`).
+  defp scope(socket), do: Ssm.Scope.of(socket.assigns.current_user)
 
   defp parse_id(nil), do: nil
 
@@ -362,6 +383,11 @@ defmodule SsmWeb.UsersLive do
       "#{result.moved_keys} key(s) moved, #{result.copied_authorizations} authorization(s) " <>
       "copied, #{result.skipped_authorizations} duplicate(s) skipped."
   end
+
+  defp bulk_error(:out_of_scope),
+    do:
+      "Read-only: this SSH user has access outside your scope (customers and host groups), " <>
+        "so its keys and settings can only be changed by an account that sees all its hosts."
 
   defp bulk_error(:no_keys_selected), do: "Select at least one key to move."
   defp bulk_error(:keys_not_owned), do: "Selected keys no longer belong to this user."

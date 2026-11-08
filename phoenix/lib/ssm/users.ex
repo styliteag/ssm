@@ -2,6 +2,13 @@ defmodule Ssm.Users do
   @moduledoc """
   Managed key owners and their public keys — the context behind
   `/api/v2/users` and `/api/v2/keys` (Users + Keys pages).
+
+  The SSH user catalog is readable in full by every web user (ADR-0012 §3).
+  Writes that take an `Ssm.Scope` first serve the web UI: they change a
+  user or its keys only when the user is `writable?/2` – every one of its
+  authorizations is on a host in scope, because a key change lands on every
+  host of that user. Otherwise `{:error, :out_of_scope}`. The scope-less
+  writes stay global (`/api/v2`, mctl contract).
   """
 
   import Ecto.Query
@@ -18,6 +25,25 @@ defmodule Ssm.Users do
   @spec get_user(integer()) :: User.t() | nil
   def get_user(id), do: Repo.get(User, id)
 
+  @doc """
+  May a user with `scope` change this SSH user (or user id) and its keys?
+  True when none of its authorizations is on a host outside the scope (a
+  user without authorizations is writable). Grants of deleted hosts count
+  as outside.
+  """
+  @spec writable?(Ssm.Scope.t(), User.t() | integer()) :: boolean()
+  def writable?(%Ssm.Scope{} = scope, %User{id: id}), do: writable?(scope, id)
+
+  def writable?(%Ssm.Scope{} = scope, user_id) when is_integer(user_id) do
+    Ssm.Scope.global?(scope) or
+      not Repo.exists?(
+        from a in Authorization,
+          where: a.user_id == ^user_id and a.host_id not in subquery(Ssm.Scope.host_ids(scope))
+      )
+  end
+
+  def writable?(_scope, _user_id), do: false
+
   @spec create_user(map()) :: {:ok, User.t()} | {:error, Ecto.Changeset.t()}
   def create_user(attrs), do: %User{} |> User.changeset(attrs) |> Repo.insert()
 
@@ -26,6 +52,18 @@ defmodule Ssm.Users do
 
   @spec delete_user(User.t()) :: {:ok, User.t()} | {:error, Ecto.Changeset.t()}
   def delete_user(%User{} = user), do: Repo.delete(user)
+
+  @doc "`update_user/2` for a web user: only a `writable?/2` user."
+  @spec update_user(Ssm.Scope.t(), User.t(), map()) ::
+          {:ok, User.t()} | {:error, Ecto.Changeset.t() | :out_of_scope}
+  def update_user(%Ssm.Scope{} = scope, %User{} = user, attrs),
+    do: if(writable?(scope, user), do: update_user(user, attrs), else: {:error, :out_of_scope})
+
+  @doc "`delete_user/1` for a web user: only a `writable?/2` user."
+  @spec delete_user(Ssm.Scope.t(), User.t()) ::
+          {:ok, User.t()} | {:error, Ecto.Changeset.t() | :out_of_scope}
+  def delete_user(%Ssm.Scope{} = scope, %User{} = user),
+    do: if(writable?(scope, user), do: delete_user(user), else: {:error, :out_of_scope})
 
   @spec change_user(User.t(), map()) :: Ecto.Changeset.t()
   def change_user(%User{} = user, attrs \\ %{}), do: User.changeset(user, attrs)
@@ -120,6 +158,34 @@ defmodule Ssm.Users do
 
   @spec delete_key(UserKey.t()) :: {:ok, UserKey.t()} | {:error, Ecto.Changeset.t()}
   def delete_key(%UserKey{} = key), do: Repo.delete(key)
+
+  @doc "`create_key/1` for a web user: the owner must be `writable?/2`."
+  @spec create_key(Ssm.Scope.t(), map()) ::
+          {:ok, UserKey.t()} | {:error, Ecto.Changeset.t() | :out_of_scope}
+  def create_key(%Ssm.Scope{} = scope, attrs) do
+    owner = %UserKey{} |> UserKey.changeset(attrs) |> Ecto.Changeset.get_field(:user_id)
+
+    if is_nil(owner) or writable?(scope, owner),
+      do: create_key(attrs),
+      else: {:error, :out_of_scope}
+  end
+
+  @doc "`update_key/2` for a web user: the old and the new owner must be `writable?/2`."
+  @spec update_key(Ssm.Scope.t(), UserKey.t(), map()) ::
+          {:ok, UserKey.t()} | {:error, Ecto.Changeset.t() | :out_of_scope}
+  def update_key(%Ssm.Scope{} = scope, %UserKey{} = key, attrs) do
+    new_owner = key |> UserKey.changeset(attrs) |> Ecto.Changeset.get_field(:user_id)
+
+    if writable?(scope, key.user_id) and writable?(scope, new_owner),
+      do: update_key(key, attrs),
+      else: {:error, :out_of_scope}
+  end
+
+  @doc "`delete_key/1` for a web user: the owner must be `writable?/2`."
+  @spec delete_key(Ssm.Scope.t(), UserKey.t()) ::
+          {:ok, UserKey.t()} | {:error, Ecto.Changeset.t() | :out_of_scope}
+  def delete_key(%Ssm.Scope{} = scope, %UserKey{} = key),
+    do: if(writable?(scope, key.user_id), do: delete_key(key), else: {:error, :out_of_scope})
 
   @spec change_key(UserKey.t(), map()) :: Ecto.Changeset.t()
   def change_key(%UserKey{} = key, attrs \\ %{}), do: UserKey.changeset(key, attrs)

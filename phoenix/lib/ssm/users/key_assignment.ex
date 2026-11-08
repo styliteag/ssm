@@ -6,6 +6,10 @@ defmodule Ssm.Users.KeyAssignment do
   found under. User, key and grant are written in one transaction, so a
   failure (e.g. a taken user name) leaves nothing behind. Database only: the
   host itself changes with a later sync.
+
+  With `:scope` (web UI, ADR-0012 §3; default global) an existing user must
+  be `Ssm.Users.writable?/2` – the new key lands on every host of that user –
+  and the grant's host must be in scope.
   """
 
   alias Ecto.Changeset
@@ -72,7 +76,15 @@ defmodule Ssm.Users.KeyAssignment do
     end
   end
 
-  defp ensure_user(%{user: %User{} = user}), do: {:ok, user, false}
+  defp ensure_user(%{user: %User{} = user} = params) do
+    if Users.writable?(scope(params), user),
+      do: {:ok, user, false},
+      else:
+        {:error,
+         {:key, "#{user.username} has access outside your scope; its keys are read-only."}}
+  end
+
+  defp scope(params), do: Map.get(params, :scope, Ssm.Scope.global())
 
   # A key that already exists in the DB (assigned to someone) is adopted
   # as it is instead of failing.
@@ -104,11 +116,11 @@ defmodule Ssm.Users.KeyAssignment do
     end
   end
 
-  defp grant(user, %{host_id: host_id, login: login}) do
+  defp grant(user, %{host_id: host_id, login: login} = params) do
     if Authorizations.exists?(user.id, host_id, login) do
       {:ok, false}
     else
-      case Authorizations.create_authorization(%{
+      case Authorizations.create_authorization(scope(params), %{
              user_id: user.id,
              host_id: host_id,
              login: login
