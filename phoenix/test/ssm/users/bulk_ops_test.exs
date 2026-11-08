@@ -31,6 +31,28 @@ defmodule Ssm.Users.BulkOpsTest do
       assert Authorizations.exists?(user.id, host.id, "deploy")
     end
 
+    test "skips a stored authorization whose host no longer exists (legacy orphan)" do
+      user = user_fixture(%{username: "wim"})
+      _keep = key_fixture(user)
+      move = key_fixture(user)
+      host = host_fixture()
+      _auth = authorization_fixture(user, host, %{login: "deploy"})
+
+      # a Diesel-era DB kept rows of deleted hosts (no FK enforcement then);
+      # deferred FKs let the test plant one inside the sandbox transaction
+      Ssm.Repo.query!("PRAGMA defer_foreign_keys = ON")
+
+      Ssm.Repo.query!(
+        ~s{INSERT INTO "authorization" (user_id, host_id, login) VALUES (?1, 999999, 'root')},
+        [user.id]
+      )
+
+      assert {:ok, result} = BulkOps.split_user(user, "wim copy", [move.id])
+      assert result.copied_authorizations == 1
+      assert Authorizations.exists?(result.new_user.id, host.id, "deploy")
+      refute Authorizations.exists?(result.new_user.id, 999_999, "root")
+    end
+
     test "refuses to take every key" do
       user = user_fixture()
       only = key_fixture(user)

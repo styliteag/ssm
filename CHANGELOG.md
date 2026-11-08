@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Splitting or merging SSH users no longer crashes on an authorization whose host was
+  deleted long ago (left behind by an older database without foreign keys): such rows
+  are not copied.
+
 ## [4.12.0] - 2026-11-08
 
 ### Added

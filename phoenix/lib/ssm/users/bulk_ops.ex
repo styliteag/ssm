@@ -244,9 +244,12 @@ defmodule Ssm.Users.BulkOps do
     seen = MapSet.new(target_auths, &fingerprint/1)
     taken = MapSet.new(target_auths, &{&1.host_id, &1.login})
 
+    # inner join: a Diesel-era DB may still hold rows of deleted hosts (no FK
+    # enforcement then); copying one would fail the foreign key
     source_auths =
       repo.all(
         from a in Authorization,
+          join: h in assoc(a, :host),
           where: a.user_id in ^source_ids and is_nil(a.grant_id),
           order_by: a.id
       )
