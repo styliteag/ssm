@@ -109,6 +109,14 @@ login_home() {
     do_getent_passwd "$1" | cut -d: -f6
 }
 
+# Home of a login with every symlink resolved (pwd -P), else the getent
+# field as it is; "" for an unknown login.
+resolved_home() {
+    home=$(login_home "$1")
+    [ -n "${home}" ] || return 0
+    (cd "${home}" 2>/dev/null && pwd -P) || printf "%s\n" "${home}"
+}
+
 # "ssh_dir" when the login's ~/.ssh is a symlink or does not resolve to the
 # .ssh directory inside its (resolved) home, else "". A home that is itself
 # reached through a symlink (FreeBSD /home -> /usr/home) is fine.
@@ -299,6 +307,18 @@ handle_set_authorized_keyfile() {
     if [ -n "${readonly_condition}" ]; then
         echo "Keyfile is readonly, aborting."
         exit 1
+    fi
+
+    # A login that is not the SSH user ($2, the login ssm connects with) but
+    # resolves to its home (a uid-0 alias such as toor in root's home) would
+    # replace the file that holds ssm's own key: refused, never managed.
+    ssh_user="${2:-}"
+    if [ -n "${ssh_user}" ] && [ "${ssh_user}" != "${login}" ]; then
+        own_home=$(resolved_home "${ssh_user}")
+        if [ -n "${own_home}" ] && [ "$(resolved_home "${login}")" = "${own_home}" ]; then
+            echo "Keyfile is unsafe (shared_home), aborting."
+            exit 1
+        fi
     fi
 
     # a login without ~/.ssh gets one (never through a link)

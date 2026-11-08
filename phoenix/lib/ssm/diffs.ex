@@ -16,6 +16,13 @@ defmodule Ssm.Diffs do
   of that login always writes it – otherwise the first sync would lock ssm
   out (onboarding v2 installs it into `~root/.ssh/authorized_keys`). When
   the own key cannot be read, a sync that would write that login is refused.
+
+  Alias logins: the own key is placed by login name, so a login that is
+  not `host.username` but resolves to its home (a uid-0 alias such as
+  `toor` sharing root's home) is never managed — `script.sh` refuses the
+  write (`unsafe (shared_home)`) and a sync skips it. Placing the key by
+  home instead would keep ssm's key, but the two logins would still
+  replace each other's grants in their one file on every sync.
   """
 
   alias Ssm.Diffs.{Compare, Expected, KeyLine}
@@ -265,6 +272,7 @@ defmodule Ssm.Diffs do
     case Regex.run(~r/unsafe \(([^)]+)\)/, message) do
       [_, "ssh_dir"] -> @ssh_dir_blocked
       [_, "home"] -> "no usable home (missing or a symlink)"
+      [_, "shared_home"] -> "not managed: shares the SSH user's home (ssm's own key)"
       [_, kind] -> "unsafe: " <> kind
       nil -> "unsafe"
     end

@@ -154,11 +154,18 @@ defmodule Ssm.Ssh.ScriptRunner do
   Replace `login`'s authorized_keys with `content`. The script enforces the
   readonly sentinel itself; its refusal surfaces as `{:error, {:ssh_readonly,
   reason}}`.
+
+  The SSH user (`target.username`) is passed along: the script refuses a
+  login that is not the SSH user but resolves to its home (a uid-0 alias
+  like `toor` in root's home) — `Keyfile is unsafe (shared_home)` — since
+  that file holds ssm's own key.
   """
   @spec set_authorized_keyfile(module(), Target.t(), String.t(), String.t()) ::
           :ok | {:error, term()}
   def set_authorized_keyfile(client \\ Ssm.Ssh, target, login, content) do
-    command = "sh #{Shell.quote(@remote_path)} set_authorized_keyfile #{Shell.quote(login)}"
+    command =
+      "sh #{Shell.quote(@remote_path)} set_authorized_keyfile #{Shell.quote(login)} " <>
+        Shell.quote(target.username || "")
 
     with :ok <- ensure_uploaded(client, target),
          {:ok, %Result{} = result} <- client.exec(target, command, input: content) do

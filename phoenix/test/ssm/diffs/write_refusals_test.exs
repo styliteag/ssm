@@ -44,7 +44,7 @@ defmodule Ssm.Diffs.WriteRefusalsTest do
     grant(host, "aaa", "HOME1")
     grant(host, "zzz", "HOME2")
     stub_host(host, [])
-    refuse(host, "sh .ssm/script.sh set_authorized_keyfile aaa", "home")
+    refuse(host, "sh .ssm/script.sh set_authorized_keyfile aaa ssm-admin", "home")
 
     assert {{:error, {:ssh_readonly, message}}, report} =
              Diffs.sync_host_reported(MockClient, host.id)
@@ -52,5 +52,22 @@ defmodule Ssm.Diffs.WriteRefusalsTest do
     assert [{"aaa", "no usable home (missing or a symlink)"}] = report.skipped
     assert message =~ "no usable home"
     assert Enum.map(report.written, & &1.login) == ["zzz"]
+  end
+
+  test "a login sharing the SSH user's home is skipped: never managed" do
+    host = host_fixture(%{username: "root"})
+    grant(host, "root", "ROOT1")
+    grant(host, "toor", "TOOR1")
+    stub_host(host, [])
+    refuse(host, "sh .ssm/script.sh set_authorized_keyfile toor root", "shared_home")
+
+    assert {{:error, {:ssh_readonly, message}}, report} =
+             Diffs.sync_host_reported(MockClient, host.id)
+
+    assert [{"toor", "not managed: shares the SSH user's home (ssm's own key)"}] =
+             report.skipped
+
+    assert message =~ "shares the SSH user's home"
+    assert Enum.map(report.written, & &1.login) == ["root"]
   end
 end

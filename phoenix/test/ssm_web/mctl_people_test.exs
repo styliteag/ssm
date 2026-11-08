@@ -83,8 +83,9 @@ defmodule SsmWeb.MctlPeopleTest do
   end
 
   defp writes(host_id) do
-    for {^host_id, "sh .ssm/script.sh set_authorized_keyfile " <> login, input} <-
+    for {^host_id, "sh .ssm/script.sh set_authorized_keyfile " <> args, input} <-
           MockClient.calls().exec_inputs,
+        [login, "root"] = String.split(args, " "),
         do: {login, input}
   end
 

@@ -113,7 +113,7 @@ defmodule SsmWeb.Api.DiffsApiTest do
       %{login: "deploy", has_pragma: true, readonly_condition: nil, keyfile: ""}
     ])
 
-    MockClient.set_exec(host.id, "sh .ssm/script.sh set_authorized_keyfile deploy", %Result{
+    MockClient.set_exec(host.id, "sh .ssm/script.sh set_authorized_keyfile deploy root", %Result{
       stderr: "readonly: system_readonly set",
       exit_code: 1
     })

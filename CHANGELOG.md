@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- ssm no longer writes the `authorized_keys` of a login that shares the home of the
+  host's SSH login (for example a uid-0 alias such as `toor` in root's home). Such a
+  write replaced the file that holds ssm's own key, so a grant for the alias could lock
+  ssm out of the host and wipe root's keys. A sync now skips that login with "not
+  managed: shares the SSH user's home"; manage the keys under the SSH login instead.
+
 ### Fixed
 
 - A sync no longer fails with "Directory nonexistent" for a login whose home has no
