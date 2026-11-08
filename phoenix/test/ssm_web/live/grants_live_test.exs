@@ -103,6 +103,19 @@ defmodule SsmWeb.GrantsLiveTest do
     assert Repo.get(Authorization, row.id)
   end
 
+  test "a reconcile after a manual delete is audited with the web user", %{conn: conn} = ctx do
+    manual = authorization_fixture(ctx.alice, ctx.host, %{login: "deploy"})
+    admin_grant(ctx)
+
+    {:ok, lv, _} = live(conn, ~p"/authorizations")
+    lv |> element("#delete-authorization-#{manual.id}") |> render_click()
+
+    [entry] = Repo.all(from l in Ssm.Activity.ActivityLog, where: l.action == "grant_add")
+    assert entry.actor_username == "admin"
+    assert Jason.decode!(entry.meta)["trigger"] == "authorization_delete"
+    assert Ssm.Diffs.Revocations.pending?(ctx.host.id)
+  end
+
   test "the Users page links each user's grants", %{conn: conn} = ctx do
     admin_grant(ctx)
     {:ok, lv, _} = live(conn, ~p"/users")

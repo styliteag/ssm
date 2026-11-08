@@ -12,16 +12,20 @@ defmodule Ssm.Diffs.SyncAudit do
 
   @max_text 500
 
-  @doc "Log the outcome for `host` (name and id) and return the sync result unchanged."
-  @spec log(String.t(), Ssm.Hosts.Host.t(), {term(), map()}) :: term()
-  def log(actor, %Ssm.Hosts.Host{} = host, {result, report}) do
+  @doc """
+  Log the outcome for `host` (name and id) and return the sync result
+  unchanged. `extra` is merged into the details (the removal-only sync adds
+  `mode: "removal_only"`).
+  """
+  @spec log(String.t(), Ssm.Hosts.Host.t(), {term(), map()}, map()) :: term()
+  def log(actor, %Ssm.Hosts.Host{} = host, {result, report}, extra \\ %{}) do
     Activity.log(%{
       activity_type: "host",
       action: action(result, report),
       target: host.name,
       host_id: host.id,
       actor_username: actor,
-      details: details(result, report)
+      details: Map.merge(details(result, report), extra)
     })
 
     result

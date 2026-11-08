@@ -23,6 +23,7 @@ defmodule Ssm.Grants do
 
   alias Ssm.Activity
   alias Ssm.Customers.Customer
+  alias Ssm.Diffs.RevocationSync
   alias Ssm.Grants.{Expansion, Grant}
   alias Ssm.Groups.Group
   alias Ssm.{Repo, Scope}
@@ -32,13 +33,42 @@ defmodule Ssm.Grants do
   @type actor :: %{role: String.t(), scope: Scope.t(), actor: String.t()}
 
   @doc """
-  Run `fun` in a transaction that takes SQLite's write lock at BEGIN
-  (`mode: :immediate`); inside an open transaction it joins that one
-  (Ecto nesting). Returns `{:ok, value}` or `{:error, reason}`
-  (`Repo.rollback/1`).
+  Run `fun` (or an `Ecto.Multi`) in a transaction that takes SQLite's write
+  lock at BEGIN (`mode: :immediate`); inside an open transaction it joins
+  that one (Ecto nesting). Returns what `Repo.transaction/2` returns.
+
+  The outermost call hands the hosts marked "revocation pending" during the
+  transaction to `Ssm.Diffs.RevocationSync` after a commit, and drops them
+  after a rollback.
   """
-  @spec transaction((-> term())) :: {:ok, term()} | {:error, term()}
-  def transaction(fun), do: Repo.transaction(fun, mode: :immediate)
+  @spec transaction((-> term()) | Ecto.Multi.t()) :: term()
+  def transaction(fun_or_multi) do
+    if Repo.in_transaction?() do
+      Repo.transaction(fun_or_multi, mode: :immediate)
+    else
+      try do
+        result = Repo.transaction(fun_or_multi, mode: :immediate)
+        if match?({:ok, _}, result), do: RevocationSync.flush()
+        result
+      after
+        RevocationSync.discard()
+      end
+    end
+  end
+
+  @doc """
+  The web or API user behind the current process (set by `SsmWeb.UserAuth`
+  for LiveViews and by the `/api/v2` auth plug), used as the audit actor of
+  reconciles that follow a manual change; nil elsewhere.
+  """
+  @spec put_actor(String.t() | nil) :: :ok
+  def put_actor(actor) do
+    Process.put({__MODULE__, :actor}, actor)
+    :ok
+  end
+
+  @spec actor() :: String.t() | nil
+  def actor, do: Process.get({__MODULE__, :actor})
 
   @doc "Grants visible to `scope` (`opts`: `:ssh_user_id`, `:customer_id`, `:group_id`)."
   @spec list_grants(Scope.t(), keyword()) :: [Grant.t()]
@@ -337,7 +367,7 @@ defmodule Ssm.Grants do
       action: action,
       target: "#{grant.ssh_user.username}@#{target}:#{grant.login}",
       user_id: if(action == "grant_create", do: grant.ssh_user_id),
-      actor_username: Map.get(actor, :actor, "ssm"),
+      actor_username: Map.get(actor, :actor) || actor() || "ssm",
       details: %{
         grant_id: grant.id,
         target: target,

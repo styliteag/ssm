@@ -67,7 +67,7 @@ defmodule Ssm.Users.BulkOps do
     |> Multi.run(:authorizations, fn repo, %{new_user: new_user} ->
       copy_authorizations(repo, [user.id], new_user.id)
     end)
-    |> Repo.transaction()
+    |> Ssm.Grants.transaction()
     |> case do
       {:ok, changes} ->
         {moved, _} = changes.move_keys
@@ -156,7 +156,7 @@ defmodule Ssm.Users.BulkOps do
       copy_authorizations(repo, source_ids, target.id)
     end)
     |> Multi.run(:deleted_users, fn repo, _changes -> delete_sources(repo, sources) end)
-    |> Repo.transaction()
+    |> Ssm.Grants.transaction()
     |> case do
       {:ok, changes} ->
         {moved, _} = changes.move_keys

@@ -138,11 +138,28 @@ defmodule Ssm.Diffs do
   """
   @spec sync_host_reported(module(), integer()) ::
           {{:ok, [SyncedLogin.t()]} | {:error, term()}, map()}
-  def sync_host_reported(client \\ Ssm.Ssh, host_id) do
+  def sync_host_reported(client \\ Ssm.Ssh, host_id), do: run_sync(client, host_id, :full)
+
+  @doc """
+  Removal-only sync (ADR-0012 §6, `Ssm.Diffs.RevocationSync`): same checks
+  and reports as `sync_host_reported/2` (disabled host, readonly markers,
+  unsafe `~/.ssh`, own key), but each login's file keeps exactly the host's
+  own lines whose key the database still authorizes — lines are only
+  removed, never added or changed. A login without a file, or with nothing
+  to remove, is not written. A linked `authorized_keys` is not read, so
+  nothing can be removed from it: it is skipped (the sync then counts as
+  partial and "revocation pending" stays).
+  """
+  @spec removal_sync_reported(module(), integer()) ::
+          {{:ok, [SyncedLogin.t()]} | {:error, term()}, map()}
+  def removal_sync_reported(client \\ Ssm.Ssh, host_id),
+    do: run_sync(client, host_id, :removal_only)
+
+  defp run_sync(client, host_id, mode) do
     # before any read of the grants (ADR-0012 §6, Ssm.Diffs.Revocations.seen/1)
     revocation = Ssm.Diffs.Revocations.seen(host_id)
 
-    case prepare_sync(client, host_id) do
+    case prepare_sync(client, host_id, mode) do
       {:ok, %{host: host, logins: logins, target: target, ctx: ctx}} ->
         logins
         |> sync_logins(client, target, ctx, %{
@@ -158,7 +175,7 @@ defmodule Ssm.Diffs do
     end
   end
 
-  defp prepare_sync(client, host_id) do
+  defp prepare_sync(client, host_id, mode) do
     with {:ok, host} <- Hosts.fetch_host(host_id),
          :ok <- ensure_not_disabled(host),
          target = Hosts.target_for(host),
@@ -166,17 +183,42 @@ defmodule Ssm.Diffs do
          # no write when the files cannot be read
          {:ok, entries} <- ScriptRunner.get_ssh_keyfiles(client, target),
          on_host = Map.new(entries, &{&1.login, parse_authorized_keys(&1.keyfile)}),
-         logins = Expected.logins_to_sync(host_id, on_host),
+         logins = logins_for(mode, Expected.logins_to_sync(host_id, on_host), on_host),
          :ok <- ensure_no_host_readonly(host, entries, logins),
-         skipped = logins_to_skip(entries, logins),
+         skipped = logins_to_skip(entries, logins) ++ unread_logins(mode, entries, logins),
          to_write = logins -- Enum.map(skipped, &elem(&1, 0)),
          {:ok, own} <- own_key_for_sync(host, to_write) do
       ignored =
         for e <- entries, e.readonly_ignored, e.login in logins, do: {e.login, e.readonly_ignored}
 
-      ctx = %{host: host, own: own, on_host: on_host, skipped: skipped, ignored: ignored}
+      ctx = %{
+        host: host,
+        own: own,
+        on_host: on_host,
+        skipped: skipped,
+        ignored: ignored,
+        mode: mode
+      }
+
       {:ok, %{host: host, logins: to_write, target: target, ctx: ctx}}
     end
+  end
+
+  # a removal-only sync touches only logins that have a file on the host
+  defp logins_for(:full, logins, _on_host), do: logins
+
+  defp logins_for(:removal_only, logins, on_host),
+    do: Enum.filter(logins, &Map.has_key?(on_host, &1))
+
+  # a linked/special authorized_keys is not read: a removal-only sync cannot
+  # tell which lines to keep, so it does not write it (a full sync replaces it)
+  defp unread_logins(:full, _entries, _logins), do: []
+
+  defp unread_logins(:removal_only, entries, logins) do
+    for e <- entries,
+        e.login in logins,
+        is_binary(e.unsafe) and e.unsafe != "ssh_dir",
+        do: {e.login, "unsafe authorized_keys (#{e.unsafe}): not read, nothing removed"}
   end
 
   # identity-claims-v1: a successful sync proves the host reachable; refresh
@@ -242,6 +284,23 @@ defmodule Ssm.Diffs do
       |> Compare.lines_to_write(expected.legacy, Map.get(ctx.on_host, login, []))
       |> with_own_key(ctx.own[login])
 
+    case lines_for(ctx.mode, lines, Map.get(ctx.on_host, login, [])) do
+      :unchanged -> sync_logins(rest, client, target, ctx, acc)
+      lines -> write_login(lines, login, rest, client, target, ctx, acc, expected)
+    end
+  end
+
+  # removal-only: the host's own lines whose key is still authorized, in the
+  # host's order and wording; :unchanged when no line goes
+  defp lines_for(:full, lines, _on_host), do: lines
+
+  defp lines_for(:removal_only, lines, on_host) do
+    keep = MapSet.new(lines, &KeyParser.identity/1)
+    kept = Enum.filter(on_host, &MapSet.member?(keep, KeyParser.identity(&1)))
+    if length(kept) == length(on_host), do: :unchanged, else: kept
+  end
+
+  defp write_login(lines, login, rest, client, target, ctx, acc, expected) do
     content = Enum.map_join(lines, "", &(&1 <> "\n"))
 
     case ScriptRunner.set_authorized_keyfile(client, target, login, content) do

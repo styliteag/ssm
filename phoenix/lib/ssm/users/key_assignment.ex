@@ -58,7 +58,7 @@ defmodule Ssm.Users.KeyAssignment do
           {:ok, %{user: User.t(), key: UserKey.t(), user_created?: boolean, granted?: boolean}}
           | {:error, {atom(), String.t()}}
   def assign(%{} = params) do
-    Repo.transaction(fn ->
+    Ssm.Grants.transaction(fn ->
       with {:ok, user, created?} <- ensure_user(params),
            {:ok, key} <- create_or_adopt_key(user, params),
            {:ok, granted?} <- grant(user, params) do

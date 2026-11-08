@@ -27,18 +27,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - "Revocation pending" on the Hosts page: a host that lost access through a
   grant (grant deleted, host moved to another customer or out of a group,
   customer merged) keeps the removed keys until a sync succeeds there. The
-  mark clears after the next successful sync; ssm does not sync on its own.
+  mark clears after the next successful sync; without `SSM_REVOCATION_SYNC=on`
+  ssm does not sync on its own.
 - The activity log records grant create and delete, and every authorization a
   grant adds, removes or hands over to another grant (`grant_add`,
   `grant_remove`, `grant_move`) with the trigger, the grant id, the actor and
   the request id.
 - A periodic check (every 15 minutes) compares grants and authorizations and
   logs differences as warnings. It changes nothing.
+- `SSM_REVOCATION_SYNC=on` (default `off`) starts a removal-only sync right
+  after every change that removes access (grant deleted, host moved out of a
+  customer or group, authorization deleted, SSH user deleted, person
+  offboarded). It only removes key lines the database no longer authorizes:
+  it never adds or changes a line, writes only logins that have a file, and
+  skips disabled hosts, readonly markers, unsafe `~/.ssh` and linked
+  `authorized_keys` files like a normal sync. It clears "revocation pending"
+  only when it succeeds completely, and each run is in the activity log as
+  `ssm (revocation sync)` with `mode: removal_only`. With `off`, nothing is
+  written automatically; the badge stays until a manual sync.
 
 ### Changed
 
 - Splitting or merging SSH users copies only manual authorizations. Grants
   stay with their SSH user; a merged user's grants are deleted with it.
+- Deleting an authorization now also marks its host "revocation pending" until
+  the next successful sync.
+- Activity-log entries of grant reconciles that follow a change in the web UI
+  or `/api/v2` name the user who made the change instead of `ssm`.
+- Every write that can change authorizations (bulk grant, key assignment,
+  split, merge, host delete) takes the database write lock at its start, so
+  concurrent writers wait instead of failing.
 - Deleting an SSH user, merging it into another, or removing a person through
   Mission Control (offboarding) also deletes the user's grants, also when the
   removal names single hosts: a kept grant would bring the access back. Each

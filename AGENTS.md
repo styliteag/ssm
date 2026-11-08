@@ -54,9 +54,18 @@ merge/delete/rename and group delete/rename, manual row update/delete) runs
 `Expansion.reconcile/2` — a full, idempotent per-host reconcile — in its own IMMEDIATE transaction
 (`Ssm.Grants.transaction/1`). A manual row wins; grant rows are read-only (`{:error, :grant_row}`,
 API 409 `CONFLICT`). Rows a reconcile removes mark the host in `pending_revocations`
-(`Ssm.Diffs.Revocations`, Hosts page badge) until a fully successful `sync_host` that started after
-the mark; nothing syncs automatically. Audit: `grant_create|grant_delete`,
-`grant_add|grant_remove|grant_move` (trigger, `grant_id`, `job_id`, `request_id`).
+(`Ssm.Diffs.Revocations`, Hosts page badge; also a deleted manual row) until a fully successful sync
+clears exactly the mark it read at its start. `SSM_REVOCATION_SYNC=on` (default off) adds the
+removal-only sync (`Ssm.Diffs.RevocationSync`, `Diffs.removal_sync_reported/2`): marks made in a
+transaction are collected per process and started by the outermost `Ssm.Grants.transaction/1` after
+commit (dropped on rollback), async under `Ssm.Diffs.TaskSupervisor`, one per host (`:global.trans`);
+it keeps the host's own lines whose key is still authorized, never adds, skips logins without a file
+and unread (linked) files, honours disabled/readonly/unsafe/own-key; audited as `ssm (revocation
+sync)`, `mode: removal_only`. Tests: `config :ssm, :revocation_sync_runner, :inline`. Every outer
+transaction that touches authorizations uses `Ssm.Grants.transaction/1` (IMMEDIATE). Audit:
+`grant_create|grant_delete`, `grant_add|grant_remove|grant_move` (trigger, `grant_id`, `job_id`,
+`request_id`); the actor is the ctx actor, else the process actor (`Ssm.Grants.put_actor/1`, set by
+`UserAuth` on LiveView mount and by the `/api/v2` auth plug), else `ssm`.
 `Ssm.Grants.DriftCheck` logs drift every 15 min (`config :ssm, :grants_drift_check`, off in tests).
 Who may create: admin any; operator only targets in its scope (`{:error, :out_of_scope}`); others
 `{:error, :forbidden}`. Migration `20261109100000` has no `down` (SQLite cannot drop an FK column).
@@ -373,7 +382,7 @@ secret as the python stack, so pre-cutover tokens keep working.
 **Env vars** (env-only, read in `phoenix/config/runtime.exs`; python-stack names and
 defaults preserved): `DATABASE_URL` (or `DATABASE_PATH`), `HTPASSWD`, `SSH_KEY`,
 `SSH_KEY_PASSPHRASE`, `SSH_TIMEOUT`, `SSH_CONNECT_TIMEOUT`, `SSH_CONCURRENCY`,
-`SSH_CHECK_SCHEDULE`, `SSH_UPDATE_SCHEDULE`, `SSM_SYNC_INTERVAL`, `SSM_SYNC_CONCURRENCY`, `JWT_SECRET` (fallback `SESSION_KEY`),
+`SSH_CHECK_SCHEDULE`, `SSH_UPDATE_SCHEDULE`, `SSM_SYNC_INTERVAL`, `SSM_SYNC_CONCURRENCY`, `SSM_REVOCATION_SYNC`, `JWT_SECRET` (fallback `SESSION_KEY`),
 `SECRET_KEY_BASE`, `LOGLEVEL`, `PORT`, `LISTEN`, `PHX_HOST`, `PHX_ALT_HOSTS` (extra UI names, `SsmWeb.Hosts`), `POOL_SIZE`,
 `TRUSTED_PROXIES`, `MCTL_TOKEN_FILE`, `MCTL_TOKEN_SCOPES`, and the OIDC set read at boot by
 `Ssm.OIDC.Config` (not runtime.exs): `OIDC_ISSUER`, `OIDC_CLIENT_ID`,

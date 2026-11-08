@@ -12,7 +12,7 @@ defmodule Ssm.Diffs.Revocations do
 
   import Ecto.Query
 
-  alias Ssm.Diffs.PendingRevocation
+  alias Ssm.Diffs.{PendingRevocation, RevocationSync}
   alias Ssm.{Repo, Scope}
 
   @doc "Mark `host_id`; a new mark moves the time, so only a later sync clears it."
@@ -25,7 +25,10 @@ defmodule Ssm.Diffs.Revocations do
       conflict_target: [:host_id]
     )
 
-    :ok
+    # the removal-only sync (opt-in) starts after the commit
+    if Repo.in_transaction?(),
+      do: RevocationSync.collect(host_id),
+      else: RevocationSync.request([host_id])
   end
 
   @doc """

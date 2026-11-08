@@ -12,6 +12,7 @@ defmodule Ssm.Authorizations do
   import Ecto.Query
 
   alias Ssm.Authorizations.{Authorization, ManagedLogin, Options}
+  alias Ssm.Diffs.Revocations
   alias Ssm.Grants.Expansion
   alias Ssm.{Repo, Scope}
 
@@ -118,7 +119,7 @@ defmodule Ssm.Authorizations do
     pairs = for user_id <- user_ids, host_id <- host_ids, do: {user_id, host_id}
     new_pairs = Enum.reject(pairs, &MapSet.member?(existing, &1))
 
-    Repo.transaction(fn ->
+    Ssm.Grants.transaction(fn ->
       created =
         Enum.map(new_pairs, fn {user_id, host_id} ->
           attrs = %{user_id: user_id, host_id: host_id, login: login, options: options}
@@ -302,9 +303,9 @@ defmodule Ssm.Authorizations do
 
   @doc """
   Delete a manual row. A row made by a grant is read-only (`{:error,
-  :grant_row}`; delete the grant instead). The host is reconciled in the
-  same transaction: when this manual row had won over a grant, the grant
-  row comes back.
+  :grant_row}`; delete the grant instead). The host is marked "revocation
+  pending" (ADR-0012 §6) and reconciled in the same transaction: when this
+  manual row had won over a grant, the grant row comes back.
   """
   @spec delete_authorization(Authorization.t()) ::
           {:ok, Authorization.t()} | {:error, Ecto.Changeset.t() | :grant_row}
@@ -314,6 +315,7 @@ defmodule Ssm.Authorizations do
 
       with nil <- stored || auth.grant_id,
            {:ok, deleted} <- Repo.delete(auth),
+           :ok <- Revocations.mark(deleted.host_id, "authorization deleted"),
            {:ok, _} <-
              Expansion.reconcile([deleted.host_id], %{trigger: "authorization_delete"}) do
         deleted

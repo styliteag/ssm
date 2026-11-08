@@ -55,6 +55,26 @@ defmodule SsmWeb.Api.GrantRowsApiTest do
     assert Repo.get!(Authorization, row.id).login == "deploy"
   end
 
+  test "deleting a manual row audits the reconcile with the API user", %{conn: conn, row: row} do
+    {:ok, _} =
+      Grants.delete_grant(
+        %{role: "admin", scope: Scope.global(), actor: "x"},
+        Repo.get!(Ssm.Grants.Grant, row.grant_id)
+      )
+
+    manual =
+      authorization_fixture(
+        Repo.get!(Ssm.Users.User, row.user_id),
+        Repo.get!(Ssm.Hosts.Host, row.host_id),
+        %{login: "manual"}
+      )
+
+    body = conn |> delete(~p"/api/v2/authorizations/#{manual.id}") |> json_response(200)
+    assert body["success"] == true
+
+    assert Ssm.Diffs.Revocations.pending?(row.host_id)
+  end
+
   test "unauthenticated is 401 AUTH_REQUIRED", %{row: row} do
     body = build_conn() |> delete(~p"/api/v2/authorizations/#{row.id}") |> json_response(401)
     assert body["error"]["code"] == "AUTH_REQUIRED"

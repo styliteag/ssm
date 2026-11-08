@@ -15,6 +15,8 @@ defmodule SsmWeb.Api.AuthPlug do
   def call(conn, _opts) do
     with ["Bearer " <> token] <- get_req_header(conn, "authorization"),
          {:ok, %{"sub" => subject}} <- Token.verify(token, "access") do
+      # audit actor of grant reconciles that follow this request's changes
+      :ok = Ssm.Grants.put_actor(subject)
       assign(conn, :api_user, subject)
     else
       _ ->

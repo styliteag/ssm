@@ -267,7 +267,7 @@ defmodule Ssm.Grants.Expansion do
       target: "#{row.user && row.user.username}@#{row.host && row.host.name}:#{row.login}",
       host_id: row.host_id,
       user_id: if(action == "grant_remove", do: nil, else: row.user_id),
-      actor_username: Map.get(ctx, :actor, "ssm"),
+      actor_username: Map.get(ctx, :actor) || Ssm.Grants.actor() || "ssm",
       details:
         Map.merge(
           %{

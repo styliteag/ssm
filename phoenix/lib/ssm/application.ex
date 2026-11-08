@@ -10,6 +10,7 @@ defmodule Ssm.Application do
   @impl true
   def start(_type, _args) do
     Ssm.OIDC.Config.load()
+    check_revocation_sync()
     :ok = Ssm.SecurityLog.install()
 
     children =
@@ -109,6 +110,15 @@ defmodule Ssm.Application do
       end
     else
       []
+    end
+  end
+
+  # SSM_REVOCATION_SYNC: a bad value is logged and counts as off
+  defp check_revocation_sync do
+    case Ssm.Diffs.RevocationSync.parse(Application.get_env(:ssm, :revocation_sync)) do
+      {:ok, true} -> Logger.info("removal-only revocation sync is on (SSM_REVOCATION_SYNC)")
+      {:ok, false} -> :ok
+      {:error, message} -> Logger.error(message <> "; the revocation sync stays off")
     end
   end
 
