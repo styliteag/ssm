@@ -41,6 +41,11 @@ config :ssm, :sync_check,
   interval: System.get_env("SSM_SYNC_INTERVAL"),
   concurrency: String.to_integer(System.get_env("SSM_SYNC_CONCURRENCY", "8"))
 
+# Removal-only sync after every revoking change (ADR-0012 §6,
+# Ssm.Diffs.RevocationSync): SSM_REVOCATION_SYNC=on|off, default off, so
+# automatic host writes stay opt-in. Checked at boot.
+config :ssm, :revocation_sync, System.get_env("SSM_REVOCATION_SYNC")
+
 # LOGLEVEL accepts RUST_LOG-style directives ("info", "ssm=debug,actix=warn");
 # the most verbose known level wins, unknown tokens fall back to :info —
 # ported from config.py rust_log_to_python_level.

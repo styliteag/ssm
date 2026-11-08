@@ -28,6 +28,7 @@ defmodule Ssm.People do
 
   alias Ssm.Accounts.Operator
   alias Ssm.Authorizations.Authorization
+  alias Ssm.Diffs.Revocations
   alias Ssm.Repo
   alias Ssm.Users.{User, UserKey}
 
@@ -129,28 +130,54 @@ defmodule Ssm.People do
 
   @doc """
   Deletes the authorizations of the person's own users (on `host_ids`, or
-  all when nil); returns the ids of the hosts that held one. Shared keys
+  all when nil); returns the ids of the hosts that held one, each marked
+  "revocation pending" (ADR-0012 §6). Shared keys
   are not touched here: `delete_keys/1` removes them only after every host
   was scrubbed.
+
+  The users' grants (ADR-0012 §5) are deleted too, even with `host_ids`: a
+  grant cannot leave single hosts, and a kept grant would bring the rows
+  back at the next reconcile. Their removals are audited (`person_remove`)
+  and mark the hosts "revocation pending"; hosts outside `host_ids` are
+  cleaned by their next sync.
   """
-  @spec remove_authorizations(Match.t(), [integer()] | nil) :: {:ok, [integer()]}
-  def remove_authorizations(%Match{} = match, host_ids) do
+  @spec remove_authorizations(Match.t(), [integer()] | nil, map()) :: {:ok, [integer()]}
+  def remove_authorizations(%Match{} = match, host_ids, ctx \\ %{}) do
     user_ids = Enum.map(match.users, & &1.id)
 
     query =
       from(a in Authorization, where: a.user_id in ^user_ids)
       |> then(&if(host_ids, do: where(&1, [a], a.host_id in ^host_ids), else: &1))
 
-    Repo.transaction(fn ->
+    Ssm.Grants.transaction(fn ->
       hosts = Repo.all(from a in query, distinct: true, select: a.host_id)
+      Enum.each(hosts, &Revocations.mark(&1, "person removed"))
+
+      {:ok, _} =
+        Ssm.Grants.drop_for_users(user_ids, Map.put(ctx, :trigger, "person_remove"))
+
       Repo.delete_all(query)
       hosts
     end)
   end
 
-  @doc "Delete `user_key` rows by id."
+  @doc """
+  Delete `user_key` rows by id; the hosts of their owners are marked
+  "revocation pending" in the same transaction.
+  """
   @spec delete_keys([integer()]) :: {non_neg_integer(), nil}
-  def delete_keys(ids), do: Repo.delete_all(from k in UserKey, where: k.id in ^ids)
+  def delete_keys(ids) do
+    {:ok, deleted} =
+      Ssm.Grants.transaction(fn ->
+        owners =
+          Repo.all(from k in UserKey, where: k.id in ^ids, distinct: true, select: k.user_id)
+
+        :ok = Revocations.mark_user_hosts(owners, "person's shared key deleted")
+        Repo.delete_all(from k in UserKey, where: k.id in ^ids)
+      end)
+
+    deleted
+  end
 
   defp operator_and_email("oidc:" <> rest) do
     case String.split(rest, "|", parts: 2) do

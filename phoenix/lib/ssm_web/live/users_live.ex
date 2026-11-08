@@ -14,6 +14,7 @@ defmodule SsmWeb.UsersLive do
   use SsmWeb, :live_view
 
   alias Ssm.Activity
+  alias Ssm.Activity.{Actions, Entries}
   alias Ssm.Users
   alias Ssm.Users.BulkOps
   alias Ssm.Users.User
@@ -31,9 +32,12 @@ defmodule SsmWeb.UsersLive do
   end
 
   defp reload_users(socket) do
+    scope = Ssm.Scope.of(socket.assigns.current_user)
+    grant_counts = scope |> Ssm.Grants.list_grants() |> Enum.frequencies_by(& &1.ssh_user_id)
+
     rows =
-      Users.list_users_with_counts(Ssm.Scope.of(socket.assigns.current_user))
-      |> Enum.map(&Map.put(&1, :id, &1.user.id))
+      Users.list_users_with_counts(scope)
+      |> Enum.map(&Map.merge(&1, %{id: &1.user.id, grant_count: grant_counts[&1.user.id] || 0}))
       |> SsmWeb.TableSort.sort(socket.assigns.sort, user_sorters())
 
     ids = MapSet.new(rows, & &1.id)
@@ -49,7 +53,8 @@ defmodule SsmWeb.UsersLive do
       "username" => &SsmWeb.TableSort.string(&1.user.username),
       "status" => &if(&1.user.enabled, do: 0, else: 1),
       "keys" => & &1.key_count,
-      "access" => & &1.authorization_count
+      "access" => & &1.authorization_count,
+      "grants" => & &1.grant_count
     }
   end
 
@@ -108,7 +113,7 @@ defmodule SsmWeb.UsersLive do
 
     case result do
       {:ok, user} ->
-        action = if socket.assigns.editing, do: "update", else: "create"
+        action = if socket.assigns.editing, do: :update, else: :create
         log_user_activity(socket, action, user)
 
         {:noreply,
@@ -128,7 +133,7 @@ defmodule SsmWeb.UsersLive do
   def handle_event("delete", %{"id" => id}, socket) do
     with %User{} = user <- fetch_user(id),
          {:ok, _} <- Users.delete_user(scope(socket), user) do
-      log_user_activity(socket, "delete", user)
+      log_user_activity(socket, :delete, user)
 
       {:noreply,
        socket
@@ -143,7 +148,7 @@ defmodule SsmWeb.UsersLive do
   def handle_event("toggle_enabled", %{"id" => id}, socket) do
     with %User{} = user <- fetch_user(id),
          {:ok, updated} <- Users.update_user(scope(socket), user, %{enabled: !user.enabled}) do
-      action = if updated.enabled, do: "enable", else: "disable"
+      action = if updated.enabled, do: :enable, else: :disable
       log_user_activity(socket, action, updated)
 
       {:noreply,
@@ -219,7 +224,8 @@ defmodule SsmWeb.UsersLive do
            scope(socket),
            user,
            String.trim(username),
-           MapSet.to_list(selected_keys)
+           MapSet.to_list(selected_keys),
+           role_opts(socket)
          ) do
       {:ok, result} ->
         log_split(socket, user, result)
@@ -274,7 +280,12 @@ defmodule SsmWeb.UsersLive do
     merging = socket.assigns.merging
     users = Enum.map(merging.rows, & &1.user)
 
-    case BulkOps.merge_users(scope(socket), users, merge_target(merging, users)) do
+    case BulkOps.merge_users(
+           scope(socket),
+           users,
+           merge_target(merging, users),
+           role_opts(socket)
+         ) do
       {:ok, result} ->
         log_merge(socket, result)
 
@@ -305,7 +316,7 @@ defmodule SsmWeb.UsersLive do
       |> Enum.map(& &1.user)
       |> then(&BulkOps.bulk_delete(scope(socket), &1))
 
-    Enum.each(result.deleted, &log_user_activity(socket, "delete", &1))
+    Enum.each(result.deleted, &log_user_activity(socket, :delete, &1))
 
     socket =
       socket
@@ -331,6 +342,10 @@ defmodule SsmWeb.UsersLive do
   # The SSH user catalog is readable in full; writes need a user whose
   # authorizations are all in the user's scope (ADR-0012 §3, `Users.writable?/2`).
   defp scope(socket), do: Ssm.Scope.of(socket.assigns.current_user)
+
+  # keys meeting grants with admin-only options: admins only
+  defp role_opts(socket),
+    do: [role: socket.assigns.current_user.role, actor: socket.assigns.current_user.actor]
 
   # ids from client events: anything but a plain integer is "not found"
   defp parse_id(value) when is_binary(value) do
@@ -408,10 +423,23 @@ defmodule SsmWeb.UsersLive do
       "Read-only: this SSH user has access outside your scope (customers and host groups), " <>
         "so its keys and settings can only be changed by an account that sees all its hosts."
 
+  defp bulk_error(:admin_only_options),
+    do:
+      "Only an admin may split or merge this SSH user: it holds key options only an " <>
+        "admin may set (forwarding, environment, …)."
+
   defp bulk_error(:no_keys_selected), do: "Select at least one key to move."
   defp bulk_error(:keys_not_owned), do: "Selected keys no longer belong to this user."
   defp bulk_error(:must_keep_one_key), do: "The original user must keep at least one key."
   defp bulk_error(:nothing_to_merge), do: "Select at least one other user to merge."
+
+  defp bulk_error({:conflicting_options, pairs}) do
+    places = Enum.map_join(pairs, ", ", fn {host, login} -> "#{login}@#{host}" end)
+
+    "Not merged: the users have different key options for the same host and login " <>
+      "(#{places}). Merging would give the other user's keys those options; make the " <>
+      "options equal or remove one of the authorizations first."
+  end
 
   defp bulk_error({:user_not_found, username}),
     do: "User #{username} disappeared before the merge finished."
@@ -427,7 +455,7 @@ defmodule SsmWeb.UsersLive do
   defp log_split(socket, user, result) do
     Activity.log(%{
       activity_type: "user",
-      action: "split",
+      action: Actions.name(:split),
       target: result.new_user.username,
       actor_username: socket.assigns.current_user.actor,
       user_id: result.new_user.id,
@@ -442,7 +470,7 @@ defmodule SsmWeb.UsersLive do
   defp log_merge(socket, result) do
     Activity.log(%{
       activity_type: "user",
-      action: "merge",
+      action: Actions.name(:merge),
       target: result.target.username,
       actor_username: socket.assigns.current_user.actor,
       user_id: result.target.id,
@@ -455,25 +483,9 @@ defmodule SsmWeb.UsersLive do
     })
   end
 
-  # "delete" must not reference the just-removed row (FK on activity_log.user_id).
-  defp log_user_activity(socket, "delete" = action, user) do
-    Activity.log(%{
-      activity_type: "user",
-      action: action,
-      target: user.username,
-      actor_username: socket.assigns.current_user.actor
-    })
-  end
-
-  defp log_user_activity(socket, action, user) do
-    Activity.log(%{
-      activity_type: "user",
-      action: action,
-      target: user.username,
-      actor_username: socket.assigns.current_user.actor,
-      user_id: user.id
-    })
-  end
+  # :delete does not reference the just-removed row (Ssm.Activity.Entries.user/4).
+  defp log_user_activity(socket, action, user),
+    do: Entries.user(action, user, socket.assigns.current_user.actor)
 
   ## Render
 
@@ -550,6 +562,9 @@ defmodule SsmWeb.UsersLive do
             <.link navigate={~p"/authorizations?user_id=#{row.id}"} class="link link-hover">
               {row.authorization_count} grant(s)
             </.link>
+            <.link navigate={~p"/grants?user_id=#{row.id}"} class="link link-hover">
+              {row.grant_count} customer/group grant(s)
+            </.link>
           </div>
           <p :if={row.user.comment} class="mt-1 truncate text-xs opacity-60">{row.user.comment}</p>
           <div class="mt-2 flex gap-1">
@@ -593,6 +608,16 @@ defmodule SsmWeb.UsersLive do
           <:col :let={row} label="Access" sort="access">
             <.link navigate={~p"/authorizations?user_id=#{row.user.id}"} class="link link-hover">
               {row.authorization_count}
+            </.link>
+          </:col>
+          <:col :let={row} label="Grants" sort="grants">
+            <.link
+              id={"user-grants-#{row.user.id}"}
+              navigate={~p"/grants?user_id=#{row.user.id}"}
+              class="link link-hover"
+              title="Grants per customer or host group"
+            >
+              {row.grant_count}
             </.link>
           </:col>
           <:action :let={row}>

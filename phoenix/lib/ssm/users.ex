@@ -10,11 +10,22 @@ defmodule Ssm.Users do
   host of that user. Otherwise `{:error, :out_of_scope}`. The scope-less
   writes stay global (`/api/v2`, mctl contract). Creating an SSH user stays
   open; its keys follow once it holds an authorization in scope.
+
+  A key that lands in a user inherits that user's grants, options
+  included: the scoped writes also take `opts` (`role:`, `actor:`) and
+  refuse a non-admin a key added or moved into a user holding a
+  grant with admin-only options (`check_admin_only/3`).
+
+  Every write that takes access away (disable or delete a user, delete,
+  move a key) marks the user's hosts "revocation pending"
+  (`Ssm.Diffs.Revocations.mark_user_hosts/2`) in the same transaction.
   """
 
   import Ecto.Query
 
-  alias Ssm.Authorizations.Authorization
+  alias Ssm.Activity
+  alias Ssm.Authorizations.{Authorization, Options}
+  alias Ssm.Diffs.Revocations
   alias Ssm.Repo
   alias Ssm.Users.{User, UserKey}
 
@@ -31,7 +42,9 @@ defmodule Ssm.Users do
   A global scope may always. A scoped one only when the user has at least
   one authorization and all of them are on hosts in scope: a user without
   authorizations is read-only until it is authorized in scope. Grants of
-  deleted hosts count as outside.
+  deleted hosts count as outside. A grant (ADR-0012 §5) whose reach is not
+  inside the scope also makes the user read-only: its future hosts would get
+  the user's keys too.
   """
   @spec writable?(Ssm.Scope.t(), User.t() | integer()) :: boolean()
   def writable?(%Ssm.Scope{} = scope, %User{id: id}), do: writable?(scope, id)
@@ -42,31 +55,105 @@ defmodule Ssm.Users do
          not Repo.exists?(
            from a in Authorization,
              where: a.user_id == ^user_id and a.host_id not in subquery(Ssm.Scope.host_ids(scope))
-         ))
+         ) and
+         grants_inside?(scope, user_id))
   end
 
   def writable?(_scope, _user_id), do: false
 
+  defp grants_inside?(scope, user_id) do
+    from(g in Ssm.Grants.Grant, where: g.ssh_user_id == ^user_id)
+    |> Repo.all()
+    |> Enum.all?(&Ssm.Grants.manageable?(scope, &1))
+  end
+
   @spec create_user(map()) :: {:ok, User.t()} | {:error, Ecto.Changeset.t()}
   def create_user(attrs), do: %User{} |> User.changeset(attrs) |> Repo.insert()
 
+  @doc "Update an SSH user; disabling it marks its hosts \"revocation pending\"."
   @spec update_user(User.t(), map()) :: {:ok, User.t()} | {:error, Ecto.Changeset.t()}
-  def update_user(%User{} = user, attrs), do: user |> User.changeset(attrs) |> Repo.update()
+  def update_user(%User{} = user, attrs) do
+    changeset = User.changeset(user, attrs)
 
+    if Ecto.Changeset.get_change(changeset, :enabled) == false,
+      do: write_revoking(changeset, &Repo.update/1, [user.id], "SSH user disabled"),
+      else: Repo.update(changeset)
+  end
+
+  # `write` and the marks commit together; the marks are made first, while
+  # the user's authorizations and keys are still where they were. An invalid
+  # changeset never opens a transaction (a caller's would roll back).
+  defp write_revoking(%Ecto.Changeset{valid?: false} = changeset, write, _user_ids, _reason),
+    do: write.(changeset)
+
+  defp write_revoking(changeset, write, user_ids, reason) do
+    Ssm.Grants.transaction(fn ->
+      :ok = Revocations.mark_user_hosts(user_ids, reason)
+
+      case write.(changeset) do
+        {:ok, written} -> written
+        {:error, failed} -> Repo.rollback(failed)
+      end
+    end)
+  end
+
+  @doc """
+  Delete an SSH user (keys and authorizations cascade). Its grants are
+  dropped first through `Ssm.Grants.drop_for_users/2` in the same
+  transaction: audited, hosts marked "revocation pending" — every host of
+  the user, also those of its manual rows.
+  """
   @spec delete_user(User.t()) :: {:ok, User.t()} | {:error, Ecto.Changeset.t()}
-  def delete_user(%User{} = user), do: Repo.delete(user)
+  def delete_user(%User{} = user) do
+    Ssm.Grants.transaction(fn ->
+      :ok = Revocations.mark_user_hosts([user.id], "SSH user deleted")
 
-  @doc "`update_user/2` for a web user: only a `writable?/2` user."
+      with {:ok, _} <- Ssm.Grants.drop_for_users([user.id], %{trigger: "user_delete"}),
+           {:ok, deleted} <- Repo.delete(user) do
+        deleted
+      else
+        {:error, reason} -> Repo.rollback(reason)
+      end
+    end)
+  end
+
+  @doc """
+  `update_user/2` for a web user: only a `writable?/2` user. Like every
+  scoped write here, the check runs inside the write's transaction
+  (`Ssm.Grants.checked/1`).
+  """
   @spec update_user(Ssm.Scope.t(), User.t(), map()) ::
           {:ok, User.t()} | {:error, Ecto.Changeset.t() | :out_of_scope}
   def update_user(%Ssm.Scope{} = scope, %User{} = user, attrs),
-    do: if(writable?(scope, user), do: update_user(user, attrs), else: {:error, :out_of_scope})
+    do: if_writable(scope, [user], fn -> update_user(user, attrs) end)
 
   @doc "`delete_user/1` for a web user: only a `writable?/2` user."
   @spec delete_user(Ssm.Scope.t(), User.t()) ::
           {:ok, User.t()} | {:error, Ecto.Changeset.t() | :out_of_scope}
   def delete_user(%Ssm.Scope{} = scope, %User{} = user),
-    do: if(writable?(scope, user), do: delete_user(user), else: {:error, :out_of_scope})
+    do: if_writable(scope, [user], fn -> delete_user(user) end)
+
+  @doc """
+  Run `write` (returning `{:ok, _}` or `{:error, _}`) when every one of
+  `users` (structs or ids) is `writable?/2` in `scope` — checked inside the
+  write's IMMEDIATE transaction (`Ssm.Grants.checked/1`) — else
+  `{:error, :out_of_scope}`. `admin_only` (`{users, op, opts}` for
+  `check_admin_only/3`) adds that check in the same transaction.
+  """
+  @spec if_writable(Ssm.Scope.t(), [User.t() | integer()], (-> term()), tuple() | nil) ::
+          term()
+  def if_writable(%Ssm.Scope{} = scope, users, write, admin_only \\ nil) do
+    Ssm.Grants.checked(fn ->
+      cond do
+        not Enum.all?(users, &writable?(scope, &1)) -> {:refused, :out_of_scope}
+        refused_admin_only?(admin_only) -> {:refused, :admin_only_options}
+        true -> write.()
+      end
+    end)
+  end
+
+  defp refused_admin_only?(nil), do: false
+  defp refused_admin_only?({users, op, opts}), do: check_admin_only(users, op, opts) != :ok
 
   @spec change_user(User.t(), map()) :: Ecto.Changeset.t()
   def change_user(%User{} = user, attrs \\ %{}), do: User.changeset(user, attrs)
@@ -156,40 +243,106 @@ defmodule Ssm.Users do
   @spec create_key(map()) :: {:ok, UserKey.t()} | {:error, Ecto.Changeset.t()}
   def create_key(attrs), do: %UserKey{} |> UserKey.changeset(attrs) |> Repo.insert()
 
+  @doc """
+  Update a key's name, comment or owner (`UserKey.edit_changeset/2`: key
+  material is immutable); a move to another user takes the key away from
+  the old owner's hosts: they are marked "revocation pending".
+  """
   @spec update_key(UserKey.t(), map()) :: {:ok, UserKey.t()} | {:error, Ecto.Changeset.t()}
-  def update_key(%UserKey{} = key, attrs),
-    do: key |> UserKey.edit_changeset(attrs) |> Repo.update()
+  def update_key(%UserKey{} = key, attrs) do
+    changeset = UserKey.edit_changeset(key, attrs)
 
-  @spec delete_key(UserKey.t()) :: {:ok, UserKey.t()} | {:error, Ecto.Changeset.t()}
-  def delete_key(%UserKey{} = key), do: Repo.delete(key)
-
-  @doc "`create_key/1` for a web user: the owner must be `writable?/2`."
-  @spec create_key(Ssm.Scope.t(), map()) ::
-          {:ok, UserKey.t()} | {:error, Ecto.Changeset.t() | :out_of_scope}
-  def create_key(%Ssm.Scope{} = scope, attrs) do
-    owner = %UserKey{} |> UserKey.changeset(attrs) |> Ecto.Changeset.get_field(:user_id)
-
-    if is_nil(owner) or writable?(scope, owner),
-      do: create_key(attrs),
-      else: {:error, :out_of_scope}
+    if Map.has_key?(changeset.changes, :user_id),
+      do: write_revoking(changeset, &Repo.update/1, [key.user_id], "key moved"),
+      else: Repo.update(changeset)
   end
 
-  @doc "`update_key/2` for a web user: the old and the new owner must be `writable?/2`."
-  @spec update_key(Ssm.Scope.t(), UserKey.t(), map()) ::
-          {:ok, UserKey.t()} | {:error, Ecto.Changeset.t() | :out_of_scope}
-  def update_key(%Ssm.Scope{} = scope, %UserKey{} = key, attrs) do
-    new_owner = key |> UserKey.edit_changeset(attrs) |> Ecto.Changeset.get_field(:user_id)
+  @doc "Delete a key; the owner's hosts are marked \"revocation pending\"."
+  @spec delete_key(UserKey.t()) :: {:ok, UserKey.t()} | {:error, Ecto.Changeset.t()}
+  def delete_key(%UserKey{} = key),
+    do: write_revoking(key, &Repo.delete/1, [key.user_id], "key deleted")
 
-    if writable?(scope, key.user_id) and writable?(scope, new_owner),
-      do: update_key(key, attrs),
-      else: {:error, :out_of_scope}
+  @doc """
+  `create_key/1` for a web user: the owner must be `writable?/2`, and for
+  a non-admin hold no admin-only options (`check_admin_only/3`).
+  """
+  @spec create_key(Ssm.Scope.t(), map(), keyword()) ::
+          {:ok, UserKey.t()} | {:error, Ecto.Changeset.t() | :out_of_scope | :admin_only_options}
+  def create_key(%Ssm.Scope{} = scope, attrs, opts \\ []) do
+    owner = %UserKey{} |> UserKey.changeset(attrs) |> Ecto.Changeset.get_field(:user_id)
+
+    if is_nil(owner),
+      do: create_key(attrs),
+      else: if_writable(scope, [owner], fn -> create_key(attrs) end, {[owner], "add key", opts})
+  end
+
+  @doc """
+  `update_key/2` for a web user: the old and the new owner must be
+  `writable?/2`; a move also needs `check_admin_only/3`
+  for the new owner (a rename does not).
+  """
+  @spec update_key(Ssm.Scope.t(), UserKey.t(), map(), keyword()) ::
+          {:ok, UserKey.t()} | {:error, Ecto.Changeset.t() | :out_of_scope | :admin_only_options}
+  def update_key(%Ssm.Scope{} = scope, %UserKey{} = key, attrs, opts \\ []) do
+    changeset = UserKey.edit_changeset(key, attrs)
+    new_owner = Ecto.Changeset.get_field(changeset, :user_id)
+    admin_only = if Map.has_key?(changeset.changes, :user_id), do: {[new_owner], "move key", opts}
+
+    if_writable(scope, [key.user_id, new_owner], fn -> update_key(key, attrs) end, admin_only)
+  end
+
+  @doc """
+  `:ok`, or `{:error, :admin_only_options}` when `opts[:role]` is not
+  `"admin"` and one of `users` (structs or ids) holds a grant whose options
+  carry an admin-only option (`Options.admin_only/1`): a key landing there
+  would inherit it. Fails closed without a role. A refusal is audited
+  (`admin_only_refused`, `opts[:actor]`, `op`).
+  """
+  @spec check_admin_only([User.t() | integer() | nil], String.t(), keyword()) ::
+          :ok | {:error, :admin_only_options}
+  def check_admin_only(users, op, opts) do
+    ids = users |> Enum.map(&user_id/1) |> Enum.reject(&is_nil/1)
+
+    if Keyword.get(opts, :role) == "admin" or not permissive_grants?(ids) do
+      :ok
+    else
+      audit_admin_only(ids, op, opts)
+      {:error, :admin_only_options}
+    end
+  end
+
+  defp user_id(%User{id: id}), do: id
+  defp user_id(id), do: id
+
+  defp permissive_grants?([]), do: false
+
+  defp permissive_grants?(ids) do
+    from(a in Authorization,
+      where: a.user_id in ^ids and not is_nil(a.options) and a.options != "",
+      select: a.options
+    )
+    |> Repo.all()
+    |> Enum.any?(&(Options.admin_only(&1) != []))
+  end
+
+  defp audit_admin_only(ids, op, opts) do
+    names =
+      Repo.all(from u in User, where: u.id in ^ids, order_by: u.username, select: u.username)
+
+    Activity.log(%{
+      activity_type: "user",
+      action: "admin_only_refused",
+      target: Enum.join(names, ", "),
+      actor_username: Keyword.get(opts, :actor) || "unknown",
+      details: %{op: op, reason: "the user holds a grant with admin-only options"}
+    })
   end
 
   @doc "`delete_key/1` for a web user: the owner must be `writable?/2`."
   @spec delete_key(Ssm.Scope.t(), UserKey.t()) ::
           {:ok, UserKey.t()} | {:error, Ecto.Changeset.t() | :out_of_scope}
   def delete_key(%Ssm.Scope{} = scope, %UserKey{} = key),
-    do: if(writable?(scope, key.user_id), do: delete_key(key), else: {:error, :out_of_scope})
+    do: if_writable(scope, [key.user_id], fn -> delete_key(key) end)
 
   @doc "Form changeset: a new key (no id) or an edit of a stored one (`UserKey.edit_changeset/2`)."
   @spec change_key(UserKey.t(), map()) :: Ecto.Changeset.t()

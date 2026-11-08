@@ -25,9 +25,9 @@ recreated.
 
 | Path | What lives there |
 |------|------------------|
-| `phoenix/lib/ssm/` | Domain contexts: `hosts.ex`, `users.ex` (+ `user_key`, `key_parser`, `bulk_ops`), `authorizations.ex`, `diffs.ex` (+ `status_cache`, and the persisted periodic check: `host_checks`, `sync_check`, `sync_scheduler`), `activity.ex`, `auth/` (htpasswd, JWT token), `release.ex` (prod migrate) |
+| `phoenix/lib/ssm/` | Domain contexts: `hosts.ex`, `users.ex` (+ `user_key`, `key_parser`, `bulk_ops`), `authorizations.ex`, `grants.ex` (+ `expansion`, `drift_check`), `diffs.ex` (+ `status_cache`, and the persisted periodic check: `host_checks`, `sync_check`, `sync_scheduler`), `activity.ex`, `auth/` (htpasswd, JWT token), `release.ex` (prod migrate) |
 | `phoenix/lib/ssm/ssh/` | `client.ex` (behaviour), `erlang_client.ex` (prod), `mock_client.ex` (tests), `safety.ex` (readonly markers), `script_runner.ex`, `cache.ex` |
-| `phoenix/lib/ssm_web/live/` | One LiveView per page: dashboard, hosts, users, keys, authorizations, diff, activities, login |
+| `phoenix/lib/ssm_web/live/` | One LiveView per page: dashboard, hosts, users, keys, authorizations, grants, diff, activities, login |
 | `phoenix/lib/ssm_web/api/` | `/api/v2` plumbing: `auth_plug.ex` (bearer JWT), `envelope.ex`, `errors.ex` (stable error codes), `params.ex` |
 | `phoenix/lib/ssm_web/controllers/api/` | One controller per API domain: auth, hosts, users, keys, authorizations, diffs, activity_log, info |
 | `phoenix/priv/repo/migrations/` | Ecto migrations. `20260101000000_baseline_schema.exs` **adopts** Diesel-/Alembic-era DBs in place (fills gaps, stamps) — read it before touching the schema. |
@@ -39,36 +39,138 @@ recreated.
 
 **Data model** (SQLite, table names are singular — Diesel parity): `host`, `user`,
 `user_key`, `authorization`, `activity_log`. `authorization` links user↔host with a
-remote `login`. `host.disabled` blocks all SSH operations. `operators` (OIDC web accounts) and newer tables for the mctl
+remote `login` — a new or changed login (authorization or grant) must match
+`Ssm.Authorizations.Login`: a POSIX name (`[A-Za-z_][A-Za-z0-9_.-]{0,31}\$?`) or an SSSD/AD
+`user@domain` (local part as before without `$`, up to 64 characters, then `@` and dot-separated
+labels `[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?`, 128 characters in all; `DOMAIN\user` refused);
+stored legacy logins stay editable and are copied by split/merge; `script.sh` never looks up a login starting with `-`.
+`host.disabled` blocks all SSH operations. `operators` (OIDC web accounts) and newer tables for the mctl
 contract are plural (contract spec names): `customers`, `groups`, `host_groups`, plus
 the `mctl_contract` library's `mctl_tokens`, `mctl_jobs`, `mctl_idempotency`, and `host_checks`
 (last result of the periodic key check per host, `ON DELETE CASCADE`), and `managed_logins`
 (every `(host, login)` that ever held a grant; written by `Authorizations.create_authorization/1`,
-never pruned, `ON DELETE CASCADE` — a sync empties such a login's file after its last grant is gone).
+`ON DELETE CASCADE` — a sync empties such a login's file after its last grant is gone; pruned only by
+`Ssm.Hosts.ManagedLogins.forget/4`: admin "Managed logins" on the hosts page or `DELETE
+/api/v2/hosts/{id}/managed-logins/{login}`, only without authorizations and when `script.sh
+has_keyfile` says the host has no file for it — an unknown login or missing home answers `unknown`,
+exit 1, never "no"; asked again under the host lock right before the delete — audited
+`forget_login`; residual race: a file someone creates on the host after that last answer is not
+seen).
+**Grants** (ADR-0012 phase 2, `Ssm.Grants`, `Ssm.Grants.Expansion`, page `/grants`): table `grants`
+(`ssh_user_id`, `customer_id` XOR `group_id`, the creator's scope as id lists `scope_customer_ids` /
+`scope_group_ids` — nil = all, `login`, `comment`, `created_by`; all FKs `ON DELETE CASCADE`) is
+expanded into `authorization` rows with `grant_id` (FK cascade; nil = manual row). Every trigger
+(grant create/delete, `Hosts.update_membership/3` incl. host create, host delete, contract customer
+merge/delete/rename and group delete/rename, manual row update/delete) runs
+`Expansion.reconcile/2` — a full, idempotent per-host reconcile — in its own IMMEDIATE transaction
+(`Ssm.Grants.transaction/1`). A manual row wins; grant rows are read-only (`{:error, :grant_row}`,
+API 409 `CONFLICT`). Rows a reconcile removes mark the host in `pending_revocations`
+(`Ssm.Diffs.Revocations`, Hosts page badge; every other access-reducing write too — see "State
+machines") until a fully successful sync clears exactly the mark it read at its start. `SSM_REVOCATION_SYNC=on` (default off) adds the
+removal-only sync (`Ssm.Diffs.RevocationSync`, `Diffs.removal_sync_reported/2`): marks made in a
+transaction are collected per process and started by the outermost `Ssm.Grants.transaction/1` after
+commit (dropped on rollback), async under `Ssm.Diffs.TaskSupervisor`, under `Ssm.Hosts.WriteLock`;
+it keeps the host's own lines whose key is still authorized (a line whose options are
+`Options.weaker?/2` than the DB's non-empty options becomes the DB line), never adds, skips logins without a file
+and unread (linked) files, honours disabled/readonly/unsafe/own-key; audited as `ssm (revocation
+sync)`, action `sync_revocation|sync_revocation_partial|sync_revocation_failed` (a manual sync stays
+`sync|sync_partial|sync_failed`), `mode: removal_only`; a run that raises or exits (SSH timeout) is
+audited `sync_revocation_failed` too. Retries: every `SyncScheduler` tick (so only while
+`SSM_SYNC_INTERVAL` is on) calls `RevocationSync.retry_pending/3` — a still-pending host is synced
+again 1, 2, 4, … (max 16) intervals after its mark (`plan_retries/4`, state in the scheduler; a new
+mark restarts it). Tests: `config :ssm, :revocation_sync_runner, :inline`. Every outer
+transaction that touches authorizations uses `Ssm.Grants.transaction/1` (IMMEDIATE); a scoped write
+makes its scope/role checks inside it (`Ssm.Grants.checked/1`, `Users.if_writable/4`: `{:refused, _}`
+commits only the audit entry). SQLite `busy_timeout` is 15 s (`config/config.exs`). Audit:
+`grant_create|grant_delete`, `grant_add|grant_remove|grant_move` (trigger, `grant_id`, `job_id`,
+`request_id`); the actor is the ctx actor, else the process actor (`Ssm.Grants.put_actor/1`, set by
+`UserAuth` on LiveView mount and by the `/api/v2` auth plug), else `ssm`.
+`Ssm.Grants.DriftCheck` logs drift every 15 min (`config :ssm, :grants_drift_check`, off in tests).
+Who may create: admin any; operator only targets in its scope (`{:error, :out_of_scope}`); others
+`{:error, :forbidden}`. Migration `20261109100000` has no `down` (SQLite cannot drop an FK column).
 Sync and readonly markers (`Ssm.Diffs.sync_host/2`): a host-wide marker (`system_readonly`, vendor
 platform) stops a sync before any write; a login's own `~/.ssh/user_readonly` counts only when root
-owns it (`script.sh` `user_readonly_state`, `find -user 0`) and then skips only that login, the
+owns it (`script.sh` `user_readonly_state`, `find -user 0`), inside a `~/.ssh` that root owns and
+group/other cannot write, and its first line is not ssm's keyfile header — else it is
+`tampered` (reported in `readonly_ignored` as "user_readonly unsafe (tampered?) …", never honoured:
+in a user-owned `~/.ssh` the user could rename ssm's own root-owned `authorized_keys` to
+`user_readonly`) — and then skips only that login, the
 others are written and the sync fails with `{:ssh_readonly, _}` naming skipped and written logins (a
 partial sync, API 409 `SSH_READONLY`). A `user_readonly` owned by anyone else is ignored (reported as
 `readonly_ignored`, shown in the diff and the audit entry); the marker must be a plain file with one
 link, and its content is never shown (fixed reason `user_readonly (root-owned)`). `script.sh` runs as
 root and never reads or writes through a link. A symlinked/hardlinked/non-regular `authorized_keys`
 is reported `unsafe` (`symlink|hardlink|special`), not read, but still written: the entry is
-replaced, never written through, so revocation reaches it. A symlinked `~/.ssh` (or one resolving
+replaced, never written through, so revocation reaches it. A login without `~/.ssh` gets one at write time
+(`script.sh` `ensure_ssh_dir`: only in a home that exists and is no symlink, `mkdir` under
+umask 077, then a `pwd -P` re-check inside the new directory and `chown` of the cwd to the
+getent uid:gid — never a path — only while the cwd is still empty, root-owned, owner rwx and no
+group/other bits; refused when the home's parent is writable by the login (owner, primary group
+or world; uid 0 exempt)); a missing or symlinked home is refused `unsafe (home)`, a sync
+skips that login ("no usable home"). `set_authorized_keyfile <login> <ssh_user>` (`ScriptRunner` passes
+`target.username`; a blank one is refused before SSH, an SSH user getent does not know is
+`unsafe (ssh_user)`) refuses a login other than the SSH user whose resolved home (`pwd -P`) is
+the SSH user's (`unsafe (shared_home)`, uid-0 aliases like `toor`): that file holds ssm's own
+key, which ssm places by login name (`host.username`) — a sync skips such a login ("not
+managed: shares the SSH user's home"). A symlinked `~/.ssh` (or one resolving
 outside the home) is `unsafe: ssh_dir`: not read, not written, skipped by a sync as "revocation
 blocked: unsafe ~/.ssh" (diff, periodic check, audit). Writes: cwd-pinned in the real `~/.ssh`, a
 fresh `O_EXCL` temp file (umask 022: root-owned 0644, as before), a handwritten file renamed to
-`authorized_keys.backup.<random>`, final rename with `mv -T`/`mv -h`; without either (busybox) a
-symlink target is `rm`'d first, then plain `mv` (a real directory there is refused, `unsafe:
-link-to-dir`, a per-login skip). An unsafe `~/.ssh` also sets the login's `read_error` (API diff);
-`SyncCheck` keeps it as blocked drift, not a host error. Reads: time-bounded; on Linux the opened fd is checked via
-`/proc` (same inode as the entry, one link).
-Logins: `Ssm.Authorizations.Login` refuses all-digit logins (getent reads a uid), a leading `-`,
-whitespace, `:` and `/` (AD/SSSD names with `@`, `\`, dots, uppercase allowed; a strict POSIX
-charset is an open decision); `script.sh` `set_authorized_keyfile` refuses empty, all-digit and `-`
-logins, matches `/etc/passwd` literally without getent, and refuses another name for the
-connecting user's `~/.ssh` (`unsafe: own_login`) so only `host.username` — written with ssm's own key — reaches it.
-Every sync outcome is audit-logged (`Ssm.Diffs.SyncAudit`).
+`authorized_keys.backup.<random>`, final rename with `mv -T`/`mv -h`, then the entry must be a
+plain file with the renamed file's inode (else `unsafe: race`); a host whose `mv` has neither
+option (old busybox) is refused (`unsafe: no_safe_rename`), a real directory there too (`unsafe:
+link-to-dir`), both per-login skips. An unsafe `~/.ssh` also sets the login's `read_error` (API diff);
+`SyncCheck` keeps it as blocked drift, not a host error. Reads: time-bounded; with perl (`Fcntl`)
+opened `O_NOFOLLOW|O_NONBLOCK` and the opened file checked (regular, one link, same dev+inode as the
+entry); without perl on Linux the opened fd is checked via `/proc` (same inode as the entry, one
+link); elsewhere the entry is checked before and after the read. The listing uses no temp file.
+Every sync outcome is audit-logged (`Ssm.Diffs.SyncAudit`). Sync (full and removal-only,
+`RevocationSync.run/2` incl. its audit), `KeyRemoval`, `Mctl.People` scrub and
+`ManagedLogins.forget` run under one per-host lock (`Ssm.Hosts.WriteLock`, `:global`, re-entrant
+for the holder through the process dictionary — a bare nested `:global.trans` releases early);
+the listing reports each file's `sha256` and a write passes it back (`set_authorized_keyfile
+<login> <ssh_user> <sha256>`): a file changed since the read is refused `(stale)`, a sync skips
+the login. Diff page "Remove" / "Remove all extra keys"
+(`Ssm.Diffs.KeyRemoval`, events `remove-key`/`remove-extra-keys`): reads the login fresh,
+re-diffs it (`Diffs.login_diff_for_write/2`, refuses without the own key like a sync), drops
+only lines still `extra_on_host` and writes the rest through `set_authorized_keyfile`;
+readonly/unsafe logins refused, audited (`remove_keys`/`remove_keys_failed`, fingerprints only).
+
+**State machines**. *Revocation pending* (ADR-0012 §6) is owned by `Ssm.Diffs.Revocations`
+(the state, table `pending_revocations`, one row per host), `Ssm.Diffs.RevocationSync` (the opt-in
+removal-only sync) and `Ssm.Hosts.WriteLock` (one host write at a time); nothing else writes the
+table. States: none → pending(reason, t) → none. `Revocations.mark/2` (or `mark_user_hosts/2`)
+enters or re-enters pending — a new mark replaces reason and t. Only a fully successful sync (full
+or removal-only) leaves it: under the write lock it reads the mark (`seen/1`) before any grant, and
+afterwards `clear/2` deletes exactly that (host, t), so a mark committed while it ran stays. A
+partial/failed sync, `KeyRemoval`, offboarding scrub and `forget` never clear. Marks are made in the
+domain function, inside the write's `Ssm.Grants.transaction/1`, and hand off to `RevocationSync`
+only after commit. Marking writes: manual row delete and move (host, login or SSH user changed —
+the old host), every reconcile that removes grant rows (grant delete, host leaves customer/group,
+customer merge/delete, group delete, user delete/merge, offboarding), SSH user disabled or deleted
+(also bulk delete and merge sources: every host of the user), split (the user's grant hosts — grant
+rows are not copied), key deleted, moved or re-keyed (the old owner's hosts), `People.remove_authorizations/3`
+and `People.delete_keys/1`, and a row whose new options grant less (`Options.weaker?(old, new)`: a
+restriction entry added or changed, a permissive option removed). An options change that only widens
+is not marked. `test/ssm/diffs/revocation_marks_test.exs` has one row per
+access-reducing operation — a new one adds its row.
+*Manual sync* (diff page "Sync", per-row sync, "Sync all", `/api/v2` sync) is owned by `Ssm.Diffs.SyncRunner`
+(a GenServer; pure transitions in `Ssm.Diffs.SyncRunner.State`, table-tested). Per host: idle →
+running(run) → idle. `SyncRunner.run/3` claims only idle hosts (a running one comes back as
+`busy`: the page shows "A sync of <host> is already running."), runs sync and `SyncAudit` entry
+under the host's `WriteLock` in a task under `Ssm.Diffs.TaskSupervisor` (not linked to the
+LiveView — closing the page mid-sync still finishes and audits), frees each host when its audit
+is written and the rest when the run ends or crashes; the caller only waits for the reply.
+`DiffLive` keeps `syncing` as a page flag and refuses a second start server-side. The `/api/v2`
+sync (`POST /diffs/{host_id}/sync`, `DiffController`) goes through `SyncRunner.run/3` too, actor =
+token subject; a busy host is 409 `SYNC_RUNNING` with `Retry-After` at once (no audit row).
+*Audit actions* are owned by `Ssm.Activity.Actions` (catalog atom → stored string; stored
+strings never change — `test/ssm/activity/actions_test.exs` snapshots them and fails on an
+uncataloged `action: "…"` literal in `lib/`) and `Ssm.Activity.Entries` (the host/user/key/
+authorization write entries, shared by the hosts/users/keys/authorizations pages and `/api/v2`).
+Every successful `/api/v2` host, user, key and authorization create/update/delete logs exactly one
+entry there, actor = token subject, details `via: "api"` (logged in the controllers; the context
+functions take no actor).
 
 **Web login** (ADR-0011, `lib/ssm/oidc/`, `ssm_web/oidc_controller.ex`): `.htpasswd`
 users are local admins (session `ssm_user`). With `OIDC_ISSUER` set, SSO users are
@@ -112,19 +214,44 @@ cannot create hosts or pin all host keys, and `Hosts.update_host/3` drops their 
 connection fields (`address`, `port`, `username`, `key_fingerprint`, `jump_via`) and refuses a
 host other hosts jump through (`:jump_host`); only admins set `jump_via` (jump hosts are global).
 `Hosts.delete_host/2` refuses a jump host in use for every UI user (`jump_via` cascades), as mctl
-does. Bulk grant intersects client-sent host ids with the scope.
+does. Bulk grant intersects client-sent host ids with the scope. Permissive authorized_keys options
+(`Options.admin_only/1`: `environment`, `cert-authority`, `user-rc`, `permitopen`, `permitlisten`,
+`pty`, `port-forwarding`, `agent-forwarding`, `X11-forwarding`, `tunnel`, `no-touch-required`) are
+admin-only on the scoped write paths: `create_/update_authorization` and `bulk_grant` take
+`role:` in `opts` (`Options.validate_role/2`, fails closed without a role; a comment-only edit of
+an admin's grant passes, moving it does not; removing or changing a restriction entry the stored row
+carries — `Options.missing_restrictions/2`, name and exact value — is admin-only too); the scope-less
+`/api/v2` path is unchanged.
 Activity entries of a host carry `activity_log.host_id` (cleared by `Hosts.delete_host/1`, SQLite
 reuses ids); a scoped user sees those of hosts in scope plus its own hostless ones. SSH user catalog: every web user
 reads all SSH users and keys; a scoped user changes a user, its keys, split/merge/bulk delete and
 diff-page key assignment only for SSH users that are `Users.writable?/2` (≥1 authorization, all
 in scope; a user without authorizations is read-only until authorized in scope) — scoped writes in `Users`, `BulkOps` and `KeyAssignment` (`:scope`) return
-`{:error, :out_of_scope}` otherwise; creating SSH users stays allowed. `test/ssm_web/scope_live_test.exs`
+`{:error, :out_of_scope}` otherwise; creating SSH users stays allowed. For a non-admin, the same scoped writes (`Users.create_key/3`,
+`update_key/4` on a move or new key material, `BulkOps.split_user/5`, `merge_users/4`, `KeyAssignment.assign/1`
+with `:role`/`:actor`) also refuse an SSH user holding a grant with admin-only options
+(`Users.check_admin_only/3`, `{:error, :admin_only_options}`, fails closed without a role, audited
+`admin_only_refused`). `test/ssm_web/scope_live_test.exs`
 enumerates every LiveView route: a new page fails the suite until it is classified there.
 
 **Host keys** (ADR-0008, `lib/ssm/ssh/host_key*.ex`, `lib/ssm/hosts/host_keys.ex`):
 every connect verifies `host.key_fingerprint`; unpinned hosts are refused.
 `Ssm.Hosts.HostKeys` (`pin/2`, `accept/3`, `pin_all/1`) is the only place that stores
 keys; `probe_host_key/2` on the SSH client is the only trust-on-first-use path.
+
+**State machines**: a host's status is one tagged value from `Ssm.HostStatus`
+(`lib/ssm/host_status.ex`, pure): `:disabled | :unchecked | :synced | {:drift, missing, extra} |
+:reachable | {:auth_failed, msg} | {:host_key_changed, msg} | {:unreachable, msg}`.
+`derive(host, cache_entry, stored_check)` picks disabled, then this node's
+`Ssm.Diffs.StatusCache` entry, then the stored `HostCheck`, else unchecked; `from_connection/1`
+maps a connection test (`:reachable` = connected, keys not compared). Errors are tagged only
+through `Ssm.Ssh.ErrorCode` codes. HostsLive and DiffLive render this value (DiffLive adds a
+transient `:loading`); do not add another status shape in a LiveView. Status is dropped at the
+context level: `Hosts.delete_host/1` (every delete path, jump cascade included) evicts cache
+entries, `Hosts.update_host/2` calls `HostChecks.forget/1` (row + cache) when `disabled` changes.
+The host-key pin is `Ssm.Hosts.PinState.of/1` (pure, read-only): `:unpinned` (no fingerprint),
+`:preseeded` (fingerprint, no `host_key` yet), `:confirmed` (both, from a probe); only
+`Ssm.Hosts.HostKeys` moves it.
 
 **mctl API** (`/api/mctl/v1`): `MctlContract.Plug` from the path dependency
 `mctl_contract` with `SsmWeb.MctlProvider`; own `ssm_` bearer tokens, own envelope.
@@ -134,7 +261,7 @@ Conformance test: `test/ssm_web/mctl_conformance_test.exs`. `POST /hosts` runs
 (`config :ssm, :mctl_login_wait`, 10 min) until mctl has authorized that key. Host summaries (C4,
 `/host-summaries`, `/hosts/{id}/summary`) read `host_checks`, which `Ssm.Diffs.SyncScheduler`
 refreshes every `SSM_SYNC_INTERVAL` through `Ssm.Diffs.HostChecks.sweep/1` (disabled hosts
-are never touched and keep no row; the stored drift holds fingerprints and comments only).
+are never touched and keep no row — disabling forgets it; the stored drift holds fingerprints and comments only).
 Contract section 10: `DELETE /hosts/{id}` (refused for a jump host in use — `jump_via` cascades)
 and people (`Ssm.People` matches operator by issuer+subject, SSH users and key comments by e-mail;
 `SsmWeb.Mctl.People` removes only the person's key lines per login through `script.sh`).
@@ -334,7 +461,8 @@ within the conventions above, doc fixes.
 
 ## 8. Reference
 
-**API** (all under `/api/v2`, plural resources): `hosts`, `users`, `keys`,
+**API** (all under `/api/v2`, plural resources): `hosts` (+ `/{id}/managed-logins`, `DELETE
+…/{login}`), `users`, `keys`,
 `authorizations`, `activity-log`, `diffs/{host_id}` (+ `/sync`),
 `auth/{login,refresh,logout,me}`, `info`. Unauthenticated health probe at
 `/api/health`. Envelope: `{success, data, error{code,message,details},
@@ -342,12 +470,18 @@ meta{total,page,page_size}}`.
 
 **Error codes** (`ssm_web/api/errors.ex`): `AUTH_REQUIRED` 401, `INVALID_CREDENTIALS`
 401, `VALIDATION_FAILED` 422, `{HOST,USER,KEY,AUTHORIZATION}_NOT_FOUND` 404,
-`RATE_LIMITED` 429 (failed-login lock, `Retry-After`), `HOST_DISABLED` 409, `SSH_READONLY` 409, `CONFLICT` 409, `SSH_CONNECT_FAILED` 502,
+`MANAGED_LOGIN_NOT_FOUND` 404, `RATE_LIMITED` 429 (failed-login lock, `Retry-After`), `HOST_DISABLED` 409, `SSH_READONLY` 409, `SYNC_RUNNING` 409 (`Retry-After`), `CONFLICT` 409, `SSH_CONNECT_FAILED` 502,
 `INTERNAL_ERROR` 500.
 Diff/sync outcomes (wire changes approved 2026-11-08): unreadable listing → 502
 `SSH_CONNECT_FAILED`; partial sync (root-owned `user_readonly`) or host-wide readonly → 409
 `SSH_READONLY`; own key (`SSH_KEY`) unavailable → 500 `INTERNAL_ERROR`; stored key row with control
-characters → 422 `VALIDATION_FAILED`. Contract tests: `test/ssm_web/api/diffs_api_test.exs`.
+characters → 422 `VALIDATION_FAILED`; host already syncing in `Ssm.Diffs.SyncRunner` (diff page,
+"Sync all", another API call) → 409 `SYNC_RUNNING` + `Retry-After: 5`, nothing read, written or
+audited — retry later. Two 409s on sync: `SYNC_RUNNING` = nothing done, `SSH_READONLY` = done
+partly or refused by a marker. Each diff login carries an additive `notes` list
+(`Ssm.Diffs.Notes`: `{kind, text, line}`, kinds `unsafe|revocation_blocked|readonly_ignored|
+drops_host_restriction|invalid_stored_options|note`). Contract tests:
+`test/ssm_web/api/diffs_api_test.exs`, `diff_notes_api_test.exs`.
 
 **Auth quick test** (dev server):
 ```bash
@@ -363,7 +497,7 @@ secret as the python stack, so pre-cutover tokens keep working.
 **Env vars** (env-only, read in `phoenix/config/runtime.exs`; python-stack names and
 defaults preserved): `DATABASE_URL` (or `DATABASE_PATH`), `HTPASSWD`, `SSH_KEY`,
 `SSH_KEY_PASSPHRASE`, `SSH_TIMEOUT`, `SSH_CONNECT_TIMEOUT`, `SSH_CONCURRENCY`,
-`SSH_CHECK_SCHEDULE`, `SSH_UPDATE_SCHEDULE`, `SSM_SYNC_INTERVAL`, `SSM_SYNC_CONCURRENCY`, `JWT_SECRET` (fallback `SESSION_KEY`),
+`SSH_CHECK_SCHEDULE`, `SSH_UPDATE_SCHEDULE`, `SSM_SYNC_INTERVAL`, `SSM_SYNC_CONCURRENCY`, `SSM_REVOCATION_SYNC`, `JWT_SECRET` (fallback `SESSION_KEY`),
 `SECRET_KEY_BASE`, `LOGLEVEL`, `PORT`, `LISTEN`, `PHX_HOST`, `PHX_ALT_HOSTS` (extra UI names, `SsmWeb.Hosts`), `POOL_SIZE`,
 `TRUSTED_PROXIES`, `MCTL_TOKEN_FILE`, `MCTL_TOKEN_SCOPES`, and the OIDC set read at boot by
 `Ssm.OIDC.Config` (not runtime.exs): `OIDC_ISSUER`, `OIDC_CLIENT_ID`,
@@ -388,18 +522,23 @@ key check is separate (`SSM_SYNC_INTERVAL`) and never writes to a host;
 `.secrets-whitelist` still carries Rust- and Python-era
 path entries (harmless, narrow — cleaning it needs user approval per rule #6);
 `./ssm.db` at the repo root is the final snapshot of the python stack's data, kept as
-the dev-DB import source (`just import-db`). Known limitations of the `script.sh`
-link checks: a root-owned file an admin left in a user's home can be moved by that user to
-`~/.ssh/user_readonly` and then freezes the login (the check sees a plain root-owned
-file); and without `/proc` (FreeBSD/pfSense) the read side checks before it reads, so a user
-who swaps `authorized_keys` for a link in the instant between check and read could still get
-one read through it (Linux checks the opened file; the write side has no such window). Without
-`timeout(1)` a FIFO swapped in at that instant can hang the listing until the SSH timeout.
+the dev-DB import source (`just import-db`). Without `getent` (busybox) `script.sh` reads `/etc/passwd` with an exact awk field match
+(`ENVIRON`, no regex). Known limitations of the `script.sh`
+link checks: without perl and without `/proc` (FreeBSD/pfSense) the read side checks the entry
+before and after it reads, so a user who swaps `authorized_keys` for a link and back in the
+instant of the read could still get one read through it (perl or Linux `/proc` check the opened
+file; the write side has no such window); without perl, a link swapped in at that instant is
+opened (a device behind it sees the open). Without perl and `timeout(1)` a FIFO swapped in at that
+instant can hang the listing until the SSH timeout. A `user_readonly` is trusted only in a
+root-owned `~/.ssh`; a root-owned file that root itself left in such a directory is not checked
+further (only ssm's keyfile header is recognised).
 A user who symlinks their own `~/.ssh` blocks ssm's writes, and so the revocation, for that login
 on purpose: it stays a visible "revocation blocked: unsafe ~/.ssh" (diff, periodic check, audit)
-that staff must resolve on the host; ssm does not repair it. On busybox (no `mv -T`/`-h`) a
-symlink-to-dir planted in the instant between ssm's `rm` of the old link, its re-check and its
-`mv` could still receive the root-owned 0644 temp file.
+that staff must resolve on the host; ssm does not repair it. Grants (design, not fixed): a grant
+names an SSH user, not a person or a key. An operator may create SSH users (with keys) that hold
+no authorization yet; when someone with a wider scope later grants such an SSH user (claim
+first, then wait), the keys planted beforehand reach every host of the grant's target. Check an
+SSH user's keys before granting it.
 
 **Knowledge graph**: `.claude/settings.json` hooks keep a `code-review-graph` index
 (`.code-review-graph/`, gitignored) updated on every edit. The MCP server entry was

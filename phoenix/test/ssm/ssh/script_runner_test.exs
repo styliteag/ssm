@@ -192,7 +192,8 @@ defmodule Ssm.Ssh.ScriptRunnerTest do
         end)
 
       {_, 0} = System.cmd("chown", ["1000", Path.join(dir, "h2/.ssh/user_readonly")])
-      File.write!(Path.join(dir, "passwd"), passwd)
+      root = "root:x:0:0::#{Path.join(dir, "home")}:/bin/sh\n"
+      File.write!(Path.join(dir, "passwd"), root <> passwd)
 
       File.write!(Path.join(bin, "getent"), """
       #!/bin/sh
@@ -226,7 +227,7 @@ defmodule Ssm.Ssh.ScriptRunnerTest do
           "sh",
           [
             "-c",
-            ~s(sh "$0" set_authorized_keyfile "$1" < "$2"),
+            ~s(sh "$0" set_authorized_keyfile "$1" root < "$2"),
             script,
             login,
             Path.join(dir, "in")
@@ -256,10 +257,73 @@ defmodule Ssm.Ssh.ScriptRunnerTest do
       assert b.unsafe == nil
     end
 
+    test "the write names the SSH user, so the script refuses a login sharing its home" do
+      stub_version_current()
+
+      assert :ok = ScriptRunner.set_authorized_keyfile(MockClient, target(), "toor", "")
+
+      assert {7, "#{@remote} set_authorized_keyfile toor root", ""} in MockClient.calls().exec_inputs
+    end
+
+    test "sha256 is parsed only as 64 hex digits" do
+      stub_version_current()
+      sha = String.duplicate("0f", 32)
+
+      json =
+        Jason.encode!([
+          %{login: "a", sha256: sha, keyfile: ""},
+          %{login: "b", sha256: "x; rm -rf /", keyfile: ""},
+          %{login: "c", keyfile: ""}
+        ])
+
+      MockClient.set_exec(7, "#{@remote} get_ssh_keyfiles", %Result{stdout: json})
+      assert {:ok, [a, b, c]} = ScriptRunner.get_ssh_keyfiles(MockClient, target())
+      assert {a.sha256, b.sha256, c.sha256} == {sha, nil, nil}
+    end
+
+    test "the write passes a valid expected sha256 and maps a stale refusal" do
+      stub_version_current()
+      sha = String.duplicate("0f", 32)
+      command = "#{@remote} set_authorized_keyfile deploy root #{sha}"
+
+      MockClient.set_exec(7, command, %Result{
+        stdout: "Keyfile changed since it was read (stale), aborting.",
+        exit_code: 1
+      })
+
+      assert {:error, {:ssh_stale, _}} =
+               ScriptRunner.set_authorized_keyfile(MockClient, target(), "deploy", "",
+                 expected_sha256: sha
+               )
+
+      assert :ok =
+               ScriptRunner.set_authorized_keyfile(MockClient, target(), "deploy", "",
+                 expected_sha256: "not-a-sha"
+               )
+
+      assert {7, "#{@remote} set_authorized_keyfile deploy root", ""} in MockClient.calls().exec_inputs
+    end
+
+    test "a target without SSH user is refused before any SSH" do
+      for username <- [nil, ""] do
+        assert {:error, {:ssh_unsafe, message}} =
+                 ScriptRunner.set_authorized_keyfile(
+                   MockClient,
+                   %{target() | username: username},
+                   "deploy",
+                   ""
+                 )
+
+        assert message =~ "SSH user"
+      end
+
+      assert MockClient.calls().exec == []
+    end
+
     test "an unsafe refusal surfaces as ssh_unsafe" do
       stub_version_current()
 
-      MockClient.set_exec(7, "#{@remote} set_authorized_keyfile deploy", %Result{
+      MockClient.set_exec(7, "#{@remote} set_authorized_keyfile deploy root", %Result{
         stdout: "Keyfile is unsafe (hardlink), aborting.",
         exit_code: 1
       })
@@ -427,7 +491,7 @@ defmodule Ssm.Ssh.ScriptRunnerTest do
     test "a huge stderr is capped in the error message" do
       stub_version_current()
 
-      MockClient.set_exec(7, "#{@remote} set_authorized_keyfile deploy", %Result{
+      MockClient.set_exec(7, "#{@remote} set_authorized_keyfile deploy root", %Result{
         stderr: String.duplicate("x", 100_000),
         exit_code: 1
       })
@@ -462,13 +526,13 @@ defmodule Ssm.Ssh.ScriptRunnerTest do
                  String.contains?(cmd, "set_authorized_keyfile")
                end)
 
-      assert command == "#{@remote} set_authorized_keyfile deploy"
+      assert command == "#{@remote} set_authorized_keyfile deploy root"
     end
 
     test "a readonly refusal surfaces as ssh_readonly" do
       stub_version_current()
 
-      MockClient.set_exec(7, "#{@remote} set_authorized_keyfile deploy", %Result{
+      MockClient.set_exec(7, "#{@remote} set_authorized_keyfile deploy root", %Result{
         stderr: "refusing write: readonly (system_readonly set)",
         exit_code: 1
       })
@@ -482,7 +546,7 @@ defmodule Ssm.Ssh.ScriptRunnerTest do
     test "other failures surface as ssh_connect_failed" do
       stub_version_current()
 
-      MockClient.set_exec(7, "#{@remote} set_authorized_keyfile deploy", %Result{
+      MockClient.set_exec(7, "#{@remote} set_authorized_keyfile deploy root", %Result{
         stderr: "disk full",
         exit_code: 1
       })

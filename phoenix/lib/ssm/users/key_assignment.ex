@@ -9,7 +9,10 @@ defmodule Ssm.Users.KeyAssignment do
 
   With `:scope` (web UI, ADR-0012 §3; default global) an existing user must
   be `Ssm.Users.writable?/2` – the new key lands on every host of that user –
-  and the grant's host must be in scope.
+  and the grant's host must be in scope. With `:role` other than `"admin"`
+  (default: none, fails closed) an existing user holding admin-only options
+  is refused before anything is written (`Ssm.Users.check_admin_only/3`,
+  audited with `:actor`).
   """
 
   alias Ecto.Changeset
@@ -58,7 +61,26 @@ defmodule Ssm.Users.KeyAssignment do
           {:ok, %{user: User.t(), key: UserKey.t(), user_created?: boolean, granted?: boolean}}
           | {:error, {atom(), String.t()}}
   def assign(%{} = params) do
-    Repo.transaction(fn ->
+    with :ok <- check_admin_only(params), do: assign_in_transaction(params)
+  end
+
+  defp check_admin_only(%{user: %User{} = user} = params) do
+    opts = [role: Map.get(params, :role), actor: Map.get(params, :actor)]
+
+    case Users.check_admin_only([user], "assign key", opts) do
+      :ok ->
+        :ok
+
+      {:error, :admin_only_options} ->
+        {:error,
+         {:key, "#{user.username} holds admin-only key options; only an admin may add keys."}}
+    end
+  end
+
+  defp check_admin_only(_params), do: :ok
+
+  defp assign_in_transaction(params) do
+    Ssm.Grants.transaction(fn ->
       with {:ok, user, created?} <- ensure_user(params),
            {:ok, key} <- create_or_adopt_key(user, params),
            {:ok, granted?} <- grant(user, params) do

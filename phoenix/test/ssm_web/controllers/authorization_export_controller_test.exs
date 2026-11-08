@@ -32,12 +32,12 @@ defmodule SsmWeb.AuthorizationExportControllerTest do
   test "cells a spreadsheet would run as a formula are neutralised", %{conn: conn} do
     user = user_fixture(%{username: "=HYPERLINK(\"http://x\")"})
     host = host_fixture(%{name: "+cmd"})
-    _auth = authorization_fixture(user, host, %{login: "@sum", comment: "c"})
+    _auth = authorization_fixture(user, host, %{login: "deploy"})
     {:ok, _} = Ssm.Users.update_user(user, %{username: "-2+3"})
 
     conn = get(conn, ~p"/authorizations/export")
     [_header, line] = String.split(response(conn, 200), "\n")
-    assert line == ~s("'-2+3","'+cmd","'@sum","","Yes","#{host.address}")
+    assert line == ~s("'-2+3","'+cmd","deploy","","Yes","#{host.address}")
   end
 
   test "a filter of the wrong type is ignored, not a crash", %{conn: conn} do

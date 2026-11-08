@@ -16,8 +16,10 @@ defmodule SsmWeb.AuthorizationsLive do
   use SsmWeb, :live_view
 
   alias Ssm.Activity
+  alias Ssm.Activity.{Actions, Entries}
   alias Ssm.Authorizations
   alias Ssm.Authorizations.Authorization
+  alias Ssm.Grants
   alias Ssm.Hosts
   alias Ssm.Users
   alias SsmWeb.Layouts
@@ -39,6 +41,9 @@ defmodule SsmWeb.AuthorizationsLive do
 
   @view_modes ~w(list matrix stats)
 
+  @grant_row "This authorization comes from a grant and is read-only here; " <>
+               "change or delete the grant instead."
+
   @impl true
   def handle_params(params, _uri, socket) do
     view = if params["view"] in @view_modes, do: params["view"], else: "list"
@@ -58,6 +63,9 @@ defmodule SsmWeb.AuthorizationsLive do
   # Host-bearing reads and writes go through the user's scope (ADR-0012):
   # rows on out-of-scope hosts are invisible and act as missing.
   defp scope(socket), do: Ssm.Scope.of(socket.assigns.current_user)
+
+  # permissive authorized_keys options are admin-only (Options.validate_role/2)
+  defp role(socket), do: [role: socket.assigns.current_user.role]
 
   defp parse_id(value) when not is_binary(value), do: nil
 
@@ -84,6 +92,10 @@ defmodule SsmWeb.AuthorizationsLive do
 
     socket
     |> assign(:authorization_count, length(authorizations))
+    |> assign(
+      :grant_labels,
+      Grants.labels(scope(socket), for(a <- authorizations, a.grant_id, do: a.grant_id))
+    )
     |> stream(:authorizations, authorizations, reset: true)
     |> reload_matrix()
   end
@@ -220,6 +232,9 @@ defmodule SsmWeb.AuthorizationsLive do
       nil ->
         {:noreply, put_flash(socket, :error, "Authorization not found.")}
 
+      %Authorization{grant_id: grant_id} when not is_nil(grant_id) ->
+        {:noreply, put_flash(socket, :error, @grant_row)}
+
       auth ->
         {:noreply,
          assign(socket,
@@ -245,13 +260,13 @@ defmodule SsmWeb.AuthorizationsLive do
   def handle_event("save", %{"authorization" => params}, socket) do
     result =
       case socket.assigns.editing do
-        nil -> Authorizations.create_authorization(scope(socket), params)
-        auth -> Authorizations.update_authorization(scope(socket), auth, params)
+        nil -> Authorizations.create_authorization(scope(socket), params, role(socket))
+        auth -> Authorizations.update_authorization(scope(socket), auth, params, role(socket))
       end
 
     case result do
       {:ok, auth} ->
-        action = if socket.assigns.editing, do: "update", else: "create"
+        action = if socket.assigns.editing, do: :update, else: :create
         log_auth_activity(socket, action, auth)
 
         {:noreply,
@@ -259,6 +274,9 @@ defmodule SsmWeb.AuthorizationsLive do
          |> assign(form: nil, editing: nil)
          |> put_flash(:info, "Authorization #{action}d.")
          |> reload_authorizations()}
+
+      {:error, :grant_row} ->
+        {:noreply, socket |> assign(form: nil, editing: nil) |> put_flash(:error, @grant_row)}
 
       {:error, changeset} ->
         {:noreply, assign(socket, form: to_form(changeset))}
@@ -269,13 +287,14 @@ defmodule SsmWeb.AuthorizationsLive do
     with %Authorization{} = auth <-
            Authorizations.get_authorization(scope(socket), parse_id(id)),
          {:ok, _} <- Authorizations.delete_authorization(scope(socket), auth) do
-      log_auth_activity(socket, "delete", auth)
+      log_auth_activity(socket, :delete, auth)
 
       {:noreply,
        socket
        |> put_flash(:info, "Authorization deleted.")
        |> reload_authorizations()}
     else
+      {:error, :grant_row} -> {:noreply, put_flash(socket, :error, @grant_row)}
       _ -> {:noreply, put_flash(socket, :error, "Authorization not found.")}
     end
   end
@@ -409,7 +428,7 @@ defmodule SsmWeb.AuthorizationsLive do
 
     case Authorizations.create_authorization(scope(socket), attrs) do
       {:ok, auth} ->
-        log_auth_activity(socket, "create", auth)
+        log_auth_activity(socket, :create, auth)
         {:noreply, reload_authorizations(socket)}
 
       {:error, _changeset} ->
@@ -420,8 +439,11 @@ defmodule SsmWeb.AuthorizationsLive do
   defp revoke_cell(socket, auth) do
     case Authorizations.delete_authorization(scope(socket), auth) do
       {:ok, _} ->
-        log_auth_activity(socket, "delete", auth)
+        log_auth_activity(socket, :delete, auth)
         {:noreply, reload_authorizations(socket)}
+
+      {:error, :grant_row} ->
+        {:noreply, put_flash(socket, :error, @grant_row)}
 
       {:error, _changeset} ->
         {:noreply, put_flash(socket, :error, "Could not revoke the authorization.")}
@@ -438,7 +460,14 @@ defmodule SsmWeb.AuthorizationsLive do
   ## Bulk grant helpers
 
   defp bulk_save(socket, user_ids, host_ids, login, options) do
-    case Authorizations.bulk_grant(scope(socket), user_ids, host_ids, login, presence(options)) do
+    case Authorizations.bulk_grant(
+           scope(socket),
+           user_ids,
+           host_ids,
+           login,
+           presence(options),
+           role(socket)
+         ) do
       {:ok, %{created: created, skipped: skipped}} ->
         log_bulk_grant(socket, login, user_ids, host_ids, created, skipped)
 
@@ -514,16 +543,17 @@ defmodule SsmWeb.AuthorizationsLive do
   end
 
   defp bulk_grant_error(changeset) do
-    case changeset.errors[:login] do
-      {message, _} -> "Login #{message}."
-      nil -> "Could not create the authorizations — check the form fields."
+    case {changeset.errors[:login], changeset.errors[:options]} do
+      {{message, _}, _} -> "Login #{message}."
+      {nil, {message, _}} -> "Nothing created: options #{message}."
+      {nil, nil} -> "Could not create the authorizations — check the form fields."
     end
   end
 
   defp log_bulk_grant(socket, login, user_ids, host_ids, created, skipped) do
     Activity.log(%{
       activity_type: "auth",
-      action: "bulk_grant",
+      action: Actions.name(:bulk_grant),
       target: "#{login} (#{length(created)} grants)",
       actor_username: socket.assigns.current_user.actor,
       details: %{
@@ -549,22 +579,8 @@ defmodule SsmWeb.AuthorizationsLive do
   defp host_label(%{host: %{name: name}}), do: name
   defp host_label(auth), do: "missing host ##{auth.host_id}"
 
-  defp log_auth_activity(socket, action, auth) do
-    auth = Ssm.Repo.preload(auth, [:user, :host])
-    target = "#{user_label(auth)}@#{host_label(auth)}:#{auth.login}"
-
-    attrs = %{
-      activity_type: "auth",
-      action: action,
-      target: target,
-      host_id: auth.host_id,
-      actor_username: socket.assigns.current_user.actor
-    }
-
-    attrs = if action == "delete", do: attrs, else: Map.put(attrs, :user_id, auth.user_id)
-
-    Activity.log(attrs)
-  end
+  defp log_auth_activity(socket, action, auth),
+    do: Entries.authorization(action, auth, socket.assigns.current_user.actor)
 
   ## Render
 
@@ -723,7 +739,17 @@ defmodule SsmWeb.AuthorizationsLive do
           </:col>
           <:col :let={{_id, auth}} label="Comment" sort="comment">{auth.comment || "—"}</:col>
           <:action :let={{_id, auth}}>
+            <.link
+              :if={auth.grant_id}
+              id={"via-grant-#{auth.id}"}
+              navigate={~p"/grants?user_id=#{auth.user_id}"}
+              class="badge badge-ghost badge-sm whitespace-nowrap"
+              title="Made by a grant: read-only here, change the grant instead"
+            >
+              via {@grant_labels[auth.grant_id] || "grant"}
+            </.link>
             <button
+              :if={is_nil(auth.grant_id)}
               id={"edit-authorization-#{auth.id}"}
               class="btn btn-ghost btn-xs"
               phx-click="edit"
@@ -733,6 +759,7 @@ defmodule SsmWeb.AuthorizationsLive do
               <.icon name="hero-pencil-square" class="size-4" />
             </button>
             <button
+              :if={is_nil(auth.grant_id)}
               id={"delete-authorization-#{auth.id}"}
               class="btn btn-ghost btn-xs text-error"
               phx-click="delete"

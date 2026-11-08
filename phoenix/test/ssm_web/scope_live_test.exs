@@ -21,7 +21,7 @@ defmodule SsmWeb.ScopeLiveTest do
   # host data and must apply the scope; catalog pages show the SSH user
   # catalog (all users, ADR-0012 §3) and must not leak host data either.
   @host_bearing ~w(/dashboard /hosts /authorizations /diff /activities)
-  @catalog ~w(/users /keys)
+  @catalog ~w(/users /keys /grants)
   @no_host_data ~w(/sign-in /settings/api-tokens)
 
   setup do

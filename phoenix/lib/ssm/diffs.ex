@@ -16,8 +16,16 @@ defmodule Ssm.Diffs do
   of that login always writes it – otherwise the first sync would lock ssm
   out (onboarding v2 installs it into `~root/.ssh/authorized_keys`). When
   the own key cannot be read, a sync that would write that login is refused.
+
+  Alias logins: the own key is placed by login name, so a login that is
+  not `host.username` but resolves to its home (a uid-0 alias such as
+  `toor` sharing root's home) is never managed — `script.sh` refuses the
+  write (`unsafe (shared_home)`) and a sync skips it. Placing the key by
+  home instead would keep ssm's key, but the two logins would still
+  replace each other's grants in their one file on every sync.
   """
 
+  alias Ssm.Authorizations.Options
   alias Ssm.Diffs.{Compare, Expected, KeyLine}
   alias Ssm.Hosts
   alias Ssm.Hosts.{Host, MachineId}
@@ -40,6 +48,7 @@ defmodule Ssm.Diffs do
 
   defmodule LoginDiff do
     @moduledoc "Per-login diff of authorized_keys."
+    @type t :: %__MODULE__{}
     defstruct login: nil,
               has_pragma: false,
               readonly_condition: nil,
@@ -138,8 +147,33 @@ defmodule Ssm.Diffs do
   """
   @spec sync_host_reported(module(), integer()) ::
           {{:ok, [SyncedLogin.t()]} | {:error, term()}, map()}
-  def sync_host_reported(client \\ Ssm.Ssh, host_id) do
-    case prepare_sync(client, host_id) do
+  def sync_host_reported(client \\ Ssm.Ssh, host_id), do: run_sync(client, host_id, :full)
+
+  @doc """
+  Removal-only sync (ADR-0012 §6, `Ssm.Diffs.RevocationSync`): same checks
+  and reports as `sync_host_reported/2` (disabled host, readonly markers,
+  unsafe `~/.ssh`, own key), but each login's file keeps exactly the host's
+  own lines whose key the database still authorizes — lines are only
+  removed, never added or changed. A login without a file, or with nothing
+  to remove, is not written. A linked `authorized_keys` is not read, so
+  nothing can be removed from it: it is skipped (the sync then counts as
+  partial and "revocation pending" stays).
+  """
+  @spec removal_sync_reported(module(), integer()) ::
+          {{:ok, [SyncedLogin.t()]} | {:error, term()}, map()}
+  def removal_sync_reported(client \\ Ssm.Ssh, host_id),
+    do: run_sync(client, host_id, :removal_only)
+
+  defp run_sync(client, host_id, mode) do
+    Ssm.Hosts.WriteLock.run(host_id, fn -> locked_sync(client, host_id, mode) end)
+  end
+
+  # under the host's write lock (Ssm.Hosts.WriteLock): read, then write
+  defp locked_sync(client, host_id, mode) do
+    # before any read of the grants (ADR-0012 §6, Ssm.Diffs.Revocations.seen/1)
+    revocation = Ssm.Diffs.Revocations.seen(host_id)
+
+    case prepare_sync(client, host_id, mode) do
       {:ok, %{host: host, logins: logins, target: target, ctx: ctx}} ->
         logins
         |> sync_logins(client, target, ctx, %{
@@ -148,13 +182,14 @@ defmodule Ssm.Diffs do
           skipped: Enum.reverse(ctx.skipped)
         })
         |> tap(fn {result, _report} -> learn_machine_id(result, host, client) end)
+        |> tap(fn {result, _report} -> clear_revocation(result, host.id, revocation) end)
 
       {:error, _} = error ->
         {error, %{written: [], skipped: [], ignored: []}}
     end
   end
 
-  defp prepare_sync(client, host_id) do
+  defp prepare_sync(client, host_id, mode) do
     with {:ok, host} <- Hosts.fetch_host(host_id),
          :ok <- ensure_not_disabled(host),
          target = Hosts.target_for(host),
@@ -162,23 +197,58 @@ defmodule Ssm.Diffs do
          # no write when the files cannot be read
          {:ok, entries} <- ScriptRunner.get_ssh_keyfiles(client, target),
          on_host = Map.new(entries, &{&1.login, parse_authorized_keys(&1.keyfile)}),
-         logins = Expected.logins_to_sync(host_id, on_host),
+         logins = logins_for(mode, Expected.logins_to_sync(host_id, on_host), on_host),
          :ok <- ensure_no_host_readonly(host, entries, logins),
-         skipped = logins_to_skip(entries, logins),
+         skipped = logins_to_skip(entries, logins) ++ unread_logins(mode, entries, logins),
          to_write = logins -- Enum.map(skipped, &elem(&1, 0)),
          {:ok, own} <- own_key_for_sync(host, to_write) do
       ignored =
         for e <- entries, e.readonly_ignored, e.login in logins, do: {e.login, e.readonly_ignored}
 
-      ctx = %{host: host, own: own, on_host: on_host, skipped: skipped, ignored: ignored}
+      shas = Map.new(entries, &{&1.login, &1.sha256})
+
+      ctx = %{
+        host: host,
+        own: own,
+        on_host: on_host,
+        shas: shas,
+        skipped: skipped,
+        ignored: ignored,
+        mode: mode
+      }
+
       {:ok, %{host: host, logins: to_write, target: target, ctx: ctx}}
     end
+  end
+
+  # a removal-only sync touches only logins that have a file on the host
+  defp logins_for(:full, logins, _on_host), do: logins
+
+  defp logins_for(:removal_only, logins, on_host),
+    do: Enum.filter(logins, &Map.has_key?(on_host, &1))
+
+  # a linked/special authorized_keys is not read: a removal-only sync cannot
+  # tell which lines to keep, so it does not write it (a full sync replaces it)
+  defp unread_logins(:full, _entries, _logins), do: []
+
+  defp unread_logins(:removal_only, entries, logins) do
+    for e <- entries,
+        e.login in logins,
+        is_binary(e.unsafe) and e.unsafe != "ssh_dir",
+        do: {e.login, "unsafe authorized_keys (#{e.unsafe}): not read, nothing removed"}
   end
 
   # identity-claims-v1: a successful sync proves the host reachable; refresh
   # its machine-id claim (best effort, never changes the sync result).
   defp learn_machine_id({:ok, _}, host, client), do: MachineId.refresh(host, client: client)
   defp learn_machine_id(_other, _host, _client), do: :ok
+
+  # ADR-0012 §6: a fully successful sync has written the removals the mark
+  # it saw at its start stands for; a partial or failed one leaves it pending
+  defp clear_revocation({:ok, _}, host_id, seen),
+    do: Ssm.Diffs.Revocations.clear(host_id, seen)
+
+  defp clear_revocation(_other, _host_id, _seen), do: :ok
 
   # a host-wide marker (system_readonly, vendor platform) blocks every login
   defp ensure_no_host_readonly(host, entries, logins) do
@@ -231,9 +301,43 @@ defmodule Ssm.Diffs do
       |> Compare.lines_to_write(expected.legacy, Map.get(ctx.on_host, login, []))
       |> with_own_key(ctx.own[login])
 
+    case lines_for(ctx.mode, lines, Map.get(ctx.on_host, login, [])) do
+      :unchanged -> sync_logins(rest, client, target, ctx, acc)
+      lines -> write_login(lines, login, rest, client, target, ctx, acc, expected)
+    end
+  end
+
+  # removal-only: the host's own lines whose key is still authorized, in the
+  # host's order and wording — except a line whose options grant more than
+  # the database's (a restriction missing, a permissive option extra): it
+  # becomes the database's line. :unchanged when no line goes or changes.
+  defp lines_for(:full, lines, _on_host), do: lines
+
+  defp lines_for(:removal_only, lines, on_host) do
+    by_key = Map.new(lines, &{KeyParser.identity(&1), &1})
+
+    kept =
+      for line <- on_host,
+          Map.has_key?(by_key, KeyParser.identity(line)),
+          do: tightened(line, Map.fetch!(by_key, KeyParser.identity(line)))
+
+    if kept == on_host, do: :unchanged, else: kept
+  end
+
+  defp tightened(host_line, db_line) do
+    db_options = KeyParser.options(db_line)
+
+    if db_options != "" and Options.weaker?(KeyParser.options(host_line), db_options),
+      do: db_line,
+      else: host_line
+  end
+
+  defp write_login(lines, login, rest, client, target, ctx, acc, expected) do
     content = Enum.map_join(lines, "", &(&1 <> "\n"))
 
-    case ScriptRunner.set_authorized_keyfile(client, target, login, content) do
+    opts = [expected_sha256: ctx.shas[login]]
+
+    case ScriptRunner.set_authorized_keyfile(client, target, login, content, opts) do
       :ok ->
         done = %SyncedLogin{login: login, written_keys: length(lines)}
         acc = %{acc | synced: [done | acc.synced], refused: acc.refused ++ expected.refused}
@@ -243,6 +347,11 @@ defmodule Ssm.Diffs do
       # user_readonly surfaces only now: skip it like a listed one
       {:error, {:ssh_readonly, reason}} ->
         sync_logins(rest, client, target, ctx, %{acc | skipped: [{login, reason} | acc.skipped]})
+
+      # the file changed on the host since the listing: not overwritten
+      {:error, {:ssh_stale, _}} ->
+        skipped = [{login, "changed on the host since it was read; not written"} | acc.skipped]
+        sync_logins(rest, client, target, ctx, %{acc | skipped: skipped})
 
       # the script refused a link only now (no listing entry, link-to-dir)
       {:error, {:ssh_unsafe, reason}} ->
@@ -264,6 +373,9 @@ defmodule Ssm.Diffs do
   defp unsafe_reason(message) do
     case Regex.run(~r/unsafe \(([^)]+)\)/, message) do
       [_, "ssh_dir"] -> @ssh_dir_blocked
+      [_, "home"] -> "no usable home (missing or a symlink)"
+      [_, "ssh_user"] -> "the SSH user is unknown on the host; nothing written"
+      [_, "shared_home"] -> "not managed: shares the SSH user's home (ssm's own key)"
       [_, kind] -> "unsafe: " <> kind
       nil -> "unsafe"
     end
@@ -341,6 +453,20 @@ defmodule Ssm.Diffs do
     do: Compare.note_extras(items, @blocked_note)
 
   defp blocked_by_user_readonly(items, _entry), do: items
+
+  @doc """
+  The diff of one listed login (`entry` from `ScriptRunner.get_ssh_keyfiles/2`)
+  for a write that removes lines (`Ssm.Diffs.KeyRemoval`). Like a sync, it
+  refuses (`{:error, {:own_key_unavailable, _}}`) when the login is the
+  host's login user and ssm's own key cannot be read: the own key line
+  would otherwise look unauthorized.
+  """
+  @spec login_diff_for_write(Host.t(), map()) :: {:ok, LoginDiff.t()} | {:error, term()}
+  def login_diff_for_write(%Host{} = host, entry) do
+    with {:ok, own} <- own_key_for_sync(host, [entry.login]) do
+      {:ok, build_login_diff(host.id, entry.login, entry, nil, own[entry.login])}
+    end
+  end
 
   @doc false
   def compute_diff(expected, actual), do: Compare.diff(expected, actual)

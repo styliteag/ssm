@@ -54,6 +54,10 @@ config :ssm, :mctl_login_wait, timeout_ms: 300, first_delay_ms: 1, max_delay_ms:
 # would race the SQL sandbox; tests call it explicitly.
 config :ssm, :mctl_boot, false
 
+# Periodic grant drift check (Ssm.Grants.DriftCheck) would race the SQL
+# sandbox; tests call DriftCheck.run/0 explicitly.
+config :ssm, :grants_drift_check, false
+
 # SSH probe (probe_ssh): tests probe a local server on loopback, which
 # production refuses
 config :ssm, :probe_allow_loopback, true

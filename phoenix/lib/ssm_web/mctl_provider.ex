@@ -100,7 +100,7 @@ defmodule SsmWeb.MctlProvider do
   def create_host(principal, params) do
     with {:ok, attrs, membership} <- HostParams.create(params),
          {:ok, attrs} <- HostParams.resolve_jump(attrs),
-         {:ok, host} <- insert_host(attrs, membership) do
+         {:ok, host} <- insert_host(attrs, membership, ctx(principal)) do
       audit(principal, "create", host)
 
       {:ok, job} =
@@ -112,8 +112,8 @@ defmodule SsmWeb.MctlProvider do
     end
   end
 
-  defp insert_host(attrs, membership) do
-    case Hosts.create_host_with_membership(attrs, membership) do
+  defp insert_host(attrs, membership, ctx) do
+    case Hosts.create_host_with_membership(attrs, membership, ctx) do
       {:ok, host} -> {:ok, host}
       {:error, %Ecto.Changeset{} = changeset} -> {:error, HostParams.changeset_error(changeset)}
       {:error, {:validation, _}} = error -> error
@@ -123,14 +123,14 @@ defmodule SsmWeb.MctlProvider do
   @impl true
   def update_host(principal, id, params) do
     with {:ok, host} <- fetch_host(id),
-         {:ok, updated} <- update_membership(host, HostParams.membership(params)) do
+         {:ok, updated} <- update_membership(host, HostParams.membership(params), ctx(principal)) do
       audit(principal, "update", updated)
       {:ok, HostView.render(updated)}
     end
   end
 
-  defp update_membership(host, attrs) do
-    case Hosts.update_membership(host, attrs) do
+  defp update_membership(host, attrs, ctx) do
+    case Hosts.update_membership(host, attrs, ctx) do
       {:ok, host} -> {:ok, host}
       {:error, %Ecto.Changeset{} = changeset} -> {:error, HostParams.changeset_error(changeset)}
       {:error, {:validation, _}} = error -> error
@@ -154,7 +154,7 @@ defmodule SsmWeb.MctlProvider do
   def delete_host(principal, id) do
     with {:ok, host} <- fetch_host(id),
          [] <- Hosts.jump_dependents(host),
-         {:ok, _deleted} <- Hosts.delete_host(host) do
+         {:ok, _deleted} <- Hosts.delete_host(host, ctx(principal)) do
       audit(principal, "delete", host)
 
       {:ok, job} =
@@ -192,10 +192,15 @@ defmodule SsmWeb.MctlProvider do
   end
 
   @impl true
-  def update_customer(_principal, slug, params) do
+  def update_customer(principal, slug, params) do
     case Customers.get_customer_by_slug(slug) do
-      nil -> {:error, :not_found}
-      customer -> customer |> Customers.update_customer(named_attrs(params)) |> named_result()
+      nil ->
+        {:error, :not_found}
+
+      customer ->
+        customer
+        |> Customers.update_customer(named_attrs(params), ctx(principal))
+        |> named_result()
     end
   end
 
@@ -214,7 +219,7 @@ defmodule SsmWeb.MctlProvider do
   # binding, so every `setup` token may merge (like create_customer)
   @impl true
   def merge_customer(principal, source, target) do
-    with {:ok, result} <- Customers.merge_customer(source, target) do
+    with {:ok, result} <- Customers.merge_customer(source, target, ctx(principal)) do
       Audit.customer(principal, "merge", source, %{into: target, moved_hosts: result.moved_hosts})
       {:ok, result}
     end
@@ -223,10 +228,10 @@ defmodule SsmWeb.MctlProvider do
   # contract section 11 (capability `rename_group`): the name only, the
   # slug is fixed after create
   @impl true
-  def update_group(_principal, slug, params) do
+  def update_group(principal, slug, params) do
     case Groups.get_group_by_slug(slug) do
       nil -> {:error, :not_found}
-      group -> group |> Groups.update_group(named_attrs(params)) |> named_result()
+      group -> group |> Groups.update_group(named_attrs(params), ctx(principal)) |> named_result()
     end
   end
 
@@ -234,7 +239,7 @@ defmodule SsmWeb.MctlProvider do
   # no token binding, so every `setup` token may delete (like create_group)
   @impl true
   def delete_group(principal, slug) do
-    with :ok <- Groups.delete_group(slug) do
+    with :ok <- Groups.delete_group(slug, ctx(principal)) do
       Audit.group(principal, "delete", slug)
       :ok
     end
@@ -244,7 +249,7 @@ defmodule SsmWeb.MctlProvider do
   # token binding in ssm, so every `setup` token may delete (like create)
   @impl true
   def delete_customer(principal, slug) do
-    with :ok <- Customers.delete_customer(slug) do
+    with :ok <- Customers.delete_customer(slug, ctx(principal)) do
       Audit.customer(principal, "delete", slug)
       :ok
     end
@@ -288,4 +293,8 @@ defmodule SsmWeb.MctlProvider do
   defp first([key | _]), do: key
 
   defp audit(principal, action, host), do: Audit.host(principal, action, host)
+
+  # grant reconcile context (ADR-0012 §10): the contract actor; these calls
+  # run before any contract job exists, so no job id
+  defp ctx(principal), do: %{actor: Audit.actor(principal), job_id: nil}
 end

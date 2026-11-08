@@ -5,7 +5,7 @@ defmodule Ssm.InputValidationTest do
   these changesets).
   """
 
-  use Ssm.DataCase, async: true
+  use Ssm.DataCase, async: false
 
   import Ssm.Fixtures
 
@@ -87,22 +87,16 @@ defmodule Ssm.InputValidationTest do
         })
 
     test "refuses logins a host would resolve to another account or read as options", c do
-      for bad <- ["0", "1000", "-oProxyCommand", "a b", "a\tb", "a:b", "../root", "a/b", " root"] do
+      for bad <-
+            ["0", "1000", "+0", "+1000", "-oProxyCommand", "a b", "a:b", "../root", "a/b"] ++
+              [" root", "CORP\\jdoe"] do
         assert {:error, cs} = grant(c, bad), "accepted login #{inspect(bad)}"
         assert %{login: [_ | _]} = errors_on(cs)
       end
     end
 
-    test "accepts directory-service logins (AD/SSSD): @, ., _, -, \\ and uppercase", c do
-      for good <- [
-            "deploy",
-            "user@corp.example",
-            "CORP\\jdoe",
-            "John.Doe",
-            "svc_backup-1",
-            "r00t",
-            "u$"
-          ] do
+    test "accepts POSIX names and user@domain", c do
+      for good <- ["deploy", "user@corp.example", "John.Doe", "svc_backup-1", "r00t", "u$"] do
         assert {:ok, _} = grant(c, good), "refused login #{inspect(good)}"
       end
     end

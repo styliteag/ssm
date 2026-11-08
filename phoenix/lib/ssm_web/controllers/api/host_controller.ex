@@ -7,12 +7,16 @@ defmodule SsmWeb.Api.HostController do
 
   use SsmWeb, :controller
 
+  alias Ssm.Activity.Entries
   alias Ssm.ControlChars
   alias Ssm.Hosts
   alias Ssm.Hosts.Host
   alias SsmWeb.Api.Errors
   alias SsmWeb.Api.Envelope
   alias SsmWeb.Api.Params
+
+  # every successful write is audited (Ssm.Activity.Entries), actor = token subject
+  @audit %{via: "api"}
 
   @create_spec [
     name: [type: :string, required: true, min_len: 1, max_len: 128, check: &ControlChars.check/1],
@@ -61,8 +65,12 @@ defmodule SsmWeb.Api.HostController do
     with {:ok, attrs} <- Params.validate(params, @create_spec),
          :ok <- ensure_jump_exists(attrs) do
       case Hosts.create_host(attrs) do
-        {:ok, host} -> Envelope.ok(conn, host_json(host), status: 201)
-        {:error, changeset} -> Errors.changeset(conn, changeset, "host")
+        {:ok, host} ->
+          Entries.host(:create, host, conn.assigns.api_user, @audit)
+          Envelope.ok(conn, host_json(host), status: 201)
+
+        {:error, changeset} ->
+          Errors.changeset(conn, changeset, "host")
       end
     else
       {:error, :jump_not_found} -> Errors.host_not_found(conn, "jump_via host not found")
@@ -77,8 +85,12 @@ defmodule SsmWeb.Api.HostController do
          :ok <- ensure_no_self_jump(attrs, host),
          :ok <- ensure_jump_exists(attrs) do
       case Hosts.update_host(host, attrs) do
-        {:ok, updated} -> Envelope.ok(conn, host_json(updated))
-        {:error, changeset} -> Errors.changeset(conn, changeset, "host")
+        {:ok, updated} ->
+          Entries.host(:update, updated, conn.assigns.api_user, @audit)
+          Envelope.ok(conn, host_json(updated))
+
+        {:error, changeset} ->
+          Errors.changeset(conn, changeset, "host")
       end
     else
       nil -> Errors.host_not_found(conn)
@@ -92,6 +104,7 @@ defmodule SsmWeb.Api.HostController do
     with {:ok, id} <- Errors.path_id(raw),
          %Host{} = host <- Hosts.get_host(id),
          {:ok, _} <- Hosts.delete_host(host) do
+      Entries.host(:delete, host, conn.assigns.api_user, @audit)
       Envelope.ok(conn, %{deleted_id: host.id})
     else
       nil -> Errors.host_not_found(conn)

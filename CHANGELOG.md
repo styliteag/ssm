@@ -7,23 +7,249 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Grants (ADR-0012 phase 2): SSH access for an SSH user on every host of a
+  customer or host group, on the new Grants page (`/grants`, also per SSH user
+  from the Users page and per customer or group). A grant creates a normal
+  authorization on each host of its target, now and for hosts that join
+  later; a host that leaves the customer or group loses it. Diff, sync,
+  `/api/v2` and Mission Control see these rows like any other.
+- An authorization made by a grant is read-only and shows "via customer X" or
+  "via group Y" on the Authorizations page. `/api/v2` answers 409 `CONFLICT`
+  when such a row is changed or deleted; change the grant instead. A manual
+  authorization for the same user, host and login wins and is kept; deleting
+  it brings the grant's authorization back.
+- Admins create any grant. A scoped operator creates grants only for its own
+  customers or groups, and the grant keeps the operator's scope, so it never
+  reaches a host outside it. A scoped operator sees and deletes only grants
+  inside its scope. Viewers cannot change grants.
+- "Revocation pending" on the Hosts page: a host that lost access through a
+  grant (grant deleted, host moved to another customer or out of a group,
+  customer merged) keeps the removed keys until a sync succeeds there. The
+  mark clears after the next successful sync; without `SSM_REVOCATION_SYNC=on`
+  ssm does not sync on its own.
+- The activity log records grant create and delete, and every authorization a
+  grant adds, removes or hands over to another grant (`grant_add`,
+  `grant_remove`, `grant_move`) with the trigger, the grant id, the actor and
+  the request id.
+- A periodic check (every 15 minutes) compares grants and authorizations and
+  logs differences as warnings. It changes nothing.
+- `SSM_REVOCATION_SYNC=on` (default `off`) starts a removal-only sync right
+  after every change that removes access (grant deleted, host moved out of a
+  customer or group, authorization deleted, SSH user deleted, person
+  offboarded, an authorization's options restricted). It only removes key
+  lines the database no longer authorizes and tightens a line whose options
+  grant more than the database's: it never adds a line, writes only logins
+  that have a file, and
+  skips disabled hosts, readonly markers, unsafe `~/.ssh` and linked
+  `authorized_keys` files like a normal sync. It clears "revocation pending"
+  only when it succeeds completely, and each run is in the activity log as
+  `ssm (revocation sync)` with `mode: removal_only`. With `off`, nothing is
+  written automatically; the badge stays until a manual sync.
+
+- Diff page: "Remove" on a line marked "not authorized" takes that key off the host
+  right away, and "Remove all extra keys" does so for every such line of a login —
+  without a full sync. ssm reads the login fresh, removes only lines that are still
+  unauthorized (never a granted key or ssm's own key), keeps every other line, and
+  writes through the same safe path as a sync; readonly and unsafe logins are refused.
+  Each removal is in the activity log with the key fingerprints. Admins and operators
+  on hosts in their scope only, never viewers.
+
+- `GET /api/v2/diffs/{host_id}`: every login now has a `notes` list with the notes the
+  diff page shows — unsafe files, blocked revocations ("revocation blocked …"), an
+  ignored `user_readonly` not owned by root, "drops host restriction: …" and "invalid
+  stored options". Each note is `{kind, text, line}`; `kind` is a stable code to switch
+  on, `line` names the key line an item note belongs to. Existing fields are unchanged.
+
+- Hosts page (admins): "Managed logins" lists every login ssm keeps writing on a host
+  with its number of authorizations, and "Forget" stops managing a login that has no
+  authorization and no `authorized_keys` left on the host (ssm checks the host first;
+  a login the host cannot resolve, or whose home is missing, is kept).
+  The same over the API: `GET /api/v2/hosts/{id}/managed-logins` and
+  `DELETE /api/v2/hosts/{id}/managed-logins/{login}` (new error code
+  `MANAGED_LOGIN_NOT_FOUND`). Each forget is in the activity log.
+
+### Changed (API)
+
+- **`/api/v2` wire change**, approved by the user 2026-11-08 (AGENTS.md rule 3):
+  `POST /diffs/{id}/sync` for a host that is already syncing (diff page,
+  "Sync all" or another API call) now answers at once with 409
+  `SYNC_RUNNING` and a `Retry-After: 5` header, in the usual error envelope.
+  Nothing is read or written on the host and no activity-log entry is made;
+  retry after the given seconds. Before, the request waited for the other
+  sync and then synced the host a second time. 409 `SSH_READONLY` keeps its
+  meaning (partial sync, or a readonly marker refused the sync): clients
+  tell the two apart by `error.code`. A sync that is not refused answers
+  and is logged exactly as before (actor = token subject).
+
+### Changed
+
+- The removal-only sync is in the activity log as `sync_revocation`,
+  `sync_revocation_partial` or `sync_revocation_failed`, so it can be told apart from
+  a manual sync (`sync`, `sync_partial`, `sync_failed`, unchanged).
+- Splitting or merging SSH users copies only manual authorizations. Grants
+  stay with their SSH user; a merged user's grants are deleted with it.
+- Deleting an authorization now also marks its host "revocation pending" until
+  the next successful sync.
+- Activity-log entries of grant reconciles that follow a change in the web UI
+  or `/api/v2` name the user who made the change instead of `ssm`.
+- Every write that can change authorizations (bulk grant, key assignment,
+  split, merge, host delete) takes the database write lock at its start, so
+  concurrent writers wait instead of failing.
+- Deleting an SSH user, merging it into another, or removing a person through
+  Mission Control (offboarding) also deletes the user's grants, also when the
+  removal names single hosts: a kept grant would bring the access back. Each
+  removal is in the activity log and marks the hosts "revocation pending".
+- A scoped account cannot change an SSH user (or its keys) that holds a grant
+  reaching beyond the account's scope, because the user's keys would also land
+  on future hosts of that grant.
+- Upgrading cannot be rolled back with `ecto.rollback` (SQLite cannot drop the
+  new `authorization.grant_id` column); restore the backup taken before the
+  upgrade instead.
+- The host-key icon on the hosts page shows three states with a tooltip each:
+  no key pinned (open lock: ssm refuses to connect), a fingerprint set but not
+  yet confirmed by a connection (faded), and a key pinned and confirmed.
+
+### Fixed
+
+- Writes wait up to 15 seconds for SQLite's write lock instead of failing with
+  "Database busy" after 2 seconds when another write runs at the same time.
+
+- A sync no longer fails with "Directory nonexistent" for a login whose home has no
+  `~/.ssh` yet: ssm creates it (mode 0700, owned by the login's user and group) and
+  writes the file. It does so only inside a home that exists and is not a symlink,
+  and never follows a link planted at `~/.ssh`. A login without a usable home (missing
+  or a symlink) is skipped with that reason; the other logins are still written.
+- Closing the diff page (or losing the connection) during a sync no longer stops
+  the sync half-way without an audit entry: the sync runs on the server, finishes
+  and is recorded in the activity log as before.
+- A second sync of a host that is already syncing (a double click, a second tab,
+  another operator, "Sync all") is refused with "A sync of <host> is already
+  running." instead of running twice and losing the first result; "Sync all"
+  reports how many hosts it skipped for that reason.
+- The hosts page status badge no longer says "unknown" after a restart while
+  "checked … ago" shows a recent check: it falls back to the stored key check.
+  A host that refuses ssm's key shows "auth failed" and a changed host key
+  shows "host key changed" (hosts page and diff viewer) instead of a plain
+  "offline"/"error".
+- Disabling or re-enabling a host drops its last check result, so a re-enabled
+  host starts as "unknown" instead of showing a stale status. Deleting a host
+  through `/api/v2` or Mission Control (and the hosts behind a deleted jump
+  host) now also clears its cached status, so a later host that reuses the id
+  does not inherit it.
+
+- Web pages no longer crash on a malformed id in a click event (users, keys,
+  authorizations), and "Load more" in the activity log stops at the newest
+  1000 entries.
+
 ### Security
+
+- A login's user could block every revocation for their login: in their own `~/.ssh`
+  they could rename the root-owned `authorized_keys` that ssm wrote to `user_readonly`,
+  which then counted as a root-owned readonly marker and made every sync skip the
+  login. A `user_readonly` now counts only inside a `~/.ssh` that root owns and that
+  group and others cannot write, and never when it is an ssm-written keyfile. Any
+  other root-owned marker is ignored, the login is written, and the diff and the
+  activity log show "user_readonly unsafe (tampered?)". To freeze a login on purpose,
+  make its `~/.ssh` root-owned (not group/world-writable) and put a root-owned
+  `user_readonly` there. This affects released versions up to and including 4.10.0.
+- Writing `authorized_keys` now checks after the final rename that the file in place
+  is the one ssm wrote ("unsafe (race)" otherwise), and hosts whose `mv` supports
+  neither `-T` nor `-h` (old busybox) are refused with "unsafe (no_safe_rename)":
+  a plain `mv` could put ssm's file into a directory a user links there at the right
+  moment. Other logins of the host are still written.
+- Reading `authorized_keys` no longer opens a link swapped in after ssm's checks:
+  where perl is available the file is opened with `O_NOFOLLOW` and checked after the
+  open (also on FreeBSD); without perl, Linux keeps the `/proc` check and other systems
+  now check the file before and after the read.
+- The host listing no longer writes a predictable temp file (`$TMPDIR/homedirs.<pid>`)
+  as root.
+- A new or changed login of an authorization or grant must be a user name: a letter
+  or `_` first, then letters, digits, `_`, `.` or `-`, at most 32 characters, an
+  optional trailing `$` (upper case is allowed, e.g. `Administrator`), or an SSSD/AD
+  login `user@domain` (up to 64 characters before the `@`, a domain such as
+  `ad.corp.example`, 128 characters in all). `DOMAIN\user` is refused. A login starting
+  with `-` could be read as an option by tools on the host. Existing authorizations
+  with other logins keep working and stay editable. On the host, `script.sh` never
+  looks up a login that starts with `-`.
+- Merging SSH users is refused when their authorizations for the same host and login
+  carry different key options ("Not merged: … different key options …", naming each
+  login@host). Before, one row was kept silently and the other user's keys got its
+  options, which could drop restrictions such as `from` or `no-pty`.
+- The scope and admin-only checks of an SSO operator's SSH user changes (edit, delete,
+  bulk delete, split, merge, add/move/delete key) and of grant creation now run inside
+  the same database transaction as the write, so a change committed in between can no
+  longer slip past them.
+- The removal-only sync (`SSM_REVOCATION_SYNC=on`) now logs `sync_revocation_failed`
+  when it crashes or an SSH call times out, and retries hosts that are still
+  "revocation pending" on the periodic check's schedule (`SSM_SYNC_INTERVAL`): one
+  interval after the mark, then after 2, 4, … up to 16 intervals.
+
+- `/api/v2` writes are now in the activity log: every successful create, update
+  or delete of a host, SSH user, key or authorization records one entry with the
+  API user as actor and `via: api` in its details, like the same change made in
+  the web UI. Before, only API syncs were recorded.
+- "Revocation pending" now covers every change that takes SSH access away, not only
+  grants and deleted authorizations: an authorization moved to another host, login or
+  SSH user (the old host), an SSH user disabled, deleted, merged away or split (the
+  hosts of its grants), a key deleted, moved to another SSH user or given new key
+  material, and the authorizations and shared keys removed when a person is offboarded
+  through Mission Control. With `SSM_REVOCATION_SYNC=on` each of them also starts the
+  removal-only sync.
+- Restricting an authorization's options (adding or changing `from`, `command`,
+  `restrict`, `expiry-time`, `no-*` and the like, or removing a permissive option)
+  now marks its host "revocation pending" too, and the removal-only sync applies it:
+  a host line of that key whose options grant more than the database's is replaced
+  by the database's line. Before, the host kept the old, wider options until a
+  manual full sync.
+- SSO operators can no longer widen an existing authorization by deleting its
+  restrictions: removing or changing a restriction already on the row (`restrict`,
+  `no-*`, `from`, `command`, `permitopen`, `permitlisten`, `expiry-time`, `principals`,
+  `verify-required`) is admin-only. Operators may still add restrictions.
+
+- A sync, "Remove key", offboarding through Mission Control and "Forget" of a managed
+  login no longer run at the same time on one host: each takes the host's write lock,
+  so one cannot undo another's change. Each write also checks that the
+  `authorized_keys` is still what ssm read; a file the user changed in between is
+  not overwritten — the login is skipped ("changed on the host since it was read").
+- ssm refuses every write when it cannot confirm that the login is not an alias of the
+  host's SSH user: a host without SSH user, or an SSH user the host does not know.
+- Creating a missing `~/.ssh` is refused when the user could swap their home (its
+  parent is writable by them); a home with the setgid bit is now handled.
+- "Forget" asks the host once more right before deleting the login.
+- The removal-only sync (`SSM_REVOCATION_SYNC=on`) now waits for the same host write
+  lock as a manual sync, "Remove key", offboarding and "Forget", so it can no longer
+  run at the same time as one of them on a host and undo its change. A write that
+  takes the lock again inside its own run no longer releases it early.
+
+- An SSO operator can no longer give a key the permissions of an admin's grant by
+  moving it: adding, importing or moving a key, splitting or merging users,
+  and assigning a diff-page key are refused (and logged) for an SSH user that holds a
+  grant with admin-only options. Renaming a key stays possible; admins are unaffected.
+- On hosts without `getent` (busybox), ssm now matches a login in `/etc/passwd`
+  exactly. Before, a login name containing a `.` (for example `roo.`) could match
+  `root` and have ssm read or write root's `authorized_keys`.
+
+- Permissive `authorized_keys` options can be set from the web UI by admins only:
+  `environment`, `cert-authority`, `user-rc`, `permitopen`, `permitlisten`, and the
+  re-enabling `pty`, `port-forwarding`, `agent-forwarding`, `X11-forwarding`, `tunnel`,
+  plus `no-touch-required`. SSO operators may set restrictive options only (`restrict`,
+  `no-*`, `from`, `command`, `expiry-time`, `principals`, `verify-required`), in the
+  authorization form and in bulk grant; they can still edit the comment of an
+  admin's grant but not move it. The `/api/v2` token path is unchanged.
+
+- ssm no longer writes the `authorized_keys` of a login that shares the home of the
+  host's SSH login (for example a uid-0 alias such as `toor` in root's home). Such a
+  write replaced the file that holds ssm's own key, so a grant for the alias could lock
+  ssm out of the host and wipe root's keys. A sync now skips that login with "not
+  managed: shares the SSH user's home"; manage the keys under the SSH login instead.
 
 - Editing a key changes only its name, comment and owner; key type and
   material can no longer be changed after creation (UI and API). A new key's
   type must be a known SSH key type, and `POST /api/v2/keys` also checks that
   the material is a key of that type (422 `VALIDATION_FAILED`). Key names are
   limited to 128 and comments to 1024 characters everywhere, as in the API.
-- Authorization logins are refused when a host could read them as something
-  else: all digits (a uid — `0` is root), a leading `-`, whitespace, `:` or
-  `/`. Directory-service names (`user@corp.example`, `CORP\user`, dots,
-  uppercase) stay allowed. Stored grants are not changed.
-- The host script (`script.sh`, re-uploaded automatically) refuses such logins
-  too, looks a login up in `/etc/passwd` by its exact name (never as a
-  pattern) when `getent` is missing, and refuses to write the file of the
-  user ssm connects as under another name (e.g. `toor` next to `root`), so a
-  grant can no longer remove ssm's own key; the sync skips that login as
-  `unsafe: own_login`.
 - A host's jump host can no longer form a loop (A via B via A) or a chain of
   more than 16 jump hosts; a loop already stored no longer exhausts memory.
 - Host listings from a host are checked entry by entry; malformed entries are
@@ -41,11 +267,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a formula (`= + - @`) with `'`; malformed filter parameters are ignored
   instead of failing.
 
-### Fixed
+### Known limitations
 
-- Web pages no longer crash on a malformed id in a click event (users, keys,
-  authorizations), and "Load more" in the activity log stops at the newest
-  1000 entries.
+- A grant names an SSH user, not a person or a key. An SSO operator may create an SSH
+  user with keys that has no authorization yet; when someone with a wider scope later
+  grants that SSH user on a customer or group, those keys reach every host of it.
+  Check an SSH user's keys before granting it.
 
 ## [4.11.0] - 2026-11-08
 

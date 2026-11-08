@@ -10,11 +10,15 @@ defmodule Ssm.Diffs.SyncScheduler do
   so sweeps never overlap; a sweep that crashes is logged and the next tick
   runs normally. The sweep runs in a task under `Ssm.Diffs.TaskSupervisor`,
   never in this process.
+
+  Each tick also retries the removal-only sync of hosts still "revocation
+  pending" (`Ssm.Diffs.RevocationSync.retry_pending/3`, only with
+  `SSM_REVOCATION_SYNC=on`, with backoff); a retry that raises is logged.
   """
 
   use GenServer
 
-  alias Ssm.Diffs.HostChecks
+  alias Ssm.Diffs.{HostChecks, RevocationSync}
 
   require Logger
 
@@ -65,7 +69,8 @@ defmodule Ssm.Diffs.SyncScheduler do
 
   @doc """
   Options: `:interval_ms` (required), `:jitter`, `:initial_delay_ms`,
-  `:sweep_fun`, `:name` (tests).
+  `:sweep_fun`, `:retry_fun` (`(state, now_ms, interval_ms -> state)`),
+  `:name` (tests).
   """
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts, name: Keyword.get(opts, :name, __MODULE__))
@@ -79,6 +84,8 @@ defmodule Ssm.Diffs.SyncScheduler do
       interval: interval,
       jitter: Keyword.get(opts, :jitter, @jitter),
       sweep_fun: Keyword.get(opts, :sweep_fun, &HostChecks.sweep/0),
+      retry_fun: Keyword.get(opts, :retry_fun, &RevocationSync.retry_pending/3),
+      retry: %{},
       task: nil
     }
 
@@ -94,7 +101,7 @@ defmodule Ssm.Diffs.SyncScheduler do
   @impl true
   def handle_info(:tick, state) do
     Process.send_after(self(), :tick, jittered(state.interval, state.jitter))
-    {:noreply, start_sweep(state)}
+    {:noreply, state |> retry_revocations() |> start_sweep()}
   end
 
   def handle_info({ref, result}, %{task: %Task{ref: ref}} = state) do
@@ -109,6 +116,14 @@ defmodule Ssm.Diffs.SyncScheduler do
   end
 
   def handle_info(_other, state), do: {:noreply, state}
+
+  defp retry_revocations(%{retry_fun: fun} = state) do
+    %{state | retry: fun.(state.retry, System.monotonic_time(:millisecond), state.interval)}
+  rescue
+    error ->
+      Logger.warning("revocation retry failed: #{Exception.message(error)}")
+      state
+  end
 
   defp start_sweep(%{task: %Task{}} = state) do
     Logger.debug("host key check sweep still running, tick skipped")

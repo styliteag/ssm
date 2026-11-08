@@ -7,29 +7,40 @@ defmodule SsmWeb.DiffLive do
   readonly marker stops a sync before any write; a login's own
   `user_readonly` skips only that login, the others are written and the
   sync reports as failed naming the skipped logins (a partial sync,
-  `Ssm.Diffs.sync_host/2`). Every sync outcome is audit-logged
-  (`Ssm.Diffs.SyncAudit`).
+  `Ssm.Diffs.sync_host/2`). Syncs run in `Ssm.Diffs.SyncRunner`, unlinked
+  from the page, which audit-logs every outcome (`Ssm.Diffs.SyncAudit`) even
+  when the page is closed mid-sync and refuses a host that is already
+  syncing.
 
   Unauthorized keys found on a host can be legitimized in place (database
   writes only, the host itself is untouched until the next sync): a key
   belonging to a known user gets an "Allow" button that grants that user the
   login; an unknown key can be assigned to a user, which also grants the
   login if missing.
+
+  "Remove key" on an unauthorized line, and "Remove all extra keys" per
+  login, take those lines off the host right away (`Ssm.Diffs.KeyRemoval`:
+  read fresh, only lines still unauthorized, through `script.sh`,
+  readonly/unsafe logins refused, audited) — admins and operators on hosts
+  in their scope, never viewers.
   """
 
   use SsmWeb, :live_view
 
   alias Ssm.Activity
+  alias Ssm.Activity.Actions
   alias Ssm.Authorizations
   alias Ssm.Diffs
   alias Ssm.Diffs.HostCheck
   alias Ssm.Diffs.HostChecks
   alias Ssm.Diffs.HostDiff
+  alias Ssm.Diffs.KeyRemoval
   alias Ssm.Diffs.StatusCache
-  alias Ssm.Diffs.SyncAudit
   alias Ssm.Diffs.SyncCheck
+  alias Ssm.Diffs.SyncRunner
   alias Ssm.Hosts
   alias Ssm.Hosts.Host
+  alias Ssm.HostStatus
   alias Ssm.Users
   alias Ssm.Users.KeyAssignment
   alias Ssm.Users.KeyParser
@@ -52,8 +63,8 @@ defmodule SsmWeb.DiffLive do
   @kinds ~w(synced needs_sync auth unreachable dns other unchecked disabled)a
 
   # Opening the page never opens an SSH connection: every host shows its last
-  # known result (this node's status cache, else the stored check in
-  # `host_checks`). Hosts are read only on an explicit action: "Check" on a
+  # known result (`Ssm.HostStatus.derive/3`: this node's status cache, else
+  # the stored check in `host_checks`); `:loading` while a check runs. Hosts are read only on an explicit action: "Check" on a
   # row, "Check all" (asks first), or the detail view of one selected host.
   @impl true
   # Only hosts in the user's scope (ADR-0012) are listed, and every action
@@ -64,7 +75,7 @@ defmodule SsmWeb.DiffLive do
     cached = StatusCache.all()
     checks = HostChecks.stored(scope)
 
-    statuses = Map.new(hosts, &{&1.id, initial_status(&1, cached[&1.id], checks[&1.id])})
+    statuses = Map.new(hosts, &{&1.id, HostStatus.derive(&1, cached[&1.id], checks[&1.id])})
 
     socket =
       socket
@@ -75,21 +86,6 @@ defmodule SsmWeb.DiffLive do
       |> assign(diff_search: "", diff_sort: nil, diff_filter: "all")
 
     {:ok, socket}
-  end
-
-  defp initial_status(%Host{disabled: true}, _cached, _check), do: :disabled
-  defp initial_status(_host, {status, _at}, _check), do: status
-  defp initial_status(_host, nil, %HostCheck{} = check), do: check_status(check)
-  defp initial_status(_host, nil, nil), do: :unchecked
-
-  # The diff page status of a stored check (`Ssm.Diffs.SyncCheck.status/1`
-  # shapes; the stored drift lists the missing and extra keys per login).
-  defp check_status(%HostCheck{state: "synced"}), do: :synced
-  defp check_status(%HostCheck{state: "error", error: error}), do: {:error, error || "error"}
-
-  defp check_status(%HostCheck{state: "drift", drift: drift}) do
-    count = fn field -> drift |> Enum.map(&length(&1[field] || [])) |> Enum.sum() end
-    {:needs_sync, count.("missing"), count.("extra")}
   end
 
   # Viewers get what is already known; anything that would open an SSH
@@ -166,7 +162,7 @@ defmodule SsmWeb.DiffLive do
     |> start_async(:detail, fn -> Diffs.host_diff(id) end)
   end
 
-  defp summarize(%HostDiff{} = diff), do: SyncCheck.status(diff)
+  defp summarize(%HostDiff{} = diff), do: HostStatus.from_sync_status(SyncCheck.status(diff))
 
   @impl true
   def handle_async(:statuses, {:ok, _done}, socket) do
@@ -212,10 +208,14 @@ defmodule SsmWeb.DiffLive do
      |> assign(detail_loading: false, detail_error: "Diff crashed: #{inspect(reason)}")}
   end
 
-  def handle_async(:sync, {:ok, {host, outcome}}, socket) do
+  # the runner (Ssm.Diffs.SyncRunner) has audited the outcome already
+  def handle_async(:sync, {:ok, {host, run}}, socket) do
     socket = assign(socket, :syncing, false)
 
-    case log_sync(socket, host, outcome) do
+    case sync_outcome(run) do
+      :busy ->
+        {:noreply, put_flash(socket, :error, already_running(host))}
+
       {:ok, synced} ->
         keys = synced |> Enum.map(& &1.written_keys) |> Enum.sum()
 
@@ -235,6 +235,28 @@ defmodule SsmWeb.DiffLive do
     end
   end
 
+  def handle_async(:remove_keys, {:ok, {host, login, result}}, socket) do
+    socket = assign(socket, :syncing, false)
+
+    case result do
+      {:ok, %{removed: n}} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "Removed #{n} key line(s) from #{login} on #{host.name}.")
+         |> refresh_after_sync(host)}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Nothing removed: #{format_reason(reason)}")}
+    end
+  end
+
+  def handle_async(:remove_keys, {:exit, reason}, socket) do
+    {:noreply,
+     socket
+     |> assign(:syncing, false)
+     |> put_flash(:error, "Remove crashed: #{inspect(reason)}")}
+  end
+
   def handle_async(:sync, {:exit, reason}, socket) do
     {:noreply,
      socket
@@ -242,11 +264,15 @@ defmodule SsmWeb.DiffLive do
      |> put_flash(:error, "Sync crashed: #{inspect(reason)}")}
   end
 
-  def handle_async(:sync_all, {:ok, outcomes}, socket) do
-    socket = assign(socket, :syncing, false)
+  def handle_async(:sync_all, {:ok, {:error, reason}}, socket) do
+    {:noreply,
+     socket
+     |> assign(:syncing, false)
+     |> put_flash(:error, "Sync all crashed: #{inspect(reason)}")}
+  end
 
-    results =
-      Enum.map(outcomes, fn {host, outcome} -> {host, log_sync(socket, host, outcome)} end)
+  def handle_async(:sync_all, {:ok, {:ok, %{results: results, busy: busy}}}, socket) do
+    socket = assign(socket, :syncing, false)
 
     ok = Enum.count(results, fn {_host, result} -> match?({:ok, _}, result) end)
     failed = length(results) - ok
@@ -260,6 +286,8 @@ defmodule SsmWeb.DiffLive do
       else
         "Sync all done: #{ok} synced, #{failed} failed."
       end
+
+    message = if busy == [], do: message, else: message <> " #{length(busy)} already running."
 
     kind = if failed == 0, do: :info, else: :error
 
@@ -281,7 +309,7 @@ defmodule SsmWeb.DiffLive do
     {:noreply,
      socket
      |> update(:checks, &Map.put(&1, host_id, check))
-     |> update(:statuses, &Map.put(&1, host_id, check_status(check)))}
+     |> update(:statuses, &Map.put(&1, host_id, HostStatus.from_check(check)))}
   end
 
   def handle_info({:host_check, host_id, {:error, :disabled}}, socket) do
@@ -292,7 +320,8 @@ defmodule SsmWeb.DiffLive do
   end
 
   def handle_info({:host_check, host_id, {:error, reason}}, socket) do
-    {:noreply, update(socket, :statuses, &Map.put(&1, host_id, {:error, format_reason(reason)}))}
+    status = HostStatus.from_error(format_reason(reason))
+    {:noreply, update(socket, :statuses, &Map.put(&1, host_id, status))}
   end
 
   defp refresh_after_sync(socket, host) do
@@ -359,10 +388,7 @@ defmodule SsmWeb.DiffLive do
   def handle_event("sync-row", %{"id" => id}, socket) do
     case fresh_host(socket, id) do
       %Host{disabled: false} = host ->
-        {:noreply,
-         socket
-         |> assign(:syncing, true)
-         |> start_async(:sync, fn -> {host, Diffs.sync_host_reported(host.id)} end)}
+        {:noreply, start_sync(socket, host)}
 
       %Host{disabled: true} = host ->
         {:noreply, put_flash(socket, :error, "Host #{host.name} is disabled.")}
@@ -388,10 +414,7 @@ defmodule SsmWeb.DiffLive do
   def handle_event("sync", _params, socket) do
     case fresh_selected(socket) do
       %Host{disabled: false} = host ->
-        {:noreply,
-         socket
-         |> assign(:syncing, true)
-         |> start_async(:sync, fn -> {host, Diffs.sync_host_reported(host.id)} end)}
+        {:noreply, start_sync(socket, host)}
 
       %Host{disabled: true} = host ->
         {:noreply, put_flash(socket, :error, "Host #{host.name} is disabled.")}
@@ -409,6 +432,28 @@ defmodule SsmWeb.DiffLive do
       allow_grant(socket, host, key.user, login)
     else
       _ -> {:noreply, put_flash(socket, :error, "Cannot authorize this key.")}
+    end
+  end
+
+  # Takes the line off the host now (not a database change): fresh read,
+  # only if still unauthorized; viewers never (also refused by ReadOnly).
+  def handle_event("remove-key", %{"login" => login, "index" => index}, socket) do
+    with false <- read_only?(socket),
+         %Host{disabled: false} = host <- fresh_selected(socket),
+         {:ok, item} <- find_extra_item(socket, login, index) do
+      {:noreply, start_remove(socket, host, login, {:lines, [item.line]})}
+    else
+      _ -> {:noreply, put_flash(socket, :error, "Cannot remove this key.")}
+    end
+  end
+
+  def handle_event("remove-extra-keys", %{"login" => login}, socket) do
+    with false <- read_only?(socket),
+         %Host{disabled: false} = host <- fresh_selected(socket),
+         true <- is_binary(login) do
+      {:noreply, start_remove(socket, host, login, :all_extra)}
+    else
+      _ -> {:noreply, put_flash(socket, :error, "Cannot remove these keys.")}
     end
   end
 
@@ -454,13 +499,19 @@ defmodule SsmWeb.DiffLive do
     end
   end
 
+  def handle_event("sync_all", %{}, %{assigns: %{syncing: true}} = socket) do
+    {:noreply, put_flash(socket, :error, "A sync is already running.")}
+  end
+
   def handle_event("sync_all", _params, socket) do
+    actor = socket.assigns.current_user.actor
+
     to_sync =
       socket
       |> fresh_hosts()
       |> Enum.reject(& &1.disabled)
       |> Enum.filter(fn host ->
-        match?({:needs_sync, _, _}, socket.assigns.statuses[host.id])
+        match?({:drift, _, _}, socket.assigns.statuses[host.id])
       end)
 
     if to_sync == [] do
@@ -469,11 +520,30 @@ defmodule SsmWeb.DiffLive do
       {:noreply,
        socket
        |> assign(:syncing, true)
-       |> start_async(:sync_all, fn ->
-         Enum.map(to_sync, fn host -> {host, Diffs.sync_host_reported(host.id)} end)
-       end)}
+       |> start_async(:sync_all, fn -> SyncRunner.run(to_sync, actor) end)}
     end
   end
+
+  # The sync and its audit entry run in Ssm.Diffs.SyncRunner, not in this
+  # page's task: closing the page only stops the waiting. The runner refuses
+  # a host that is already syncing (another page, another tab); this page
+  # also refuses a second start while it waits for one.
+  defp start_sync(%{assigns: %{syncing: true}} = socket, host),
+    do: put_flash(socket, :error, already_running(host))
+
+  defp start_sync(socket, host) do
+    actor = socket.assigns.current_user.actor
+
+    socket
+    |> assign(:syncing, true)
+    |> start_async(:sync, fn -> {host, SyncRunner.run([host], actor)} end)
+  end
+
+  defp already_running(host), do: "A sync of #{host.name} is already running."
+
+  defp sync_outcome({:ok, %{results: [{_host, outcome}]}}), do: outcome
+  defp sync_outcome({:ok, %{results: [], busy: [_ | _]}}), do: :busy
+  defp sync_outcome({:error, _} = error), do: error
 
   ## Scope: every event re-reads its host through the user's scope (ADR-0012),
   ## never from the mount-time list, so a host that left the scope is missing.
@@ -495,6 +565,21 @@ defmodule SsmWeb.DiffLive do
 
   defp fresh_selected(%{assigns: %{selected: %Host{id: id}}} = socket), do: fresh_host(socket, id)
   defp fresh_selected(_socket), do: nil
+
+  defp start_remove(socket, host, login, selector) do
+    actor = socket.assigns.current_user.actor
+
+    socket
+    |> assign(:syncing, true)
+    |> start_async(:remove_keys, fn ->
+      {host, login, KeyRemoval.remove(host, login, selector, actor)}
+    end)
+  end
+
+  # a readonly or unsafe login is not written: no remove buttons
+  defp removable?(login), do: is_nil(login.readonly_condition) and is_nil(login.unsafe)
+
+  defp has_extra?(login), do: Enum.any?(login.items, &(&1.status == :extra_on_host))
 
   ## Allow / assign helpers (database-only; the host is untouched until sync)
 
@@ -575,7 +660,9 @@ defmodule SsmWeb.DiffLive do
         parsed: unknown.parsed,
         host_id: host.id,
         login: unknown.login,
-        scope: Ssm.Scope.of(socket.assigns.current_user)
+        scope: Ssm.Scope.of(socket.assigns.current_user),
+        role: socket.assigns.current_user.role,
+        actor: socket.assigns.current_user.actor
       })
 
     case result do
@@ -601,7 +688,7 @@ defmodule SsmWeb.DiffLive do
   defp log_allow(socket, user, host, login) do
     Activity.log(%{
       activity_type: "auth",
-      action: "create",
+      action: Actions.name(:create),
       target: "#{user.username}@#{host.name}:#{login}",
       host_id: host.id,
       actor_username: socket.assigns.current_user.actor,
@@ -612,7 +699,7 @@ defmodule SsmWeb.DiffLive do
   defp log_user_create(socket, user) do
     Activity.log(%{
       activity_type: "user",
-      action: "create",
+      action: Actions.name(:create),
       target: user.username,
       actor_username: socket.assigns.current_user.actor,
       user_id: user.id,
@@ -623,7 +710,7 @@ defmodule SsmWeb.DiffLive do
   defp log_key_assign(socket, user, key) do
     Activity.log(%{
       activity_type: "key",
-      action: "create",
+      action: Actions.name(:create),
       target: key.name || key.key_type,
       actor_username: socket.assigns.current_user.actor,
       user_id: user.id,
@@ -646,10 +733,6 @@ defmodule SsmWeb.DiffLive do
   end
 
   ## Helpers
-
-  # every sync outcome (success, partial, failure) goes to the audit log
-  defp log_sync(socket, host, outcome),
-    do: SyncAudit.log(socket.assigns.current_user.actor, host, outcome)
 
   defp format_reason({_code, message}) when is_binary(message), do: message
   defp format_reason(:not_found), do: "host not found"
@@ -676,8 +759,9 @@ defmodule SsmWeb.DiffLive do
     case statuses[id] do
       :disabled -> :disabled
       :synced -> :synced
-      {:needs_sync, _, _} -> :needs_sync
-      {:error, _} -> HostCheck.kind(checks[id]) || :other
+      {:drift, _, _} -> :needs_sync
+      {:auth_failed, _} -> :auth
+      {_error, message} when is_binary(message) -> HostCheck.kind(checks[id]) || :other
       _unchecked_or_loading -> :unchecked
     end
   end
@@ -737,14 +821,14 @@ defmodule SsmWeb.DiffLive do
     }
   end
 
-  defp diff_status_rank({:error, _}), do: 0
-  defp diff_status_rank({:needs_sync, _, _}), do: 1
+  defp diff_status_rank({:drift, _, _}), do: 1
   defp diff_status_rank(:synced), do: 2
   defp diff_status_rank(:loading), do: 3
   defp diff_status_rank(:unchecked), do: 3
   defp diff_status_rank(:disabled), do: 4
+  defp diff_status_rank({_error, _message}), do: 0
 
-  defp diff_count({:needs_sync, missing, extra}), do: missing + extra
+  defp diff_count({:drift, missing, extra}), do: missing + extra
   defp diff_count(:synced), do: 0
   defp diff_count(_status), do: nil
 
@@ -758,15 +842,17 @@ defmodule SsmWeb.DiffLive do
   defp status_class(:loading), do: "badge-ghost"
   defp status_class(:unchecked), do: "badge-ghost"
   defp status_class(:synced), do: "badge-success"
-  defp status_class({:needs_sync, _, _}), do: "badge-warning"
-  defp status_class({:error, _}), do: "badge-error"
+  defp status_class({:drift, _, _}), do: "badge-warning"
+  defp status_class({_error, _message}), do: "badge-error"
 
   defp status_text(:disabled), do: "disabled"
   defp status_text(:loading), do: "checking…"
   defp status_text(:unchecked), do: "not checked"
   defp status_text(:synced), do: "synchronized"
-  defp status_text({:needs_sync, missing, extra}), do: "needs sync (+#{missing}/−#{extra})"
-  defp status_text({:error, _}), do: "error"
+  defp status_text({:drift, missing, extra}), do: "needs sync (+#{missing}/−#{extra})"
+  defp status_text({:auth_failed, _}), do: "auth failed"
+  defp status_text({:host_key_changed, _}), do: "host key changed"
+  defp status_text({:unreachable, _}), do: "error"
 
   defp item_badge(assigns) do
     ~H"""
@@ -1032,6 +1118,20 @@ defmodule SsmWeb.DiffLive do
               </span>
               <span :if={login.unsafe} class="badge badge-warning badge-xs">{login.unsafe}</span>
               <span :if={login.blocked} class="badge badge-error badge-xs">{login.blocked}</span>
+              <button
+                :if={
+                  not @selected.disabled and removable?(login) and has_extra?(login) and
+                    not @syncing
+                }
+                id={"remove-extra-#{login.login}"}
+                class="btn btn-ghost btn-xs ml-auto text-error"
+                phx-click="remove-extra-keys"
+                phx-value-login={login.login}
+                data-confirm={"Remove every unauthorized key line from #{login.login}'s authorized_keys on #{@selected.name} now?"}
+                title="Take every line marked not authorized off the host now"
+              >
+                <.icon name="hero-trash" class="size-4" /> Remove all extra keys
+              </button>
             </div>
 
             <div :if={login.read_error} class="alert alert-warning py-2 text-xs">
@@ -1059,6 +1159,24 @@ defmodule SsmWeb.DiffLive do
                   login={login.login}
                   index={index}
                 />
+                <button
+                  :if={
+                    item.status == :extra_on_host and not @selected.disabled and
+                      removable?(login) and not @syncing
+                  }
+                  id={"remove-key-#{login.login}-#{index}"}
+                  class={[
+                    "btn btn-ghost btn-xs flex-none text-error",
+                    extra_key_info(item.line, @key_owners) == :invalid && "ml-auto"
+                  ]}
+                  phx-click="remove-key"
+                  phx-value-login={login.login}
+                  phx-value-index={index}
+                  data-confirm={"Remove this key line from #{login.login}'s authorized_keys on #{@selected.name} now?"}
+                  title="Take this line off the host now"
+                >
+                  <.icon name="hero-trash" class="size-4" /> Remove
+                </button>
               </li>
             </ul>
           </div>

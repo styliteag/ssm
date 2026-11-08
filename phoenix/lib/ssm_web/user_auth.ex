@@ -160,6 +160,8 @@ defmodule SsmWeb.UserAuth do
     socket = mount_current_user(socket, session)
 
     if socket.assigns.current_user do
+      # audit actor of grant reconciles that follow this user's changes
+      :ok = Ssm.Grants.put_actor(socket.assigns.current_user[:actor])
       {:cont, socket |> SsmWeb.ReadOnly.attach() |> watch_oidc_session(session)}
     else
       {:halt,

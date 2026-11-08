@@ -165,10 +165,14 @@ defmodule Ssm.Diffs.HardeningTest do
       grant(host, "zzz", "RO8")
       stub_host(host, [{"zzz", "", nil}])
 
-      MockClient.set_exec(host.id, "sh .ssm/script.sh set_authorized_keyfile aaa", %Result{
-        stdout: "Keyfile is readonly, aborting.",
-        exit_code: 1
-      })
+      MockClient.set_exec(
+        host.id,
+        "sh .ssm/script.sh set_authorized_keyfile aaa ssm-admin",
+        %Result{
+          stdout: "Keyfile is readonly, aborting.",
+          exit_code: 1
+        }
+      )
 
       assert {{:error, {:ssh_readonly, message}}, report} =
                Diffs.sync_host_reported(MockClient, host.id)
@@ -273,10 +277,14 @@ defmodule Ssm.Diffs.HardeningTest do
       grant(host, "zzz", "LTD2")
       stub_host(host, [{"aaa", "", nil}, {"zzz", "", nil}])
 
-      MockClient.set_exec(host.id, "sh .ssm/script.sh set_authorized_keyfile aaa", %Result{
-        stdout: "Keyfile is unsafe (link-to-dir), aborting.",
-        exit_code: 1
-      })
+      MockClient.set_exec(
+        host.id,
+        "sh .ssm/script.sh set_authorized_keyfile aaa ssm-admin",
+        %Result{
+          stdout: "Keyfile is unsafe (link-to-dir), aborting.",
+          exit_code: 1
+        }
+      )
 
       assert {{:error, {:ssh_readonly, message}}, report} =
                Diffs.sync_host_reported(MockClient, host.id)
@@ -292,10 +300,14 @@ defmodule Ssm.Diffs.HardeningTest do
       grant(host, "zzz", "UNS4")
       stub_host(host, [{"zzz", "", nil}])
 
-      MockClient.set_exec(host.id, "sh .ssm/script.sh set_authorized_keyfile aaa", %Result{
-        stdout: "Keyfile is unsafe (ssh_dir), aborting.",
-        exit_code: 1
-      })
+      MockClient.set_exec(
+        host.id,
+        "sh .ssm/script.sh set_authorized_keyfile aaa ssm-admin",
+        %Result{
+          stdout: "Keyfile is unsafe (ssh_dir), aborting.",
+          exit_code: 1
+        }
+      )
 
       assert {{:error, {:ssh_readonly, message}}, report} =
                Diffs.sync_host_reported(MockClient, host.id)

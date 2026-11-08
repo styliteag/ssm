@@ -20,8 +20,14 @@ defmodule Ssm.Authorizations.Options do
 
   @valued ~w(from command permitopen permitlisten environment expiry-time principals tunnel)
 
+  # options that widen what a key may do (or re-enable what `restrict`
+  # takes away): set by admins only on the web UI (`validate_role/2`)
+  @admin_only ~w(environment cert-authority user-rc permitopen permitlisten pty
+                 port-forwarding agent-forwarding x11-forwarding tunnel no-touch-required)
+
   # options that narrow what a key may do; dropping one widens access
-  @restrictions ~w(from command restrict permitopen permitlisten expiry-time principals)
+  @restrictions ~w(from command restrict permitopen permitlisten expiry-time principals
+                   verify-required)
 
   @arity Map.new(@flags, &{String.downcase(&1), :flag})
          |> Map.merge(Map.new(@valued, &{String.downcase(&1), :valued}))
@@ -63,6 +69,68 @@ defmodule Ssm.Authorizations.Options do
   end
 
   @doc """
+  The admin-only (permissive) option names in `options`, lower-case, once
+  each, in order: `environment`, `cert-authority`, `user-rc`,
+  `permitopen`, `permitlisten`, the re-enabling `pty`, `port-forwarding`,
+  `agent-forwarding`, `x11-forwarding`, `tunnel`, and `no-touch-required`
+  (drops the FIDO touch check). Everything else on the allow-list only
+  narrows what a key may do.
+  """
+  @spec admin_only(String.t() | nil) :: [String.t()]
+  def admin_only(nil), do: []
+
+  def admin_only(options) when is_binary(options),
+    do: options |> names() |> Enum.filter(&(&1 in @admin_only)) |> Enum.uniq()
+
+  @doc """
+  Changeset check for a web user's `role`: only `"admin"` may write
+  permissive options (`admin_only/1`). Anyone else gets an `:options` error
+  when the grant's options carry one and the change sets the options or
+  moves the grant (new grant, other host, user or login); editing the
+  comment of an admin's grant stays possible.
+  """
+  @spec validate_role(Ecto.Changeset.t(), String.t() | nil) :: Ecto.Changeset.t()
+  def validate_role(changeset, "admin"), do: changeset
+
+  def validate_role(changeset, _role) do
+    names = changeset |> Ecto.Changeset.get_field(:options) |> admin_only()
+
+    cond do
+      names != [] and writes_options?(changeset) ->
+        Ecto.Changeset.add_error(changeset, :options, role_message(names))
+
+      (dropped = dropped_by_change(changeset)) != [] ->
+        Ecto.Changeset.add_error(changeset, :options, drop_message(dropped))
+
+      true ->
+        changeset
+    end
+  end
+
+  # restrictions of a stored row that the change removes or alters
+  defp dropped_by_change(%Ecto.Changeset{data: data} = changeset) do
+    if is_nil(Map.get(data, :id)) or not Map.has_key?(changeset.changes, :options),
+      do: [],
+      else: missing_restrictions(Map.get(data, :options), changeset.changes.options)
+  end
+
+  defp drop_message(entries),
+    do:
+      "removing or changing the restriction #{Enum.join(entries, ", ")} may be done by an " <>
+        "admin only (operators may only add restrictions)"
+
+  @doc "The error text for permissive option `names` set by a non-admin."
+  @spec role_message([String.t()]) :: String.t()
+  def role_message(names),
+    do:
+      "#{Enum.join(names, ", ")} may be set by an admin only (operators: restrictive options only)"
+
+  defp writes_options?(%Ecto.Changeset{data: data, changes: changes}) do
+    is_nil(Map.get(data, :id)) or
+      Enum.any?([:options, :host_id, :user_id, :login], &Map.has_key?(changes, &1))
+  end
+
+  @doc """
   The restricting options (`from`, `command`, `restrict`, `no-*`,
   `permitopen`, `permitlisten`, `expiry-time`, `principals`) of `host_options`
   that `db_options` lacks, lower-case, in host order. Both are options
@@ -79,15 +147,53 @@ defmodule Ssm.Authorizations.Options do
     |> Enum.uniq()
   end
 
+  @doc """
+  The restriction entries of `required` (as in `dropped_restrictions/2`,
+  plus `verify-required`) that `present` lacks: compared by lower-case
+  name and exact value, so `from="10.0.0.0/8"` is missing from options
+  that only carry `from="0.0.0.0/0"`. Entries as `name` or `name="value"`
+  (name lower-case), in `required` order, once each.
+  """
+  @spec missing_restrictions(String.t() | nil, String.t() | nil) :: [String.t()]
+  def missing_restrictions(required, present) do
+    have = MapSet.new(restriction_entries(present))
+
+    required
+    |> restriction_entries()
+    |> Enum.reject(&MapSet.member?(have, &1))
+    |> Enum.uniq()
+  end
+
+  @doc """
+  True when `options` grant more than `than`: they lack one of its
+  restriction entries (`missing_restrictions/2`) or carry a permissive
+  option (`admin_only/1`) it lacks. A change from `old` to `new` with
+  `weaker?(old, new)` takes access away.
+  """
+  @spec weaker?(String.t() | nil, String.t() | nil) :: boolean()
+  def weaker?(options, than),
+    do: missing_restrictions(than, options) != [] or admin_only(options) -- admin_only(than) != []
+
   defp restriction?(name), do: name in @restrictions or String.starts_with?(name, "no-")
+
+  defp restriction_entries(options) do
+    for entry <- entries(options),
+        [name | value] = String.split(entry, "=", parts: 2),
+        name = String.downcase(name),
+        restriction?(name),
+        do: Enum.join([name | value], "=")
+  end
 
   # lenient: option names of a prefix read from a host (sshd quoting rules)
   defp names(options) do
     options
-    |> host_entries("", [], false)
+    |> entries()
     |> Enum.map(fn entry -> entry |> String.split("=", parts: 2) |> hd() |> String.downcase() end)
     |> Enum.reject(&(&1 == ""))
   end
+
+  defp entries(nil), do: []
+  defp entries(options), do: host_entries(options, "", [], false)
 
   defp host_entries(<<>>, cur, acc, _quoted), do: Enum.reverse([cur | acc])
 

@@ -7,16 +7,29 @@ defmodule SsmWeb.Api.DiffController do
   `user_readonly` skips only that login, the others are written and the
   response is 409 SSH_READONLY naming skipped and written logins (partial
   sync). Every sync outcome is audit-logged (`Ssm.Diffs.SyncAudit`).
+
+  The sync runs through `Ssm.Diffs.SyncRunner`, like the diff page's: a host
+  the runner already syncs (diff page, "Sync all", another API call) is
+  refused at once with 409 SYNC_RUNNING and `Retry-After` — nothing is read,
+  written or audited for that request. 409 SSH_READONLY stays the partial
+  sync. Approved wire change (2026-11-08).
+
+  Each login of a diff carries `notes` (additive): `[{kind, text, line}]`
+  from `Ssm.Diffs.Notes`, the notes the diff page shows.
   """
 
   use SsmWeb, :controller
 
   alias Ssm.Diffs
-  alias Ssm.Diffs.SyncAudit
+  alias Ssm.Diffs.Notes
+  alias Ssm.Diffs.SyncRunner
   alias Ssm.Hosts
   alias Ssm.Hosts.Host
   alias SsmWeb.Api.Errors
   alias SsmWeb.Api.Envelope
+
+  # seconds a client should wait before retrying a refused sync
+  @sync_retry_after 5
 
   def show(conn, %{"host_id" => raw}) do
     with {:ok, id} <- Errors.path_id(raw),
@@ -40,6 +53,7 @@ defmodule SsmWeb.Api.DiffController do
       })
     else
       nil -> Errors.host_not_found(conn)
+      {:error, {:sync_running, host}} -> sync_running(conn, host)
       {:error, errors} when is_list(errors) -> Envelope.validation_failed(conn, errors)
       {:error, reason} -> diff_error(conn, reason)
     end
@@ -49,9 +63,21 @@ defmodule SsmWeb.Api.DiffController do
   defp ensure_read(%{read_error: nil}), do: :ok
   defp ensure_read(%{read_error: message}), do: {:error, {:ssh_connect_failed, message}}
 
-  # every sync outcome (success, partial, failure) goes to the audit log
-  defp audited_sync(conn, host),
-    do: SyncAudit.log(conn.assigns.api_user, host, Diffs.sync_host_reported(host.id))
+  # sync + audit (actor = token subject) in Ssm.Diffs.SyncRunner; every
+  # outcome (success, partial, failure) goes to the audit log there
+  defp audited_sync(conn, host) do
+    case SyncRunner.run([host], conn.assigns.api_user) do
+      {:ok, %{results: [{_host, outcome}]}} -> outcome
+      {:ok, %{busy: [_]}} -> {:error, {:sync_running, host}}
+      {:error, _} = crashed -> crashed
+    end
+  end
+
+  defp sync_running(conn, host) do
+    conn
+    |> put_resp_header("retry-after", Integer.to_string(@sync_retry_after))
+    |> Envelope.fail(409, "SYNC_RUNNING", "a sync of #{host.name} is already running")
+  end
 
   defp diff_error(conn, :not_found), do: Errors.host_not_found(conn)
 
@@ -73,6 +99,11 @@ defmodule SsmWeb.Api.DiffController do
   defp diff_error(conn, {:ssh_connect_failed, message}),
     do: Envelope.fail(conn, 502, "SSH_CONNECT_FAILED", message)
 
+  defp diff_error(conn, {:crashed, reason}) do
+    message = if is_binary(reason), do: reason, else: inspect(reason)
+    Envelope.fail(conn, 500, "INTERNAL_ERROR", "sync crashed: #{message}")
+  end
+
   defp diff_error(conn, reason),
     do: Envelope.fail(conn, 500, "INTERNAL_ERROR", "diff failed: #{inspect(reason)}")
 
@@ -88,6 +119,8 @@ defmodule SsmWeb.Api.DiffController do
             has_pragma: login.has_pragma,
             readonly_condition: login.readonly_condition,
             read_error: login.read_error,
+            # additive: the notes the diff page shows (Ssm.Diffs.Notes)
+            notes: Notes.of(login),
             items:
               Enum.map(login.items, fn item ->
                 %{status: Atom.to_string(item.status), line: item.line}

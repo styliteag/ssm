@@ -10,6 +10,7 @@ defmodule Ssm.Application do
   @impl true
   def start(_type, _args) do
     Ssm.OIDC.Config.load()
+    check_revocation_sync()
     :ok = Ssm.SecurityLog.install()
 
     children =
@@ -33,13 +34,17 @@ defmodule Ssm.Application do
         Ssm.OIDC.TokenStore,
         # mctl contract: create_host job work (host-key probe + pin).
         {Task.Supervisor, name: Ssm.Mctl.TaskSupervisor},
-        # Periodic key check sweeps (Ssm.Diffs.SyncScheduler).
-        {Task.Supervisor, name: Ssm.Diffs.TaskSupervisor}
+        # Periodic key check sweeps (Ssm.Diffs.SyncScheduler), manual syncs
+        # (Ssm.Diffs.SyncRunner) and the removal-only sync.
+        {Task.Supervisor, name: Ssm.Diffs.TaskSupervisor},
+        # Manual syncs (diff page): per-host state, runs under the supervisor above.
+        Ssm.Diffs.SyncRunner
       ] ++
         oidc_children() ++
         mctl_boot() ++
         ssh_children() ++
         sync_children() ++
+        drift_children() ++
         [
           # Start to serve requests, typically the last entry
           SsmWeb.Endpoint
@@ -108,6 +113,23 @@ defmodule Ssm.Application do
       end
     else
       []
+    end
+  end
+
+  # SSM_REVOCATION_SYNC: a bad value is logged and counts as off
+  defp check_revocation_sync do
+    case Ssm.Diffs.RevocationSync.parse(Application.get_env(:ssm, :revocation_sync)) do
+      {:ok, true} -> Logger.info("removal-only revocation sync is on (SSM_REVOCATION_SYNC)")
+      {:ok, false} -> :ok
+      {:error, message} -> Logger.error(message <> "; the revocation sync stays off")
+    end
+  end
+
+  # The periodic grant drift check (logs only, never writes); off in tests.
+  defp drift_children do
+    case Ssm.Grants.DriftCheck.child_opts() do
+      nil -> []
+      opts -> [{Ssm.Grants.DriftCheck, opts}]
     end
   end
 

@@ -10,6 +10,7 @@ defmodule SsmWeb.Api.KeyController do
 
   import Ecto.Query
 
+  alias Ssm.Activity.Entries
   alias Ssm.ControlChars
   alias Ssm.Repo
   alias Ssm.Users
@@ -17,6 +18,9 @@ defmodule SsmWeb.Api.KeyController do
   alias SsmWeb.Api.Errors
   alias SsmWeb.Api.Envelope
   alias SsmWeb.Api.Params
+
+  # every successful write is audited (Ssm.Activity.Entries), actor = token subject
+  @audit %{via: "api"}
 
   @create_spec [
     user_id: [type: :integer, required: true],
@@ -69,8 +73,12 @@ defmodule SsmWeb.Api.KeyController do
          :ok <- check_material(attrs),
          :ok <- ensure_owner_exists(attrs.user_id) do
       case Users.create_key(attrs) do
-        {:ok, key} -> Envelope.ok(conn, key_json(key), status: 201)
-        {:error, changeset} -> Errors.changeset(conn, changeset, "key")
+        {:ok, key} ->
+          Entries.key(:create, key, conn.assigns.api_user, @audit)
+          Envelope.ok(conn, key_json(key), status: 201)
+
+        {:error, changeset} ->
+          Errors.changeset(conn, changeset, "key")
       end
     else
       {:error, :owner_not_found} -> Errors.user_not_found(conn)
@@ -83,8 +91,12 @@ defmodule SsmWeb.Api.KeyController do
          %UserKey{} = key <- Repo.get(UserKey, id),
          {:ok, attrs} <- Params.validate_partial(params, @update_spec) do
       case Users.update_key(key, attrs) do
-        {:ok, updated} -> Envelope.ok(conn, key_json(updated))
-        {:error, changeset} -> Errors.changeset(conn, changeset, "key")
+        {:ok, updated} ->
+          Entries.key(:update, updated, conn.assigns.api_user, @audit)
+          Envelope.ok(conn, key_json(updated))
+
+        {:error, changeset} ->
+          Errors.changeset(conn, changeset, "key")
       end
     else
       nil -> Errors.key_not_found(conn)
@@ -96,6 +108,7 @@ defmodule SsmWeb.Api.KeyController do
     with {:ok, id} <- Errors.path_id(raw),
          %UserKey{} = key <- Repo.get(UserKey, id),
          {:ok, _} <- Users.delete_key(key) do
+      Entries.key(:delete, key, conn.assigns.api_user, @audit)
       Envelope.ok(conn, %{deleted_id: key.id})
     else
       nil -> Errors.key_not_found(conn)

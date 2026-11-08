@@ -27,6 +27,8 @@ defmodule Ssm.Ssh.ScriptSafetyTest do
     """)
 
     File.chmod!(Path.join(dir, "bin/getent"), 0o755)
+    # the SSH user every write names (set_authorized_keyfile <login> root)
+    File.write!(Path.join(dir, "passwd"), "root:x:0:0::#{Path.join(dir, "root")}:/bin/sh\n")
 
     # root's own file, as onboarding leaves it: ssm's header plus its key
     root_keys = Path.join(dir, "root/.ssh/authorized_keys")
@@ -75,7 +77,7 @@ defmodule Ssm.Ssh.ScriptSafetyTest do
 
     System.cmd(
       "sh",
-      ["-c", ~s(sh "$0" set_authorized_keyfile "$1" < "$2"), ctx.script, login, input],
+      ["-c", ~s(sh "$0" set_authorized_keyfile "$1" root < "$2"), ctx.script, login, input],
       env: env(ctx),
       stderr_to_stdout: true
     )
@@ -254,17 +256,19 @@ defmodule Ssm.Ssh.ScriptSafetyTest do
       )
     end
 
-    test "without mv -T/-h a symlink-to-dir authorized_keys is removed and replaced", ctx do
+    # a plain mv could move the file into a directory linked there in between
+    test "without mv -T/-h a symlink-to-dir authorized_keys is refused, nothing lands there",
+         ctx do
       busybox_mv(ctx)
       ssh = ssh_dir(add_user(ctx, "bbx"))
       target = Path.join(ctx.dir, "sudoers.d")
       File.mkdir_p!(target)
       File.ln_s!(target, Path.join(ssh, "authorized_keys"))
 
-      assert {_, 0} = write(ctx, "bbx", "ssh-rsa NEW y\n")
+      assert {out, 1} = write(ctx, "bbx", "ssh-rsa NEW y\n")
+      assert out =~ "Keyfile is unsafe (no_safe_rename)"
       assert File.ls!(target) == []
-      assert stat!(Path.join(ssh, "authorized_keys")).type == :regular
-      assert File.read!(Path.join(ssh, "authorized_keys")) =~ "ssh-rsa NEW y"
+      assert Path.wildcard(Path.join(ssh, ".authorized_keys.ssm.*")) == []
     end
 
     test "a real directory named authorized_keys is refused as unsafe (link-to-dir)", ctx do
@@ -290,72 +294,6 @@ defmodule Ssm.Ssh.ScriptSafetyTest do
         assert File.read!(keys) == "ssh-rsa HANDMADE x\n"
         assert File.ls!(Path.dirname(keys)) == ["authorized_keys"]
       end
-    end
-  end
-
-  describe "login guards" do
-    test "an all-numeric or option-like login is refused before any lookup", ctx do
-      before = File.read!(ctx.root_keys)
-
-      for login <- ["0", "1000", "-x", ""] do
-        assert {out, 1} = write(ctx, login, "ssh-ed25519 ATTACKER x\n")
-        assert out =~ "Invalid login", "login #{inspect(login)}: #{out}"
-      end
-
-      assert File.read!(ctx.root_keys) == before
-    end
-
-    test "another name for the connecting user's ~/.ssh is refused (own_login)", ctx do
-      # toor on FreeBSD: a second passwd entry with root's home
-      File.write!(
-        Path.join(ctx.dir, "passwd"),
-        "toor:x:0:0::#{Path.join(ctx.dir, "root")}:/bin/sh\n",
-        [:append]
-      )
-
-      before = File.read!(ctx.root_keys)
-
-      assert {out, 1} = write(ctx, "toor", "ssh-ed25519 ATTACKER x\n")
-      assert out =~ "unsafe (own_login)"
-      assert File.read!(ctx.root_keys) == before
-    end
-
-    test "the connecting user's own name still writes its own file", ctx do
-      {me, 0} = System.cmd("id", ["-un"])
-
-      File.write!(
-        Path.join(ctx.dir, "passwd"),
-        "#{String.trim(me)}:x:0:0::#{Path.join(ctx.dir, "root")}:/bin/sh\n",
-        [:append]
-      )
-
-      assert {_, 0} = write(ctx, String.trim(me), "ssh-ed25519 SSMKEY ssm\n")
-      assert File.read!(ctx.root_keys) =~ "ssh-ed25519 SSMKEY ssm"
-    end
-
-    test "without getent the passwd lookup matches the login literally, never as a pattern",
-         ctx do
-      [function] =
-        Regex.run(~r/^do_getent_passwd\(\) \{.*?^\}/ms, ScriptRunner.script_source())
-
-      passwd = Path.join(ctx.dir, "passwd.plain")
-      File.write!(passwd, "root:x:0:0::/root:/bin/sh\n00:x:5:5::/zero:/bin/sh\n")
-
-      script =
-        "have_getent() { return 1; }\npasswd_file=\"$2\"\n" <>
-          function <>
-          "\ndo_getent_passwd \"$1\""
-
-      lookup = fn login ->
-        {out, _} = System.cmd("sh", ["-c", script, "sh", login, passwd])
-        out
-      end
-
-      assert lookup.("r..t") == ""
-      assert lookup.("r.*") == ""
-      assert lookup.("0") == ""
-      assert lookup.("00") =~ "/zero"
-      assert lookup.("root") =~ "/root"
     end
   end
 

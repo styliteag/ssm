@@ -11,6 +11,7 @@ defmodule Ssm.Hosts do
 
   import Ecto.Query
 
+  alias Ssm.Diffs.{HostChecks, StatusCache}
   alias Ssm.Hosts.Host
   alias Ssm.{Repo, Scope}
   alias Ssm.Ssh.Target
@@ -90,15 +91,17 @@ defmodule Ssm.Hosts do
   end
 
   @doc """
-  Create a host and assign its customer/groups (slugs) in one transaction;
-  unknown slugs roll the insert back (see `update_membership/2`).
+  Create a host and assign its customer/groups (slugs) in one IMMEDIATE
+  transaction; unknown slugs roll the insert back (see
+  `update_membership/3`, which also expands the grants that reach the host).
   """
-  @spec create_host_with_membership(map(), map()) ::
+  @spec create_host_with_membership(map(), map(), Ssm.Grants.Expansion.ctx()) ::
           {:ok, Host.t()} | {:error, Ecto.Changeset.t() | {:validation, map()}}
-  def create_host_with_membership(attrs, membership) do
-    Repo.transaction(fn ->
+  def create_host_with_membership(attrs, membership, ctx \\ %{}) do
+    Ssm.Grants.transaction(fn ->
       with {:ok, host} <- create_host(attrs),
-           {:ok, host} <- update_membership(host, membership) do
+           {:ok, host} <-
+             update_membership(host, membership, Map.put(ctx, :trigger, "host_create")) do
         host
       else
         {:error, reason} -> Repo.rollback(reason)
@@ -108,7 +111,13 @@ defmodule Ssm.Hosts do
 
   @spec update_host(Host.t(), map()) :: {:ok, Host.t()} | {:error, Ecto.Changeset.t()}
   def update_host(%Host{} = host, attrs) do
-    host |> Host.changeset(attrs) |> validate_jump_chain() |> Repo.update()
+    changeset = host |> Host.changeset(attrs) |> validate_jump_chain()
+
+    with {:ok, updated} <- Repo.update(changeset) do
+      # a status from before a disable/enable is stale (Ssm.HostStatus)
+      if Ecto.Changeset.changed?(changeset, :disabled), do: HostChecks.forget(updated.id)
+      {:ok, updated}
+    end
   end
 
   # A new `jump_via` must not lead back to the host itself (A -> B -> A) nor
@@ -195,28 +204,35 @@ defmodule Ssm.Hosts do
   def delete_host(%Scope{} = scope, %Host{id: id}) do
     # Check and delete in one IMMEDIATE transaction (SQLite write lock from
     # BEGIN): no dependent can appear between the check and the cascade.
-    Repo.transaction(
-      fn ->
-        with {:ok, host} <- Scope.fetch_host(scope, id),
-             [] <- jump_dependents(host),
-             {:ok, deleted} <- delete_host(host) do
-          deleted
-        else
-          names when is_list(names) -> Repo.rollback({:jump_host_in_use, names})
-          {:error, reason} -> Repo.rollback(reason)
-        end
-      end,
-      mode: :immediate
-    )
+    Ssm.Grants.transaction(fn ->
+      with {:ok, host} <- Scope.fetch_host(scope, id),
+           [] <- jump_dependents(host),
+           {:ok, deleted} <- delete_host(host) do
+        deleted
+      else
+        names when is_list(names) -> Repo.rollback({:jump_host_in_use, names})
+        {:error, reason} -> Repo.rollback(reason)
+      end
+    end)
   end
+
+  def delete_host(%Host{} = host, ctx) when is_map(ctx), do: do_delete_host(host, ctx)
 
   @doc """
   Delete a host. Its activity entries keep their text but lose the host id:
   SQLite reuses ids, and a later host must not inherit them (scope filter).
+  Its grant rows go with it and are audited as removed (`host_delete`).
   """
   @spec delete_host(Host.t()) :: {:ok, Host.t()} | {:error, Ecto.Changeset.t()}
-  def delete_host(%Host{} = host) do
-    Repo.transaction(fn ->
+  def delete_host(%Host{} = host), do: do_delete_host(host, %{})
+
+  defp do_delete_host(host, ctx) do
+    # the jump_via cascade deletes the hosts behind this one too
+    gone = jump_descendants([host.id], MapSet.new([host.id]))
+
+    Ssm.Grants.transaction(fn ->
+      :ok = Ssm.Grants.Expansion.forget_host(host.id, ctx)
+
       case Repo.delete(host) do
         {:ok, deleted} ->
           detach_activity(deleted.id)
@@ -226,6 +242,24 @@ defmodule Ssm.Hosts do
           Repo.rollback(changeset)
       end
     end)
+    |> tap(fn result -> if match?({:ok, _}, result), do: evict_statuses(gone) end)
+  end
+
+  # Their check rows go by ON DELETE CASCADE; the cache entries must go
+  # too: SQLite reuses ids, a new host must not inherit a status.
+  defp evict_statuses(ids), do: Enum.each(ids, &StatusCache.delete/1)
+
+  # every id reachable through jump_via, the given ones included (a jump
+  # loop in old data ends at the first repeat)
+  defp jump_descendants([], seen), do: MapSet.to_list(seen)
+
+  defp jump_descendants(ids, seen) do
+    children =
+      from(h in Host, where: h.jump_via in ^ids, select: h.id)
+      |> Repo.all()
+      |> Enum.reject(&MapSet.member?(seen, &1))
+
+    jump_descendants(children, MapSet.union(seen, MapSet.new(children)))
   end
 
   defp detach_activity(host_id) do
@@ -300,26 +334,39 @@ defmodule Ssm.Hosts do
   only the keys present in `attrs`. Unknown slugs are refused with
   `{:error, {:validation, %{"customer" | "groups" => [message]}}}`; a name
   conflict returns the changeset. Always bumps `updated_at`.
+
+  The host's grant rows are reconciled in the same IMMEDIATE transaction
+  (`Ssm.Grants.Expansion`, trigger `host_membership` unless `ctx` names
+  one): a host that leaves a grant's customer or group loses those rows and
+  is marked "revocation pending".
   """
-  @spec update_membership(Host.t(), map()) ::
+  @spec update_membership(Host.t(), map(), Ssm.Grants.Expansion.ctx()) ::
           {:ok, Host.t()}
           | {:error, {:validation, map()}}
           | {:error, Ecto.Changeset.t()}
-  def update_membership(%Host{} = host, attrs) do
+  def update_membership(%Host{} = host, attrs, ctx \\ %{}) do
     host = Repo.preload(host, [:customer, :groups])
+    ctx = Map.put_new(ctx, :trigger, "host_membership")
 
     with {:ok, changes} <- resolve_customer(%{}, attrs),
          {:ok, changes} <- resolve_groups(changes, attrs) do
-      host
-      |> Host.changeset(Map.take(attrs, [:name]))
-      |> Ecto.Changeset.force_change(:updated_at, DateTime.utc_now(:second))
-      |> put_membership(changes)
-      |> Repo.update()
-      |> case do
-        {:ok, updated} -> {:ok, Repo.preload(updated, [:customer, :groups], force: true)}
-        {:error, _} = error -> error
-      end
+      Ssm.Grants.transaction(fn ->
+        with {:ok, updated} <- write_membership(host, attrs, changes),
+             {:ok, _counts} <- Ssm.Grants.Expansion.reconcile([updated.id], ctx) do
+          Repo.preload(updated, [:customer, :groups], force: true)
+        else
+          {:error, reason} -> Repo.rollback(reason)
+        end
+      end)
     end
+  end
+
+  defp write_membership(host, attrs, changes) do
+    host
+    |> Host.changeset(Map.take(attrs, [:name]))
+    |> Ecto.Changeset.force_change(:updated_at, DateTime.utc_now(:second))
+    |> put_membership(changes)
+    |> Repo.update()
   end
 
   defp resolve_customer(changes, %{customer: nil}), do: {:ok, Map.put(changes, :customer, nil)}
