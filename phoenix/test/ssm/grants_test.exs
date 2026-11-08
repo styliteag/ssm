@@ -119,6 +119,38 @@ defmodule Ssm.GrantsTest do
       assert [%{meta: %{"trigger" => "authorization_delete"}}] = audit("grant_add")
     end
 
+    test "a restricted manual row is not replaced by a grant row without its restrictions",
+         ctx do
+      host = host_in("acme")
+      manual = authorization_fixture(ctx.alice, host, %{login: "deploy", options: "no-pty"})
+      grant = grant!(%{ssh_user_id: ctx.alice.id, customer_id: ctx.acme.id, login: "deploy"})
+
+      assert {:error, {:grant_takeover, grant_id}} =
+               Authorizations.delete_authorization(Repo.get!(Authorization, manual.id))
+
+      assert grant_id == grant.id
+      assert rows(host.id) == [{ctx.alice.id, "deploy", nil}]
+      assert Repo.get!(Authorization, manual.id).options == "no-pty"
+      assert audit("grant_add") == []
+
+      # moving it away would hand its place to the grant as well
+      other = host_in("beta")
+
+      assert {:error, {:grant_takeover, ^grant_id}} =
+               Authorizations.update_authorization(Repo.get!(Authorization, manual.id), %{
+                 host_id: other.id
+               })
+
+      assert rows(host.id) == [{ctx.alice.id, "deploy", nil}]
+
+      # without restrictions the grant row takes over as before
+      {:ok, plain} =
+        Authorizations.update_authorization(Repo.get!(Authorization, manual.id), %{options: ""})
+
+      {:ok, _} = Authorizations.delete_authorization(plain)
+      assert rows(host.id) == [{ctx.alice.id, "deploy", grant.id}]
+    end
+
     test "two grants for the same row share one row and hand it over", ctx do
       host = host_in("acme", ["web"])
       g1 = grant!(%{ssh_user_id: ctx.alice.id, customer_id: ctx.acme.id, login: "deploy"})

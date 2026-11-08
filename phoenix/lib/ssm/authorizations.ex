@@ -243,7 +243,8 @@ defmodule Ssm.Authorizations do
            {:ok, auth} <- write.(changeset),
            :ok <- mark_reduced(changeset.data, auth),
            :ok <- record_managed_login(auth.host_id, auth.login),
-           {:ok, _} <- reconcile_after_manual(reconcile_host_id, auth) do
+           {:ok, _} <- reconcile_after_manual(reconcile_host_id, auth),
+           :ok <- ensure_no_takeover_widening(changeset.data, auth) do
         auth
       else
         {:error, failed} -> Repo.rollback(failed)
@@ -277,6 +278,41 @@ defmodule Ssm.Authorizations do
         Revocations.mark(old.host_id, "authorization options restricted")
 
       true ->
+        :ok
+    end
+  end
+
+  # A manual row that leaves its (user, host, login) — deleted or moved —
+  # hands that place to a grant covering it, and the grant row carries the
+  # grant's options, not the row's. When that row grants more than the
+  # manual one did (a restriction such as `no-pty` would silently go), the
+  # write is refused: `{:error, {:grant_takeover, grant_id}}`. Drop the
+  # restrictions first (admin-only for operators) or delete the grant.
+  defp ensure_no_takeover_widening(%Authorization{id: nil}, _auth), do: :ok
+
+  defp ensure_no_takeover_widening(%Authorization{} = old, auth) do
+    if {old.user_id, old.host_id, old.login} == {auth.user_id, auth.host_id, auth.login},
+      do: :ok,
+      else: ensure_no_takeover_widening(old)
+  end
+
+  defp ensure_no_takeover_widening(%Authorization{} = old) do
+    taker =
+      Repo.one(
+        from a in Authorization,
+          where:
+            a.host_id == ^old.host_id and a.user_id == ^old.user_id and a.login == ^old.login and
+              not is_nil(a.grant_id),
+          select: {a.grant_id, a.options}
+      )
+
+    case taker do
+      {grant_id, options} ->
+        if Options.weaker?(options, old.options),
+          do: {:error, {:grant_takeover, grant_id}},
+          else: :ok
+
+      nil ->
         :ok
     end
   end
@@ -362,7 +398,8 @@ defmodule Ssm.Authorizations do
            {:ok, deleted} <- Repo.delete(auth),
            :ok <- Revocations.mark(deleted.host_id, "authorization deleted"),
            {:ok, _} <-
-             Expansion.reconcile([deleted.host_id], %{trigger: "authorization_delete"}) do
+             Expansion.reconcile([deleted.host_id], %{trigger: "authorization_delete"}),
+           :ok <- ensure_no_takeover_widening(deleted) do
         deleted
       else
         grant_id when is_integer(grant_id) -> Repo.rollback(:grant_row)

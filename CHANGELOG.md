@@ -146,6 +146,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Deleting or moving a manual authorization that a grant also covers (same SSH user,
+  host and login) is refused when the grant row that would take its place lacks the
+  manual row's restrictions (e.g. `no-pty`, `from=`): before, the grant row replaced it
+  silently and the restrictions were gone. Remove the restrictions first (admin-only
+  for operators) or delete the grant. API: 409 `CONFLICT`.
+
 - A login's user could block every revocation for their login: in their own `~/.ssh`
   they could rename the root-owned `authorized_keys` that ssm wrote to `user_readonly`,
   which then counted as a root-owned readonly marker and made every sync skip the

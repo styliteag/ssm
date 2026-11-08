@@ -55,6 +55,21 @@ defmodule SsmWeb.Api.Errors do
   def grant_row(conn),
     do: Envelope.fail(conn, 409, "CONFLICT", "authorization is managed by a grant (read-only)")
 
+  @doc """
+  `{:error, {:grant_takeover, grant_id}}`: deleting or moving a manual row
+  would hand its place to a grant row without the row's restrictions.
+  409 CONFLICT, an existing code.
+  """
+  def grant_takeover(conn, grant_id),
+    do:
+      Envelope.fail(
+        conn,
+        409,
+        "CONFLICT",
+        "grant #{grant_id} covers this user and login without this row's restrictions; " <>
+          "remove the restrictions first or delete the grant"
+      )
+
   defp constraint_error?(changeset) do
     Enum.any?(changeset.errors, fn {_field, {_message, meta}} ->
       meta[:constraint] in [:unique, :foreign]

@@ -44,6 +44,10 @@ defmodule SsmWeb.AuthorizationsLive do
   @grant_row "This authorization comes from a grant and is read-only here; " <>
                "change or delete the grant instead."
 
+  @grant_takeover "A grant covers this SSH user and login without this row's restrictions; " <>
+                    "removing or moving the row would drop them. Remove the restrictions " <>
+                    "first or delete the grant."
+
   @impl true
   def handle_params(params, _uri, socket) do
     view = if params["view"] in @view_modes, do: params["view"], else: "list"
@@ -281,6 +285,9 @@ defmodule SsmWeb.AuthorizationsLive do
       {:error, :grant_row} ->
         {:noreply, socket |> assign(form: nil, editing: nil) |> put_flash(:error, @grant_row)}
 
+      {:error, {:grant_takeover, _grant_id}} ->
+        {:noreply, put_flash(socket, :error, @grant_takeover)}
+
       {:error, changeset} ->
         {:noreply, assign(socket, form: to_form(changeset))}
     end
@@ -298,6 +305,7 @@ defmodule SsmWeb.AuthorizationsLive do
        |> reload_authorizations()}
     else
       {:error, :grant_row} -> {:noreply, put_flash(socket, :error, @grant_row)}
+      {:error, {:grant_takeover, _}} -> {:noreply, put_flash(socket, :error, @grant_takeover)}
       _ -> {:noreply, put_flash(socket, :error, "Authorization not found.")}
     end
   end
@@ -447,6 +455,9 @@ defmodule SsmWeb.AuthorizationsLive do
 
       {:error, :grant_row} ->
         {:noreply, put_flash(socket, :error, @grant_row)}
+
+      {:error, {:grant_takeover, _}} ->
+        {:noreply, put_flash(socket, :error, @grant_takeover)}
 
       {:error, _changeset} ->
         {:noreply, put_flash(socket, :error, "Could not revoke the authorization.")}

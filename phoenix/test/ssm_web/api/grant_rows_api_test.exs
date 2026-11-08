@@ -55,6 +55,22 @@ defmodule SsmWeb.Api.GrantRowsApiTest do
     assert Repo.get!(Authorization, row.id).login == "deploy"
   end
 
+  test "DELETE of a restricted manual row a grant would replace is 409 CONFLICT", %{
+    conn: conn,
+    row: row
+  } do
+    alice = Repo.get!(Ssm.Users.User, row.user_id)
+    host = host_fixture()
+    manual = authorization_fixture(alice, host, %{login: "deploy", options: "no-pty"})
+    {:ok, _} = Hosts.update_membership(host, %{customer: "acme"})
+
+    body = conn |> delete(~p"/api/v2/authorizations/#{manual.id}") |> json_response(409)
+    assert body["success"] == false
+    assert body["error"]["code"] == "CONFLICT"
+    assert body["error"]["message"] =~ "restrictions"
+    assert Repo.get!(Authorization, manual.id).options == "no-pty"
+  end
+
   test "deleting a manual row audits the reconcile with the API user", %{conn: conn, row: row} do
     {:ok, _} =
       Grants.delete_grant(

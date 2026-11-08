@@ -111,6 +111,9 @@ defmodule SsmWeb.Api.AuthorizationController do
         {:error, :grant_row} ->
           Errors.grant_row(conn)
 
+        {:error, {:grant_takeover, grant_id}} ->
+          Errors.grant_takeover(conn, grant_id)
+
         {:error, changeset} ->
           Errors.changeset(conn, changeset, "authorization")
       end
@@ -130,6 +133,7 @@ defmodule SsmWeb.Api.AuthorizationController do
       nil -> Errors.authorization_not_found(conn)
       {:error, errors} when is_list(errors) -> Envelope.validation_failed(conn, errors)
       {:error, :grant_row} -> Errors.grant_row(conn)
+      {:error, {:grant_takeover, grant_id}} -> Errors.grant_takeover(conn, grant_id)
       {:error, _} -> Envelope.fail(conn, 409, "CONFLICT", "authorization cannot be deleted")
     end
   end

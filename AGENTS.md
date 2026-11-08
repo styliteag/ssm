@@ -69,7 +69,8 @@ expanded into `authorization` rows with `grant_id` (FK cascade; nil = manual row
 merge/delete/rename and group delete/rename, manual row update/delete) runs
 `Expansion.reconcile/2` — a full, idempotent per-host reconcile — in its own IMMEDIATE transaction
 (`Ssm.Grants.transaction/1`). A manual row wins; grant rows are read-only (`{:error, :grant_row}`,
-API 409 `CONFLICT`). Rows a reconcile removes mark the host in `pending_revocations`
+API 409 `CONFLICT`). Deleting or moving a manual row whose place a grant row would take with fewer
+restrictions (`Options.weaker?/2`) is refused (`{:error, {:grant_takeover, grant_id}}`, API 409 `CONFLICT`). Rows a reconcile removes mark the host in `pending_revocations`
 (`Ssm.Diffs.Revocations`, Hosts page badge; every other access-reducing write too — see "State
 machines") until a fully successful sync clears exactly the mark it read at its start. `SSM_REVOCATION_SYNC=on` (default off) adds the
 removal-only sync (`Ssm.Diffs.RevocationSync`, `Diffs.removal_sync_reported/2`): marks made in a
