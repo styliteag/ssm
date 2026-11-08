@@ -37,9 +37,7 @@ defmodule Ssm.Diffs.HostChecks do
 
     case Diffs.host_diff(client, host_id) do
       {:ok, diff} ->
-        owners = Keyword.get_lazy(opts, :owners, &owners/0)
-        StatusCache.put(host_id, SyncCheck.status(diff))
-        store(host_id, SyncCheck.result(diff, owners), now(opts))
+        record(host_id, diff, opts)
 
       {:error, {:host_disabled, _}} ->
         forget(host_id)
@@ -49,6 +47,33 @@ defmodule Ssm.Diffs.HostChecks do
         forget(host_id)
         {:error, :not_found}
     end
+  end
+
+  @doc """
+  Store a diff that was already read (e.g. the diff page's detail view of
+  one host) as that host's check, without a second SSH connection. Options
+  as `check_host/2` (`:owners`, `:now`). `{:ok, %HostCheck{}}` or
+  `{:error, :not_found}` when the host was deleted meanwhile.
+  """
+  @spec record(integer(), Diffs.HostDiff.t(), keyword()) ::
+          {:ok, HostCheck.t()} | {:error, :not_found}
+  def record(host_id, %Diffs.HostDiff{} = diff, opts \\ []) do
+    owners = Keyword.get_lazy(opts, :owners, &owners/0)
+    StatusCache.put(host_id, SyncCheck.status(diff))
+    store(host_id, SyncCheck.result(diff, owners), now(opts))
+  end
+
+  @doc "The stored check of every host that has one: host id → `%HostCheck{}`."
+  @spec stored() :: %{integer() => HostCheck.t()}
+  def stored, do: HostCheck |> Repo.all() |> Map.new(&{&1.host_id, &1})
+
+  @doc """
+  The ssm users owning each key (key base64 → user name), for `:owners`.
+  Load it once when checking many hosts.
+  """
+  @spec owners() :: %{String.t() => String.t()}
+  def owners do
+    Map.new(Users.list_keys(), &{&1.key_base64, &1.user.username})
   end
 
   @doc """
@@ -183,10 +208,6 @@ defmodule Ssm.Diffs.HostChecks do
   defp forget(host_id) do
     Repo.delete_all(from c in HostCheck, where: c.host_id == ^host_id)
     :ok
-  end
-
-  defp owners do
-    Map.new(Users.list_keys(), &{&1.key_base64, &1.user.username})
   end
 
   defp now(opts),

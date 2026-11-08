@@ -18,6 +18,8 @@ defmodule SsmWeb.DiffLive do
   alias Ssm.Activity
   alias Ssm.Authorizations
   alias Ssm.Diffs
+  alias Ssm.Diffs.HostCheck
+  alias Ssm.Diffs.HostChecks
   alias Ssm.Diffs.HostDiff
   alias Ssm.Diffs.StatusCache
   alias Ssm.Diffs.SyncCheck
@@ -29,53 +31,62 @@ defmodule SsmWeb.DiffLive do
   alias Ssm.Users.UserKey
   alias SsmWeb.Layouts
 
-  # Cached statuses older than this are re-checked on mount.
-  @status_ttl_ms 5 * 60 * 1000
+  # Result filters: value, label. `kinds/1` maps a filter to the result
+  # kinds it shows; `result_kind/2` classifies one host.
+  @filters [
+    {"all", "All hosts"},
+    {"needs_sync", "Needs sync"},
+    {"auth", "Key not accepted"},
+    {"unreachable", "Unreachable / timeout"},
+    {"dns", "Name does not resolve"},
+    {"other", "Other errors"},
+    {"unchecked", "Never checked"},
+    {"disabled", "Disabled"}
+  ]
 
+  @kinds ~w(synced needs_sync auth unreachable dns other unchecked disabled)a
+
+  # Opening the page never opens an SSH connection: every host shows its last
+  # known result (this node's status cache, else the stored check in
+  # `host_checks`). Hosts are read only on an explicit action: "Check" on a
+  # row, "Check all" (asks first), or the detail view of one selected host.
   @impl true
   def mount(_params, _session, socket) do
     hosts = Hosts.list_hosts()
     cached = StatusCache.all()
+    checks = HostChecks.stored()
 
-    # Last known result shows immediately (the React app kept these in
-    # browser state); only missing or stale hosts get re-checked.
-    statuses =
-      Map.new(hosts, fn host ->
-        cond do
-          host.disabled -> {host.id, :disabled}
-          match?({_status, _at}, cached[host.id]) -> {host.id, elem(cached[host.id], 0)}
-          read_only?(socket) -> {host.id, {:error, "not checked yet"}}
-          true -> {host.id, :loading}
-        end
-      end)
+    statuses = Map.new(hosts, &{&1.id, initial_status(&1, cached[&1.id], checks[&1.id])})
 
     socket =
       socket
       |> assign(page_title: "Diff Viewer")
-      |> assign(hosts: hosts, statuses: statuses, syncing: false)
+      |> assign(hosts: hosts, statuses: statuses, checks: checks, syncing: false)
       |> assign(detail: nil, detail_error: nil, detail_loading: false)
       |> assign(key_owners: %{}, unknown_key: nil)
-      |> assign(diff_search: "", diff_sort: nil)
-
-    socket =
-      if connected?(socket) and not read_only?(socket) do
-        to_check = Enum.reject(hosts, fn host -> host.disabled or fresh?(cached[host.id]) end)
-        start_statuses_async(socket, to_check)
-      else
-        socket
-      end
+      |> assign(diff_search: "", diff_sort: nil, diff_filter: "all")
 
     {:ok, socket}
   end
 
-  # Viewers get what is already known (the status cache); anything that would
-  # open an SSH connection to a host is for operators and admins.
+  defp initial_status(%Host{disabled: true}, _cached, _check), do: :disabled
+  defp initial_status(_host, {status, _at}, _check), do: status
+  defp initial_status(_host, nil, %HostCheck{} = check), do: check_status(check)
+  defp initial_status(_host, nil, nil), do: :unchecked
+
+  # The diff page status of a stored check (`Ssm.Diffs.SyncCheck.status/1`
+  # shapes; the stored drift lists the missing and extra keys per login).
+  defp check_status(%HostCheck{state: "synced"}), do: :synced
+  defp check_status(%HostCheck{state: "error", error: error}), do: {:error, error || "error"}
+
+  defp check_status(%HostCheck{state: "drift", drift: drift}) do
+    count = fn field -> drift |> Enum.map(&length(&1[field] || [])) |> Enum.sum() end
+    {:needs_sync, count.("missing"), count.("extra")}
+  end
+
+  # Viewers get what is already known; anything that would open an SSH
+  # connection to a host is for operators and admins.
   defp read_only?(socket), do: socket.assigns.current_user.role == "viewer"
-
-  defp fresh?({_status, cached_at}),
-    do: System.monotonic_time(:millisecond) - cached_at < @status_ttl_ms
-
-  defp fresh?(nil), do: false
 
   @impl true
   def handle_params(params, _uri, socket) do
@@ -113,6 +124,8 @@ defmodule SsmWeb.DiffLive do
   # id, status}` messages) instead of one all-or-nothing batch — with dozens
   # of hosts and a 120s timeout on dead ones, a single batch kept every badge
   # on "checking…" for minutes.
+  # Every result is stored as the host's check (`HostChecks.check_host/2`), so
+  # the page shows it again after a reload without a new SSH connection.
   defp start_statuses_async(socket, hosts) do
     ids = Enum.map(hosts, & &1.id)
     parent = self()
@@ -120,15 +133,23 @@ defmodule SsmWeb.DiffLive do
     concurrency = check_concurrency()
 
     start_async(socket, :statuses, fn ->
+      owners = HostChecks.owners()
+
       ids
       |> Task.async_stream(
-        fn id -> send(parent, {:host_status, id, status_for(id)}) end,
+        fn id -> send(parent, {:host_check, id, check(id, owners)}) end,
         max_concurrency: concurrency,
         ordered: false,
         timeout: :infinity
       )
       |> Stream.run()
     end)
+  end
+
+  defp check(id, owners) do
+    HostChecks.check_host(id, owners: owners)
+  rescue
+    e -> {:error, {:crashed, Exception.message(e)}}
   end
 
   # SSH_CONCURRENCY (default 32) — how many hosts are checked in parallel.
@@ -141,14 +162,6 @@ defmodule SsmWeb.DiffLive do
     socket
     |> assign(:detail_loading, true)
     |> start_async(:detail, fn -> Diffs.host_diff(id) end)
-  end
-
-  defp status_for(host_id) do
-    case Diffs.host_diff(host_id) do
-      {:ok, diff} -> summarize(diff)
-      {:error, {:host_disabled, _}} -> :disabled
-      {:error, reason} -> {:error, format_reason(reason)}
-    end
   end
 
   defp summarize(%HostDiff{} = diff), do: SyncCheck.status(diff)
@@ -170,8 +183,21 @@ defmodule SsmWeb.DiffLive do
         statuses = Map.put(socket.assigns.statuses, diff.host_id, summarize(diff))
         owners = Map.new(Users.list_keys(), &{&1.key_base64, &1.user})
 
+        # the explicit read of this host is stored as its check
+        checks =
+          case HostChecks.record(diff.host_id, diff) do
+            {:ok, check} -> Map.put(socket.assigns.checks, diff.host_id, check)
+            {:error, _} -> socket.assigns.checks
+          end
+
         {:noreply,
-         assign(socket, detail: diff, detail_error: nil, statuses: statuses, key_owners: owners)}
+         assign(socket,
+           detail: diff,
+           detail_error: nil,
+           statuses: statuses,
+           checks: checks,
+           key_owners: owners
+         )}
 
       {:error, reason} ->
         {:noreply, assign(socket, detail: nil, detail_error: format_reason(reason))}
@@ -226,7 +252,8 @@ defmodule SsmWeb.DiffLive do
       log_sync(socket, host, %{logins: length(synced), keys: keys})
     end
 
-    hosts = Enum.reject(socket.assigns.hosts, & &1.disabled)
+    # re-check only the hosts that were synced, not the whole fleet
+    hosts = Enum.map(results, fn {host, _result} -> host end)
 
     message =
       if failed == 0 do
@@ -251,9 +278,22 @@ defmodule SsmWeb.DiffLive do
   end
 
   @impl true
-  def handle_info({:host_status, host_id, status}, socket) do
-    StatusCache.put(host_id, status)
-    {:noreply, update(socket, :statuses, &Map.put(&1, host_id, status))}
+  def handle_info({:host_check, host_id, {:ok, %HostCheck{} = check}}, socket) do
+    {:noreply,
+     socket
+     |> update(:checks, &Map.put(&1, host_id, check))
+     |> update(:statuses, &Map.put(&1, host_id, check_status(check)))}
+  end
+
+  def handle_info({:host_check, host_id, {:error, :disabled}}, socket) do
+    {:noreply,
+     socket
+     |> update(:checks, &Map.delete(&1, host_id))
+     |> update(:statuses, &Map.put(&1, host_id, :disabled))}
+  end
+
+  def handle_info({:host_check, host_id, {:error, reason}}, socket) do
+    {:noreply, update(socket, :statuses, &Map.put(&1, host_id, {:error, format_reason(reason)}))}
   end
 
   defp refresh_after_sync(socket, host) do
@@ -295,6 +335,11 @@ defmodule SsmWeb.DiffLive do
     {:noreply, assign(socket, :diff_search, q)}
   end
 
+  def handle_event("diff-filter", %{"filter" => filter}, socket) do
+    filter = if filter in Enum.map(@filters, &elem(&1, 0)), do: filter, else: "all"
+    {:noreply, assign(socket, :diff_filter, filter)}
+  end
+
   def handle_event("sort", %{"key" => key}, socket) do
     {:noreply, update(socket, :diff_sort, &SsmWeb.TableSort.toggle(&1, key))}
   end
@@ -328,6 +373,7 @@ defmodule SsmWeb.DiffLive do
     end
   end
 
+  # "Check all" (asks first in the page): reads every enabled host over SSH.
   def handle_event("recheck", _params, socket) do
     hosts = Enum.reject(socket.assigns.hosts, & &1.disabled)
 
@@ -592,11 +638,65 @@ defmodule SsmWeb.DiffLive do
   defp format_reason(:not_found), do: "host not found"
   defp format_reason(other), do: inspect(other)
 
-  # Hosts for the list view: searched (name/address) and sorted.
+  # Hosts for the list view: filtered by result, searched (name/address) and
+  # sorted.
   defp list_rows(assigns) do
-    assigns.hosts
+    assigns
+    |> card_rows()
     |> filter_hosts(assigns.diff_search)
     |> SsmWeb.TableSort.sort(assigns.diff_sort, diff_sorters(assigns.statuses))
+  end
+
+  # Hosts for the card view: filtered by result.
+  defp card_rows(assigns) do
+    Enum.filter(assigns.hosts, &(result_kind(&1, assigns) in kinds(assigns.diff_filter)))
+  end
+
+  defp kinds("all"), do: @kinds
+  defp kinds(filter), do: [String.to_existing_atom(filter)]
+
+  defp result_kind(%Host{id: id}, %{statuses: statuses, checks: checks}) do
+    case statuses[id] do
+      :disabled -> :disabled
+      :synced -> :synced
+      {:needs_sync, _, _} -> :needs_sync
+      {:error, _} -> HostCheck.kind(checks[id]) || :other
+      _unchecked_or_loading -> :unchecked
+    end
+  end
+
+  defp filter_options(assigns) do
+    counts = Enum.frequencies_by(assigns.hosts, &result_kind(&1, assigns))
+
+    Enum.map(@filters, fn
+      {"all", label} -> {"#{label} (#{length(assigns.hosts)})", "all"}
+      {value, label} -> {"#{label} (#{counts[String.to_existing_atom(value)] || 0})", value}
+    end)
+  end
+
+  defp auth_count(assigns), do: Enum.count(assigns.hosts, &(result_kind(&1, assigns) == :auth))
+
+  defp checkable_count(hosts), do: Enum.count(hosts, &(not &1.disabled))
+
+  # "checked 3 h ago" / "never checked" from the stored check.
+  attr :check, :any, required: true
+  attr :id, :string, default: nil
+
+  defp check_age(assigns) do
+    ~H"""
+    <span id={@id} class="block text-xs opacity-60">
+      {if @check, do: "checked #{ago(@check.checked_at)}", else: "never checked"}
+    </span>
+    """
+  end
+
+  defp ago(%DateTime{} = at) do
+    case DateTime.diff(DateTime.utc_now(), at) do
+      s when s < 60 -> "just now"
+      s when s < 3600 -> "#{div(s, 60)} min ago"
+      s when s < 86_400 -> "#{div(s, 3600)} h ago"
+      s -> "#{div(s, 86_400)} d ago"
+    end
   end
 
   defp filter_hosts(hosts, search) do
@@ -624,6 +724,7 @@ defmodule SsmWeb.DiffLive do
   defp diff_status_rank({:needs_sync, _, _}), do: 1
   defp diff_status_rank(:synced), do: 2
   defp diff_status_rank(:loading), do: 3
+  defp diff_status_rank(:unchecked), do: 3
   defp diff_status_rank(:disabled), do: 4
 
   defp diff_count({:needs_sync, missing, extra}), do: missing + extra
@@ -638,12 +739,14 @@ defmodule SsmWeb.DiffLive do
 
   defp status_class(:disabled), do: "badge-neutral"
   defp status_class(:loading), do: "badge-ghost"
+  defp status_class(:unchecked), do: "badge-ghost"
   defp status_class(:synced), do: "badge-success"
   defp status_class({:needs_sync, _, _}), do: "badge-warning"
   defp status_class({:error, _}), do: "badge-error"
 
   defp status_text(:disabled), do: "disabled"
   defp status_text(:loading), do: "checking…"
+  defp status_text(:unchecked), do: "not checked"
   defp status_text(:synced), do: "synchronized"
   defp status_text({:needs_sync, missing, extra}), do: "needs sync (+#{missing}/−#{extra})"
   defp status_text({:error, _}), do: "error"
@@ -671,9 +774,14 @@ defmodule SsmWeb.DiffLive do
       <.header>
         Diff Viewer
         <:subtitle>Expected authorized_keys (database) vs actual (host)</:subtitle>
-        <:actions>
-          <.button id="recheck-all" phx-click="recheck" disabled={@syncing}>
-            <.icon name="hero-arrow-path" class="size-4" /> Re-check all
+        <:actions :if={!@selected}>
+          <.button
+            id="recheck-all"
+            phx-click="recheck"
+            disabled={@syncing}
+            data-confirm={"Check all #{checkable_count(@hosts)} hosts? ssm connects to each over SSH and reads its authorized_keys (nothing is written)."}
+          >
+            <.icon name="hero-arrow-path" class="size-4" /> Check all
           </.button>
           <.button id="sync-all" phx-click="sync_all" disabled={@syncing}>
             <.icon
@@ -686,7 +794,31 @@ defmodule SsmWeb.DiffLive do
 
       <p :if={@hosts == []} class="text-sm opacity-60">No hosts configured.</p>
 
-      <div class="flex flex-wrap items-center gap-3">
+      <.link
+        :if={@selected}
+        id="diff-back"
+        patch={~p"/diff?#{[view: @diff_view]}"}
+        class="link text-sm"
+      >
+        ← all hosts
+      </.link>
+
+      <div
+        :if={!@selected and auth_count(assigns) > 0}
+        id="key-not-accepted"
+        class="alert alert-warning text-sm"
+      >
+        <.icon name="hero-key" class="size-4" />
+        <span>
+          {auth_count(assigns)} {if auth_count(assigns) == 1, do: "host", else: "hosts"} did not
+          accept ssm's key at the last check.
+        </span>
+        <button class="btn btn-ghost btn-xs" phx-click="diff-filter" phx-value-filter="auth">
+          Show
+        </button>
+      </div>
+
+      <div :if={!@selected} class="flex flex-wrap items-center gap-3">
         <div id="diff-view-switcher" class="join">
           <button
             id="diff-view-cards"
@@ -721,9 +853,14 @@ defmodule SsmWeb.DiffLive do
             autocomplete="off"
           />
         </form>
+        <form id="diff-filter" phx-change="diff-filter" class="w-64">
+          <select name="filter" class="select select-sm w-full" aria-label="Filter by result">
+            {Phoenix.HTML.Form.options_for_select(filter_options(assigns), @diff_filter)}
+          </select>
+        </form>
       </div>
 
-      <div :if={@diff_view == "list" and @hosts != []} class="overflow-x-auto">
+      <div :if={!@selected and @diff_view == "list" and @hosts != []} class="overflow-x-auto">
         <.table
           id="diff-list"
           rows={list_rows(assigns)}
@@ -739,6 +876,7 @@ defmodule SsmWeb.DiffLive do
           <:col :let={host} label="Address" sort="address">{host.address}:{host.port}</:col>
           <:col :let={host} label="Status" sort="status">
             <.status_badge status={@statuses[host.id]} />
+            <.check_age :if={!host.disabled} check={@checks[host.id]} />
           </:col>
           <:col :let={host} label="Differences" sort="differences">
             <span
@@ -759,7 +897,7 @@ defmodule SsmWeb.DiffLive do
               phx-click="recheck-row"
               phx-value-id={host.id}
               disabled={host.disabled}
-              title="Re-check this host"
+              title="Check this host (reads it over SSH)"
             >
               <.icon name="hero-arrow-path" class="size-4" />
             </button>
@@ -779,17 +917,16 @@ defmodule SsmWeb.DiffLive do
       </div>
 
       <ul
-        :if={@diff_view == "cards"}
+        :if={!@selected and @diff_view == "cards"}
         id="diff-hosts"
         class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3"
       >
-        <li :for={host <- @hosts}>
+        <li :for={host <- card_rows(assigns)}>
           <button
             id={"diff-host-#{host.id}"}
             class={[
               "flex w-full items-center justify-between gap-2 rounded-box bg-base-200 px-4 py-3",
-              "text-left transition hover:bg-base-300",
-              @selected && @selected.id == host.id && "ring-2 ring-primary"
+              "text-left transition hover:bg-base-300"
             ]}
             phx-click="select"
             phx-value-id={host.id}
@@ -797,6 +934,7 @@ defmodule SsmWeb.DiffLive do
             <span class="min-w-0">
               <span class="block truncate font-medium">{host.name}</span>
               <span class="block truncate text-xs opacity-60">{host.address}:{host.port}</span>
+              <.check_age :if={!host.disabled} check={@checks[host.id]} />
             </span>
             <.status_badge status={@statuses[host.id]} />
           </button>
@@ -806,10 +944,18 @@ defmodule SsmWeb.DiffLive do
       <section :if={@selected} id="diff-detail" class="card bg-base-200">
         <div class="card-body">
           <div class="flex items-center justify-between gap-4">
-            <h2 class="card-title text-base">
-              {@selected.name}
-              <.status_badge status={@statuses[@selected.id]} />
-            </h2>
+            <div>
+              <h2 class="card-title text-base">
+                {@selected.name}
+                <.status_badge status={@statuses[@selected.id]} />
+              </h2>
+              <p class="text-xs opacity-60">{@selected.address}:{@selected.port}</p>
+              <.check_age
+                :if={!@selected.disabled}
+                id="diff-detail-age"
+                check={@checks[@selected.id]}
+              />
+            </div>
             <div class="flex gap-2">
               <button
                 id="refresh-diff"

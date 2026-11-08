@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Diff page: opening it no longer connects to any host. Each host shows its
+  last stored check (`host_checks`) with its age ("checked 3 h ago" / "never
+  checked"); hosts are read over SSH only on an explicit action: "Check" on a
+  row, "Check all" (asks first and names how many hosts it contacts), or the
+  detail view of one host. Every manual check is stored like the periodic
+  check, so a reload shows it without a new connection. "Sync all" re-checks
+  only the hosts it synced.
+- Diff page with `host_id`: only that host's detail (name, address, last
+  check, Check/Sync, the diff) and a "← all hosts" link; no host list and no
+  other host is contacted.
+
+### Added
+
+- Diff page: a result filter (needs sync, key not accepted, unreachable /
+  timeout, name does not resolve, other errors, never checked, disabled) with
+  counts, and a "Key not accepted" notice listing hosts whose last check was
+  refused for ssm's key.
+
 ## [4.9.0] - 2026-11-08
 
 ### Added

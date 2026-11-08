@@ -160,8 +160,13 @@ defmodule SsmWeb.ReadOnlyDiffTest do
     refute ssh_used?()
   end
 
-  test "operator: the same page does open SSH connections", %{conn: conn, provider: p} do
+  test "operator: opening the page opens no SSH connection, Check all does",
+       %{conn: conn, provider: p} do
     {:ok, lv, _} = live(as(conn, p, "operator"), ~p"/diff")
+    render_async(lv)
+    refute ssh_used?()
+
+    lv |> element("#recheck-all") |> render_click()
     render_async(lv)
     assert ssh_used?()
   end

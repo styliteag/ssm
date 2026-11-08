@@ -53,7 +53,22 @@ defmodule SsmWeb.DiffLiveTest do
     assert {:error, {:redirect, %{to: "/sign-in"}}} = live(conn, ~p"/diff")
   end
 
-  test "shows per-host sync status after the async check", %{conn: conn} do
+  defp store_check(host, state, attrs \\ []) do
+    at = Keyword.get(attrs, :checked_at, DateTime.truncate(DateTime.utc_now(), :second))
+
+    Ssm.Repo.insert!(%Ssm.Diffs.HostCheck{
+      host_id: host.id,
+      state: state,
+      logins: 1,
+      drift: Keyword.get(attrs, :drift, []),
+      error_code: attrs[:error_code],
+      error: attrs[:error],
+      checked_at: at,
+      changed_at: at
+    })
+  end
+
+  test "opening the page makes no SSH connection; Check all checks and stores", %{conn: conn} do
     synced_host = synced_setup()
 
     user = user_fixture()
@@ -70,19 +85,83 @@ defmodule SsmWeb.DiffLiveTest do
     {:ok, view, _html} = live(conn, ~p"/diff?view=cards")
     render_async(view)
 
+    assert has_element?(view, "#diff-host-#{synced_host.id} .badge", "not checked")
+    assert has_element?(view, "#diff-host-#{disabled.id} .badge", "disabled")
+    assert MockClient.calls().exec == []
+    assert MockClient.calls().connect == []
+
+    # asks first, naming how many hosts get an SSH connection
+    assert has_element?(view, ~s(#recheck-all[data-confirm*="2 hosts"]))
+
+    view |> element("#recheck-all") |> render_click()
+    render_async(view)
+
     assert has_element?(view, "#diff-host-#{synced_host.id} .badge", "synchronized")
     assert has_element?(view, "#diff-host-#{drifted.id} .badge", "needs sync (+1/−1)")
     assert has_element?(view, "#diff-host-#{disabled.id} .badge", "disabled")
+    assert %{state: "synced"} = Ssm.Diffs.HostChecks.stored()[synced_host.id]
+    assert %{state: "drift"} = Ssm.Diffs.HostChecks.stored()[drifted.id]
   end
 
-  test "a fresh cached status renders immediately without any SSH", %{conn: conn} do
+  test "the stored check shows with its age, without any SSH", %{conn: conn} do
     host = host_fixture(%{name: "warm"})
-    Ssm.Diffs.StatusCache.put(host.id, :synced)
+    drift = [%{"user" => "ann", "login" => "root", "missing" => ["k1"], "extra" => []}]
+    three_hours_ago = DateTime.add(DateTime.truncate(DateTime.utc_now(), :second), -3 * 3600)
+    store_check(host, "drift", drift: drift, checked_at: three_hours_ago)
 
-    {:ok, view, _html} = live(conn, ~p"/diff?view=cards")
+    {:ok, view, _html} = live(conn, ~p"/diff?view=list")
     render_async(view)
 
-    assert has_element?(view, "#diff-host-#{host.id} .badge", "synchronized")
+    assert has_element?(view, "#diff-row-#{host.id} .badge", "needs sync (+1/−0)")
+    assert has_element?(view, "#diff-row-#{host.id}", "checked 3 h ago")
+    assert MockClient.calls().exec == []
+  end
+
+  test "with host_id only that host is shown and read, no host list", %{conn: conn} do
+    host = synced_setup()
+    other = host_fixture(%{name: "other"})
+    store_check(other, "synced")
+
+    {:ok, view, _html} = live(conn, ~p"/diff?host_id=#{host.id}")
+    render_async(view)
+
+    assert has_element?(view, "#diff-detail", "web1")
+    assert has_element?(view, "#diff-back", "all hosts")
+    refute has_element?(view, "#diff-list")
+    refute has_element?(view, "#diff-hosts")
+    refute has_element?(view, "#diff-row-#{other.id}")
+    refute has_element?(view, "#recheck-all")
+
+    contacted = MockClient.calls().exec |> Enum.map(&elem(&1, 0)) |> Enum.uniq()
+    assert contacted == [host.id]
+  end
+
+  test "Key not accepted lists the hosts that refused ssm's key", %{conn: conn} do
+    refused = host_fixture(%{name: "refused"})
+    gone = host_fixture(%{name: "gone"})
+    fine = host_fixture(%{name: "fine"})
+
+    store_check(refused, "error",
+      error_code: "auth_failed",
+      error: "SSH authentication with ssm's key failed"
+    )
+
+    store_check(gone, "error", error_code: "timeout", error: "the SSH connection timed out")
+    store_check(fine, "synced")
+
+    {:ok, view, _html} = live(conn, ~p"/diff?view=list")
+
+    assert has_element?(view, "#key-not-accepted", "1 host")
+
+    view |> element("#diff-filter") |> render_change(%{filter: "auth"})
+    assert has_element?(view, "#diff-row-#{refused.id}")
+    refute has_element?(view, "#diff-row-#{gone.id}")
+    refute has_element?(view, "#diff-row-#{fine.id}")
+
+    view |> element("#diff-filter") |> render_change(%{filter: "unreachable"})
+    assert has_element?(view, "#diff-row-#{gone.id}")
+    refute has_element?(view, "#diff-row-#{refused.id}")
+
     assert MockClient.calls().exec == []
   end
 
@@ -125,6 +204,8 @@ defmodule SsmWeb.DiffLiveTest do
     assert has_element?(view, "#diff-detail", "missing on host")
     assert has_element?(view, "#diff-detail", "not authorized")
     assert has_element?(view, "#diff-detail", "ssh-ed25519 WANTED laptop")
+    # the explicit read of the selected host is stored as its check
+    assert %{state: "drift"} = Ssm.Diffs.HostChecks.stored()[host.id]
   end
 
   test "sync pushes the expected keys and logs the action", %{conn: conn} do
@@ -439,6 +520,7 @@ defmodule SsmWeb.DiffLiveTest do
       render_async(view)
 
       assert has_element?(view, "#diff-row-#{host.id} .badge", "synchronized")
+      assert %{state: "synced"} = Ssm.Diffs.HostChecks.stored()[host.id]
     end
   end
 
@@ -457,6 +539,7 @@ defmodule SsmWeb.DiffLiveTest do
     MockClient.set_default_exec(%Result{exit_code: 0})
 
     {:ok, view, _html} = live(conn, ~p"/diff?view=cards")
+    view |> element("#recheck-all") |> render_click()
     render_async(view)
 
     view |> element("#sync-all") |> render_click()

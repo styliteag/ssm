@@ -20,7 +20,7 @@ defmodule SsmWeb.ReadOnly do
 
   @read_events ~w(
     filter load_more sort view-mode list-search search type-filter view
-    diff-view diff-search select deselect cancel
+    diff-view diff-search diff-filter select deselect cancel
     unknown-key-cancel
   )
 

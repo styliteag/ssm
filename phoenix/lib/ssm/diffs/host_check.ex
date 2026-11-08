@@ -34,4 +34,18 @@ defmodule Ssm.Diffs.HostCheck do
 
   @doc "The valid states."
   def states, do: @states
+
+  @doc """
+  The kind of a failed check, for filtering (`Ssm.Ssh.ErrorCode` codes):
+  `:auth` (the host refused ssm's key), `:unreachable` (refused, timed out,
+  no route), `:dns`, `:other`; `nil` for a check that did not fail.
+  """
+  @spec kind(t() | nil) :: :auth | :unreachable | :dns | :other | nil
+  def kind(%__MODULE__{state: "error", error_code: code}), do: code_kind(code)
+  def kind(_check), do: nil
+
+  defp code_kind("auth_failed"), do: :auth
+  defp code_kind(code) when code in ~w(unreachable timeout connect_refused), do: :unreachable
+  defp code_kind("dns_error"), do: :dns
+  defp code_kind(_code), do: :other
 end
