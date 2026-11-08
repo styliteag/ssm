@@ -46,6 +46,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `ssm (revocation sync)` with `mode: removal_only`. With `off`, nothing is
   written automatically; the badge stays until a manual sync.
 
+- Diff page: "Remove" on a line marked "not authorized" takes that key off the host
+  right away, and "Remove all extra keys" does so for every such line of a login —
+  without a full sync. ssm reads the login fresh, removes only lines that are still
+  unauthorized (never a granted key or ssm's own key), keeps every other line, and
+  writes through the same safe path as a sync; readonly and unsafe logins are refused.
+  Each removal is in the activity log with the key fingerprints. Admins and operators
+  on hosts in their scope only, never viewers.
+
+- `GET /api/v2/diffs/{host_id}`: every login now has a `notes` list with the notes the
+  diff page shows — unsafe files, blocked revocations ("revocation blocked …"), an
+  ignored `user_readonly` not owned by root, "drops host restriction: …" and "invalid
+  stored options". Each note is `{kind, text, line}`; `kind` is a stable code to switch
+  on, `line` names the key line an item note belongs to. Existing fields are unchanged.
+
+- Hosts page (admins): "Managed logins" lists every login ssm keeps writing on a host
+  with its number of authorizations, and "Forget" stops managing a login that has no
+  authorization and no `authorized_keys` left on the host (ssm checks the host first;
+  a login the host cannot resolve, or whose home is missing, is kept).
+  The same over the API: `GET /api/v2/hosts/{id}/managed-logins` and
+  `DELETE /api/v2/hosts/{id}/managed-logins/{login}` (new error code
+  `MANAGED_LOGIN_NOT_FOUND`). Each forget is in the activity log.
+
 ### Changed
 
 - Splitting or merging SSH users copies only manual authorizations. Grants
@@ -67,6 +89,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Upgrading cannot be rolled back with `ecto.rollback` (SQLite cannot drop the
   new `authorization.grant_id` column); restore the backup taken before the
   upgrade instead.
+
+### Fixed
+
+- A sync no longer fails with "Directory nonexistent" for a login whose home has no
+  `~/.ssh` yet: ssm creates it (mode 0700, owned by the login's user and group) and
+  writes the file. It does so only inside a home that exists and is not a symlink,
+  and never follows a link planted at `~/.ssh`. A login without a usable home (missing
+  or a symlink) is skipped with that reason; the other logins are still written.
+
+### Security
+
+- A sync, "Remove key", offboarding through Mission Control and "Forget" of a managed
+  login no longer run at the same time on one host: each takes the host's write lock,
+  so one cannot undo another's change. Each write also checks that the
+  `authorized_keys` is still what ssm read; a file the user changed in between is
+  not overwritten — the login is skipped ("changed on the host since it was read").
+- ssm refuses every write when it cannot confirm that the login is not an alias of the
+  host's SSH user: a host without SSH user, or an SSH user the host does not know.
+- Creating a missing `~/.ssh` is refused when the user could swap their home (its
+  parent is writable by them); a home with the setgid bit is now handled.
+- "Forget" asks the host once more right before deleting the login.
+
+- An SSO operator can no longer give a key the permissions of an admin's grant by
+  moving it: adding, importing, moving or re-keying a key, splitting or merging users,
+  and assigning a diff-page key are refused (and logged) for an SSH user that holds a
+  grant with admin-only options. Renaming a key stays possible; admins are unaffected.
+- On hosts without `getent` (busybox), ssm now matches a login in `/etc/passwd`
+  exactly. Before, a login name containing a `.` (for example `roo.`) could match
+  `root` and have ssm read or write root's `authorized_keys`.
+
+- Permissive `authorized_keys` options can be set from the web UI by admins only:
+  `environment`, `cert-authority`, `user-rc`, `permitopen`, `permitlisten`, and the
+  re-enabling `pty`, `port-forwarding`, `agent-forwarding`, `X11-forwarding`, `tunnel`,
+  plus `no-touch-required`. SSO operators may set restrictive options only (`restrict`,
+  `no-*`, `from`, `command`, `expiry-time`, `principals`, `verify-required`), in the
+  authorization form and in bulk grant; they can still edit the comment of an
+  admin's grant but not move it. The `/api/v2` token path is unchanged.
+
+- ssm no longer writes the `authorized_keys` of a login that shares the home of the
+  host's SSH login (for example a uid-0 alias such as `toor` in root's home). Such a
+  write replaced the file that holds ssm's own key, so a grant for the alias could lock
+  ssm out of the host and wipe root's keys. A sync now skips that login with "not
+  managed: shares the SSH user's home"; manage the keys under the SSH login instead.
 
 ## [4.11.0] - 2026-11-08
 

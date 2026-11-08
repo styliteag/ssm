@@ -63,6 +63,9 @@ defmodule SsmWeb.AuthorizationsLive do
   # rows on out-of-scope hosts are invisible and act as missing.
   defp scope(socket), do: Ssm.Scope.of(socket.assigns.current_user)
 
+  # permissive authorized_keys options are admin-only (Options.validate_role/2)
+  defp role(socket), do: [role: socket.assigns.current_user.role]
+
   defp parse_id(nil), do: nil
 
   defp parse_id(value) do
@@ -256,8 +259,8 @@ defmodule SsmWeb.AuthorizationsLive do
   def handle_event("save", %{"authorization" => params}, socket) do
     result =
       case socket.assigns.editing do
-        nil -> Authorizations.create_authorization(scope(socket), params)
-        auth -> Authorizations.update_authorization(scope(socket), auth, params)
+        nil -> Authorizations.create_authorization(scope(socket), params, role(socket))
+        auth -> Authorizations.update_authorization(scope(socket), auth, params, role(socket))
       end
 
     case result do
@@ -456,7 +459,14 @@ defmodule SsmWeb.AuthorizationsLive do
   ## Bulk grant helpers
 
   defp bulk_save(socket, user_ids, host_ids, login, options) do
-    case Authorizations.bulk_grant(scope(socket), user_ids, host_ids, login, presence(options)) do
+    case Authorizations.bulk_grant(
+           scope(socket),
+           user_ids,
+           host_ids,
+           login,
+           presence(options),
+           role(socket)
+         ) do
       {:ok, %{created: created, skipped: skipped}} ->
         log_bulk_grant(socket, login, user_ids, host_ids, created, skipped)
 
@@ -524,9 +534,10 @@ defmodule SsmWeb.AuthorizationsLive do
   end
 
   defp bulk_grant_error(changeset) do
-    case changeset.errors[:login] do
-      {message, _} -> "Login #{message}."
-      nil -> "Could not create the authorizations — check the form fields."
+    case {changeset.errors[:login], changeset.errors[:options]} do
+      {{message, _}, _} -> "Login #{message}."
+      {nil, {message, _}} -> "Nothing created: options #{message}."
+      {nil, nil} -> "Could not create the authorizations — check the form fields."
     end
   end
 

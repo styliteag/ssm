@@ -236,7 +236,8 @@ defmodule SsmWeb.UsersLive do
            scope(socket),
            user,
            String.trim(username),
-           MapSet.to_list(selected_keys)
+           MapSet.to_list(selected_keys),
+           role_opts(socket)
          ) do
       {:ok, result} ->
         log_split(socket, user, result)
@@ -291,7 +292,12 @@ defmodule SsmWeb.UsersLive do
     merging = socket.assigns.merging
     users = Enum.map(merging.rows, & &1.user)
 
-    case BulkOps.merge_users(scope(socket), users, merge_target(merging, users)) do
+    case BulkOps.merge_users(
+           scope(socket),
+           users,
+           merge_target(merging, users),
+           role_opts(socket)
+         ) do
       {:ok, result} ->
         log_merge(socket, result)
 
@@ -349,6 +355,10 @@ defmodule SsmWeb.UsersLive do
   # authorizations are all in the user's scope (ADR-0012 §3, `Users.writable?/2`).
   defp scope(socket), do: Ssm.Scope.of(socket.assigns.current_user)
 
+  # keys meeting grants with admin-only options: admins only
+  defp role_opts(socket),
+    do: [role: socket.assigns.current_user.role, actor: socket.assigns.current_user.actor]
+
   defp parse_id(nil), do: nil
 
   defp parse_id(value) do
@@ -392,6 +402,11 @@ defmodule SsmWeb.UsersLive do
     do:
       "Read-only: this SSH user has access outside your scope (customers and host groups), " <>
         "so its keys and settings can only be changed by an account that sees all its hosts."
+
+  defp bulk_error(:admin_only_options),
+    do:
+      "Only an admin may split or merge this SSH user: it holds key options only an " <>
+        "admin may set (forwarding, environment, …)."
 
   defp bulk_error(:no_keys_selected), do: "Select at least one key to move."
   defp bulk_error(:keys_not_owned), do: "Selected keys no longer belong to this user."

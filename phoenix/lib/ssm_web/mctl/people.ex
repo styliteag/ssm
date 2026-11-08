@@ -123,7 +123,11 @@ defmodule SsmWeb.Mctl.People do
   defp scrub(%Host{disabled: true} = host, _blobs), do: result(host.id, {:error, "host disabled"})
   defp scrub(%Host{} = _host, []), do: :untouched
 
-  defp scrub(%Host{} = host, blobs) do
+  # under the host's write lock (shared with sync and "Remove key")
+  defp scrub(%Host{} = host, blobs),
+    do: Ssm.Hosts.WriteLock.run(host.id, fn -> locked_scrub(host, blobs) end)
+
+  defp locked_scrub(host, blobs) do
     target = Hosts.target_for(host)
 
     case ScriptRunner.get_ssh_keyfiles(Ssm.Ssh, target) do
@@ -155,7 +159,9 @@ defmodule SsmWeb.Mctl.People do
       true ->
         content = keep |> Enum.reject(&(&1 == "")) |> Enum.map_join("", &(&1 <> "\n"))
 
-        case ScriptRunner.set_authorized_keyfile(Ssm.Ssh, target, entry.login, content) do
+        opts = [expected_sha256: entry.sha256]
+
+        case ScriptRunner.set_authorized_keyfile(Ssm.Ssh, target, entry.login, content, opts) do
           :ok -> :ok
           {:error, reason} -> {:error, "#{entry.login}: #{message(reason)}"}
         end

@@ -100,15 +100,30 @@ defmodule Ssm.Authorizations do
   whole batch back and returns `{:error, changeset}`.
 
   Returns `{:ok, %{created: [auth], skipped: n}}` on success. With a scope,
-  a host outside it refuses the whole batch: `{:error, :out_of_scope}`.
+  a host outside it refuses the whole batch: `{:error, :out_of_scope}`, and
+  permissive options need `role: "admin"` in `opts` (else `{:error,
+  changeset}` with an `:options` error, nothing created).
   """
-  @spec bulk_grant(Scope.t(), [integer()], [integer()], String.t(), String.t() | nil) ::
+  @spec bulk_grant(Scope.t(), [integer()], [integer()], String.t(), String.t() | nil, keyword()) ::
           {:ok, %{created: [Authorization.t()], skipped: non_neg_integer()}}
           | {:error, Ecto.Changeset.t() | :out_of_scope}
-  def bulk_grant(%Scope{} = scope, user_ids, host_ids, login, options) do
-    if Scope.all_in_scope?(scope, host_ids),
-      do: bulk_grant(user_ids, host_ids, login, options),
-      else: {:error, :out_of_scope}
+  def bulk_grant(%Scope{} = scope, user_ids, host_ids, login, options, opts \\ []) do
+    cond do
+      not Scope.all_in_scope?(scope, host_ids) ->
+        {:error, :out_of_scope}
+
+      Options.admin_only(options) != [] and opts[:role] != "admin" ->
+        {:error, role_error(options)}
+
+      true ->
+        bulk_grant(user_ids, host_ids, login, options)
+    end
+  end
+
+  defp role_error(options) do
+    %Authorization{}
+    |> Ecto.Changeset.change(%{options: options})
+    |> Ecto.Changeset.add_error(:options, Options.role_message(Options.admin_only(options)))
   end
 
   @spec bulk_grant([integer()], [integer()], String.t(), String.t() | nil) ::
@@ -145,29 +160,39 @@ defmodule Ssm.Authorizations do
 
   @doc """
   `create_authorization/1` for a web user: a host outside `scope` is
-  refused like a missing one (`host_id` "does not exist").
+  refused like a missing one (`host_id` "does not exist"). `opts[:role]`
+  is the web user's role: only `"admin"` may set permissive options
+  (`Options.validate_role/2`); without a role the check fails closed.
   """
-  @spec create_authorization(Scope.t(), map()) ::
+  @spec create_authorization(Scope.t(), map(), keyword()) ::
           {:ok, Authorization.t()} | {:error, Ecto.Changeset.t()}
-  def create_authorization(%Scope{} = scope, attrs) do
+  def create_authorization(%Scope{} = scope, attrs, opts \\ []) do
     %Authorization{}
     |> Authorization.changeset(attrs)
+    |> Options.validate_role(opts[:role])
     |> check_scope(scope)
     |> write_managed(&Repo.insert/1)
   end
 
   @doc """
   `update_authorization/2` for a web user: old and new host must be in
-  `scope`. A row made by a grant is read-only (`{:error, :grant_row}`).
+  `scope`; `opts[:role]` as in `create_authorization/3`. A row made by a
+  grant is read-only (`{:error, :grant_row}`).
   """
-  @spec update_authorization(Scope.t(), Authorization.t(), map()) ::
+  @spec update_authorization(Scope.t(), Authorization.t(), map(), keyword()) ::
           {:ok, Authorization.t()} | {:error, Ecto.Changeset.t() | :grant_row}
-  def update_authorization(%Scope{}, %Authorization{grant_id: grant_id}, _attrs)
+  def update_authorization(scope, auth, attrs, opts \\ [])
+
+  def update_authorization(%Scope{}, %Authorization{grant_id: grant_id}, _attrs, _opts)
       when not is_nil(grant_id),
       do: {:error, :grant_row}
 
-  def update_authorization(%Scope{} = scope, %Authorization{} = auth, attrs) do
-    changeset = auth |> Authorization.changeset(attrs) |> check_scope(scope)
+  def update_authorization(%Scope{} = scope, %Authorization{} = auth, attrs, opts) do
+    changeset =
+      auth
+      |> Authorization.changeset(attrs)
+      |> Options.validate_role(opts[:role])
+      |> check_scope(scope)
 
     if Scope.in_scope?(scope, auth.host_id),
       do: write_managed(changeset, &Repo.update/1, auth.host_id),

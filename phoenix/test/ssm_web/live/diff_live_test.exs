@@ -235,7 +235,7 @@ defmodule SsmWeb.DiffLiveTest do
   test "a readonly refusal surfaces as an error flash", %{conn: conn} do
     host = synced_setup()
 
-    MockClient.set_exec(host.id, "sh .ssm/script.sh set_authorized_keyfile deploy", %Result{
+    MockClient.set_exec(host.id, "sh .ssm/script.sh set_authorized_keyfile deploy root", %Result{
       stderr: "readonly: system_readonly set",
       exit_code: 1
     })
@@ -258,7 +258,7 @@ defmodule SsmWeb.DiffLiveTest do
   test "a failed sync is audit-logged with the reason", %{conn: conn} do
     host = synced_setup()
 
-    MockClient.set_exec(host.id, "sh .ssm/script.sh set_authorized_keyfile deploy", %Result{
+    MockClient.set_exec(host.id, "sh .ssm/script.sh set_authorized_keyfile deploy root", %Result{
       stderr: "readonly: system_readonly set",
       exit_code: 1
     })

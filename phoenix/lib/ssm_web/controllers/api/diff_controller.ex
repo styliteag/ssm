@@ -7,11 +7,15 @@ defmodule SsmWeb.Api.DiffController do
   `user_readonly` skips only that login, the others are written and the
   response is 409 SSH_READONLY naming skipped and written logins (partial
   sync). Every sync outcome is audit-logged (`Ssm.Diffs.SyncAudit`).
+
+  Each login of a diff carries `notes` (additive): `[{kind, text, line}]`
+  from `Ssm.Diffs.Notes`, the notes the diff page shows.
   """
 
   use SsmWeb, :controller
 
   alias Ssm.Diffs
+  alias Ssm.Diffs.Notes
   alias Ssm.Diffs.SyncAudit
   alias Ssm.Hosts
   alias Ssm.Hosts.Host
@@ -88,6 +92,8 @@ defmodule SsmWeb.Api.DiffController do
             has_pragma: login.has_pragma,
             readonly_condition: login.readonly_condition,
             read_error: login.read_error,
+            # additive: the notes the diff page shows (Ssm.Diffs.Notes)
+            notes: Notes.of(login),
             items:
               Enum.map(login.items, fn item ->
                 %{status: Atom.to_string(item.status), line: item.line}

@@ -16,6 +16,13 @@ defmodule Ssm.Diffs do
   of that login always writes it – otherwise the first sync would lock ssm
   out (onboarding v2 installs it into `~root/.ssh/authorized_keys`). When
   the own key cannot be read, a sync that would write that login is refused.
+
+  Alias logins: the own key is placed by login name, so a login that is
+  not `host.username` but resolves to its home (a uid-0 alias such as
+  `toor` sharing root's home) is never managed — `script.sh` refuses the
+  write (`unsafe (shared_home)`) and a sync skips it. Placing the key by
+  home instead would keep ssm's key, but the two logins would still
+  replace each other's grants in their one file on every sync.
   """
 
   alias Ssm.Diffs.{Compare, Expected, KeyLine}
@@ -40,6 +47,7 @@ defmodule Ssm.Diffs do
 
   defmodule LoginDiff do
     @moduledoc "Per-login diff of authorized_keys."
+    @type t :: %__MODULE__{}
     defstruct login: nil,
               has_pragma: false,
               readonly_condition: nil,
@@ -156,6 +164,11 @@ defmodule Ssm.Diffs do
     do: run_sync(client, host_id, :removal_only)
 
   defp run_sync(client, host_id, mode) do
+    Ssm.Hosts.WriteLock.run(host_id, fn -> locked_sync(client, host_id, mode) end)
+  end
+
+  # under the host's write lock (Ssm.Hosts.WriteLock): read, then write
+  defp locked_sync(client, host_id, mode) do
     # before any read of the grants (ADR-0012 §6, Ssm.Diffs.Revocations.seen/1)
     revocation = Ssm.Diffs.Revocations.seen(host_id)
 
@@ -191,10 +204,13 @@ defmodule Ssm.Diffs do
       ignored =
         for e <- entries, e.readonly_ignored, e.login in logins, do: {e.login, e.readonly_ignored}
 
+      shas = Map.new(entries, &{&1.login, &1.sha256})
+
       ctx = %{
         host: host,
         own: own,
         on_host: on_host,
+        shas: shas,
         skipped: skipped,
         ignored: ignored,
         mode: mode
@@ -303,7 +319,9 @@ defmodule Ssm.Diffs do
   defp write_login(lines, login, rest, client, target, ctx, acc, expected) do
     content = Enum.map_join(lines, "", &(&1 <> "\n"))
 
-    case ScriptRunner.set_authorized_keyfile(client, target, login, content) do
+    opts = [expected_sha256: ctx.shas[login]]
+
+    case ScriptRunner.set_authorized_keyfile(client, target, login, content, opts) do
       :ok ->
         done = %SyncedLogin{login: login, written_keys: length(lines)}
         acc = %{acc | synced: [done | acc.synced], refused: acc.refused ++ expected.refused}
@@ -313,6 +331,11 @@ defmodule Ssm.Diffs do
       # user_readonly surfaces only now: skip it like a listed one
       {:error, {:ssh_readonly, reason}} ->
         sync_logins(rest, client, target, ctx, %{acc | skipped: [{login, reason} | acc.skipped]})
+
+      # the file changed on the host since the listing: not overwritten
+      {:error, {:ssh_stale, _}} ->
+        skipped = [{login, "changed on the host since it was read; not written"} | acc.skipped]
+        sync_logins(rest, client, target, ctx, %{acc | skipped: skipped})
 
       # the script refused a link only now (no listing entry, link-to-dir)
       {:error, {:ssh_unsafe, reason}} ->
@@ -334,6 +357,9 @@ defmodule Ssm.Diffs do
   defp unsafe_reason(message) do
     case Regex.run(~r/unsafe \(([^)]+)\)/, message) do
       [_, "ssh_dir"] -> @ssh_dir_blocked
+      [_, "home"] -> "no usable home (missing or a symlink)"
+      [_, "ssh_user"] -> "the SSH user is unknown on the host; nothing written"
+      [_, "shared_home"] -> "not managed: shares the SSH user's home (ssm's own key)"
       [_, kind] -> "unsafe: " <> kind
       nil -> "unsafe"
     end
@@ -411,6 +437,20 @@ defmodule Ssm.Diffs do
     do: Compare.note_extras(items, @blocked_note)
 
   defp blocked_by_user_readonly(items, _entry), do: items
+
+  @doc """
+  The diff of one listed login (`entry` from `ScriptRunner.get_ssh_keyfiles/2`)
+  for a write that removes lines (`Ssm.Diffs.KeyRemoval`). Like a sync, it
+  refuses (`{:error, {:own_key_unavailable, _}}`) when the login is the
+  host's login user and ssm's own key cannot be read: the own key line
+  would otherwise look unauthorized.
+  """
+  @spec login_diff_for_write(Host.t(), map()) :: {:ok, LoginDiff.t()} | {:error, term()}
+  def login_diff_for_write(%Host{} = host, entry) do
+    with {:ok, own} <- own_key_for_sync(host, [entry.login]) do
+      {:ok, build_login_diff(host.id, entry.login, entry, nil, own[entry.login])}
+    end
+  end
 
   @doc false
   def compute_diff(expected, actual), do: Compare.diff(expected, actual)

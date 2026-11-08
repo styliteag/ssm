@@ -10,11 +10,17 @@ defmodule Ssm.Users do
   host of that user. Otherwise `{:error, :out_of_scope}`. The scope-less
   writes stay global (`/api/v2`, mctl contract). Creating an SSH user stays
   open; its keys follow once it holds an authorization in scope.
+
+  A key that lands in a user inherits that user's grants, options
+  included: the scoped writes also take `opts` (`role:`, `actor:`) and
+  refuse a non-admin a key added, moved or re-keyed into a user holding a
+  grant with admin-only options (`check_admin_only/3`).
   """
 
   import Ecto.Query
 
-  alias Ssm.Authorizations.Authorization
+  alias Ssm.Activity
+  alias Ssm.Authorizations.{Authorization, Options}
   alias Ssm.Repo
   alias Ssm.Users.{User, UserKey}
 
@@ -185,26 +191,92 @@ defmodule Ssm.Users do
   @spec delete_key(UserKey.t()) :: {:ok, UserKey.t()} | {:error, Ecto.Changeset.t()}
   def delete_key(%UserKey{} = key), do: Repo.delete(key)
 
-  @doc "`create_key/1` for a web user: the owner must be `writable?/2`."
-  @spec create_key(Ssm.Scope.t(), map()) ::
-          {:ok, UserKey.t()} | {:error, Ecto.Changeset.t() | :out_of_scope}
-  def create_key(%Ssm.Scope{} = scope, attrs) do
+  @doc """
+  `create_key/1` for a web user: the owner must be `writable?/2`, and for
+  a non-admin hold no admin-only options (`check_admin_only/3`).
+  """
+  @spec create_key(Ssm.Scope.t(), map(), keyword()) ::
+          {:ok, UserKey.t()} | {:error, Ecto.Changeset.t() | :out_of_scope | :admin_only_options}
+  def create_key(%Ssm.Scope{} = scope, attrs, opts \\ []) do
     owner = %UserKey{} |> UserKey.changeset(attrs) |> Ecto.Changeset.get_field(:user_id)
 
-    if is_nil(owner) or writable?(scope, owner),
-      do: create_key(attrs),
-      else: {:error, :out_of_scope}
+    cond do
+      is_nil(owner) -> create_key(attrs)
+      not writable?(scope, owner) -> {:error, :out_of_scope}
+      true -> with :ok <- check_admin_only([owner], "add key", opts), do: create_key(attrs)
+    end
   end
 
-  @doc "`update_key/2` for a web user: the old and the new owner must be `writable?/2`."
-  @spec update_key(Ssm.Scope.t(), UserKey.t(), map()) ::
-          {:ok, UserKey.t()} | {:error, Ecto.Changeset.t() | :out_of_scope}
-  def update_key(%Ssm.Scope{} = scope, %UserKey{} = key, attrs) do
-    new_owner = key |> UserKey.changeset(attrs) |> Ecto.Changeset.get_field(:user_id)
+  @doc """
+  `update_key/2` for a web user: the old and the new owner must be
+  `writable?/2`; a move or a new key material also needs `check_admin_only/3`
+  for the new owner (a rename does not).
+  """
+  @spec update_key(Ssm.Scope.t(), UserKey.t(), map(), keyword()) ::
+          {:ok, UserKey.t()} | {:error, Ecto.Changeset.t() | :out_of_scope | :admin_only_options}
+  def update_key(%Ssm.Scope{} = scope, %UserKey{} = key, attrs, opts \\ []) do
+    changeset = UserKey.changeset(key, attrs)
+    new_owner = Ecto.Changeset.get_field(changeset, :user_id)
+    rekeyed? = Enum.any?([:user_id, :key_type, :key_base64], &Map.has_key?(changeset.changes, &1))
 
-    if writable?(scope, key.user_id) and writable?(scope, new_owner),
-      do: update_key(key, attrs),
-      else: {:error, :out_of_scope}
+    cond do
+      not (writable?(scope, key.user_id) and writable?(scope, new_owner)) ->
+        {:error, :out_of_scope}
+
+      rekeyed? ->
+        with :ok <- check_admin_only([new_owner], "move or re-key key", opts),
+             do: update_key(key, attrs)
+
+      true ->
+        update_key(key, attrs)
+    end
+  end
+
+  @doc """
+  `:ok`, or `{:error, :admin_only_options}` when `opts[:role]` is not
+  `"admin"` and one of `users` (structs or ids) holds a grant whose options
+  carry an admin-only option (`Options.admin_only/1`): a key landing there
+  would inherit it. Fails closed without a role. A refusal is audited
+  (`admin_only_refused`, `opts[:actor]`, `op`).
+  """
+  @spec check_admin_only([User.t() | integer() | nil], String.t(), keyword()) ::
+          :ok | {:error, :admin_only_options}
+  def check_admin_only(users, op, opts) do
+    ids = users |> Enum.map(&user_id/1) |> Enum.reject(&is_nil/1)
+
+    if Keyword.get(opts, :role) == "admin" or not permissive_grants?(ids) do
+      :ok
+    else
+      audit_admin_only(ids, op, opts)
+      {:error, :admin_only_options}
+    end
+  end
+
+  defp user_id(%User{id: id}), do: id
+  defp user_id(id), do: id
+
+  defp permissive_grants?([]), do: false
+
+  defp permissive_grants?(ids) do
+    from(a in Authorization,
+      where: a.user_id in ^ids and not is_nil(a.options) and a.options != "",
+      select: a.options
+    )
+    |> Repo.all()
+    |> Enum.any?(&(Options.admin_only(&1) != []))
+  end
+
+  defp audit_admin_only(ids, op, opts) do
+    names =
+      Repo.all(from u in User, where: u.id in ^ids, order_by: u.username, select: u.username)
+
+    Activity.log(%{
+      activity_type: "user",
+      action: "admin_only_refused",
+      target: Enum.join(names, ", "),
+      actor_username: Keyword.get(opts, :actor) || "unknown",
+      details: %{op: op, reason: "the user holds a grant with admin-only options"}
+    })
   end
 
   @doc "`delete_key/1` for a web user: the owner must be `writable?/2`."

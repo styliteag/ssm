@@ -18,6 +18,8 @@ defmodule SsmWeb.KeysLive do
 
   @type_filters ~w(all rsa ed25519 ecdsa other)
 
+  @admin_only_owner "Only an admin may add or move keys to this SSH user: it holds key options " <>
+                      "only an admin may set (forwarding, environment, …)."
   @read_only_owner "Read-only: the owner of this key has access outside your scope " <>
                      "(customers and host groups); a key change would reach those hosts too."
 
@@ -247,7 +249,7 @@ defmodule SsmWeb.KeysLive do
     socket = assign(socket, paste: paste, parsed: parsed)
 
     with {:ok, _} <- parsed,
-         {:ok, key} <- Users.create_key(scope(socket), attrs) do
+         {:ok, key} <- Users.create_key(scope(socket), attrs, role_opts(socket)) do
       log_key_activity(socket, "create", key)
 
       {:noreply,
@@ -262,6 +264,9 @@ defmodule SsmWeb.KeysLive do
       {:error, :out_of_scope} ->
         {:noreply, put_flash(socket, :error, @read_only_owner)}
 
+      {:error, :admin_only_options} ->
+        {:noreply, put_flash(socket, :error, @admin_only_owner)}
+
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply,
          socket
@@ -271,7 +276,7 @@ defmodule SsmWeb.KeysLive do
   end
 
   defp save_edit(socket, key, params) do
-    case Users.update_key(scope(socket), key, params) do
+    case Users.update_key(scope(socket), key, params, role_opts(socket)) do
       {:ok, updated} ->
         log_key_activity(socket, "update", updated)
 
@@ -283,6 +288,9 @@ defmodule SsmWeb.KeysLive do
 
       {:error, :out_of_scope} ->
         {:noreply, put_flash(socket, :error, @read_only_owner)}
+
+      {:error, :admin_only_options} ->
+        {:noreply, put_flash(socket, :error, @admin_only_owner)}
 
       {:error, changeset} ->
         {:noreply, assign(socket, form: to_form(changeset))}
@@ -336,12 +344,16 @@ defmodule SsmWeb.KeysLive do
   defp import_line(socket, line, n, user_id) do
     with {:ok, parsed} <- KeyParser.parse(line),
          {:ok, key} <-
-           Users.create_key(scope(socket), %{
-             "user_id" => user_id,
-             "key_type" => parsed.key_type,
-             "key_base64" => parsed.key_base64,
-             "name" => parsed.name
-           }) do
+           Users.create_key(
+             scope(socket),
+             %{
+               "user_id" => user_id,
+               "key_type" => parsed.key_type,
+               "key_base64" => parsed.key_base64,
+               "name" => parsed.name
+             },
+             role_opts(socket)
+           ) do
       log_key_activity(socket, "import", key)
       %{line: n, status: :ok, message: "imported"}
     else
@@ -350,6 +362,9 @@ defmodule SsmWeb.KeysLive do
 
       {:error, :out_of_scope} ->
         %{line: n, status: :error, message: "owner has access outside your scope (read-only)"}
+
+      {:error, :admin_only_options} ->
+        %{line: n, status: :error, message: "owner holds admin-only key options (admin only)"}
 
       {:error, reason} when is_binary(reason) ->
         %{line: n, status: :error, message: reason}
@@ -367,6 +382,10 @@ defmodule SsmWeb.KeysLive do
   # The catalog is readable in full; keys change only for owners whose
   # authorizations are all in the user's scope (ADR-0012 §3).
   defp scope(socket), do: Ssm.Scope.of(socket.assigns.current_user)
+
+  # a key landing in a user with admin-only grant options is for admins only
+  defp role_opts(socket),
+    do: [role: socket.assigns.current_user.role, actor: socket.assigns.current_user.actor]
 
   ## Filtering & stats
 

@@ -256,10 +256,14 @@ defmodule Ssm.DiffsTest do
 
       stub_version(host.id)
 
-      MockClient.set_exec(host.id, "sh .ssm/script.sh set_authorized_keyfile deploy", %Result{
-        stderr: "readonly: system_readonly set",
-        exit_code: 1
-      })
+      MockClient.set_exec(
+        host.id,
+        "sh .ssm/script.sh set_authorized_keyfile deploy root",
+        %Result{
+          stderr: "readonly: system_readonly set",
+          exit_code: 1
+        }
+      )
 
       assert {:error, {:ssh_readonly, message}} = Diffs.sync_host(MockClient, host.id)
       assert message =~ "readonly"
