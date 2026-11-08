@@ -253,11 +253,12 @@ defmodule Ssm.Ssh.ScriptRunner do
     end
   end
 
+  # both streams, the script's own stdout first: a login shell on the host
+  # may print to stderr (motd, agent banners) and must not hide the reason
   defp refusal_reason(%Result{} = result) do
-    case output(result.stderr) do
-      "" -> output(result.stdout)
-      stderr -> stderr
-    end
+    [output(result.stdout), output(result.stderr)]
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.join(" | ")
   end
 
   # remote text for a message: trimmed, invalid UTF-8 replaced, capped

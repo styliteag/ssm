@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Splitting or merging SSH users no longer crashes on an authorization whose host was
   deleted long ago (left behind by an older database without foreign keys): such rows
   are not copied.
+- A failed key write now names the script's own reason (e.g. "Keyfile is unsafe
+  (ssh_user)") even when the host's login shell prints to stderr (motd, agent
+  banners); before, such output replaced the reason and an unsafe or readonly
+  refusal showed as a connection error.
 
 ## [4.12.0] - 2026-11-08
 

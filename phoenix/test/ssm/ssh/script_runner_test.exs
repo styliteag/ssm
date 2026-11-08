@@ -334,6 +334,22 @@ defmodule Ssm.Ssh.ScriptRunnerTest do
       assert message =~ "unsafe (hardlink)"
     end
 
+    test "login noise on stderr does not hide the script's refusal" do
+      stub_version_current()
+
+      MockClient.set_exec(7, "#{@remote} set_authorized_keyfile deploy root", %Result{
+        stdout: "Keyfile is unsafe (hardlink), aborting.",
+        stderr: "Found yubikey-agent socket: SSH_AUTH_SOCK=/run/yubikey-agent/a.sock",
+        exit_code: 1
+      })
+
+      assert {:error, {:ssh_unsafe, message}} =
+               ScriptRunner.set_authorized_keyfile(MockClient, target(), "deploy", "")
+
+      assert message =~ "unsafe (hardlink)"
+      assert message =~ "yubikey-agent"
+    end
+
     test "readonly_ignored is parsed (nil when empty)" do
       stub_version_current()
 
