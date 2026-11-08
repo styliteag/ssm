@@ -134,6 +134,15 @@ rows are not copied), key deleted, moved or re-keyed (the old owner's hosts), `P
 and `People.delete_keys/1`. An options-only change of a row is not marked (a removal-only sync could
 not apply it; a full sync does). `test/ssm/diffs/revocation_marks_test.exs` has one row per
 access-reducing operation — a new one adds its row.
+*Manual sync* (diff page "Sync", per-row sync, "Sync all") is owned by `Ssm.Diffs.SyncRunner`
+(a GenServer; pure transitions in `Ssm.Diffs.SyncRunner.State`, table-tested). Per host: idle →
+running(run) → idle. `SyncRunner.run/3` claims only idle hosts (a running one comes back as
+`busy`: the page shows "A sync of <host> is already running."), runs sync and `SyncAudit` entry
+under the host's `WriteLock` in a task under `Ssm.Diffs.TaskSupervisor` (not linked to the
+LiveView — closing the page mid-sync still finishes and audits), frees each host when its audit
+is written and the rest when the run ends or crashes; the caller only waits for the reply.
+`DiffLive` keeps `syncing` as a page flag and refuses a second start server-side. The `/api/v2`
+sync still runs in the request (`DiffController`), serialized only by the write lock.
 
 **Web login** (ADR-0011, `lib/ssm/oidc/`, `ssm_web/oidc_controller.ex`): `.htpasswd`
 users are local admins (session `ssm_user`). With `OIDC_ISSUER` set, SSO users are

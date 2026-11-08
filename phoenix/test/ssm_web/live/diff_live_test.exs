@@ -641,4 +641,106 @@ defmodule SsmWeb.DiffLiveTest do
     assert host_id == drifted.id
     refute host_id == synced_host.id
   end
+
+  describe "manual sync lifecycle (Ssm.Diffs.SyncRunner)" do
+    # two logins; the second write pauses, so the sync is caught half-way
+    defp two_login_setup do
+      host = synced_setup()
+      other = user_fixture()
+      key_fixture(other, %{key_type: "ssh-ed25519", key_base64: "SECONDKEY", name: "x"})
+      authorization_fixture(other, host, %{login: "app"})
+
+      stub_keyfiles(host.id, [
+        %{login: "deploy", has_pragma: true, keyfile: ""},
+        %{login: "app", has_pragma: true, keyfile: ""}
+      ])
+
+      MockClient.set_default_exec(%Result{exit_code: 0})
+      on_exit(Ssm.Test.PausingClient.setup(self(), 2))
+      host
+    end
+
+    defp sync_entries(target),
+      do: Enum.filter(Ssm.Activity.list(), &(&1.action == "sync" and &1.target == target))
+
+    defp eventually(fun, tries \\ 100) do
+      cond do
+        fun.() -> true
+        tries == 0 -> false
+        true -> Process.sleep(20) && eventually(fun, tries - 1)
+      end
+    end
+
+    defp written_logins do
+      Enum.count(MockClient.calls().exec_inputs, fn {_id, cmd, _input} ->
+        String.contains?(cmd, "set_authorized_keyfile")
+      end)
+    end
+
+    test "closing the page mid-sync still finishes the sync and writes its audit entry",
+         %{conn: conn} do
+      host = two_login_setup()
+
+      {:ok, view, _html} = live(conn, ~p"/diff?host_id=#{host.id}")
+      render_async(view)
+      view |> element("#sync-host") |> render_click()
+
+      assert_receive {:paused, writer}, 2_000
+      assert written_logins() == 1
+
+      Process.flag(:trap_exit, true)
+      ref = Process.monitor(view.pid)
+      Process.exit(view.pid, :kill)
+      assert_receive {:DOWN, ^ref, :process, _, :killed}
+
+      send(writer, :go)
+
+      assert eventually(fn -> length(sync_entries("web1")) == 1 end)
+      assert written_logins() == 2
+      assert Ssm.Diffs.SyncRunner.status(host.id) == :idle
+    end
+
+    test "a second sync of the same host is refused while the first runs", %{conn: conn} do
+      host = two_login_setup()
+
+      {:ok, view, _html} = live(conn, ~p"/diff?host_id=#{host.id}")
+      {:ok, other, _html} = live(conn, ~p"/diff?host_id=#{host.id}")
+      render_async(view)
+      render_async(other)
+
+      view |> element("#sync-host") |> render_click()
+      assert_receive {:paused, writer}, 2_000
+      assert {:running, _run} = Ssm.Diffs.SyncRunner.status(host.id)
+
+      # the same page: the server checks, not only the disabled button
+      assert render_click(view, "sync", %{}) =~ "A sync of web1 is already running."
+
+      # another page (or tab)
+      other |> element("#sync-host") |> render_click()
+      assert render_async(other) =~ "A sync of web1 is already running."
+
+      send(writer, :go)
+      assert render_async(view) =~ "Synced web1: 2 logins"
+      assert length(sync_entries("web1")) == 1
+      assert Ssm.Diffs.SyncRunner.status(host.id) == :idle
+    end
+
+    test "sync all skips a host that is already syncing", %{conn: conn} do
+      host = two_login_setup()
+
+      {:ok, view, _html} = live(conn, ~p"/diff?host_id=#{host.id}")
+      render_async(view)
+      view |> element("#sync-host") |> render_click()
+      assert_receive {:paused, writer}, 2_000
+
+      Ssm.Diffs.StatusCache.put(host.id, {:needs_sync, 2, 0})
+      {:ok, all, _html} = live(conn, ~p"/diff?view=cards")
+      all |> element("#sync-all") |> render_click()
+      assert render_async(all) =~ "1 already running"
+
+      send(writer, :go)
+      render_async(view)
+      assert length(sync_entries("web1")) == 1
+    end
+  end
 end

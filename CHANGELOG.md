@@ -100,6 +100,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   writes the file. It does so only inside a home that exists and is not a symlink,
   and never follows a link planted at `~/.ssh`. A login without a usable home (missing
   or a symlink) is skipped with that reason; the other logins are still written.
+- Closing the diff page (or losing the connection) during a sync no longer stops
+  the sync half-way without an audit entry: the sync runs on the server, finishes
+  and is recorded in the activity log as before.
+- A second sync of a host that is already syncing (a double click, a second tab,
+  another operator, "Sync all") is refused with "A sync of <host> is already
+  running." instead of running twice and losing the first result; "Sync all"
+  reports how many hosts it skipped for that reason.
 
 ### Security
 
