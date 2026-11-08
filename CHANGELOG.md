@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- A sync that wrote some logins and skipped others (e.g. a login that does not exist on
+  the host) shows a yellow "Sync of … partly done" warning instead of a red "failed"
+  error, and the diff refreshes.
+
 ## [4.12.2] - 2026-11-08
 
 ## [4.12.1] - 2026-11-08

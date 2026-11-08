@@ -298,7 +298,9 @@ defmodule SsmWeb.DiffLiveTest do
     view |> element("#sync-host") |> render_click()
     render_async(view)
 
-    assert render(view) =~ "Sync of web1 failed"
+    # partly done: a warning (yellow), not an error
+    assert has_element?(view, "#flash-warning", "Sync of web1 partly done")
+    refute has_element?(view, "#flash-error")
     assert {"admin", "web1", details} = audit("sync_partial")
     assert details["written"] == "deploy"
     assert details["skipped"] =~ ~s("locked")

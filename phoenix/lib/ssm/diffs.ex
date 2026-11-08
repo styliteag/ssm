@@ -390,6 +390,16 @@ defmodule Ssm.Diffs do
     end
   end
 
+  @doc """
+  True for the error of a sync that wrote some logins and skipped others
+  (`finish/4`: "…; written: a, b"), false for one that wrote nothing.
+  """
+  @spec partial_sync?(term()) :: boolean()
+  def partial_sync?({:ssh_readonly, text}) when is_binary(text),
+    do: text =~ ~r/; written: [^;\s]/
+
+  def partial_sync?(_reason), do: false
+
   defp finish(synced, [], [], _host), do: {:ok, synced}
 
   defp finish(_synced, refused, [], _host),

@@ -230,8 +230,18 @@ defmodule SsmWeb.DiffLive do
         {:noreply, socket}
 
       {:error, reason} ->
-        {:noreply,
-         put_flash(socket, :error, "Sync of #{host.name} failed: #{format_reason(reason)}")}
+        if Ssm.Diffs.partial_sync?(reason) do
+          {:noreply,
+           socket
+           |> put_flash(
+             :warning,
+             "Sync of #{host.name} partly done: #{format_reason(reason)}"
+           )
+           |> refresh_after_sync(host)}
+        else
+          {:noreply,
+           put_flash(socket, :error, "Sync of #{host.name} failed: #{format_reason(reason)}")}
+        end
     end
   end
 
