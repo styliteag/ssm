@@ -70,7 +70,10 @@ defmodule Ssm.FakeOIDCProvider do
       "iat" => now,
       "exp" => now + 300,
       "name" => "Test User",
-      "email" => "#{sub}@example.test"
+      "email" => "#{sub}@example.test",
+      # mctl always sends the scope (ADR-0012 §1); tests drop it with nil
+      "orbit_customers" => ["*"],
+      "orbit_groups" => ["*"]
     }
     |> Map.merge(extra)
     |> Map.reject(fn {_k, v} -> is_nil(v) end)

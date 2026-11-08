@@ -84,8 +84,8 @@ defmodule Ssm.OIDC.Flow do
 
   defp from_claims(%{"sub" => sub} = claims, config) when is_binary(sub) and sub != "" do
     with :ok <- check_iat(claims["iat"], sub),
-         {:ok, role, customers} <- resolve(claims, config, sub),
-         {:ok, operator} <- upsert(claims, config, sub, role, customers),
+         {:ok, role, scope} <- resolve(claims, config, sub),
+         {:ok, operator} <- upsert(claims, config, sub, role, scope),
          :ok <- ensure_enabled(operator) do
       {:ok, %{operator: operator, sid: sid(claims), amr: amr(claims)}}
     end
@@ -109,19 +109,20 @@ defmodule Ssm.OIDC.Flow do
 
   defp resolve(claims, config, sub) do
     case Roles.resolve(claims, config) do
-      {:ok, role, customers} -> {:ok, role, customers}
+      {:ok, role, scope} -> {:ok, role, scope}
       {:error, reason} -> {:error, {reason, sub}}
     end
   end
 
-  defp upsert(claims, config, sub, role, customers) do
+  defp upsert(claims, config, sub, role, scope) do
     attrs = %{
       name: display_name(claims, sub),
       email: string(claims["email"]),
       # only `true` counts (OIDC Core 5.1: boolean)
       email_verified: claims["email_verified"] == true,
       role: role,
-      customers: customers,
+      customers: scope.customers,
+      groups: scope.groups,
       sid: sid(claims)
     }
 

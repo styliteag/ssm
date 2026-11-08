@@ -23,7 +23,9 @@ defmodule Ssm.Accounts.Operator do
     field :email_verified, :boolean, default: false
     field :verified_email, :string
     field :role, :string
+    # JSON slug lists from the scope claims (ADR-0012 §1), `["*"]` = all
     field :customers, :string, default: "[]"
+    field :groups, :string, default: "[]"
     field :disabled_at, :utc_datetime
     field :session_revoked_at, :integer
     field :last_sid, :string
@@ -45,6 +47,7 @@ defmodule Ssm.Accounts.Operator do
       :verified_email,
       :role,
       :customers,
+      :groups,
       :last_sid,
       :last_login_at
     ])

@@ -83,6 +83,18 @@ most 1500 bytes it sits in the session encrypted (`Plug.Crypto`, salt `ssm oidc 
 larger ones in `Ssm.OIDC.TokenStore` (ETS, TTL = `OIDC_SESSION_MAX_HOURS`, deleted at logout) with
 only a random reference in the session; never logged. `.htpasswd` users are unaffected. `/api/v2` bearer tokens are independent of all this.
 
+**Operator scope** (ADR-0012 phase 1, `Ssm.OIDC.Roles`, `Ssm.Accounts.scope/1`): every OIDC
+login carries `orbit_customers` and `orbit_groups` (host-group slugs); each must be exactly
+`["*"]` or a non-empty slug list (a mixed `["*", "x"]` is malformed). `operator`/`viewer` with
+a missing or malformed claim are refused; only `OIDC_GROUPS_DEFAULT=*` lets a missing groups
+claim count as `*`. `admin` is global: missing claims count as `*`, a non-`*` scope is refused
+(no downgrade). Refusals are audited as `oidc.login_refused` with `reason`
+(`customers_missing|customers_malformed|groups_missing|groups_malformed|admin_scoped`, plus the
+older ones). Unknown slugs are dropped and logged. Both lists are stored on the operator
+(`customers`, `groups`, JSON) and overwritten at every login; a role or scope change
+disconnects open LiveViews, and the periodic re-check ends a view whose scope changed. The
+session's `current_user` carries `scope` (`Ssm.Scope`; local `.htpasswd` users: global).
+
 **Host keys** (ADR-0008, `lib/ssm/ssh/host_key*.ex`, `lib/ssm/hosts/host_keys.ex`):
 every connect verifies `host.key_fingerprint`; unpinned hosts are refused.
 `Ssm.Hosts.HostKeys` (`pin/2`, `accept/3`, `pin_all/1`) is the only place that stores
@@ -329,7 +341,8 @@ defaults preserved): `DATABASE_URL` (or `DATABASE_PATH`), `HTPASSWD`, `SSH_KEY`,
 `SECRET_KEY_BASE`, `LOGLEVEL`, `PORT`, `LISTEN`, `PHX_HOST`, `PHX_ALT_HOSTS` (extra UI names, `SsmWeb.Hosts`), `POOL_SIZE`,
 `TRUSTED_PROXIES`, `MCTL_TOKEN_FILE`, `MCTL_TOKEN_SCOPES`, and the OIDC set read at boot by
 `Ssm.OIDC.Config` (not runtime.exs): `OIDC_ISSUER`, `OIDC_CLIENT_ID`,
-`OIDC_CLIENT_SECRET_FILE`, `OIDC_ROLE_CLAIM`, `OIDC_CUSTOMERS_CLAIM`, `OIDC_ROLE_MAP`,
+`OIDC_CLIENT_SECRET_FILE`, `OIDC_ROLE_CLAIM`, `OIDC_CUSTOMERS_CLAIM`, `OIDC_GROUPS_CLAIM`
+(default `orbit_groups`), `OIDC_GROUPS_DEFAULT` (only `*`, see "Operator scope"), `OIDC_ROLE_MAP`,
 `OIDC_LOGIN_LABEL`, `OIDC_SESSION_MAX_HOURS`, `OIDC_RP_LOGOUT`, `LOCAL_LOGIN`.
 
 **Secrets protection**: run `./install-hooks.sh` after cloning (installs

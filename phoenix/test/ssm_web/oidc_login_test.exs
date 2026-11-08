@@ -192,8 +192,13 @@ defmodule SsmWeb.OIDCLoginTest do
       {:ok, _} = Ssm.Customers.create_customer(%{slug: "acme", name: "Acme"})
       {:ok, _} = Ssm.Customers.create_customer(%{slug: "beta", name: "Beta"})
 
-      sso_login(conn, p, %{"orbit_role" => "admin", "orbit_customers" => ["acme"], "name" => "A"})
-      assert [%{role: "admin", name: "A"} = op] = Repo.all(Ssm.Accounts.Operator)
+      sso_login(conn, p, %{
+        "orbit_role" => "operator",
+        "orbit_customers" => ["acme"],
+        "name" => "A"
+      })
+
+      assert [%{role: "operator", name: "A"} = op] = Repo.all(Ssm.Accounts.Operator)
       assert Accounts.customers(op) == ["acme"]
 
       build_conn()

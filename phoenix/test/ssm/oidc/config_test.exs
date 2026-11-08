@@ -51,6 +51,28 @@ defmodule Ssm.OIDC.ConfigTest do
     end
   end
 
+  test "groups claim and default (ADR-0012 §1)", %{path: path} do
+    {c, _} = Config.from_env(env(path))
+    assert c.groups_claim == "orbit_groups"
+    assert c.groups_default == nil
+
+    {c, _} =
+      Config.from_env(
+        env(path, %{"OIDC_GROUPS_CLAIM" => "hostgroups", "OIDC_GROUPS_DEFAULT" => " * "})
+      )
+
+    assert c.groups_claim == "hostgroups"
+    assert c.groups_default == :all
+
+    log =
+      capture_log(fn ->
+        assert {%Config{groups_default: nil}, _} =
+                 Config.from_env(env(path, %{"OIDC_GROUPS_DEFAULT" => "web"}))
+      end)
+
+    assert log =~ "OIDC_GROUPS_DEFAULT"
+  end
+
   test "overrides and role map order", %{path: path} do
     {c, _} =
       Config.from_env(

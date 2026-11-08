@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- SSO login fails closed on the scope claims (ADR-0012 phase 1). Operators and
+  viewers must bring `orbit_customers` and `orbit_groups` (host groups), each
+  exactly `["*"]` or a list of slugs; a missing or malformed claim (also a
+  mixed `["*", "x"]`) refuses the login. An `admin` with a restricted scope is
+  refused instead of being downgraded. Each refusal is in the activity log
+  with its reason.
+
+### Added
+
+- `OIDC_GROUPS_CLAIM` (default `orbit_groups`) names the host-group claim.
+  `OIDC_GROUPS_DEFAULT=*` lets a missing groups claim count as all groups,
+  for identity providers other than Mission Control.
+- The operator's host groups are stored next to its customers and
+  overwritten at every login.
+
+### Changed
+
+- Upgrading ends every open SSO session once, so each operator signs in
+  again and gets its scope from the new claims.
+
 ## [4.10.0] - 2026-11-08
 
 ### Changed

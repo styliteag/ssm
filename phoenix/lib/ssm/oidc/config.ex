@@ -16,6 +16,8 @@ defmodule Ssm.OIDC.Config do
             client_secret: nil,
             role_claim: "orbit_role",
             customers_claim: "orbit_customers",
+            groups_claim: "orbit_groups",
+            groups_default: nil,
             role_map: [],
             login_label: "Login with SSO",
             session_max_hours: 8,
@@ -102,6 +104,8 @@ defmodule Ssm.OIDC.Config do
         client_secret: secret,
         role_claim: env["OIDC_ROLE_CLAIM"] || "orbit_role",
         customers_claim: env["OIDC_CUSTOMERS_CLAIM"] || "orbit_customers",
+        groups_claim: blank_to(env["OIDC_GROUPS_CLAIM"], "orbit_groups"),
+        groups_default: parse_groups_default(env["OIDC_GROUPS_DEFAULT"]),
         role_map: parse_role_map(env["OIDC_ROLE_MAP"]),
         login_label: blank_to(env["OIDC_LOGIN_LABEL"], "Login with SSO"),
         session_max_hours: parse_hours(env["OIDC_SESSION_MAX_HOURS"]),
@@ -157,6 +161,22 @@ defmodule Ssm.OIDC.Config do
         group = String.trim(group),
         group != "",
         do: {group, String.trim(role)}
+  end
+
+  # Only an explicit `*` lets a missing groups claim count as all groups
+  # (ADR-0012 §1, providers that are not mctl); anything else fails closed.
+  defp parse_groups_default(value) do
+    case value |> to_string() |> String.trim() do
+      "" ->
+        nil
+
+      "*" ->
+        :all
+
+      _other ->
+        Logger.error("OIDC_GROUPS_DEFAULT must be * or unset; ignoring it (fail closed)")
+        nil
+    end
   end
 
   defp parse_hours(nil), do: 8

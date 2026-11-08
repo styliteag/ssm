@@ -182,7 +182,8 @@ defmodule SsmWeb.UserAuth do
   # An OIDC session is more than a cookie check at mount: a timer ends the
   # view at the absolute expiry, and every `oidc_recheck_ms` (60 s) the
   # operator row is read again (disabled, revoked, sid revoked, role
-  # changed). Back-channel logout and disabling also broadcast a disconnect.
+  # or scope changed). Back-channel logout and disabling also broadcast a
+  # disconnect.
   defp watch_oidc_session(%{assigns: %{current_user: %{source: :oidc}}} = socket, session) do
     if Phoenix.LiveView.connected?(socket) do
       slice = Map.take(session, ~w(operator_id oidc_expires_at oidc_started_ms oidc_sid))
@@ -203,10 +204,10 @@ defmodule SsmWeb.UserAuth do
   defp oidc_info(:oidc_session_expired, socket, _slice), do: {:halt, session_ended(socket)}
 
   defp oidc_info(:oidc_session_recheck, socket, slice) do
-    role = socket.assigns.current_user.role
+    %{role: role, scope: scope} = socket.assigns.current_user
 
     case user_from_session(slice) do
-      %{role: ^role} ->
+      %{role: ^role, scope: ^scope} ->
         schedule_recheck()
         {:halt, socket}
 
@@ -255,7 +256,13 @@ defmodule SsmWeb.UserAuth do
          true <- System.os_time(:second) - logged_in_at <= @session_max_age,
          {:ok, fingerprint} <- Htpasswd.entry_fingerprint(htpasswd_path(), username),
          true <- fingerprint == session["pwv"] do
-      %{username: username, actor: username, role: "admin", source: :local}
+      %{
+        username: username,
+        actor: username,
+        role: "admin",
+        source: :local,
+        scope: Ssm.Scope.global()
+      }
     else
       _ -> nil
     end
@@ -276,7 +283,8 @@ defmodule SsmWeb.UserAuth do
         actor: Accounts.actor_label(operator),
         role: operator.role,
         source: :oidc,
-        operator_id: operator.id
+        operator_id: operator.id,
+        scope: Accounts.scope(operator)
       }
     else
       _ -> nil
