@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.11.0] - 2026-11-08
+
 ### Security
 
 - SSO login fails closed on the scope claims (ADR-0012 phase 1). Operators and
