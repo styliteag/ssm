@@ -33,6 +33,46 @@ defmodule Ssm.Users.KeyParser do
     end
   end
 
+  @doc """
+  The key of an authorized_keys line as `{type, base64}`: the first known key
+  type followed by key material, whatever options prefix
+  (`from="10.0.0.0/8",no-pty`), comment, surrounding whitespace or CR stand
+  around it. Two lines hold the same key exactly when their identities are
+  equal. `nil` when the line has no known key type with material. The
+  material is not validated here (see `parse/1`).
+  """
+  @spec identity(String.t()) :: {String.t(), String.t()} | nil
+  def identity(line) when is_binary(line) do
+    tokens = String.split(line)
+
+    case key_index(tokens) do
+      nil -> nil
+      index -> {Enum.at(tokens, index), Enum.at(tokens, index + 1)}
+    end
+  end
+
+  @doc """
+  `parse/1` for an authorized_keys line that may carry an options prefix:
+  the options are skipped (ssm does not keep them), the key and its comment
+  are parsed and validated as `parse/1` does.
+  """
+  @spec parse_authorized_line(String.t()) :: {:ok, parsed()} | {:error, String.t()}
+  def parse_authorized_line(line) when is_binary(line) do
+    tokens = String.split(line)
+
+    case key_index(tokens) do
+      nil -> parse(line)
+      index -> tokens |> Enum.drop(index) |> Enum.join(" ") |> parse()
+    end
+  end
+
+  # index of the first known key type that is followed by a token
+  defp key_index(tokens) do
+    tokens
+    |> Enum.chunk_every(2, 1, :discard)
+    |> Enum.find_index(fn [type, _material] -> type in UserKey.key_types() end)
+  end
+
   defp build(type, base64, comment) do
     with :ok <- check_type(type),
          :ok <- check_material(type, base64) do

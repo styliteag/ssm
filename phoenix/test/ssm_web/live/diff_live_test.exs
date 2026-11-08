@@ -221,6 +221,52 @@ defmodule SsmWeb.DiffLiveTest do
            end)
   end
 
+  test "a granted key with another comment on the host is listed once, present", %{conn: conn} do
+    # prod 2026-11-08: listed as "missing on host" and "not authorized" at once
+    wb = user_fixture(%{username: "wb"})
+    host = host_fixture(%{name: "dev"})
+    material = valid_material(<<7>>)
+    key_fixture(wb, %{key_type: "ssh-ed25519", key_base64: material, name: "Wim Bonis 2022"})
+    authorization_fixture(wb, host, %{login: "deploy"})
+
+    stub_keyfiles(host.id, [
+      %{
+        login: "deploy",
+        has_pragma: true,
+        readonly_condition: nil,
+        keyfile: ~s(no-pty ssh-ed25519 #{material} wb@laptop\r\n)
+      }
+    ])
+
+    {:ok, view, _html} = live(conn, ~p"/diff?host_id=#{host.id}")
+    html = render_async(view)
+
+    refute html =~ "missing on host"
+    refute html =~ "not authorized"
+    refute has_element?(view, "[id^='allow-key-deploy-']")
+  end
+
+  test "an extra key with an options prefix still gets its Allow button", %{conn: conn} do
+    roamer = user_fixture(%{username: "roamer"})
+    host = host_fixture(%{name: "web1"})
+    material = valid_material(<<8>>)
+    key_fixture(roamer, %{key_type: "ssh-ed25519", key_base64: material, name: "roam"})
+
+    stub_keyfiles(host.id, [
+      %{
+        login: "deploy",
+        has_pragma: true,
+        readonly_condition: nil,
+        keyfile: ~s(from="10.0.0.0/8" ssh-ed25519 #{material} roam)
+      }
+    ])
+
+    {:ok, view, _html} = live(conn, ~p"/diff?host_id=#{host.id}")
+    render_async(view)
+
+    assert has_element?(view, "[id^='allow-key-deploy-']", "Allow (roamer)")
+  end
+
   test "an unknown extra key can be assigned to a user, granting the login too", %{conn: conn} do
     authorized = user_fixture(%{username: "expected"})
     adopter = user_fixture(%{username: "adopter"})

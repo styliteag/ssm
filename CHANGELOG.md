@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Diff page: a granted key whose line on the host has another comment (or
+  an options prefix such as `from="…",no-pty`, or CRLF / trailing blanks)
+  is shown once as present. It was listed twice, as "missing on host" and
+  "not authorized" ("Allow" then said the grant already exists), because
+  whole lines were compared instead of key type + base64. The periodic
+  check no longer counts such keys as drift.
+- Sync keeps the host's line of a granted key as it is (options and
+  comment) instead of replacing it with ssm's line, writes each key once,
+  and no longer writes when the host's key files cannot be read first.
+- "Allow" and "Assign unknown key" also work for host lines with an
+  options prefix.
+
 ## [4.8.1] - 2026-11-08
 
 ### Fixed

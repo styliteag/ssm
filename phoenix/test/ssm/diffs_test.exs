@@ -271,6 +271,101 @@ defmodule Ssm.DiffsTest do
     end
   end
 
+  describe "key identity: type + base64, whatever comment, options or whitespace" do
+    # prod 2026-11-08 (host dev, login root): a granted RSA key whose host
+    # comment differed from the DB name was listed twice, "missing on host"
+    # and "not authorized" ("Allow" then said the grant already exists)
+    defp host_with_file(login, text) do
+      host = host_fixture()
+      stub_version(host.id)
+
+      MockClient.set_exec(host.id, "sh .ssm/script.sh get_ssh_keyfiles", %Result{
+        stdout:
+          keyfiles_json([
+            %{login: login, has_pragma: true, readonly_condition: nil, keyfile: text}
+          ])
+      })
+
+      host
+    end
+
+    defp grant(host, login, attrs) do
+      user = user_fixture()
+      key_fixture(user, Map.merge(%{key_type: "ssh-rsa"}, attrs))
+      authorization_fixture(user, host, %{login: login})
+      user
+    end
+
+    defp items_of(host) do
+      {:ok, %HostDiff{logins: [login]}} = Diffs.host_diff(MockClient, host.id)
+      Enum.map(login.items, &{&1.status, &1.line})
+    end
+
+    test "a granted key with another comment on the host is :present once" do
+      host = host_with_file("root", "ssh-rsa BLOB1 wb@laptop")
+      grant(host, "root", %{key_base64: "BLOB1", name: "Wim Bonis RSA"})
+      assert items_of(host) == [{:present, "ssh-rsa BLOB1 wb@laptop"}]
+    end
+
+    test "an options prefix on the host line does not hide the key" do
+      line = ~s(from="10.0.0.0/8",no-pty ssh-rsa BLOB2 laptop)
+      host = host_with_file("root", line)
+      grant(host, "root", %{key_base64: "BLOB2", name: "laptop"})
+      assert items_of(host) == [{:present, line}]
+    end
+
+    test "CRLF and trailing whitespace on the host are ignored" do
+      host = host_with_file("root", "ssh-rsa BLOB3 laptop  \r\nssh-rsa EXTRA9 x\r\n")
+      grant(host, "root", %{key_base64: "BLOB3", name: "laptop"})
+
+      assert items_of(host) == [
+               {:present, "ssh-rsa BLOB3 laptop"},
+               {:extra_on_host, "ssh-rsa EXTRA9 x"}
+             ]
+    end
+
+    test "a DB key without a name matches a host line with a comment, and the reverse" do
+      host = host_with_file("root", "ssh-rsa BLOB4 laptop\nssh-rsa BLOB5")
+      grant(host, "root", %{key_base64: "BLOB4", name: nil})
+      grant(host, "root", %{key_base64: "BLOB5", name: "named in ssm"})
+
+      assert items_of(host) == [
+               {:present, "ssh-rsa BLOB4 laptop"},
+               {:present, "ssh-rsa BLOB5"}
+             ]
+    end
+
+    test "a sync keeps the host's line of a granted key (options, comment) and drops the rest" do
+      opt_line = ~s(from="10.0.0.0/8",no-pty ssh-rsa BLOB6 laptop)
+
+      host =
+        host_with_file(
+          "deploy",
+          Enum.join([opt_line, "ssh-rsa BLOB7 old-comment", "ssh-rsa GONE x"], "\n")
+        )
+
+      grant(host, "deploy", %{key_base64: "BLOB6", name: "laptop"})
+      grant(host, "deploy", %{key_base64: "BLOB7", name: "Wim Bonis"})
+      grant(host, "deploy", %{key_base64: "NEWKEY", name: "new"})
+      MockClient.set_default_exec(%Result{exit_code: 0})
+
+      assert {:ok, [%{login: "deploy", written_keys: 3}]} = Diffs.sync_host(MockClient, host.id)
+
+      {_, _, written} =
+        Enum.find(MockClient.calls().exec_inputs, fn {_id, cmd, _} ->
+          String.contains?(cmd, "set_authorized_keyfile deploy")
+        end)
+
+      lines = String.split(written, "\n", trim: true)
+      assert opt_line in lines
+      assert "ssh-rsa BLOB7 old-comment" in lines
+      # a key the host lacks gets ssm's line
+      assert "ssh-rsa NEWKEY new" in lines
+      refute Enum.any?(lines, &String.contains?(&1, "GONE"))
+      assert length(lines) == 3
+    end
+  end
+
   describe "compute_diff/2 (pure)" do
     test "sorts within each status group" do
       result = Diffs.compute_diff(["b", "a"], ["a", "z"])
