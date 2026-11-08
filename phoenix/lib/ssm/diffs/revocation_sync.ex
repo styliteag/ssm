@@ -14,19 +14,28 @@ defmodule Ssm.Diffs.RevocationSync do
   `Ssm.Hosts.WriteLock` (one host write at a time), only removes lines, is
   audited as actor `ssm (revocation sync)` with action `sync_revocation`
   (`_partial`, `_failed`) and `mode: removal_only`, and
-  clears the mark only after full success. When off, the mark and the
-  Hosts page badge are the only effect.
+  clears the mark only after full success. A run that raises or exits (an
+  SSH call that timed out) is audited as `sync_revocation_failed`. When off,
+  the mark and the Hosts page badge are the only effect.
+
+  Retries (`retry_pending/3`, on every `Ssm.Diffs.SyncScheduler` tick, so
+  only while `SSM_SYNC_INTERVAL` is on): a host still pending is synced
+  again one interval after its mark, then after 2, 4, … intervals (at most
+  16 intervals apart); a new mark restarts the count.
   """
 
   alias Ssm.Diffs
-  alias Ssm.Diffs.SyncAudit
+  alias Ssm.Diffs.{Revocations, SyncAudit}
   alias Ssm.Hosts
   alias Ssm.Hosts.WriteLock
+  alias Ssm.Scope
 
   require Logger
 
   @actor "ssm (revocation sync)"
   @key {__MODULE__, :hosts}
+  @max_backoff 16
+  @empty_report %{written: [], skipped: [], ignored: []}
 
   @doc "Parses `SSM_REVOCATION_SYNC`: nil, empty or `off` → false, `on` → true."
   @spec parse(term()) :: {:ok, boolean()} | {:error, String.t()}
@@ -106,8 +115,74 @@ defmodule Ssm.Diffs.RevocationSync do
       end
     end)
   rescue
-    error ->
-      Logger.warning("revocation sync of host #{host_id} failed: #{Exception.message(error)}")
-      {:error, :crashed}
+    error -> crashed(host_id, Exception.message(error))
+  catch
+    :exit, reason -> crashed(host_id, "exit: " <> inspect(reason, limit: 20))
+  end
+
+  # the crash is audited like a failed sync (best effort): the mark stays
+  defp crashed(host_id, text) do
+    Logger.warning("revocation sync of host #{host_id} failed: #{text}")
+
+    try do
+      with {:ok, host} <- Hosts.fetch_host(host_id) do
+        outcome = {{:error, {:crashed, "crashed: " <> text}}, @empty_report}
+        SyncAudit.log(@actor, host, outcome, %{mode: "removal_only"}, "sync_revocation")
+      end
+    rescue
+      error -> Logger.warning("revocation sync audit failed: #{Exception.message(error)}")
+    end
+
+    {:error, :crashed}
+  end
+
+  @doc """
+  The hosts to retry now, and the new retry state. `pending` maps each
+  marked host to its mark time, `state` is the previous result (`%{}` at
+  first), `now_ms` a monotonic time and `base_ms` the interval. A mark not
+  seen before waits `base_ms` (its immediate sync ran after the commit);
+  each retry doubles the wait, up to #{@max_backoff} × `base_ms`. Hosts no
+  longer pending are dropped.
+  """
+  @spec plan_retries(%{integer() => term()}, map(), integer(), pos_integer()) ::
+          {[integer()], map()}
+  def plan_retries(pending, state, now_ms, base_ms) do
+    pending
+    |> Enum.sort()
+    |> Enum.reduce({[], %{}}, fn {host_id, mark}, {due, next} ->
+      case Map.get(state, host_id) do
+        %{mark: ^mark, next_ms: at} = entry when now_ms >= at ->
+          attempts = entry.attempts + 1
+          wait = base_ms * min(Integer.pow(2, attempts), @max_backoff)
+
+          {[host_id | due],
+           Map.put(next, host_id, %{entry | attempts: attempts, next_ms: now_ms + wait})}
+
+        %{mark: ^mark} = entry ->
+          {due, Map.put(next, host_id, entry)}
+
+        _new_or_newer_mark ->
+          {due, Map.put(next, host_id, %{mark: mark, attempts: 0, next_ms: now_ms + base_ms})}
+      end
+    end)
+    |> then(fn {due, next} -> {Enum.reverse(due), next} end)
+  end
+
+  @doc """
+  Retry the removal-only sync of hosts still "revocation pending"
+  (`plan_retries/4`); returns the new state. Off: nothing, `%{}`.
+  """
+  @spec retry_pending(map(), integer(), pos_integer()) :: map()
+  def retry_pending(state, now_ms, base_ms) do
+    if enabled?() do
+      pending =
+        Scope.global() |> Revocations.pending() |> Map.new(fn {id, p} -> {id, p.inserted_at} end)
+
+      {due, state} = plan_retries(pending, state, now_ms, base_ms)
+      request(due)
+      state
+    else
+      %{}
+    end
   end
 end

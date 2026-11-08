@@ -413,6 +413,14 @@ defmodule SsmWeb.UsersLive do
   defp bulk_error(:must_keep_one_key), do: "The original user must keep at least one key."
   defp bulk_error(:nothing_to_merge), do: "Select at least one other user to merge."
 
+  defp bulk_error({:conflicting_options, pairs}) do
+    places = Enum.map_join(pairs, ", ", fn {host, login} -> "#{login}@#{host}" end)
+
+    "Not merged: the users have different key options for the same host and login " <>
+      "(#{places}). Merging would give the other user's keys those options; make the " <>
+      "options equal or remove one of the authorizations first."
+  end
+
   defp bulk_error({:user_not_found, username}),
     do: "User #{username} disappeared before the merge finished."
 

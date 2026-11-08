@@ -69,8 +69,14 @@ it keeps the host's own lines whose key is still authorized (a line whose option
 `Options.weaker?/2` than the DB's non-empty options becomes the DB line), never adds, skips logins without a file
 and unread (linked) files, honours disabled/readonly/unsafe/own-key; audited as `ssm (revocation
 sync)`, action `sync_revocation|sync_revocation_partial|sync_revocation_failed` (a manual sync stays
-`sync|sync_partial|sync_failed`), `mode: removal_only`. Tests: `config :ssm, :revocation_sync_runner, :inline`. Every outer
-transaction that touches authorizations uses `Ssm.Grants.transaction/1` (IMMEDIATE). Audit:
+`sync|sync_partial|sync_failed`), `mode: removal_only`; a run that raises or exits (SSH timeout) is
+audited `sync_revocation_failed` too. Retries: every `SyncScheduler` tick (so only while
+`SSM_SYNC_INTERVAL` is on) calls `RevocationSync.retry_pending/3` — a still-pending host is synced
+again 1, 2, 4, … (max 16) intervals after its mark (`plan_retries/4`, state in the scheduler; a new
+mark restarts it). Tests: `config :ssm, :revocation_sync_runner, :inline`. Every outer
+transaction that touches authorizations uses `Ssm.Grants.transaction/1` (IMMEDIATE); a scoped write
+makes its scope/role checks inside it (`Ssm.Grants.checked/1`, `Users.if_writable/4`: `{:refused, _}`
+commits only the audit entry). SQLite `busy_timeout` is 15 s (`config/config.exs`). Audit:
 `grant_create|grant_delete`, `grant_add|grant_remove|grant_move` (trigger, `grant_id`, `job_id`,
 `request_id`); the actor is the ctx actor, else the process actor (`Ssm.Grants.put_actor/1`, set by
 `UserAuth` on LiveView mount and by the `/api/v2` auth plug), else `ssm`.

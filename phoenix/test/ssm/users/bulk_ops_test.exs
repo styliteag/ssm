@@ -105,6 +105,44 @@ defmodule Ssm.Users.BulkOpsTest do
       assert Authorizations.managed_logins(host.id) == ["legacy"]
     end
 
+    test "refuses rows with different options for the same host and login (no widening)" do
+      target = user_fixture(%{username: "wide"})
+      source = user_fixture(%{username: "narrow"})
+      key_fixture(source)
+      host = host_fixture(%{name: "db1"})
+      authorization_fixture(target, host, %{login: "root"})
+      authorization_fixture(source, host, %{login: "root", options: ~s(from="10.0.0.0/8")})
+
+      assert {:error, {:conflicting_options, [{"db1", "root"}]}} =
+               BulkOps.merge_users([source, target], target)
+
+      assert Users.get_user(source.id)
+      assert [_] = Users.list_keys(user_id: source.id)
+    end
+
+    test "refuses two sources that differ in options for one host and login" do
+      a = user_fixture()
+      b = user_fixture()
+      host = host_fixture(%{name: "web1"})
+      authorization_fixture(a, host, %{login: "deploy", options: "no-pty"})
+      authorization_fixture(b, host, %{login: "deploy"})
+
+      assert {:error, {:conflicting_options, [{"web1", "deploy"}]}} =
+               BulkOps.merge_users([a, b], %{username: "merged"})
+
+      refute Users.list_users() |> Enum.any?(&(&1.username == "merged"))
+    end
+
+    test "nil and empty options are the same (no conflict)" do
+      target = user_fixture()
+      source = user_fixture()
+      host = host_fixture()
+      authorization_fixture(target, host, %{login: "root", options: ""})
+      authorization_fixture(source, host, %{login: "root"})
+
+      assert {:ok, %{skipped_authorizations: 1}} = BulkOps.merge_users([source, target], target)
+    end
+
     test "into a brand-new user from attrs" do
       a = user_fixture(%{username: "a"})
       b = user_fixture(%{username: "b"})

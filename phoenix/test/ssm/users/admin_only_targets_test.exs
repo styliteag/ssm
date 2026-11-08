@@ -91,7 +91,13 @@ defmodule Ssm.Users.AdminOnlyTargetsTest do
     assert {:ok, _} = BulkOps.split_user(Scope.global(), plain, "plain-2", [key.id], @op)
   end
 
-  test "an admin may split and merge such users", %{wide: wide, plain: plain} do
+  test "an admin may split and merge such users", %{wide: wide, plain: plain, host: host} do
+    # not while their rows on one host and login differ in options (no widening)
+    assert {:error, {:conflicting_options, [_]}} =
+             BulkOps.merge_users(Scope.global(), [wide, plain], wide, @admin)
+
+    [row] = Ssm.Authorizations.list_authorizations(user_id: plain.id, host_id: host.id)
+    {:ok, _} = Ssm.Authorizations.update_authorization(row, %{options: "agent-forwarding"})
     assert {:ok, _} = BulkOps.merge_users(Scope.global(), [wide, plain], wide, @admin)
   end
 

@@ -38,6 +38,54 @@ defmodule Ssm.Diffs.SyncSchedulerTest do
     end
   end
 
+  describe "revocation retries" do
+    test "every tick hands the retry state to retry_fun" do
+      me = self()
+
+      retry = fn state, now_ms, interval_ms ->
+        send(me, {:retry, state, interval_ms})
+        Map.put(state, :ticks, Map.get(state, :ticks, 0) + 1) |> Map.put(:now, now_ms)
+      end
+
+      start_supervised!(
+        {SyncScheduler,
+         name: :sched_retry,
+         interval_ms: 20,
+         jitter: 0.0,
+         initial_delay_ms: 0,
+         sweep_fun: fn -> :ok end,
+         retry_fun: retry}
+      )
+
+      assert_receive {:retry, %{}, 20}, 1000
+      assert_receive {:retry, %{ticks: 1}, 20}, 1000
+    end
+
+    test "a crashing retry_fun keeps the scheduler running" do
+      me = self()
+
+      retry = fn _state, _now, _interval ->
+        send(me, :retry)
+        raise "db down"
+      end
+
+      pid =
+        start_supervised!(
+          {SyncScheduler,
+           name: :sched_retry_crash,
+           interval_ms: 20,
+           jitter: 0.0,
+           initial_delay_ms: 0,
+           sweep_fun: fn -> :ok end,
+           retry_fun: retry}
+        )
+
+      assert_receive :retry, 1000
+      assert_receive :retry, 1000
+      assert Process.alive?(pid)
+    end
+  end
+
   describe "process" do
     test "sweeps on every tick, never two at once" do
       me = self()

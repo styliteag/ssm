@@ -20,6 +20,19 @@ defmodule Ssm.Diffs.RevocationSyncTest.PausingClient do
   end
 end
 
+defmodule Ssm.Diffs.RevocationSyncTest.ExitingClient do
+  @moduledoc false
+  # MockClient, but every command exits like an SSH call that timed out
+  alias Ssm.Ssh.MockClient
+
+  def connect(target), do: MockClient.connect(target)
+  def read_file(target, path), do: MockClient.read_file(target, path)
+  def write_file(target, path, content), do: MockClient.write_file(target, path, content)
+  def probe_host_key(target, opts), do: MockClient.probe_host_key(target, opts)
+  def close, do: MockClient.close()
+  def exec(_target, _command, _opts), do: exit({:timeout, {GenServer, :call, [:ssh]}})
+end
+
 defmodule Ssm.Diffs.RevocationSyncTest do
   @moduledoc """
   ADR-0012 §6: with `SSM_REVOCATION_SYNC=on`, every revoking change starts a
@@ -37,7 +50,7 @@ defmodule Ssm.Diffs.RevocationSyncTest do
   alias Ssm.Activity.ActivityLog
   alias Ssm.Diffs
   alias Ssm.Diffs.{RevocationSync, Revocations}
-  alias Ssm.Diffs.RevocationSyncTest.PausingClient
+  alias Ssm.Diffs.RevocationSyncTest.{ExitingClient, PausingClient}
   alias Ssm.Ssh.{MockClient, Result}
   alias Ssm.{Authorizations, Customers, Grants, Hosts, Repo, Scope}
 
@@ -288,6 +301,62 @@ defmodule Ssm.Diffs.RevocationSyncTest do
       send(holder, :release)
       Task.await(waiting)
       assert [_] = writes(ctx.host.id)
+    end
+  end
+
+  test "an exit inside the sync (SSH timeout) is audited as failed and keeps the mark", ctx do
+    Application.put_env(:ssm, :revocation_sync, "off")
+    :ok = Revocations.mark(ctx.host.id, "test")
+
+    assert {:error, :crashed} = RevocationSync.run(ExitingClient, ctx.host.id)
+
+    assert [entry] = Repo.all(from l in ActivityLog, where: l.action == "sync_revocation_failed")
+    assert entry.actor_username == "ssm (revocation sync)"
+    assert Jason.decode!(entry.meta)["error"] =~ "crashed"
+    assert Revocations.pending?(ctx.host.id)
+  end
+
+  describe "retry of pending marks (plan_retries/4, retry_pending/3)" do
+    test "a new mark waits one interval, then retries back off exponentially" do
+      t = ~U[2026-11-08 10:00:00Z]
+      {[], state} = RevocationSync.plan_retries(%{7 => t}, %{}, 0, 1000)
+      assert {[], ^state} = RevocationSync.plan_retries(%{7 => t}, state, 999, 1000)
+      {[7], state} = RevocationSync.plan_retries(%{7 => t}, state, 1000, 1000)
+      # next after 2 intervals, then 4, … (capped)
+      assert {[], _} = RevocationSync.plan_retries(%{7 => t}, state, 2999, 1000)
+      {[7], state} = RevocationSync.plan_retries(%{7 => t}, state, 3000, 1000)
+      assert {[], _} = RevocationSync.plan_retries(%{7 => t}, state, 6999, 1000)
+      assert {[7], _} = RevocationSync.plan_retries(%{7 => t}, state, 7000, 1000)
+    end
+
+    test "a new mark restarts the backoff; a cleared one is forgotten" do
+      t1 = ~U[2026-11-08 10:00:00Z]
+      t2 = ~U[2026-11-08 11:00:00Z]
+      {[], state} = RevocationSync.plan_retries(%{7 => t1}, %{}, 0, 1000)
+      {[7], state} = RevocationSync.plan_retries(%{7 => t1}, state, 1000, 1000)
+      {[], state} = RevocationSync.plan_retries(%{7 => t2}, state, 1500, 1000)
+      assert {[7], _} = RevocationSync.plan_retries(%{7 => t2}, state, 2500, 1000)
+      assert {[], %{}} = RevocationSync.plan_retries(%{}, state, 9999, 1000)
+    end
+
+    test "retry_pending runs the removal-only sync of a due pending host", ctx do
+      auth = authorization_fixture(ctx.alice, ctx.host, %{login: "deploy"})
+      Application.put_env(:ssm, :revocation_sync, "off")
+      {:ok, _} = Authorizations.delete_authorization(auth)
+      Application.put_env(:ssm, :revocation_sync, "on")
+      stub_host(ctx.host.id, "ssh-ed25519 ALICE alice\n")
+
+      state = RevocationSync.retry_pending(%{}, 0, 1000)
+      assert writes(ctx.host.id) == []
+      _state = RevocationSync.retry_pending(state, 1000, 1000)
+      assert [{_cmd, ""}] = writes(ctx.host.id)
+      refute Revocations.pending?(ctx.host.id)
+    end
+
+    test "off: no retry, no state", ctx do
+      Application.put_env(:ssm, :revocation_sync, "off")
+      :ok = Revocations.mark(ctx.host.id, "test")
+      assert RevocationSync.retry_pending(%{}, 0, 1000) == %{}
     end
   end
 

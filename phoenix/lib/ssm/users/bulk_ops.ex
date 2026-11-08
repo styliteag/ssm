@@ -45,12 +45,13 @@ defmodule Ssm.Users.BulkOps do
   @spec split_user(Ssm.Scope.t(), User.t(), String.t(), [integer()], keyword()) ::
           {:ok, split_result()} | {:error, term()}
   def split_user(%Ssm.Scope{} = scope, %User{} = user, new_username, key_ids, opts \\ []) do
-    cond do
-      not Ssm.Users.writable?(scope, user) -> {:error, :out_of_scope}
-      # the new user's keys would inherit the copied grants' options
-      :ok != Ssm.Users.check_admin_only([user], "split", opts) -> {:error, :admin_only_options}
-      true -> split_user(user, new_username, key_ids)
-    end
+    # the new user's keys would inherit the copied grants' options
+    Ssm.Users.if_writable(
+      scope,
+      [user],
+      fn -> split_user(user, new_username, key_ids) end,
+      {[user], "split", opts}
+    )
   end
 
   @doc """
@@ -137,12 +138,13 @@ defmodule Ssm.Users.BulkOps do
   def merge_users(%Ssm.Scope{} = scope, users, target, opts \\ []) do
     involved = if match?(%User{}, target), do: [target | users], else: users
 
-    cond do
-      not Enum.all?(involved, &Ssm.Users.writable?(scope, &1)) -> {:error, :out_of_scope}
-      # keys and grants meet in the target: no admin-only options on either side
-      :ok != Ssm.Users.check_admin_only(involved, "merge", opts) -> {:error, :admin_only_options}
-      true -> merge_users(users, target)
-    end
+    # keys and grants meet in the target: no admin-only options on either side
+    Ssm.Users.if_writable(
+      scope,
+      involved,
+      fn -> merge_users(users, target) end,
+      {involved, "merge", opts}
+    )
   end
 
   @doc """
@@ -154,6 +156,12 @@ defmodule Ssm.Users.BulkOps do
   whose `{host_id, login}` pair the target already holds is also skipped —
   the DB is unique per user/host/login); the source users are then deleted
   (cascading their old authorizations).
+
+  Refused with `{:error, {:conflicting_options, [{host_name, login}]}}`
+  (nothing changed) when the target's rows and the sources' manual rows
+  carry different `options` for one host and login: only one row can stay,
+  and the keys of the other side would silently get its (possibly wider)
+  options. nil and "" count as the same.
   """
   @spec merge_users([User.t()], User.t() | map()) :: {:ok, merge_result()} | {:error, term()}
   def merge_users(users, %User{} = target) do
@@ -172,6 +180,9 @@ defmodule Ssm.Users.BulkOps do
     source_ids = Enum.map(sources, & &1.id)
 
     multi
+    |> Multi.run(:options, fn repo, %{target: target} ->
+      check_option_conflicts(repo, source_ids, target)
+    end)
     |> Multi.update_all(
       :move_keys,
       fn %{target: target} ->
@@ -201,6 +212,27 @@ defmodule Ssm.Users.BulkOps do
       {:error, _step, reason, _changes} ->
         {:error, reason}
     end
+  end
+
+  # the rows that meet on one (host, login): every row of the target (a new
+  # one has none) and the sources' manual rows (grant rows are not copied)
+  defp check_option_conflicts(repo, source_ids, target) do
+    rows =
+      repo.all(
+        from a in Authorization,
+          join: h in assoc(a, :host),
+          where: a.user_id == ^target.id or (a.user_id in ^source_ids and is_nil(a.grant_id)),
+          select: {h.name, a.login, a.options}
+      )
+
+    conflicts =
+      rows
+      |> Enum.group_by(fn {host, login, _} -> {host, login} end, fn {_, _, o} -> o || "" end)
+      |> Enum.filter(fn {_pair, options} -> length(Enum.uniq(options)) > 1 end)
+      |> Enum.map(&elem(&1, 0))
+      |> Enum.sort()
+
+    if conflicts == [], do: {:ok, nil}, else: {:error, {:conflicting_options, conflicts}}
   end
 
   # Copies every manual authorization of `source_ids` onto `target_id`,
@@ -293,9 +325,17 @@ defmodule Ssm.Users.BulkOps do
   """
   @spec bulk_delete(Ssm.Scope.t(), [User.t()]) :: bulk_delete_result()
   def bulk_delete(%Ssm.Scope{} = scope, users) do
-    {writable, refused} = Enum.split_with(users, &Ssm.Users.writable?(scope, &1))
-    result = bulk_delete(writable)
-    %{result | failed: result.failed ++ Enum.map(refused, &{&1, :out_of_scope})}
+    # one transaction per user, the scope check inside it
+    {deleted, failed} =
+      Enum.reduce(users, {[], []}, fn user, {deleted, failed} ->
+        case Ssm.Users.if_writable(scope, [user], fn -> delete_current(user) end) do
+          {:ok, gone} -> {[gone | deleted], failed}
+          {:error, reason} -> {deleted, [{user, reason} | failed]}
+        end
+      end)
+
+    {refused, other} = Enum.split_with(Enum.reverse(failed), &match?({_, :out_of_scope}, &1))
+    %{deleted: Enum.reverse(deleted), failed: other ++ refused}
   end
 
   @doc """
@@ -310,15 +350,16 @@ defmodule Ssm.Users.BulkOps do
   end
 
   defp delete_one(user, {deleted, failed}) do
-    case Repo.get(User, user.id) do
-      nil ->
-        {deleted, [{user, :not_found} | failed]}
+    case delete_current(user) do
+      {:ok, gone} -> {[gone | deleted], failed}
+      {:error, reason} -> {deleted, [{user, reason} | failed]}
+    end
+  end
 
-      current ->
-        case Ssm.Users.delete_user(current) do
-          {:ok, gone} -> {[gone | deleted], failed}
-          {:error, reason} -> {deleted, [{user, reason} | failed]}
-        end
+  defp delete_current(user) do
+    case Repo.get(User, user.id) do
+      nil -> {:error, :not_found}
+      current -> Ssm.Users.delete_user(current)
     end
   end
 

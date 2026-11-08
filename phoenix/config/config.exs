@@ -20,6 +20,12 @@ config :ssm,
   ecto_repos: [Ssm.Repo],
   generators: [timestamp_type: :utc_datetime]
 
+# SQLite: a write waits up to 15 s for another writer's lock (IMMEDIATE
+# transactions, Ssm.Grants.transaction/1) instead of failing "Database busy"
+# after the driver's default 2 s. Every environment (runtime.exs adds the
+# prod path only).
+config :ssm, Ssm.Repo, busy_timeout: 15_000
+
 # Configure the endpoint
 config :ssm, SsmWeb.Endpoint,
   url: [host: "localhost"],

@@ -97,6 +97,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Writes wait up to 15 seconds for SQLite's write lock instead of failing with
+  "Database busy" after 2 seconds when another write runs at the same time.
+
 - A sync no longer fails with "Directory nonexistent" for a login whose home has no
   `~/.ssh` yet: ssm creates it (mode 0700, owned by the login's user and group) and
   writes the file. It does so only inside a home that exists and is not a symlink,
@@ -125,6 +128,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   now check the file before and after the read.
 - The host listing no longer writes a predictable temp file (`$TMPDIR/homedirs.<pid>`)
   as root.
+- Merging SSH users is refused when their authorizations for the same host and login
+  carry different key options ("Not merged: … different key options …", naming each
+  login@host). Before, one row was kept silently and the other user's keys got its
+  options, which could drop restrictions such as `from` or `no-pty`.
+- The scope and admin-only checks of an SSO operator's SSH user changes (edit, delete,
+  bulk delete, split, merge, add/move/delete key) and of grant creation now run inside
+  the same database transaction as the write, so a change committed in between can no
+  longer slip past them.
+- The removal-only sync (`SSM_REVOCATION_SYNC=on`) now logs `sync_revocation_failed`
+  when it crashes or an SSH call times out, and retries hosts that are still
+  "revocation pending" on the periodic check's schedule (`SSM_SYNC_INTERVAL`): one
+  interval after the mark, then after 2, 4, … up to 16 intervals.
 
 - "Revocation pending" now covers every change that takes SSH access away, not only
   grants and deleted authorizations: an authorization moved to another host, login or

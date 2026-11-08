@@ -117,17 +117,43 @@ defmodule Ssm.Users do
     end)
   end
 
-  @doc "`update_user/2` for a web user: only a `writable?/2` user."
+  @doc """
+  `update_user/2` for a web user: only a `writable?/2` user. Like every
+  scoped write here, the check runs inside the write's transaction
+  (`Ssm.Grants.checked/1`).
+  """
   @spec update_user(Ssm.Scope.t(), User.t(), map()) ::
           {:ok, User.t()} | {:error, Ecto.Changeset.t() | :out_of_scope}
   def update_user(%Ssm.Scope{} = scope, %User{} = user, attrs),
-    do: if(writable?(scope, user), do: update_user(user, attrs), else: {:error, :out_of_scope})
+    do: if_writable(scope, [user], fn -> update_user(user, attrs) end)
 
   @doc "`delete_user/1` for a web user: only a `writable?/2` user."
   @spec delete_user(Ssm.Scope.t(), User.t()) ::
           {:ok, User.t()} | {:error, Ecto.Changeset.t() | :out_of_scope}
   def delete_user(%Ssm.Scope{} = scope, %User{} = user),
-    do: if(writable?(scope, user), do: delete_user(user), else: {:error, :out_of_scope})
+    do: if_writable(scope, [user], fn -> delete_user(user) end)
+
+  @doc """
+  Run `write` (returning `{:ok, _}` or `{:error, _}`) when every one of
+  `users` (structs or ids) is `writable?/2` in `scope` — checked inside the
+  write's IMMEDIATE transaction (`Ssm.Grants.checked/1`) — else
+  `{:error, :out_of_scope}`. `admin_only` (`{users, op, opts}` for
+  `check_admin_only/3`) adds that check in the same transaction.
+  """
+  @spec if_writable(Ssm.Scope.t(), [User.t() | integer()], (-> term()), tuple() | nil) ::
+          term()
+  def if_writable(%Ssm.Scope{} = scope, users, write, admin_only \\ nil) do
+    Ssm.Grants.checked(fn ->
+      cond do
+        not Enum.all?(users, &writable?(scope, &1)) -> {:refused, :out_of_scope}
+        refused_admin_only?(admin_only) -> {:refused, :admin_only_options}
+        true -> write.()
+      end
+    end)
+  end
+
+  defp refused_admin_only?(nil), do: false
+  defp refused_admin_only?({users, op, opts}), do: check_admin_only(users, op, opts) != :ok
 
   @spec change_user(User.t(), map()) :: Ecto.Changeset.t()
   def change_user(%User{} = user, attrs \\ %{}), do: User.changeset(user, attrs)
@@ -244,11 +270,9 @@ defmodule Ssm.Users do
   def create_key(%Ssm.Scope{} = scope, attrs, opts \\ []) do
     owner = %UserKey{} |> UserKey.changeset(attrs) |> Ecto.Changeset.get_field(:user_id)
 
-    cond do
-      is_nil(owner) -> create_key(attrs)
-      not writable?(scope, owner) -> {:error, :out_of_scope}
-      true -> with :ok <- check_admin_only([owner], "add key", opts), do: create_key(attrs)
-    end
+    if is_nil(owner),
+      do: create_key(attrs),
+      else: if_writable(scope, [owner], fn -> create_key(attrs) end, {[owner], "add key", opts})
   end
 
   @doc """
@@ -263,17 +287,9 @@ defmodule Ssm.Users do
     new_owner = Ecto.Changeset.get_field(changeset, :user_id)
     rekeyed? = Enum.any?([:user_id, :key_type, :key_base64], &Map.has_key?(changeset.changes, &1))
 
-    cond do
-      not (writable?(scope, key.user_id) and writable?(scope, new_owner)) ->
-        {:error, :out_of_scope}
+    admin_only = if rekeyed?, do: {[new_owner], "move or re-key key", opts}
 
-      rekeyed? ->
-        with :ok <- check_admin_only([new_owner], "move or re-key key", opts),
-             do: update_key(key, attrs)
-
-      true ->
-        update_key(key, attrs)
-    end
+    if_writable(scope, [key.user_id, new_owner], fn -> update_key(key, attrs) end, admin_only)
   end
 
   @doc """
@@ -327,7 +343,7 @@ defmodule Ssm.Users do
   @spec delete_key(Ssm.Scope.t(), UserKey.t()) ::
           {:ok, UserKey.t()} | {:error, Ecto.Changeset.t() | :out_of_scope}
   def delete_key(%Ssm.Scope{} = scope, %UserKey{} = key),
-    do: if(writable?(scope, key.user_id), do: delete_key(key), else: {:error, :out_of_scope})
+    do: if_writable(scope, [key.user_id], fn -> delete_key(key) end)
 
   @spec change_key(UserKey.t(), map()) :: Ecto.Changeset.t()
   def change_key(%UserKey{} = key, attrs \\ %{}), do: UserKey.changeset(key, attrs)

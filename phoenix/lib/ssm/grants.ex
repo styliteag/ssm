@@ -57,6 +57,32 @@ defmodule Ssm.Grants do
   end
 
   @doc """
+  Run a checked write: `fun` makes its scope or role checks and then the
+  write, all inside one `transaction/1` (IMMEDIATE), so the checks see what
+  the write sees — nothing committed in between. `fun` returns `{:ok,
+  value}` (committed), `{:error, reason}` (rolled back) or `{:refused,
+  reason}` (committed — nothing was written but an audit entry — and
+  returned as `{:error, reason}`).
+  """
+  @spec checked((-> {:ok, term()} | {:error, term()} | {:refused, term()})) ::
+          {:ok, term()} | {:error, term()}
+  def checked(fun) do
+    result =
+      transaction(fn ->
+        case fun.() do
+          {:ok, value} -> {:ok, value}
+          {:refused, reason} -> {:error, reason}
+          {:error, reason} -> Repo.rollback(reason)
+        end
+      end)
+
+    case result do
+      {:ok, inner} -> inner
+      {:error, _reason} = error -> error
+    end
+  end
+
+  @doc """
   The web or API user behind the current process (set by `SsmWeb.UserAuth`
   for LiveViews and by the `/api/v2` auth plug), used as the audit actor of
   reconciles that follow a manual change; nil elsewhere.
@@ -117,6 +143,15 @@ defmodule Ssm.Grants do
   @spec create_grant(actor(), map()) ::
           {:ok, Grant.t()} | {:error, :forbidden | :out_of_scope | Ecto.Changeset.t() | term()}
   def create_grant(actor, attrs) do
+    if writer?(actor),
+      do: checked(fn -> create_checked(actor, attrs) end),
+      else: {:error, :forbidden}
+  end
+
+  # inside the write transaction: the scope's ids (stored with the grant and
+  # checked against its target) are read there, so the check and the insert
+  # see the same customers and groups
+  defp create_checked(actor, attrs) do
     scope = Map.get(actor, :scope, Scope.none())
     ids = scope_ids(scope)
 
@@ -129,27 +164,22 @@ defmodule Ssm.Grants do
     changeset = Grant.create_changeset(%Grant{}, attrs, internal)
 
     cond do
-      not writer?(actor) -> {:error, :forbidden}
-      not changeset.valid? -> {:error, changeset}
+      not changeset.valid? -> {:refused, changeset}
       # a scoped dimension whose slugs match no customer/group reaches nothing
-      [] in [ids.customers, ids.groups] -> {:error, :out_of_scope}
-      not target_in_scope?(ids, changeset) -> {:error, :out_of_scope}
+      [] in [ids.customers, ids.groups] -> {:refused, :out_of_scope}
+      not target_in_scope?(ids, changeset) -> {:refused, :out_of_scope}
       true -> insert_and_expand(changeset, actor)
     end
   end
 
   defp insert_and_expand(changeset, actor) do
-    transaction(fn ->
-      with {:ok, grant} <- Repo.insert(changeset),
-           grant = Repo.preload(grant, [:ssh_user, :customer, :group]),
-           {:ok, _counts} <-
-             Expansion.reconcile(Expansion.affected_host_ids([grant]), ctx(actor, "grant_create")) do
-        audit(actor, "grant_create", grant)
-        grant
-      else
-        {:error, reason} -> Repo.rollback(reason)
-      end
-    end)
+    with {:ok, grant} <- Repo.insert(changeset),
+         grant = Repo.preload(grant, [:ssh_user, :customer, :group]),
+         {:ok, _counts} <-
+           Expansion.reconcile(Expansion.affected_host_ids([grant]), ctx(actor, "grant_create")) do
+      audit(actor, "grant_create", grant)
+      {:ok, grant}
+    end
   end
 
   @doc """
