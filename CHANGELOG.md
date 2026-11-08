@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.12.0] - 2026-11-08
+
 ### Added
 
 - Grants (ADR-0012 phase 2): SSH access for an SSH user on every host of a
