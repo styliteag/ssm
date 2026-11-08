@@ -83,6 +83,7 @@ defmodule SsmWeb.DiffLive do
       |> assign(hosts: hosts, statuses: statuses, checks: checks, syncing: false)
       |> assign(detail: nil, detail_error: nil, detail_loading: false)
       |> assign(key_owners: %{}, host_auths: %{}, keyfiles: %{}, unknown_key: nil)
+      |> assign(remove_user: nil)
       |> assign(diff_search: "", diff_sort: nil, diff_filter: "all")
 
     {:ok, socket}
@@ -448,21 +449,56 @@ defmodule SsmWeb.DiffLive do
     end
   end
 
-  # "missing on host": take the SSH user's access away in the database (a
-  # manual row; a grant row only through its grant), then reload the diff
-  def handle_event("revoke-auth", %{"id" => id}, socket) do
+  # "Remove <user>": a dialog lists the login's lines and marks every key of
+  # that SSH user (a user can hold several); confirming deletes the manual
+  # authorization (a grant row only through its grant), optionally syncs
+  def handle_event("remove-user-open", %{"id" => id}, socket) do
     with false <- read_only?(socket),
          {id, ""} <- Integer.parse(to_string(id)),
-         %Authorizations.Authorization{} = auth <-
+         %Authorizations.Authorization{grant_id: nil} = auth <-
            Authorizations.get_authorization(scope(socket), id),
+         %Users.User{} = user <- Users.get_user(auth.user_id) do
+      {:noreply,
+       assign(socket, :remove_user, %{
+         auth_id: auth.id,
+         user_id: auth.user_id,
+         username: user.username,
+         login: auth.login
+       })}
+    else
+      _ -> {:noreply, put_flash(socket, :error, "Cannot remove this access.")}
+    end
+  end
+
+  def handle_event("remove-user-cancel", _params, socket),
+    do: {:noreply, assign(socket, :remove_user, nil)}
+
+  def handle_event("remove-user-confirm", params, %{assigns: %{remove_user: %{} = r}} = socket) do
+    socket = assign(socket, :remove_user, nil)
+
+    with false <- read_only?(socket),
+         %Authorizations.Authorization{} = auth <-
+           Authorizations.get_authorization(scope(socket), r.auth_id),
          {:ok, _} <- Authorizations.delete_authorization(scope(socket), auth) do
       Ssm.Activity.Entries.authorization(:delete, auth, socket.assigns.current_user.actor)
       host = fresh_selected(socket)
 
-      {:noreply,
-       socket
-       |> put_flash(:info, "Access removed. Sync the host to update its authorized_keys.")
-       |> then(&if(host, do: start_detail_async(&1, host), else: &1))}
+      cond do
+        host && params["sync"] == "true" ->
+          {:noreply,
+           socket
+           |> put_flash(:info, "Removed #{r.username} from #{r.login}; syncing #{host.name}…")
+           |> start_sync(host)}
+
+        host ->
+          {:noreply,
+           socket
+           |> put_flash(:info, "Removed #{r.username} from #{r.login}. Sync to update the host.")
+           |> start_detail_async(host)}
+
+        true ->
+          {:noreply, socket}
+      end
     else
       {:error, {:grant_takeover, _}} ->
         {:noreply,
@@ -480,6 +516,8 @@ defmodule SsmWeb.DiffLive do
         {:noreply, put_flash(socket, :error, "Cannot remove this access.")}
     end
   end
+
+  def handle_event("remove-user-confirm", _params, socket), do: {:noreply, socket}
 
   # Takes the line off the host now (not a database change): fresh read,
   # only if still unauthorized; viewers never (also refused by ReadOnly).
@@ -789,6 +827,15 @@ defmodule SsmWeb.DiffLive do
 
   defp owner_auth(%UserKey{user_id: uid}, login, auths), do: Map.get(auths, {uid, login})
   defp owner_auth(_key, _login, _auths), do: nil
+
+  defp login_items(%HostDiff{logins: logins}, login),
+    do: Enum.find_value(logins, [], &(&1.login == login && &1.items))
+
+  defp login_items(_detail, _login), do: []
+
+  defp owned_by?(line, owners, user_id) do
+    match?(%UserKey{user_id: ^user_id}, line_key(line, owners))
+  end
 
   # a manual row can be deleted here; a grant row only through its grant
   defp revocable?(%Authorizations.Authorization{grant_id: nil}), do: true
@@ -1279,21 +1326,21 @@ defmodule SsmWeb.DiffLive do
                 </span>
                 <button
                   :if={
-                    item.status == :missing_on_host and not @syncing and
+                    item.status != :extra_on_host and not @syncing and
                       revocable?(
                         owner_auth(line_key(item.line, @key_owners), login.login, @host_auths)
                       )
                   }
                   id={"revoke-#{login.login}-#{index}"}
                   class="btn btn-ghost btn-xs ml-auto flex-none text-error"
-                  phx-click="revoke-auth"
+                  phx-click="remove-user-open"
                   phx-value-id={
                     owner_auth(line_key(item.line, @key_owners), login.login, @host_auths).id
                   }
-                  data-confirm={"Remove #{line_key(item.line, @key_owners).user.username}'s access to #{login.login} on #{@selected.name}? (database only; the key is not on the host)"}
-                  title="Delete this authorization in ssm, then refresh"
+                  title="Remove this SSH user's access to this login (shows every key it holds here)"
                 >
-                  <.icon name="hero-user-minus" class="size-4" /> Remove user
+                  <.icon name="hero-user-minus" class="size-4" />
+                  Remove {line_key(item.line, @key_owners).user.username}
                 </button>
                 <.extra_key_actions
                   :if={item.status == :extra_on_host and not @selected.disabled}
@@ -1324,6 +1371,69 @@ defmodule SsmWeb.DiffLive do
           </div>
         </div>
       </section>
+
+      <.modal
+        :if={@remove_user}
+        id="remove-user-modal"
+        on_cancel={JS.push("remove-user-cancel")}
+      >
+        <:title>Remove {@remove_user.username} from {@remove_user.login}</:title>
+
+        <p class="mb-2 text-sm opacity-70">
+          The marked keys belong to {@remove_user.username} and leave
+          <span class="font-mono">{@remove_user.login}</span>
+          on {@selected && @selected.name} at the next sync.
+        </p>
+
+        <ul id="remove-user-lines" class="mb-3 space-y-1">
+          <li
+            :for={
+              {item, index} <-
+                Enum.with_index(login_items(@detail, @remove_user.login))
+            }
+            id={"remove-user-line-#{index}"}
+            class={[
+              "flex items-center gap-2 rounded px-2 py-1 text-xs",
+              if(owned_by?(item.line, @key_owners, @remove_user.user_id),
+                do: "bg-error/20 text-error font-semibold remove-marked",
+                else: "bg-base-200 opacity-60"
+              )
+            ]}
+          >
+            <.icon
+              :if={owned_by?(item.line, @key_owners, @remove_user.user_id)}
+              name="hero-minus-circle"
+              class="size-4 flex-none"
+            />
+            <code class="min-w-0 truncate font-mono" title={item.line}>
+              {short_key_line(item.line)}
+            </code>
+          </li>
+        </ul>
+
+        <div class="modal-action">
+          <button type="button" class="btn btn-ghost" phx-click="remove-user-cancel">
+            Cancel
+          </button>
+          <button
+            id="remove-user-confirm"
+            type="button"
+            class="btn btn-error btn-outline"
+            phx-click="remove-user-confirm"
+          >
+            Remove
+          </button>
+          <button
+            id="remove-user-confirm-sync"
+            type="button"
+            class="btn btn-error"
+            phx-click="remove-user-confirm"
+            phx-value-sync="true"
+          >
+            Remove and sync now
+          </button>
+        </div>
+      </.modal>
 
       <.modal :if={@unknown_key} id="unknown-key-modal" on_cancel={JS.push("unknown-key-cancel")}>
         <:title>Assign unknown key</:title>

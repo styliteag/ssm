@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Diff viewer: "Remove <user>" on every key line of a manual authorization (present or
+  missing on the host). A dialog lists the login's lines and marks every key of that SSH
+  user; "Remove" deletes the access in ssm, "Remove and sync now" also syncs the host.
+
 ## [4.13.0] - 2026-11-09
 
 ### Added

@@ -779,6 +779,41 @@ defmodule SsmWeb.DiffLiveTest do
       assert render(element(view, "#copy-keyfile-deploy")) =~ long
     end
 
+    test "Remove <user> marks every key of that user and can sync at once", %{conn: conn} do
+      wim = user_fixture(%{username: "wim"})
+      other = user_fixture(%{username: "other"})
+      host = host_fixture(%{name: "web1"})
+      k1 = Base.encode64(<<11::32>> <> "ssh-ed25519" <> :binary.copy(<<1>>, 32))
+      k2 = Base.encode64(<<11::32>> <> "ssh-ed25519" <> :binary.copy(<<2>>, 32))
+      k3 = Base.encode64(<<11::32>> <> "ssh-ed25519" <> :binary.copy(<<3>>, 32))
+      key_fixture(wim, %{key_type: "ssh-ed25519", key_base64: k1, name: "a"})
+      key_fixture(wim, %{key_type: "ssh-ed25519", key_base64: k2, name: "b"})
+      key_fixture(other, %{key_type: "ssh-ed25519", key_base64: k3, name: "c"})
+      authorization_fixture(wim, host, %{login: "deploy"})
+      authorization_fixture(other, host, %{login: "deploy"})
+
+      stub_keyfiles(host.id, [
+        %{
+          login: "deploy",
+          has_pragma: true,
+          keyfile: "ssh-ed25519 #{k1} a\nssh-ed25519 #{k2} b\nssh-ed25519 #{k3} c"
+        }
+      ])
+
+      {:ok, view, _html} = live(conn, ~p"/diff?host_id=#{host.id}")
+      render_async(view)
+
+      view |> element("#revoke-deploy-0") |> render_click()
+
+      assert view
+             |> render()
+             |> LazyHTML.from_document()
+             |> LazyHTML.query(".remove-marked")
+             |> Enum.count() == 2
+
+      assert has_element?(view, "#remove-user-confirm-sync")
+    end
+
     test "a missing key's manual access can be removed from the diff", %{conn: conn} do
       owner = user_fixture(%{username: "gone"})
       host = host_fixture(%{name: "web1"})
@@ -796,7 +831,11 @@ defmodule SsmWeb.DiffLiveTest do
       render_async(view)
 
       refute has_element?(view, "#remove-key-deploy-0")
+      assert has_element?(view, "#revoke-deploy-0", "Remove gone")
       view |> element("#revoke-deploy-0") |> render_click()
+      assert has_element?(view, "#remove-user-modal")
+      assert has_element?(view, "#remove-user-line-0.remove-marked")
+      view |> element("#remove-user-confirm") |> render_click()
       render_async(view)
 
       refute Ssm.Repo.get(Ssm.Authorizations.Authorization, auth.id)
