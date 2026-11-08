@@ -6,6 +6,34 @@ defmodule Ssm.Authorizations.OptionsTest do
   alias Ssm.Authorizations
   alias Ssm.Authorizations.Options
 
+  describe "missing_restrictions/2 and weaker?/2" do
+    test "restriction entries compare by name and exact value" do
+      required = ~s(restrict,No-Pty,from="10.0.0.0/8",verify-required)
+
+      assert Options.missing_restrictions(required, required) == []
+      assert Options.missing_restrictions(required, String.downcase(required)) == []
+
+      assert Options.missing_restrictions(required, nil) ==
+               ["restrict", "no-pty", ~s(from="10.0.0.0/8"), "verify-required"]
+
+      assert Options.missing_restrictions(required, ~s(restrict,no-pty,from="0.0.0.0/0")) ==
+               [~s(from="10.0.0.0/8"), "verify-required"]
+
+      assert Options.missing_restrictions(nil, required) == []
+      assert Options.missing_restrictions(~s(environment="A=b",pty), nil) == []
+    end
+
+    test "weaker?: lacks a restriction of the other or carries a permissive option it lacks" do
+      assert Options.weaker?(nil, "no-pty")
+      assert Options.weaker?(~s(from="10.0.0.0/8"), ~s(from="10.0.0.1"))
+      assert Options.weaker?("no-pty,agent-forwarding", "no-pty")
+      refute Options.weaker?("no-pty", "no-pty")
+      refute Options.weaker?("no-pty,no-user-rc", "no-pty")
+      refute Options.weaker?("no-pty", nil)
+      refute Options.weaker?("no-pty", "agent-forwarding")
+    end
+  end
+
   describe "validate/1" do
     test "accepts empty and allow-listed options" do
       for options <- [

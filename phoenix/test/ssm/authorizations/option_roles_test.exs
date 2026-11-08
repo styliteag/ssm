@@ -123,6 +123,57 @@ defmodule Ssm.Authorizations.OptionRolesTest do
     end
   end
 
+  describe "dropping a restriction of an existing row" do
+    setup do
+      {:ok, auth} =
+        Authorizations.create_authorization(
+          attrs(~s(restrict,no-pty,from="10.0.0.0/8",command="/bin/true"))
+        )
+
+      %{auth: auth}
+    end
+
+    test "is admin-only: an operator may not remove or change a restriction", %{auth: auth} do
+      for options <- [
+            nil,
+            "",
+            ~s(no-pty,from="10.0.0.0/8",command="/bin/true"),
+            ~s(restrict,from="10.0.0.0/8",command="/bin/true"),
+            ~s(restrict,no-pty,command="/bin/true"),
+            ~s(restrict,no-pty,from="0.0.0.0/0",command="/bin/true")
+          ] do
+        assert {:error, changeset} =
+                 Authorizations.update_authorization(Scope.global(), auth, %{options: options},
+                   role: "operator"
+                 )
+
+        assert %{options: [message]} = errors_on(changeset), inspect(options)
+        assert message =~ "admin"
+      end
+    end
+
+    test "an operator may add restrictions or edit the comment", %{auth: auth} do
+      tighter = ~s(restrict,no-pty,from="10.0.0.0/8",command="/bin/true",expiry-time="20300101")
+
+      assert {:ok, auth} =
+               Authorizations.update_authorization(Scope.global(), auth, %{options: tighter},
+                 role: "operator"
+               )
+
+      assert {:ok, _} =
+               Authorizations.update_authorization(Scope.global(), auth, %{comment: "x"},
+                 role: "operator"
+               )
+    end
+
+    test "an admin may drop restrictions", %{auth: auth} do
+      assert {:ok, %{options: nil}} =
+               Authorizations.update_authorization(Scope.global(), auth, %{options: nil},
+                 role: "admin"
+               )
+    end
+  end
+
   describe "bulk grant" do
     test "an operator's bulk grant with a permissive option creates nothing" do
       user = user_fixture()

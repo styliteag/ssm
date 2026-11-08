@@ -121,6 +121,35 @@ defmodule Ssm.Diffs.RevocationSyncTest do
     assert Jason.decode!(entry.meta)["mode"] == "removal_only"
   end
 
+  test "restricted options replace the host's weaker line of that key", ctx do
+    row = authorization_fixture(ctx.bob, ctx.host, %{login: "deploy"})
+
+    stub_host(
+      ctx.host.id,
+      ~s(ssh-ed25519 BOB bob@laptop\npty,no-pty ssh-ed25519 BOBNEW new\nssh-ed25519 OTHER x\n)
+    )
+
+    {:ok, _} = Authorizations.update_authorization(row, %{options: ~s(no-pty,from="10.0.0.0/8")})
+
+    assert [{_cmd, content}] = writes(ctx.host.id)
+    lines = String.split(content, "\n", trim: true)
+    assert [bob, bobnew] = lines
+    assert bob =~ ~r/\Ano-pty,from="10.0.0.0\/8" ssh-ed25519 BOB( |\z)/
+    assert bobnew =~ ~r/\Ano-pty,from="10.0.0.0\/8" ssh-ed25519 BOBNEW( |\z)/
+    refute Revocations.pending?(ctx.host.id)
+  end
+
+  test "a host line at least as restricted as the database is kept verbatim", ctx do
+    row = authorization_fixture(ctx.bob, ctx.host, %{login: "deploy"})
+    host_line = ~s(no-pty,from="10.0.0.0/8",no-agent-forwarding ssh-ed25519 BOB bob@laptop)
+    stub_host(ctx.host.id, host_line <> "\nssh-ed25519 OTHER x\n")
+
+    {:ok, _} = Authorizations.update_authorization(row, %{options: ~s(no-pty,from="10.0.0.0/8")})
+
+    assert [{_cmd, content}] = writes(ctx.host.id)
+    assert content == host_line <> "\n"
+  end
+
   test "nothing to remove: no write, the mark clears", ctx do
     grant = grant!(ctx, ctx.alice)
     stub_host(ctx.host.id, "")

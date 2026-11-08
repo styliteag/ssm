@@ -25,6 +25,7 @@ defmodule Ssm.Diffs do
   replace each other's grants in their one file on every sync.
   """
 
+  alias Ssm.Authorizations.Options
   alias Ssm.Diffs.{Compare, Expected, KeyLine}
   alias Ssm.Hosts
   alias Ssm.Hosts.{Host, MachineId}
@@ -307,13 +308,28 @@ defmodule Ssm.Diffs do
   end
 
   # removal-only: the host's own lines whose key is still authorized, in the
-  # host's order and wording; :unchanged when no line goes
+  # host's order and wording — except a line whose options grant more than
+  # the database's (a restriction missing, a permissive option extra): it
+  # becomes the database's line. :unchanged when no line goes or changes.
   defp lines_for(:full, lines, _on_host), do: lines
 
   defp lines_for(:removal_only, lines, on_host) do
-    keep = MapSet.new(lines, &KeyParser.identity/1)
-    kept = Enum.filter(on_host, &MapSet.member?(keep, KeyParser.identity(&1)))
-    if length(kept) == length(on_host), do: :unchanged, else: kept
+    by_key = Map.new(lines, &{KeyParser.identity(&1), &1})
+
+    kept =
+      for line <- on_host,
+          Map.has_key?(by_key, KeyParser.identity(line)),
+          do: tightened(line, Map.fetch!(by_key, KeyParser.identity(line)))
+
+    if kept == on_host, do: :unchanged, else: kept
+  end
+
+  defp tightened(host_line, db_line) do
+    db_options = KeyParser.options(db_line)
+
+    if db_options != "" and Options.weaker?(KeyParser.options(host_line), db_options),
+      do: db_line,
+      else: host_line
   end
 
   defp write_login(lines, login, rest, client, target, ctx, acc, expected) do

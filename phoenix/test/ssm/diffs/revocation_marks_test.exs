@@ -62,6 +62,9 @@ defmodule Ssm.Diffs.RevocationMarksTest do
     {"manual authorization moved to another host (web, scoped)", [:h1], [:h2, :hg]},
     {"manual authorization moved to another login", [:h1], [:h2, :hg]},
     {"manual authorization moved to another SSH user", [:h1], [:h2, :hg]},
+    {"manual authorization options restricted", [:h1], [:h2, :hg]},
+    {"manual authorization restriction value changed", [:h1], [:h2, :hg]},
+    {"manual authorization permissive option removed", [:h1], [:h2, :hg]},
     {"SSH user disabled", [:h1, :hg], [:h2]},
     {"SSH user disabled (web, scoped)", [:h1, :hg], [:h2]},
     {"SSH user deleted", [:h1, :hg], [:h2]},
@@ -100,6 +103,11 @@ defmodule Ssm.Diffs.RevocationMarksTest do
     {:ok, _} = Users.update_user(ctx.bob, %{enabled: false})
     Repo.delete_all(PendingRevocation)
     {:ok, _} = Users.update_user(ctx.bob, %{enabled: true})
+    # options that only widen access (a restriction dropped) remove nothing
+    {:ok, auth} = Authorizations.update_authorization(ctx.manual, %{options: "no-pty"})
+    Repo.delete_all(PendingRevocation)
+    {:ok, auth} = Authorizations.update_authorization(auth, %{options: "agent-forwarding"})
+    {:ok, _} = Authorizations.update_authorization(auth, %{options: ~s(agent-forwarding,pty)})
 
     assert Revocations.pending(Scope.global()) == %{}
   end
@@ -122,6 +130,25 @@ defmodule Ssm.Diffs.RevocationMarksTest do
 
   defp run("manual authorization moved to another SSH user", ctx),
     do: {:ok, _} = Authorizations.update_authorization(ctx.manual, %{user_id: ctx.bob.id})
+
+  defp run("manual authorization options restricted", ctx),
+    do: {:ok, _} = Authorizations.update_authorization(ctx.manual, %{options: "no-pty"})
+
+  defp run("manual authorization restriction value changed", ctx) do
+    {:ok, auth} =
+      Authorizations.update_authorization(ctx.manual, %{options: ~s(from="10.0.0.0/8")})
+
+    Repo.delete_all(PendingRevocation)
+    {:ok, _} = Authorizations.update_authorization(auth, %{options: ~s(from="10.0.0.1")})
+  end
+
+  defp run("manual authorization permissive option removed", ctx) do
+    {:ok, auth} =
+      Authorizations.update_authorization(ctx.manual, %{options: "agent-forwarding,no-pty"})
+
+    Repo.delete_all(PendingRevocation)
+    {:ok, _} = Authorizations.update_authorization(auth, %{options: "no-pty"})
+  end
 
   defp run("SSH user disabled", ctx),
     do: {:ok, _} = Users.update_user(ctx.alice, %{enabled: false})

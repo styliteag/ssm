@@ -65,7 +65,8 @@ machines") until a fully successful sync clears exactly the mark it read at its 
 removal-only sync (`Ssm.Diffs.RevocationSync`, `Diffs.removal_sync_reported/2`): marks made in a
 transaction are collected per process and started by the outermost `Ssm.Grants.transaction/1` after
 commit (dropped on rollback), async under `Ssm.Diffs.TaskSupervisor`, under `Ssm.Hosts.WriteLock`;
-it keeps the host's own lines whose key is still authorized, never adds, skips logins without a file
+it keeps the host's own lines whose key is still authorized (a line whose options are
+`Options.weaker?/2` than the DB's non-empty options becomes the DB line), never adds, skips logins without a file
 and unread (linked) files, honours disabled/readonly/unsafe/own-key; audited as `ssm (revocation
 sync)`, action `sync_revocation|sync_revocation_partial|sync_revocation_failed` (a manual sync stays
 `sync|sync_partial|sync_failed`), `mode: removal_only`. Tests: `config :ssm, :revocation_sync_runner, :inline`. Every outer
@@ -131,8 +132,9 @@ the old host), every reconcile that removes grant rows (grant delete, host leave
 customer merge/delete, group delete, user delete/merge, offboarding), SSH user disabled or deleted
 (also bulk delete and merge sources: every host of the user), split (the user's grant hosts — grant
 rows are not copied), key deleted, moved or re-keyed (the old owner's hosts), `People.remove_authorizations/3`
-and `People.delete_keys/1`. An options-only change of a row is not marked (a removal-only sync could
-not apply it; a full sync does). `test/ssm/diffs/revocation_marks_test.exs` has one row per
+and `People.delete_keys/1`, and a row whose new options grant less (`Options.weaker?(old, new)`: a
+restriction entry added or changed, a permissive option removed). An options change that only widens
+is not marked. `test/ssm/diffs/revocation_marks_test.exs` has one row per
 access-reducing operation — a new one adds its row.
 
 **Web login** (ADR-0011, `lib/ssm/oidc/`, `ssm_web/oidc_controller.ex`): `.htpasswd`
@@ -182,7 +184,9 @@ does. Bulk grant intersects client-sent host ids with the scope. Permissive auth
 `pty`, `port-forwarding`, `agent-forwarding`, `X11-forwarding`, `tunnel`, `no-touch-required`) are
 admin-only on the scoped write paths: `create_/update_authorization` and `bulk_grant` take
 `role:` in `opts` (`Options.validate_role/2`, fails closed without a role; a comment-only edit of
-an admin's grant passes, moving it does not); the scope-less `/api/v2` path is unchanged.
+an admin's grant passes, moving it does not; removing or changing a restriction entry the stored row
+carries — `Options.missing_restrictions/2`, name and exact value — is admin-only too); the scope-less
+`/api/v2` path is unchanged.
 Activity entries of a host carry `activity_log.host_id` (cleared by `Hosts.delete_host/1`, SQLite
 reuses ids); a scoped user sees those of hosts in scope plus its own hostless ones. SSH user catalog: every web user
 reads all SSH users and keys; a scoped user changes a user, its keys, split/merge/bulk delete and

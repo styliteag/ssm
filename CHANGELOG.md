@@ -38,8 +38,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `SSM_REVOCATION_SYNC=on` (default `off`) starts a removal-only sync right
   after every change that removes access (grant deleted, host moved out of a
   customer or group, authorization deleted, SSH user deleted, person
-  offboarded). It only removes key lines the database no longer authorizes:
-  it never adds or changes a line, writes only logins that have a file, and
+  offboarded, an authorization's options restricted). It only removes key
+  lines the database no longer authorizes and tightens a line whose options
+  grant more than the database's: it never adds a line, writes only logins
+  that have a file, and
   skips disabled hosts, readonly markers, unsafe `~/.ssh` and linked
   `authorized_keys` files like a normal sync. It clears "revocation pending"
   only when it succeeds completely, and each run is in the activity log as
@@ -109,8 +111,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   hosts of its grants), a key deleted, moved to another SSH user or given new key
   material, and the authorizations and shared keys removed when a person is offboarded
   through Mission Control. With `SSM_REVOCATION_SYNC=on` each of them also starts the
-  removal-only sync. Changing only the options of an authorization is not marked; a
-  normal sync applies it.
+  removal-only sync.
+- Restricting an authorization's options (adding or changing `from`, `command`,
+  `restrict`, `expiry-time`, `no-*` and the like, or removing a permissive option)
+  now marks its host "revocation pending" too, and the removal-only sync applies it:
+  a host line of that key whose options grant more than the database's is replaced
+  by the database's line. Before, the host kept the old, wider options until a
+  manual full sync.
+- SSO operators can no longer widen an existing authorization by deleting its
+  restrictions: removing or changing a restriction already on the row (`restrict`,
+  `no-*`, `from`, `command`, `permitopen`, `permitlisten`, `expiry-time`, `principals`,
+  `verify-required`) is admin-only. Operators may still add restrictions.
 
 - A sync, "Remove key", offboarding through Mission Control and "Forget" of a managed
   login no longer run at the same time on one host: each takes the host's write lock,
