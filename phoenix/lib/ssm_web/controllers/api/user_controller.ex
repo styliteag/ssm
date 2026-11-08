@@ -5,6 +5,7 @@ defmodule SsmWeb.Api.UserController do
 
   import Ecto.Query
 
+  alias Ssm.Activity.Entries
   alias Ssm.ControlChars
   alias Ssm.Repo
   alias Ssm.Users
@@ -12,6 +13,9 @@ defmodule SsmWeb.Api.UserController do
   alias SsmWeb.Api.Errors
   alias SsmWeb.Api.Envelope
   alias SsmWeb.Api.Params
+
+  # every successful write is audited (Ssm.Activity.Entries), actor = token subject
+  @audit %{via: "api"}
 
   @create_spec [
     username: [
@@ -49,8 +53,12 @@ defmodule SsmWeb.Api.UserController do
   def create(conn, params) do
     with {:ok, attrs} <- Params.validate(params, @create_spec) do
       case Users.create_user(attrs) do
-        {:ok, user} -> Envelope.ok(conn, user_json(user), status: 201)
-        {:error, changeset} -> Errors.changeset(conn, changeset, "user")
+        {:ok, user} ->
+          Entries.user(:create, user, conn.assigns.api_user, @audit)
+          Envelope.ok(conn, user_json(user), status: 201)
+
+        {:error, changeset} ->
+          Errors.changeset(conn, changeset, "user")
       end
     else
       {:error, errors} -> Envelope.validation_failed(conn, errors)
@@ -62,8 +70,12 @@ defmodule SsmWeb.Api.UserController do
          %User{} = user <- Users.get_user(id),
          {:ok, attrs} <- Params.validate_partial(params, @update_spec) do
       case Users.update_user(user, attrs) do
-        {:ok, updated} -> Envelope.ok(conn, user_json(updated))
-        {:error, changeset} -> Errors.changeset(conn, changeset, "user")
+        {:ok, updated} ->
+          Entries.user(:update, updated, conn.assigns.api_user, @audit)
+          Envelope.ok(conn, user_json(updated))
+
+        {:error, changeset} ->
+          Errors.changeset(conn, changeset, "user")
       end
     else
       nil -> Errors.user_not_found(conn)
@@ -75,6 +87,7 @@ defmodule SsmWeb.Api.UserController do
     with {:ok, id} <- Errors.path_id(raw),
          %User{} = user <- Users.get_user(id),
          {:ok, _} <- Users.delete_user(user) do
+      Entries.user(:delete, user, conn.assigns.api_user, @audit)
       Envelope.ok(conn, %{deleted_id: user.id})
     else
       nil -> Errors.user_not_found(conn)

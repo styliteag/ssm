@@ -8,7 +8,7 @@ defmodule SsmWeb.KeysLive do
 
   use SsmWeb, :live_view
 
-  alias Ssm.Activity
+  alias Ssm.Activity.Entries
   alias Ssm.Authorizations
   alias Ssm.Diffs
   alias Ssm.Users
@@ -204,7 +204,7 @@ defmodule SsmWeb.KeysLive do
   def handle_event("delete", %{"id" => id}, socket) do
     with %UserKey{} = key <- Users.get_key(String.to_integer(id)),
          {:ok, _} <- Users.delete_key(scope(socket), key) do
-      log_key_activity(socket, "delete", key)
+      log_key_activity(socket, :delete, key)
 
       {:noreply,
        socket
@@ -250,7 +250,7 @@ defmodule SsmWeb.KeysLive do
 
     with {:ok, _} <- parsed,
          {:ok, key} <- Users.create_key(scope(socket), attrs, role_opts(socket)) do
-      log_key_activity(socket, "create", key)
+      log_key_activity(socket, :create, key)
 
       {:noreply,
        socket
@@ -278,7 +278,7 @@ defmodule SsmWeb.KeysLive do
   defp save_edit(socket, key, params) do
     case Users.update_key(scope(socket), key, params, role_opts(socket)) do
       {:ok, updated} ->
-        log_key_activity(socket, "update", updated)
+        log_key_activity(socket, :update, updated)
 
         {:noreply,
          socket
@@ -354,7 +354,7 @@ defmodule SsmWeb.KeysLive do
              },
              role_opts(socket)
            ) do
-      log_key_activity(socket, "import", key)
+      log_key_activity(socket, :import, key)
       %{line: n, status: :ok, message: "imported"}
     else
       {:error, %Ecto.Changeset{} = changeset} ->
@@ -468,24 +468,15 @@ defmodule SsmWeb.KeysLive do
 
   ## Helpers
 
-  defp key_label(%UserKey{name: name}) when is_binary(name) and name != "", do: name
-  defp key_label(%UserKey{key_type: type}), do: type
+  defp key_label(key), do: Entries.key_label(key)
 
   defp full_key_line(key), do: Diffs.format_key_line(key.key_type, key.key_base64, key.name)
 
   defp truncate_key(base64) when byte_size(base64) <= 32, do: base64
   defp truncate_key(base64), do: String.slice(base64, 0, 32) <> "…"
 
-  defp log_key_activity(socket, action, key) do
-    Activity.log(%{
-      activity_type: "key",
-      action: action,
-      target: key_label(key),
-      actor_username: socket.assigns.current_user.actor,
-      user_id: key.user_id,
-      details: %{key_type: key.key_type}
-    })
-  end
+  defp log_key_activity(socket, action, key),
+    do: Entries.key(action, key, socket.assigns.current_user.actor)
 
   defp key_type_badge_class("ssh-ed25519"), do: "badge-success"
   defp key_type_badge_class("ssh-rsa"), do: "badge-info"

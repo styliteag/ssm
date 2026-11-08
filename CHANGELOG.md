@@ -110,6 +110,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- `/api/v2` writes are now in the activity log: every successful create, update
+  or delete of a host, SSH user, key or authorization records one entry with the
+  API user as actor and `via: api` in its details, like the same change made in
+  the web UI. Before, only API syncs were recorded.
 - "Revocation pending" now covers every change that takes SSH access away, not only
   grants and deleted authorizations: an authorization moved to another host, login or
   SSH user (the old host), an SSH user disabled, deleted, merged away or split (the

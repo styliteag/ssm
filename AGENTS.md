@@ -143,6 +143,13 @@ LiveView — closing the page mid-sync still finishes and audits), frees each ho
 is written and the rest when the run ends or crashes; the caller only waits for the reply.
 `DiffLive` keeps `syncing` as a page flag and refuses a second start server-side. The `/api/v2`
 sync still runs in the request (`DiffController`), serialized only by the write lock.
+*Audit actions* are owned by `Ssm.Activity.Actions` (catalog atom → stored string; stored
+strings never change — `test/ssm/activity/actions_test.exs` snapshots them and fails on an
+uncataloged `action: "…"` literal in `lib/`) and `Ssm.Activity.Entries` (the host/user/key/
+authorization write entries, shared by the hosts/users/keys/authorizations pages and `/api/v2`).
+Every successful `/api/v2` host, user, key and authorization create/update/delete logs exactly one
+entry there, actor = token subject, details `via: "api"` (logged in the controllers; the context
+functions take no actor).
 
 **Web login** (ADR-0011, `lib/ssm/oidc/`, `ssm_web/oidc_controller.ex`): `.htpasswd`
 users are local admins (session `ssm_user`). With `OIDC_ISSUER` set, SSO users are

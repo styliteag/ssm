@@ -28,6 +28,7 @@ defmodule SsmWeb.DiffLive do
   use SsmWeb, :live_view
 
   alias Ssm.Activity
+  alias Ssm.Activity.Actions
   alias Ssm.Authorizations
   alias Ssm.Diffs
   alias Ssm.Diffs.HostCheck
@@ -700,7 +701,7 @@ defmodule SsmWeb.DiffLive do
   defp log_allow(socket, user, host, login) do
     Activity.log(%{
       activity_type: "auth",
-      action: "create",
+      action: Actions.name(:create),
       target: "#{user.username}@#{host.name}:#{login}",
       host_id: host.id,
       actor_username: socket.assigns.current_user.actor,
@@ -711,7 +712,7 @@ defmodule SsmWeb.DiffLive do
   defp log_user_create(socket, user) do
     Activity.log(%{
       activity_type: "user",
-      action: "create",
+      action: Actions.name(:create),
       target: user.username,
       actor_username: socket.assigns.current_user.actor,
       user_id: user.id,
@@ -722,7 +723,7 @@ defmodule SsmWeb.DiffLive do
   defp log_key_assign(socket, user, key) do
     Activity.log(%{
       activity_type: "key",
-      action: "create",
+      action: Actions.name(:create),
       target: key.name || key.key_type,
       actor_username: socket.assigns.current_user.actor,
       user_id: user.id,

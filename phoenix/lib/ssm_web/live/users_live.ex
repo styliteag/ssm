@@ -14,6 +14,7 @@ defmodule SsmWeb.UsersLive do
   use SsmWeb, :live_view
 
   alias Ssm.Activity
+  alias Ssm.Activity.{Actions, Entries}
   alias Ssm.Users
   alias Ssm.Users.BulkOps
   alias Ssm.Users.User
@@ -112,7 +113,7 @@ defmodule SsmWeb.UsersLive do
 
     case result do
       {:ok, user} ->
-        action = if socket.assigns.editing, do: "update", else: "create"
+        action = if socket.assigns.editing, do: :update, else: :create
         log_user_activity(socket, action, user)
 
         {:noreply,
@@ -132,7 +133,7 @@ defmodule SsmWeb.UsersLive do
   def handle_event("delete", %{"id" => id}, socket) do
     with %User{} = user <- Users.get_user(String.to_integer(id)),
          {:ok, _} <- Users.delete_user(scope(socket), user) do
-      log_user_activity(socket, "delete", user)
+      log_user_activity(socket, :delete, user)
 
       {:noreply,
        socket
@@ -147,7 +148,7 @@ defmodule SsmWeb.UsersLive do
   def handle_event("toggle_enabled", %{"id" => id}, socket) do
     with %User{} = user <- Users.get_user(String.to_integer(id)),
          {:ok, updated} <- Users.update_user(scope(socket), user, %{enabled: !user.enabled}) do
-      action = if updated.enabled, do: "enable", else: "disable"
+      action = if updated.enabled, do: :enable, else: :disable
       log_user_activity(socket, action, updated)
 
       {:noreply,
@@ -328,7 +329,7 @@ defmodule SsmWeb.UsersLive do
       |> Enum.map(& &1.user)
       |> then(&BulkOps.bulk_delete(scope(socket), &1))
 
-    Enum.each(result.deleted, &log_user_activity(socket, "delete", &1))
+    Enum.each(result.deleted, &log_user_activity(socket, :delete, &1))
 
     socket =
       socket
@@ -427,7 +428,7 @@ defmodule SsmWeb.UsersLive do
   defp log_split(socket, user, result) do
     Activity.log(%{
       activity_type: "user",
-      action: "split",
+      action: Actions.name(:split),
       target: result.new_user.username,
       actor_username: socket.assigns.current_user.actor,
       user_id: result.new_user.id,
@@ -442,7 +443,7 @@ defmodule SsmWeb.UsersLive do
   defp log_merge(socket, result) do
     Activity.log(%{
       activity_type: "user",
-      action: "merge",
+      action: Actions.name(:merge),
       target: result.target.username,
       actor_username: socket.assigns.current_user.actor,
       user_id: result.target.id,
@@ -455,25 +456,9 @@ defmodule SsmWeb.UsersLive do
     })
   end
 
-  # "delete" must not reference the just-removed row (FK on activity_log.user_id).
-  defp log_user_activity(socket, "delete" = action, user) do
-    Activity.log(%{
-      activity_type: "user",
-      action: action,
-      target: user.username,
-      actor_username: socket.assigns.current_user.actor
-    })
-  end
-
-  defp log_user_activity(socket, action, user) do
-    Activity.log(%{
-      activity_type: "user",
-      action: action,
-      target: user.username,
-      actor_username: socket.assigns.current_user.actor,
-      user_id: user.id
-    })
-  end
+  # :delete does not reference the just-removed row (Ssm.Activity.Entries.user/4).
+  defp log_user_activity(socket, action, user),
+    do: Entries.user(action, user, socket.assigns.current_user.actor)
 
   ## Render
 

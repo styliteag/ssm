@@ -24,7 +24,7 @@ defmodule SsmWeb.HostsLive do
 
   use SsmWeb, :live_view
 
-  alias Ssm.Activity
+  alias Ssm.Activity.Entries
   alias Ssm.Authorizations
   alias Ssm.Diffs.HostChecks
   alias Ssm.Diffs.StatusCache
@@ -211,7 +211,7 @@ defmodule SsmWeb.HostsLive do
 
     case result do
       {:ok, host} ->
-        action = if socket.assigns.editing, do: "update", else: "create"
+        action = if socket.assigns.editing, do: :update, else: :create
         log_host_activity(socket, action, host)
 
         {:noreply,
@@ -232,7 +232,7 @@ defmodule SsmWeb.HostsLive do
   def handle_event("delete", %{"id" => id}, socket) do
     with %Host{} = host <- Hosts.get_host(scope(socket), parse_id(id)),
          {:ok, _} <- Hosts.delete_host(scope(socket), host) do
-      log_host_activity(socket, "delete", host)
+      log_host_activity(socket, :delete, host)
       StatusCache.delete(host.id)
 
       {:noreply,
@@ -259,7 +259,7 @@ defmodule SsmWeb.HostsLive do
   def handle_event("toggle_disabled", %{"id" => id}, socket) do
     with %Host{} = host <- Hosts.get_host(scope(socket), parse_id(id)),
          {:ok, updated} <- Hosts.update_host(scope(socket), host, %{disabled: !host.disabled}) do
-      action = if updated.disabled, do: "disable", else: "enable"
+      action = if updated.disabled, do: :disable, else: :enable
       log_host_activity(socket, action, updated)
 
       {:noreply,
@@ -605,16 +605,8 @@ defmodule SsmWeb.HostsLive do
   defp host_error({:jump_host_in_use, names}),
     do: "Cannot delete this host: it is the jump host of #{Enum.join(names, ", ")}."
 
-  defp log_host_activity(socket, action, host) do
-    Activity.log(%{
-      activity_type: "host",
-      action: action,
-      target: host.name,
-      host_id: host.id,
-      actor_username: socket.assigns.current_user.actor,
-      details: %{address: host.address, port: host.port}
-    })
-  end
+  defp log_host_activity(socket, action, host),
+    do: Entries.host(action, host, socket.assigns.current_user.actor)
 
   defp status_label(:online), do: "online"
   defp status_label({:offline, _message}), do: "offline"

@@ -9,6 +9,7 @@ defmodule SsmWeb.Api.AuthorizationController do
 
   import Ecto.Query
 
+  alias Ssm.Activity.Entries
   alias Ssm.Authorizations
   alias Ssm.Authorizations.{Authorization, Options}
   alias Ssm.ControlChars
@@ -18,6 +19,9 @@ defmodule SsmWeb.Api.AuthorizationController do
   alias SsmWeb.Api.Errors
   alias SsmWeb.Api.Envelope
   alias SsmWeb.Api.Params
+
+  # every successful write is audited (Ssm.Activity.Entries), actor = token subject
+  @audit %{via: "api"}
 
   @create_spec [
     host_id: [type: :integer, required: true],
@@ -81,8 +85,12 @@ defmodule SsmWeb.Api.AuthorizationController do
          :ok <- ensure_host_exists(attrs.host_id),
          :ok <- ensure_user_exists(attrs.user_id) do
       case Authorizations.create_authorization(attrs) do
-        {:ok, auth} -> Envelope.ok(conn, auth_json(auth), status: 201)
-        {:error, changeset} -> Errors.changeset(conn, changeset, "authorization")
+        {:ok, auth} ->
+          Entries.authorization(:create, auth, conn.assigns.api_user, @audit)
+          Envelope.ok(conn, auth_json(auth), status: 201)
+
+        {:error, changeset} ->
+          Errors.changeset(conn, changeset, "authorization")
       end
     else
       {:error, :host_not_found} -> Errors.host_not_found(conn)
@@ -96,9 +104,15 @@ defmodule SsmWeb.Api.AuthorizationController do
          %Authorization{} = auth <- Authorizations.get_authorization(id),
          {:ok, attrs} <- Params.validate_partial(params, @update_spec) do
       case Authorizations.update_authorization(auth, attrs) do
-        {:ok, updated} -> Envelope.ok(conn, auth_json(updated))
-        {:error, :grant_row} -> Errors.grant_row(conn)
-        {:error, changeset} -> Errors.changeset(conn, changeset, "authorization")
+        {:ok, updated} ->
+          Entries.authorization(:update, updated, conn.assigns.api_user, @audit)
+          Envelope.ok(conn, auth_json(updated))
+
+        {:error, :grant_row} ->
+          Errors.grant_row(conn)
+
+        {:error, changeset} ->
+          Errors.changeset(conn, changeset, "authorization")
       end
     else
       nil -> Errors.authorization_not_found(conn)
@@ -110,6 +124,7 @@ defmodule SsmWeb.Api.AuthorizationController do
     with {:ok, id} <- Errors.path_id(raw),
          %Authorization{} = auth <- Authorizations.get_authorization(id),
          {:ok, _} <- Authorizations.delete_authorization(auth) do
+      Entries.authorization(:delete, auth, conn.assigns.api_user, @audit)
       Envelope.ok(conn, %{deleted_id: auth.id})
     else
       nil -> Errors.authorization_not_found(conn)

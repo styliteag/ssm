@@ -16,6 +16,7 @@ defmodule SsmWeb.AuthorizationsLive do
   use SsmWeb, :live_view
 
   alias Ssm.Activity
+  alias Ssm.Activity.{Actions, Entries}
   alias Ssm.Authorizations
   alias Ssm.Authorizations.Authorization
   alias Ssm.Grants
@@ -265,7 +266,7 @@ defmodule SsmWeb.AuthorizationsLive do
 
     case result do
       {:ok, auth} ->
-        action = if socket.assigns.editing, do: "update", else: "create"
+        action = if socket.assigns.editing, do: :update, else: :create
         log_auth_activity(socket, action, auth)
 
         {:noreply,
@@ -286,7 +287,7 @@ defmodule SsmWeb.AuthorizationsLive do
     with %Authorization{} = auth <-
            Authorizations.get_authorization(scope(socket), String.to_integer(id)),
          {:ok, _} <- Authorizations.delete_authorization(scope(socket), auth) do
-      log_auth_activity(socket, "delete", auth)
+      log_auth_activity(socket, :delete, auth)
 
       {:noreply,
        socket
@@ -427,7 +428,7 @@ defmodule SsmWeb.AuthorizationsLive do
 
     case Authorizations.create_authorization(scope(socket), attrs) do
       {:ok, auth} ->
-        log_auth_activity(socket, "create", auth)
+        log_auth_activity(socket, :create, auth)
         {:noreply, reload_authorizations(socket)}
 
       {:error, _changeset} ->
@@ -438,7 +439,7 @@ defmodule SsmWeb.AuthorizationsLive do
   defp revoke_cell(socket, auth) do
     case Authorizations.delete_authorization(scope(socket), auth) do
       {:ok, _} ->
-        log_auth_activity(socket, "delete", auth)
+        log_auth_activity(socket, :delete, auth)
         {:noreply, reload_authorizations(socket)}
 
       {:error, :grant_row} ->
@@ -544,7 +545,7 @@ defmodule SsmWeb.AuthorizationsLive do
   defp log_bulk_grant(socket, login, user_ids, host_ids, created, skipped) do
     Activity.log(%{
       activity_type: "auth",
-      action: "bulk_grant",
+      action: Actions.name(:bulk_grant),
       target: "#{login} (#{length(created)} grants)",
       actor_username: socket.assigns.current_user.actor,
       details: %{
@@ -570,22 +571,8 @@ defmodule SsmWeb.AuthorizationsLive do
   defp host_label(%{host: %{name: name}}), do: name
   defp host_label(auth), do: "missing host ##{auth.host_id}"
 
-  defp log_auth_activity(socket, action, auth) do
-    auth = Ssm.Repo.preload(auth, [:user, :host])
-    target = "#{user_label(auth)}@#{host_label(auth)}:#{auth.login}"
-
-    attrs = %{
-      activity_type: "auth",
-      action: action,
-      target: target,
-      host_id: auth.host_id,
-      actor_username: socket.assigns.current_user.actor
-    }
-
-    attrs = if action == "delete", do: attrs, else: Map.put(attrs, :user_id, auth.user_id)
-
-    Activity.log(attrs)
-  end
+  defp log_auth_activity(socket, action, auth),
+    do: Entries.authorization(action, auth, socket.assigns.current_user.actor)
 
   ## Render
 
