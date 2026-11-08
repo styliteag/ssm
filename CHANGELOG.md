@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The host-key icon on the hosts page shows three states with a tooltip each:
+  no key pinned (open lock: ssm refuses to connect), a fingerprint set but not
+  yet confirmed by a connection (faded), and a key pinned and confirmed.
+
 ### Fixed
 
 - The hosts page status badge no longer says "unknown" after a restart while

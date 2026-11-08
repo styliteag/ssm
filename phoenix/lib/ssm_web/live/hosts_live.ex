@@ -29,6 +29,7 @@ defmodule SsmWeb.HostsLive do
   alias Ssm.Hosts
   alias Ssm.HostStatus
   alias Ssm.Hosts.Host
+  alias Ssm.Hosts.PinState
   alias Ssm.Scope
   alias SsmWeb.Layouts
 
@@ -560,6 +561,30 @@ defmodule SsmWeb.HostsLive do
   defp status_title({:unreachable, message}), do: message
   defp status_title(_reachable), do: "Reachable (last key check or connection test)"
 
+  # Host-key pin: unpinned / pre-seeded (not confirmed) / confirmed.
+  attr :host, Host, required: true
+
+  defp pin_icon(assigns) do
+    assigns = assign(assigns, :state, PinState.of(assigns.host))
+
+    ~H"""
+    <span
+      data-pin-state={@state}
+      data-pinned={@state != :unpinned}
+      title={PinState.title(@host)}
+    >
+      <.icon name={pin_icon_name(@state)} class={["size-3.5", pin_icon_class(@state)]} />
+    </span>
+    """
+  end
+
+  defp pin_icon_name(:unpinned), do: "hero-lock-open"
+  defp pin_icon_name(_pinned), do: "hero-finger-print"
+
+  defp pin_icon_class(:unpinned), do: "text-warning"
+  defp pin_icon_class(:preseeded), do: "opacity-30"
+  defp pin_icon_class(:confirmed), do: "opacity-60"
+
   # Non-root login: reduced functionality, explained in the tooltip.
   attr :host, Host, required: true
 
@@ -707,13 +732,7 @@ defmodule SsmWeb.HostsLive do
         >
           <:col :let={host} label="Name" sort="name">
             <span class="font-medium">{host.name}</span>
-            <span
-              :if={Ssm.Ssh.HostKey.pinned?(host.key_fingerprint)}
-              data-pinned
-              title={"Host key pinned: #{host.key_fingerprint}"}
-            >
-              <.icon name="hero-finger-print" class="size-3.5 opacity-60" />
-            </span>
+            <.pin_icon host={host} />
             <p :if={host.comment} class="text-xs opacity-60">{host.comment}</p>
           </:col>
           <:col :let={host} label="Address" sort="address">{host.address}:{host.port}</:col>

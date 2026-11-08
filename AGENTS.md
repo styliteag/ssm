@@ -131,6 +131,9 @@ through `Ssm.Ssh.ErrorCode` codes. HostsLive and DiffLive render this value (Dif
 transient `:loading`); do not add another status shape in a LiveView. Status is dropped at the
 context level: `Hosts.delete_host/1` (every delete path, jump cascade included) evicts cache
 entries, `Hosts.update_host/2` calls `HostChecks.forget/1` (row + cache) when `disabled` changes.
+The host-key pin is `Ssm.Hosts.PinState.of/1` (pure, read-only): `:unpinned` (no fingerprint),
+`:preseeded` (fingerprint, no `host_key` yet), `:confirmed` (both, from a probe); only
+`Ssm.Hosts.HostKeys` moves it.
 
 **mctl API** (`/api/mctl/v1`): `MctlContract.Plug` from the path dependency
 `mctl_contract` with `SsmWeb.MctlProvider`; own `ssm_` bearer tokens, own envelope.

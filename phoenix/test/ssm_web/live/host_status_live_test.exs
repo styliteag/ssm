@@ -100,4 +100,26 @@ defmodule SsmWeb.HostStatusLiveTest do
       assert has_element?(view, "#diff-row-#{rekeyed.id} .badge", "host key changed")
     end
   end
+
+  describe "host key pin icon" do
+    test "shows unpinned, pre-seeded and confirmed apart", %{conn: conn} do
+      fp = "ssh-ed25519 SHA256:fL66gvwaZdYDdKSZ3NwHakAvwnspoc1Lj5IAqcb4+4Q"
+      none = host_fixture(%{name: "none"})
+      seeded = host_fixture(%{name: "seeded", key_fingerprint: fp})
+
+      confirmed =
+        host_fixture(%{name: "confirmed"})
+        |> Ecto.Changeset.change(key_fingerprint: fp, host_key: "ssh-ed25519 AAAAKEY")
+        |> Repo.update!()
+
+      {:ok, view, _html} = live(conn, ~p"/hosts")
+
+      assert has_element?(view, "#hosts-#{none.id} [data-pin-state=unpinned]")
+      assert has_element?(view, "#hosts-#{seeded.id} [data-pin-state=preseeded]")
+      assert has_element?(view, "#hosts-#{confirmed.id} [data-pin-state=confirmed]")
+
+      assert view |> element("#hosts-#{seeded.id} [data-pin-state]") |> render() =~
+               "not confirmed"
+    end
+  end
 end
