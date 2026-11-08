@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.9.2] - 2026-11-08
+
 ### Added
 
 - Hosts page: "Refresh all (N)" tests the SSH connection of every enabled
