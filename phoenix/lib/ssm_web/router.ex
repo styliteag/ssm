@@ -48,6 +48,8 @@ defmodule SsmWeb.Router do
       get "/hosts/:id", HostController, :show
       patch "/hosts/:id", HostController, :update
       delete "/hosts/:id", HostController, :delete
+      get "/hosts/:id/managed-logins", ManagedLoginController, :index
+      delete "/hosts/:id/managed-logins/:login", ManagedLoginController, :delete
 
       get "/users", UserController, :index
       post "/users", UserController, :create

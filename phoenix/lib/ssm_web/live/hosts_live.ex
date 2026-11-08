@@ -16,6 +16,10 @@ defmodule SsmWeb.HostsLive do
   each result lands in its row as it arrives. A connection test is not a
   key check, so it is not written to `host_checks`; the row shows "checked
   … ago" from the stored key check, or "checked just now" after a test.
+
+  Admins open a host's "Managed logins" (`Ssm.Hosts.ManagedLogins`) and
+  forget a login without authorizations and without a file on the host;
+  the role is checked in every event, not only by hiding the button.
   """
 
   use SsmWeb, :live_view
@@ -26,6 +30,7 @@ defmodule SsmWeb.HostsLive do
   alias Ssm.Diffs.StatusCache
   alias Ssm.Hosts
   alias Ssm.Hosts.Host
+  alias Ssm.Hosts.ManagedLogins
   alias Ssm.Scope
   alias SsmWeb.Layouts
 
@@ -44,6 +49,7 @@ defmodule SsmWeb.HostsLive do
      |> assign(filter: "active", conn_results: %{}, sort: nil, view: "list")
      |> assign(refreshing: false, refresh_done: 0, refresh_total: 0, refresh_ids: [])
      |> assign(:tested_at, %{})
+     |> assign(:managed, nil)
      |> reload_hosts()}
   end
 
@@ -308,6 +314,41 @@ defmodule SsmWeb.HostsLive do
     end
   end
 
+  # Managed logins: admins only, checked here (the button is hidden too).
+  def handle_event("managed-logins", _params, %{assigns: %{admin: false}} = socket),
+    do: {:noreply, put_flash(socket, :error, "Managed logins are for admins only.")}
+
+  def handle_event("managed-logins", %{"id" => id}, socket) do
+    case Hosts.get_host(scope(socket), parse_id(id)) do
+      nil -> {:noreply, put_flash(socket, :error, "Host not found.")}
+      host -> {:noreply, open_managed(socket, host)}
+    end
+  end
+
+  def handle_event("managed-logins-close", _params, socket),
+    do: {:noreply, assign(socket, :managed, nil)}
+
+  def handle_event("forget-login", _params, %{assigns: %{admin: false}} = socket),
+    do: {:noreply, put_flash(socket, :error, "Managed logins are for admins only.")}
+
+  def handle_event("forget-login", %{"host-id" => id, "login" => login}, socket)
+      when is_binary(login) do
+    case Hosts.get_host(scope(socket), parse_id(id)) do
+      nil ->
+        {:noreply, put_flash(socket, :error, "Host not found.")}
+
+      host ->
+        actor = socket.assigns.current_user.actor
+
+        {:noreply,
+         socket
+         |> update(:managed, &(&1 && %{&1 | busy: true}))
+         |> start_async(:forget_login, fn ->
+           {host, login, ManagedLogins.forget(host, login, actor)}
+         end)}
+    end
+  end
+
   # Pins every enabled host, so only for users who see every host.
   def handle_event("pin_host_keys", _params, %{assigns: %{global: false}} = socket),
     do: {:noreply, put_flash(socket, :error, @outside_scope)}
@@ -394,12 +435,41 @@ defmodule SsmWeb.HostsLive do
     end
   end
 
+  def handle_async(:forget_login, {:ok, {host, login, result}}, socket) do
+    socket = update(socket, :managed, &(&1 && %{&1 | busy: false}))
+
+    case result do
+      {:ok, _} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "Forgot login #{login} on #{host.name}.")
+         |> open_managed(host)}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Login #{login} kept: #{forget_error(reason)}")}
+    end
+  end
+
+  def handle_async(:forget_login, {:exit, reason}, socket) do
+    {:noreply,
+     socket
+     |> update(:managed, &(&1 && %{&1 | busy: false}))
+     |> put_flash(:error, "Forget crashed: #{inspect(reason)}")}
+  end
+
   def handle_async(:test_connection, {:exit, reason}, socket) do
     {:noreply,
      socket
      |> assign(:testing_id, nil)
      |> put_flash(:error, "Connection test crashed: #{inspect(reason)}")}
   end
+
+  defp open_managed(socket, host),
+    do: assign(socket, :managed, %{host: host, logins: ManagedLogins.list(host.id), busy: false})
+
+  defp forget_error(:managed_login_not_found), do: "it is not managed (any more)."
+  defp forget_error({_tag, message}) when is_binary(message), do: message
+  defp forget_error(reason), do: inspect(reason)
 
   defp put_conn_result(socket, host_id, result) do
     socket
@@ -692,7 +762,7 @@ defmodule SsmWeb.HostsLive do
           </div>
           <p :if={host.comment} class="mt-1 truncate text-xs opacity-60">{host.comment}</p>
           <div class="mt-2 flex gap-1">
-            <.host_actions host={host} testing_id={@testing_id} />
+            <.host_actions host={host} testing_id={@testing_id} admin={@admin} />
           </div>
         </li>
       </ul>
@@ -744,10 +814,12 @@ defmodule SsmWeb.HostsLive do
             </p>
           </:col>
           <:action :let={host}>
-            <.host_actions host={host} testing_id={@testing_id} />
+            <.host_actions host={host} testing_id={@testing_id} admin={@admin} />
           </:action>
         </.table>
       </div>
+
+      <SsmWeb.ManagedLoginsComponents.managed_logins_modal :if={@managed} managed={@managed} />
 
       <.modal :if={@form} id="host-modal" on_cancel={JS.push("cancel")}>
         <:title>{if @editing, do: "Edit host", else: "New host"}</:title>
@@ -765,9 +837,20 @@ defmodule SsmWeb.HostsLive do
 
   attr :host, :any, required: true
   attr :testing_id, :any, required: true
+  attr :admin, :boolean, default: false
 
   defp host_actions(assigns) do
     ~H"""
+    <button
+      :if={@admin}
+      id={"managed-logins-#{@host.id}"}
+      class="btn btn-ghost btn-xs"
+      phx-click="managed-logins"
+      phx-value-id={@host.id}
+      title="Managed logins (admin)"
+    >
+      <.icon name="hero-user-group" class="size-4" />
+    </button>
     <.link
       id={"diff-link-#{@host.id}"}
       navigate={~p"/diff?host_id=#{@host.id}"}

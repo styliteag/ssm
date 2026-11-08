@@ -44,7 +44,10 @@ contract are plural (contract spec names): `customers`, `groups`, `host_groups`,
 the `mctl_contract` library's `mctl_tokens`, `mctl_jobs`, `mctl_idempotency`, and `host_checks`
 (last result of the periodic key check per host, `ON DELETE CASCADE`), and `managed_logins`
 (every `(host, login)` that ever held a grant; written by `Authorizations.create_authorization/1`,
-never pruned, `ON DELETE CASCADE` — a sync empties such a login's file after its last grant is gone).
+`ON DELETE CASCADE` — a sync empties such a login's file after its last grant is gone; pruned only by
+`Ssm.Hosts.ManagedLogins.forget/4`: admin "Managed logins" on the hosts page or `DELETE
+/api/v2/hosts/{id}/managed-logins/{login}`, only without authorizations and when `script.sh
+has_keyfile` says the host has no file for it, audited `forget_login`).
 Sync and readonly markers (`Ssm.Diffs.sync_host/2`): a host-wide marker (`system_readonly`, vendor
 platform) stops a sync before any write; a login's own `~/.ssh/user_readonly` counts only when root
 owns it (`script.sh` `user_readonly_state`, `find -user 0`) and then skips only that login, the
@@ -346,7 +349,8 @@ within the conventions above, doc fixes.
 
 ## 8. Reference
 
-**API** (all under `/api/v2`, plural resources): `hosts`, `users`, `keys`,
+**API** (all under `/api/v2`, plural resources): `hosts` (+ `/{id}/managed-logins`, `DELETE
+…/{login}`), `users`, `keys`,
 `authorizations`, `activity-log`, `diffs/{host_id}` (+ `/sync`),
 `auth/{login,refresh,logout,me}`, `info`. Unauthenticated health probe at
 `/api/health`. Envelope: `{success, data, error{code,message,details},
@@ -354,7 +358,7 @@ meta{total,page,page_size}}`.
 
 **Error codes** (`ssm_web/api/errors.ex`): `AUTH_REQUIRED` 401, `INVALID_CREDENTIALS`
 401, `VALIDATION_FAILED` 422, `{HOST,USER,KEY,AUTHORIZATION}_NOT_FOUND` 404,
-`RATE_LIMITED` 429 (failed-login lock, `Retry-After`), `HOST_DISABLED` 409, `SSH_READONLY` 409, `CONFLICT` 409, `SSH_CONNECT_FAILED` 502,
+`MANAGED_LOGIN_NOT_FOUND` 404, `RATE_LIMITED` 429 (failed-login lock, `Retry-After`), `HOST_DISABLED` 409, `SSH_READONLY` 409, `CONFLICT` 409, `SSH_CONNECT_FAILED` 502,
 `INTERNAL_ERROR` 500.
 Diff/sync outcomes (wire changes approved 2026-11-08): unreadable listing → 502
 `SSH_CONNECT_FAILED`; partial sync (root-owned `user_readonly`) or host-wide readonly → 409

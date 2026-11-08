@@ -23,6 +23,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stored options". Each note is `{kind, text, line}`; `kind` is a stable code to switch
   on, `line` names the key line an item note belongs to. Existing fields are unchanged.
 
+- Hosts page (admins): "Managed logins" lists every login ssm keeps writing on a host
+  with its number of authorizations, and "Forget" stops managing a login that has no
+  authorization and no `authorized_keys` left on the host (ssm checks the host first).
+  The same over the API: `GET /api/v2/hosts/{id}/managed-logins` and
+  `DELETE /api/v2/hosts/{id}/managed-logins/{login}` (new error code
+  `MANAGED_LOGIN_NOT_FOUND`). Each forget is in the activity log.
+
+### Fixed
+
+- A sync no longer fails with "Directory nonexistent" for a login whose home has no
+  `~/.ssh` yet: ssm creates it (mode 0700, owned by the login's user and group) and
+  writes the file. It does so only inside a home that exists and is not a symlink,
+  and never follows a link planted at `~/.ssh`. A login without a usable home (missing
+  or a symlink) is skipped with that reason; the other logins are still written.
+
 ### Security
 
 - Permissive `authorized_keys` options can be set from the web UI by admins only:
@@ -38,14 +53,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   write replaced the file that holds ssm's own key, so a grant for the alias could lock
   ssm out of the host and wipe root's keys. A sync now skips that login with "not
   managed: shares the SSH user's home"; manage the keys under the SSH login instead.
-
-### Fixed
-
-- A sync no longer fails with "Directory nonexistent" for a login whose home has no
-  `~/.ssh` yet: ssm creates it (mode 0700, owned by the login's user and group) and
-  writes the file. It does so only inside a home that exists and is not a symlink,
-  and never follows a link planted at `~/.ssh`. A login without a usable home (missing
-  or a symlink) is skipped with that reason; the other logins are still written.
 
 ## [4.11.0] - 2026-11-08
 

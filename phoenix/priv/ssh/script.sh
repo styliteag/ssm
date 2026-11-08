@@ -112,7 +112,7 @@ login_home() {
 # Home of a login with every symlink resolved (pwd -P), else the getent
 # field as it is; "" for an unknown login.
 resolved_home() {
-    home=$(login_home "$1")
+    home=$(login_home "$1") || return 0
     [ -n "${home}" ] || return 0
     (cd "${home}" 2>/dev/null && pwd -P) || printf "%s\n" "${home}"
 }
@@ -469,6 +469,20 @@ handle_get_ssh_keyfiles() {
     printf "]"
 }
 
+# "yes" when anything sits at the login's ~/.ssh/authorized_keys (a link
+# too, dangling or not) or its ~/.ssh is a link, else "no" (also for a
+# login getent does not know). Nothing is read.
+handle_has_keyfile() {
+    home=$(login_home "$1") || home=""
+    if [ -n "${home}" ] && { [ -e "${home}/${authorized_keys_location}" ] \
+        || [ -h "${home}/${authorized_keys_location}" ] || [ -h "${home}/.ssh" ]; }; then
+        echo "yes"
+    else
+        echo "no"
+    fi
+    exit 0
+}
+
 handle_update() {
     newfile="${0}.new"
     cat - > "${newfile}"
@@ -498,6 +512,7 @@ shift
 case "${command}" in
     set_authorized_keyfile)  handle_set_authorized_keyfile "$@" ;;
     get_ssh_keyfiles)        handle_get_ssh_keyfiles ;;
+    has_keyfile)             handle_has_keyfile "$@" ;;
     update)                  handle_update ;;
     version)                 handle_version ;;
     *)

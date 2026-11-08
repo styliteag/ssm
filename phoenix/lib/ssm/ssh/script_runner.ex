@@ -209,6 +209,32 @@ defmodule Ssm.Ssh.ScriptRunner do
     result |> refusal_reason() |> String.downcase() |> String.contains?("readonly")
   end
 
+  @doc """
+  Whether the host has an `authorized_keys` entry for `login` (any file or
+  link there, or a linked `~/.ssh`): `{:ok, boolean}`. A login the host
+  does not know has none. Anything but a clear answer is an error.
+  """
+  @spec has_keyfile(module(), Target.t(), String.t()) :: {:ok, boolean()} | {:error, term()}
+  def has_keyfile(client \\ Ssm.Ssh, target, login) do
+    command = "sh #{Shell.quote(@remote_path)} has_keyfile #{Shell.quote(login)}"
+
+    with :ok <- ensure_uploaded(client, target),
+         {:ok, %Result{} = result} <- client.exec(target, command, []) do
+      case {result.exit_code, String.trim(result.stdout)} do
+        {0, "yes"} ->
+          {:ok, true}
+
+        {0, "no"} ->
+          {:ok, false}
+
+        _ ->
+          {:error,
+           {:ssh_connect_failed,
+            "script.sh has_keyfile failed on #{target.name}: " <> refusal_reason(result)}}
+      end
+    end
+  end
+
   @doc "The remote script's `{version, sha256}` self-report."
   @spec version(module(), Target.t()) :: {:ok, map()} | {:error, term()}
   def version(client \\ Ssm.Ssh, target) do

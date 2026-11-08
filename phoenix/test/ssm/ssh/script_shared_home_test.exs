@@ -53,4 +53,11 @@ defmodule Ssm.Ssh.ScriptSharedHomeTest do
 
     assert {_, 0} = write(ctx, "toor", "ssh-ed25519 SSMKEY ssm\n")
   end
+
+  test "an SSH user unknown to getent does not abort the write", ctx do
+    home = add_user(ctx, "alice")
+
+    assert {_, 0} = write(ctx, ["alice", "no-such-user"], "ssh-ed25519 A x\n")
+    assert File.read!(Path.join(home, ".ssh/authorized_keys")) =~ "ssh-ed25519 A x"
+  end
 end
