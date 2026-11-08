@@ -12,13 +12,14 @@ defmodule Ssm.Diffs.SyncAudit do
 
   @max_text 500
 
-  @doc "Log the outcome and return the sync result unchanged."
-  @spec log(String.t(), String.t(), {term(), map()}) :: term()
-  def log(actor, target, {result, report}) do
+  @doc "Log the outcome for `host` (name and id) and return the sync result unchanged."
+  @spec log(String.t(), Ssm.Hosts.Host.t(), {term(), map()}) :: term()
+  def log(actor, %Ssm.Hosts.Host{} = host, {result, report}) do
     Activity.log(%{
       activity_type: "host",
       action: action(result, report),
-      target: target,
+      target: host.name,
+      host_id: host.id,
       actor_username: actor,
       details: details(result, report)
     })

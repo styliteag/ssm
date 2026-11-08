@@ -68,6 +68,7 @@ defmodule SsmWeb.Mctl.Audit do
       activity_type: "host",
       action: action,
       target: host.name,
+      host_id: host.id,
       actor_username: actor(principal),
       details:
         Map.merge(

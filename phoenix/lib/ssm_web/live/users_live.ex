@@ -32,7 +32,7 @@ defmodule SsmWeb.UsersLive do
 
   defp reload_users(socket) do
     rows =
-      Users.list_users_with_counts()
+      Users.list_users_with_counts(Ssm.Scope.of(socket.assigns.current_user))
       |> Enum.map(&Map.put(&1, :id, &1.user.id))
       |> SsmWeb.TableSort.sort(socket.assigns.sort, user_sorters())
 

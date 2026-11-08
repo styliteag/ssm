@@ -6,18 +6,21 @@ defmodule SsmWeb.DashboardLive do
 
   use SsmWeb, :live_view
 
-  alias Ssm.{Activity, Authorizations, Hosts, Users}
+  alias Ssm.{Activity, Authorizations, Hosts, Scope, Users}
   alias SsmWeb.Layouts
 
   @impl true
   def mount(_params, _session, socket) do
+    user = socket.assigns.current_user
+    scope = Scope.of(user)
+
     {:ok,
      socket
      |> assign(page_title: "Dashboard")
-     |> assign(stats())
+     |> assign(stats(scope))
      |> assign(:version, to_string(Application.spec(:ssm, :vsn)))
      |> assign(:schema_version, schema_version())
-     |> assign(:recent_activity, Activity.list(limit: 10))}
+     |> assign(:recent_activity, Activity.list(scope, actor: user.actor, limit: 10))}
   end
 
   # Latest applied Ecto migration — the dashboard version pill's "db" part
@@ -29,13 +32,15 @@ defmodule SsmWeb.DashboardLive do
     end
   end
 
-  defp stats do
+  # Host and authorization counts follow the user's scope (ADR-0012); the
+  # SSH user catalog (users, keys) is readable in full.
+  defp stats(scope) do
     %{
-      host_count: Hosts.count_hosts(),
-      disabled_host_count: Hosts.count_disabled_hosts(),
+      host_count: Hosts.count_hosts(scope),
+      disabled_host_count: Hosts.count_disabled_hosts(scope),
       user_count: Users.count_users(),
       key_count: Users.count_keys(),
-      authorization_count: Authorizations.count_authorizations()
+      authorization_count: Authorizations.count_authorizations(scope)
     }
   end
 

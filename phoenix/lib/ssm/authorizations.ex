@@ -2,16 +2,27 @@ defmodule Ssm.Authorizations do
   @moduledoc """
   User↔host grants under a remote login — the context behind
   `/api/v2/authorizations` and the Authorizations page.
+
+  Functions that take an `Ssm.Scope` first serve the web UI (ADR-0012): rows
+  on out-of-scope hosts are invisible, and a write that names such a host is
+  refused like a missing host. The scope-less ones are global (`/api/v2`,
+  mctl contract).
   """
 
   import Ecto.Query
 
   alias Ssm.Authorizations.{Authorization, ManagedLogin, Options}
-  alias Ssm.Repo
+  alias Ssm.{Repo, Scope}
 
   @spec list_authorizations(keyword()) :: [Authorization.t()]
-  def list_authorizations(opts \\ []) do
-    query = from a in Authorization, order_by: a.id, preload: [:user, :host]
+  def list_authorizations(opts \\ []), do: list_authorizations(Scope.global(), opts)
+
+  @doc "Grants on hosts in `scope`; `opts` filter by `:host_id` / `:user_id`."
+  @spec list_authorizations(Scope.t(), keyword()) :: [Authorization.t()]
+  def list_authorizations(%Scope{} = scope, opts) do
+    query =
+      from(a in Authorization, order_by: a.id, preload: [:user, :host])
+      |> Scope.filter(scope)
 
     query =
       Enum.reduce(opts, query, fn
@@ -23,11 +34,19 @@ defmodule Ssm.Authorizations do
     Repo.all(query)
   end
 
-  @spec count_authorizations() :: non_neg_integer()
-  def count_authorizations, do: Repo.aggregate(Authorization, :count)
+  @spec count_authorizations(Scope.t()) :: non_neg_integer()
+  def count_authorizations(%Scope{} = scope \\ Scope.global()),
+    do: Authorization |> Scope.filter(scope) |> Repo.aggregate(:count)
 
   @spec get_authorization(integer()) :: Authorization.t() | nil
   def get_authorization(id), do: Repo.get(Authorization, id)
+
+  @doc "A grant on a host in `scope`, or nil."
+  @spec get_authorization(Scope.t(), term()) :: Authorization.t() | nil
+  def get_authorization(%Scope{} = scope, id) when is_integer(id),
+    do: Authorization |> Scope.filter(scope) |> Repo.get(id)
+
+  def get_authorization(_scope, _id), do: nil
 
   @doc "True when a grant with exactly this (user, host, login) exists."
   @spec exists?(integer(), integer(), String.t()) :: boolean()
@@ -38,10 +57,13 @@ defmodule Ssm.Authorizations do
     )
   end
 
-  @doc "Fetch the grant for exactly this (user, host, login), or nil."
-  @spec get_by_grant(integer(), integer(), String.t()) :: Authorization.t() | nil
-  def get_by_grant(user_id, host_id, login),
-    do: Repo.get_by(Authorization, user_id: user_id, host_id: host_id, login: login)
+  @doc "Fetch the grant for exactly this (user, host, login) on a host in `scope`, or nil."
+  @spec get_by_grant(Scope.t(), integer(), integer(), String.t()) :: Authorization.t() | nil
+  def get_by_grant(%Scope{} = scope, user_id, host_id, login) do
+    Authorization
+    |> Scope.filter(scope)
+    |> Repo.get_by(user_id: user_id, host_id: host_id, login: login)
+  end
 
   @doc """
   The subset of `user_ids × host_ids` pairs that already hold a grant under
@@ -63,8 +85,18 @@ defmodule Ssm.Authorizations do
   grant are skipped. Runs in one transaction: any changeset failure rolls the
   whole batch back and returns `{:error, changeset}`.
 
-  Returns `{:ok, %{created: [auth], skipped: n}}` on success.
+  Returns `{:ok, %{created: [auth], skipped: n}}` on success. With a scope,
+  a host outside it refuses the whole batch: `{:error, :out_of_scope}`.
   """
+  @spec bulk_grant(Scope.t(), [integer()], [integer()], String.t(), String.t() | nil) ::
+          {:ok, %{created: [Authorization.t()], skipped: non_neg_integer()}}
+          | {:error, Ecto.Changeset.t() | :out_of_scope}
+  def bulk_grant(%Scope{} = scope, user_ids, host_ids, login, options) do
+    if Scope.all_in_scope?(scope, host_ids),
+      do: bulk_grant(user_ids, host_ids, login, options),
+      else: {:error, :out_of_scope}
+  end
+
   @spec bulk_grant([integer()], [integer()], String.t(), String.t() | nil) ::
           {:ok, %{created: [Authorization.t()], skipped: non_neg_integer()}}
           | {:error, Ecto.Changeset.t()}
@@ -96,6 +128,47 @@ defmodule Ssm.Authorizations do
   @spec create_authorization(map()) :: {:ok, Authorization.t()} | {:error, Ecto.Changeset.t()}
   def create_authorization(attrs),
     do: %Authorization{} |> Authorization.changeset(attrs) |> write_managed(&Repo.insert/1)
+
+  @doc """
+  `create_authorization/1` for a web user: a host outside `scope` is
+  refused like a missing one (`host_id` "does not exist").
+  """
+  @spec create_authorization(Scope.t(), map()) ::
+          {:ok, Authorization.t()} | {:error, Ecto.Changeset.t()}
+  def create_authorization(%Scope{} = scope, attrs) do
+    %Authorization{}
+    |> Authorization.changeset(attrs)
+    |> check_scope(scope)
+    |> write_managed(&Repo.insert/1)
+  end
+
+  @doc "`update_authorization/2` for a web user: old and new host must be in `scope`."
+  @spec update_authorization(Scope.t(), Authorization.t(), map()) ::
+          {:ok, Authorization.t()} | {:error, Ecto.Changeset.t()}
+  def update_authorization(%Scope{} = scope, %Authorization{} = auth, attrs) do
+    changeset = auth |> Authorization.changeset(attrs) |> check_scope(scope)
+
+    if Scope.in_scope?(scope, auth.host_id),
+      do: write_managed(changeset, &Repo.update/1),
+      else: {:error, Ecto.Changeset.add_error(changeset, :host_id, "does not exist")}
+  end
+
+  @doc "`delete_authorization/1` for a web user: the grant's host must be in `scope`."
+  @spec delete_authorization(Scope.t(), Authorization.t()) ::
+          {:ok, Authorization.t()} | {:error, :not_found | Ecto.Changeset.t()}
+  def delete_authorization(%Scope{} = scope, %Authorization{} = auth) do
+    if Scope.in_scope?(scope, auth.host_id),
+      do: delete_authorization(auth),
+      else: {:error, :not_found}
+  end
+
+  defp check_scope(changeset, scope) do
+    host_id = Ecto.Changeset.get_field(changeset, :host_id)
+
+    if is_nil(host_id) or Scope.in_scope?(scope, host_id),
+      do: changeset,
+      else: Ecto.Changeset.add_error(changeset, :host_id, "does not exist")
+  end
 
   @doc "Update a grant; a new host/login pair is recorded as managed too."
   @spec update_authorization(Authorization.t(), map()) ::

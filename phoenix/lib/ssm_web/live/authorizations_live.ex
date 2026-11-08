@@ -49,11 +49,15 @@ defmodule SsmWeb.AuthorizationsLive do
      |> assign(:filter_user_id, parse_id(params["user_id"]))
      |> assign(:filter_host_id, parse_id(params["host_id"]))
      |> assign(:users, Users.list_users())
-     |> assign(:hosts, Hosts.list_hosts())
+     |> assign(:hosts, Hosts.list_hosts(scope(socket)))
      |> assign(:show_authorized_only, params["authorized"] == "1")
      |> assign(:matrix_login_param, params["login"])
      |> reload_authorizations()}
   end
+
+  # Host-bearing reads and writes go through the user's scope (ADR-0012):
+  # rows on out-of-scope hosts are invisible and act as missing.
+  defp scope(socket), do: Ssm.Scope.of(socket.assigns.current_user)
 
   defp parse_id(nil), do: nil
 
@@ -72,8 +76,9 @@ defmodule SsmWeb.AuthorizationsLive do
       )
 
     authorizations =
-      opts
-      |> Authorizations.list_authorizations()
+      socket
+      |> scope()
+      |> Authorizations.list_authorizations(opts)
       |> search_authorizations(socket.assigns.auth_search)
       |> SsmWeb.TableSort.sort(socket.assigns.auth_sort, auth_sorters())
 
@@ -107,7 +112,7 @@ defmodule SsmWeb.AuthorizationsLive do
   end
 
   defp reload_matrix(socket) do
-    all = Authorizations.list_authorizations()
+    all = Authorizations.list_authorizations(scope(socket), [])
     accounts = login_accounts(all)
     login = pick_login(socket.assigns.matrix_login_param, accounts)
 
@@ -211,7 +216,7 @@ defmodule SsmWeb.AuthorizationsLive do
   end
 
   def handle_event("edit", %{"id" => id}, socket) do
-    case Authorizations.get_authorization(String.to_integer(id)) do
+    case Authorizations.get_authorization(scope(socket), String.to_integer(id)) do
       nil ->
         {:noreply, put_flash(socket, :error, "Authorization not found.")}
 
@@ -240,8 +245,8 @@ defmodule SsmWeb.AuthorizationsLive do
   def handle_event("save", %{"authorization" => params}, socket) do
     result =
       case socket.assigns.editing do
-        nil -> Authorizations.create_authorization(params)
-        auth -> Authorizations.update_authorization(auth, params)
+        nil -> Authorizations.create_authorization(scope(socket), params)
+        auth -> Authorizations.update_authorization(scope(socket), auth, params)
       end
 
     case result do
@@ -262,8 +267,8 @@ defmodule SsmWeb.AuthorizationsLive do
 
   def handle_event("delete", %{"id" => id}, socket) do
     with %Authorization{} = auth <-
-           Authorizations.get_authorization(String.to_integer(id)),
-         {:ok, _} <- Authorizations.delete_authorization(auth) do
+           Authorizations.get_authorization(scope(socket), String.to_integer(id)),
+         {:ok, _} <- Authorizations.delete_authorization(scope(socket), auth) do
       log_auth_activity(socket, "delete", auth)
 
       {:noreply,
@@ -391,14 +396,16 @@ defmodule SsmWeb.AuthorizationsLive do
   ## Matrix helpers
 
   defp toggle_grant(socket, user_id, host_id, login) do
-    case Authorizations.get_by_grant(user_id, host_id, login) do
+    case Authorizations.get_by_grant(scope(socket), user_id, host_id, login) do
       nil -> grant_cell(socket, user_id, host_id, login)
       auth -> revoke_cell(socket, auth)
     end
   end
 
   defp grant_cell(socket, user_id, host_id, login) do
-    case Authorizations.create_authorization(%{user_id: user_id, host_id: host_id, login: login}) do
+    attrs = %{user_id: user_id, host_id: host_id, login: login}
+
+    case Authorizations.create_authorization(scope(socket), attrs) do
       {:ok, auth} ->
         log_auth_activity(socket, "create", auth)
         {:noreply, reload_authorizations(socket)}
@@ -409,7 +416,7 @@ defmodule SsmWeb.AuthorizationsLive do
   end
 
   defp revoke_cell(socket, auth) do
-    case Authorizations.delete_authorization(auth) do
+    case Authorizations.delete_authorization(scope(socket), auth) do
       {:ok, _} ->
         log_auth_activity(socket, "delete", auth)
         {:noreply, reload_authorizations(socket)}
@@ -429,7 +436,7 @@ defmodule SsmWeb.AuthorizationsLive do
   ## Bulk grant helpers
 
   defp bulk_save(socket, user_ids, host_ids, login, options) do
-    case Authorizations.bulk_grant(user_ids, host_ids, login, presence(options)) do
+    case Authorizations.bulk_grant(scope(socket), user_ids, host_ids, login, presence(options)) do
       {:ok, %{created: created, skipped: skipped}} ->
         log_bulk_grant(socket, login, user_ids, host_ids, created, skipped)
 
@@ -444,6 +451,10 @@ defmodule SsmWeb.AuthorizationsLive do
 
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply, put_flash(socket, :error, bulk_grant_error(changeset))}
+
+      {:error, :out_of_scope} ->
+        {:noreply,
+         put_flash(socket, :error, "Nothing created: a selected host is outside your scope.")}
     end
   end
 
@@ -529,6 +540,7 @@ defmodule SsmWeb.AuthorizationsLive do
       activity_type: "auth",
       action: action,
       target: target,
+      host_id: auth.host_id,
       actor_username: socket.assigns.current_user.actor
     }
 

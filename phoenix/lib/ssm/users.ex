@@ -30,13 +30,17 @@ defmodule Ssm.Users do
   @spec change_user(User.t(), map()) :: Ecto.Changeset.t()
   def change_user(%User{} = user, attrs \\ %{}), do: User.changeset(user, attrs)
 
-  @doc "Every user with their key and authorization counts (Users page rows)."
-  @spec list_users_with_counts() :: [
+  @doc """
+  Every user with their key count and the count of their authorizations on
+  hosts in `scope` (Users page rows; the SSH user catalog is readable in
+  full, ADR-0012 §3, host data is not).
+  """
+  @spec list_users_with_counts(Ssm.Scope.t()) :: [
           %{user: User.t(), key_count: non_neg_integer(), authorization_count: non_neg_integer()}
         ]
-  def list_users_with_counts do
+  def list_users_with_counts(%Ssm.Scope{} = scope \\ Ssm.Scope.global()) do
     key_counts = per_user_counts(UserKey)
-    auth_counts = per_user_counts(Authorization)
+    auth_counts = per_user_counts(Ssm.Scope.filter(Authorization, scope))
 
     Enum.map(list_users(), fn user ->
       %{

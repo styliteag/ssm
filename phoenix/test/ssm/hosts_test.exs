@@ -97,7 +97,7 @@ defmodule Ssm.HostsTest do
       a = host_fixture(%{name: "a"})
       _b = host_fixture(%{name: "b"})
 
-      names = a |> Hosts.jump_candidates() |> Enum.map(& &1.name)
+      names = Ssm.Scope.global() |> Hosts.jump_candidates(a) |> Enum.map(& &1.name)
       assert "b" in names
       refute "a" in names
     end

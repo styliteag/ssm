@@ -51,7 +51,7 @@ defmodule SsmWeb.Api.DiffController do
 
   # every sync outcome (success, partial, failure) goes to the audit log
   defp audited_sync(conn, host),
-    do: SyncAudit.log(conn.assigns.api_user, host.name, Diffs.sync_host_reported(host.id))
+    do: SyncAudit.log(conn.assigns.api_user, host, Diffs.sync_host_reported(host.id))
 
   defp diff_error(conn, :not_found), do: Errors.host_not_found(conn)
 

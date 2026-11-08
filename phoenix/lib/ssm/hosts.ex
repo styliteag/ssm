@@ -3,19 +3,37 @@ defmodule Ssm.Hosts do
   Managed SSH hosts — the context behind `/api/v2/hosts` and the Hosts page.
   Every SSH operation elsewhere resolves its `Ssm.Ssh.Target` through
   `target_for/1`, which walks the `jump_via` chain.
+
+  Functions that take an `Ssm.Scope` first serve the web UI (ADR-0012): an
+  out-of-scope host is treated as missing. The scope-less ones are global
+  (`/api/v2`, mctl contract, background jobs).
   """
 
   import Ecto.Query
 
   alias Ssm.Hosts.Host
-  alias Ssm.Repo
+  alias Ssm.{Repo, Scope}
   alias Ssm.Ssh.Target
 
   @spec list_hosts() :: [Host.t()]
-  def list_hosts, do: Repo.all(from h in Host, order_by: h.id)
+  def list_hosts, do: list_hosts(Scope.global())
+
+  @doc "Hosts in `scope`, by id."
+  @spec list_hosts(Scope.t()) :: [Host.t()]
+  def list_hosts(%Scope{} = scope),
+    do: scope |> Scope.hosts() |> order_by([h], h.id) |> Repo.all()
 
   @spec get_host(integer()) :: Host.t() | nil
   def get_host(id), do: Repo.get(Host, id)
+
+  @doc "A host in `scope`, or nil (missing and out of scope look the same)."
+  @spec get_host(Scope.t(), term()) :: Host.t() | nil
+  def get_host(%Scope{} = scope, id) do
+    case Scope.fetch_host(scope, id) do
+      {:ok, host} -> host
+      {:error, :not_found} -> nil
+    end
+  end
 
   @doc """
   Resolve a host reference — an id (integer or decimal string) or a host
@@ -93,8 +111,29 @@ defmodule Ssm.Hosts do
     host |> Host.changeset(attrs) |> Repo.update()
   end
 
+  @doc """
+  Delete a host. Its activity entries keep their text but lose the host id:
+  SQLite reuses ids, and a later host must not inherit them (scope filter).
+  """
   @spec delete_host(Host.t()) :: {:ok, Host.t()} | {:error, Ecto.Changeset.t()}
-  def delete_host(%Host{} = host), do: Repo.delete(host)
+  def delete_host(%Host{} = host) do
+    Repo.transaction(fn ->
+      case Repo.delete(host) do
+        {:ok, deleted} ->
+          detach_activity(deleted.id)
+          deleted
+
+        {:error, changeset} ->
+          Repo.rollback(changeset)
+      end
+    end)
+  end
+
+  defp detach_activity(host_id) do
+    Repo.update_all(from(l in Ssm.Activity.ActivityLog, where: l.host_id == ^host_id),
+      set: [host_id: nil]
+    )
+  end
 
   @doc "Names of the hosts that use `host` as their jump host."
   @spec jump_dependents(Host.t()) :: [String.t()]
@@ -228,19 +267,24 @@ defmodule Ssm.Hosts do
         do: {host, problems}
   end
 
-  @spec count_hosts() :: non_neg_integer()
-  def count_hosts, do: Repo.aggregate(Host, :count)
+  @spec count_hosts(Scope.t()) :: non_neg_integer()
+  def count_hosts(%Scope{} = scope \\ Scope.global()),
+    do: scope |> Scope.hosts() |> Repo.aggregate(:count)
 
-  @spec count_disabled_hosts() :: non_neg_integer()
-  def count_disabled_hosts,
-    do: Repo.aggregate(from(h in Host, where: h.disabled == true), :count)
+  @spec count_disabled_hosts(Scope.t()) :: non_neg_integer()
+  def count_disabled_hosts(%Scope{} = scope \\ Scope.global()),
+    do: scope |> Scope.hosts() |> where([h], h.disabled == true) |> Repo.aggregate(:count)
 
-  @doc "Hosts eligible to be a jump host for `host` (any other host)."
-  @spec jump_candidates(Host.t() | nil) :: [Host.t()]
-  def jump_candidates(nil), do: list_hosts()
+  @doc "Hosts in `scope` eligible to be a jump host for `host` (any other host)."
+  @spec jump_candidates(Scope.t(), Host.t() | nil) :: [Host.t()]
+  def jump_candidates(%Scope{} = scope, host) do
+    query = scope |> Scope.hosts() |> order_by([h], h.name)
 
-  def jump_candidates(%Host{id: id}),
-    do: Repo.all(from h in Host, where: h.id != ^id, order_by: h.name)
+    case host do
+      %Host{id: id} -> Repo.all(where(query, [h], h.id != ^id))
+      nil -> Repo.all(query)
+    end
+  end
 
   @doc "Pin one host's SSH host key (ADR-0008). See `Ssm.Hosts.HostKeys.pin/2`."
   defdelegate pin_host_key(host, opts \\ []), to: Ssm.Hosts.HostKeys, as: :pin

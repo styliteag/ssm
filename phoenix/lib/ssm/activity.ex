@@ -9,12 +9,14 @@ defmodule Ssm.Activity do
   require Logger
 
   alias Ssm.Activity.ActivityLog
-  alias Ssm.Repo
+  alias Ssm.{Repo, Scope}
 
   @activity_types ~w(key host user auth)
 
   @doc """
   Append one entry. `details` is JSON-encoded into the `metadata` column.
+  Host-bearing entries pass `host_id`, so scoped operators see them
+  (`list/2`).
   Returns `{:ok, entry}` or `{:error, reason}`; callers typically ignore it.
   """
   @spec log(map()) :: {:ok, ActivityLog.t()} | {:error, term()}
@@ -51,7 +53,15 @@ defmodule Ssm.Activity do
       or actor_username (LIKE wildcards in the term are escaped)
   """
   @spec list(keyword()) :: [ActivityLog.t()]
-  def list(opts \\ []) do
+  def list(opts \\ []), do: list(Scope.global(), opts)
+
+  @doc """
+  `list/1` for a web user with `scope` (ADR-0012): a scoped user sees the
+  entries of hosts in scope plus its own (`:actor`, its audit label);
+  entries without a host are for global users only.
+  """
+  @spec list(Scope.t(), keyword()) :: [ActivityLog.t()]
+  def list(%Scope{} = scope, opts) do
     limit = Keyword.get(opts, :limit, 200)
 
     query =
@@ -61,9 +71,20 @@ defmodule Ssm.Activity do
         preload: [:user]
 
     query
+    |> filter_scope(scope, Keyword.get(opts, :actor))
     |> filter_type(Keyword.get(opts, :activity_type))
     |> filter_search(Keyword.get(opts, :search))
     |> Repo.all()
+  end
+
+  defp filter_scope(query, scope, actor) do
+    if Scope.global?(scope) do
+      query
+    else
+      hosts = Scope.host_ids(scope)
+      actor = actor || ""
+      where(query, [l], l.host_id in subquery(hosts) or l.actor_username == ^actor)
+    end
   end
 
   defp filter_type(query, type) when type in @activity_types,

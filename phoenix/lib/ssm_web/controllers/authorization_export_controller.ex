@@ -3,7 +3,8 @@ defmodule SsmWeb.AuthorizationExportController do
   CSV download of the authorizations list, honoring the page's `user_id` /
   `host_id` filters — the React AuthorizationsPage export with the same
   columns (`User, Host, Login Account, SSH Options, User Enabled,
-  Host Address`), built server-side instead of from browser state.
+  Host Address`), built server-side instead of from browser state. Only
+  rows on hosts in the user's scope (ADR-0012).
   """
 
   use SsmWeb, :controller
@@ -18,7 +19,11 @@ defmodule SsmWeb.AuthorizationExportController do
       |> Enum.reject(fn {_key, value} -> is_nil(value) end)
 
     csv =
-      [@columns | Enum.map(Authorizations.list_authorizations(opts), &row/1)]
+      conn.assigns.current_user
+      |> Ssm.Scope.of()
+      |> Authorizations.list_authorizations(opts)
+      |> Enum.map(&row/1)
+      |> then(&[@columns | &1])
       |> Enum.map_join("\n", &csv_line/1)
 
     filename = "authorizations-#{Date.utc_today()}.csv"

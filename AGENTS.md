@@ -94,6 +94,18 @@ older ones). Unknown slugs are dropped and logged. Both lists are stored on the 
 (`customers`, `groups`, JSON) and overwritten at every login; a role or scope change
 disconnects open LiveViews, and the periodic re-check ends a view whose scope changed. The
 session's `current_user` carries `scope` (`Ssm.Scope`; local `.htpasswd` users: global).
+`Ssm.Scope` is the only place that turns a scope into queries (`filter/3`, `hosts/1`,
+`fetch_host/2`, `in_scope?/2`): a host is in scope when (customers `*` or its customer listed)
+and (groups `*` or ≥1 of its groups listed); hosts without customer/group only for `*`. Context
+functions that take a `%Ssm.Scope{}` first (`Hosts.list_hosts/1`, `get_host/2`,
+`Authorizations.list_authorizations/2`, `create_/update_/delete_authorization`, `bulk_grant/5`,
+`Activity.list/2`, `HostChecks.stored/1`, counts) serve the web UI; the scope-less ones stay
+global for `/api/v2`, the mctl contract and background jobs. Every LiveView passes
+`Scope.of(current_user)`; an out-of-scope id acts as a missing one ("not found"). Scoped users
+cannot create hosts or pin all host keys; only admins set `jump_via` (jump hosts are global).
+Activity entries of a host carry `activity_log.host_id` (cleared by `Hosts.delete_host/1`, SQLite
+reuses ids); a scoped user sees those of hosts in scope plus its own. `test/ssm_web/scope_live_test.exs`
+enumerates every LiveView route: a new page fails the suite until it is classified there.
 
 **Host keys** (ADR-0008, `lib/ssm/ssh/host_key*.ex`, `lib/ssm/hosts/host_keys.ex`):
 every connect verifies `host.key_fingerprint`; unpinned hosts are refused.

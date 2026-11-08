@@ -211,6 +211,7 @@ defmodule Ssm.Hosts.HostKeys do
       activity_type: "host",
       action: action,
       target: host.name,
+      host_id: host.id,
       actor_username: Keyword.get(opts, :actor, "system"),
       details:
         %{address: host.address, port: host.port}

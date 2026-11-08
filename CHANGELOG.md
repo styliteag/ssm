@@ -15,6 +15,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   mixed `["*", "x"]`) refuses the login. An `admin` with a restricted scope is
   refused instead of being downgraded. Each refusal is in the activity log
   with its reason.
+- Web operators and viewers are limited to the hosts of their customers and
+  host groups (ADR-0012 phase 1). Hosts, diffs and sync, authorizations
+  (list, matrix, bulk grant, CSV export), the activity log, dashboard counts
+  and search show and change only hosts in scope; a host outside it behaves
+  like a missing one. Hosts without a customer or group are visible only with
+  `*` in that dimension. `.htpasswd` admins, SSO admins, `/api/v2` tokens and
+  the Mission Control API stay global.
 
 ### Added
 
@@ -26,6 +33,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- A scoped account cannot create hosts or run "Pin host keys" (both act
+  outside its scope). Only admins set a host's jump host; for other roles the
+  field is read-only.
+- The activity log records the host of host-bearing entries. A scoped account
+  sees the entries of its hosts and its own; entries written before this
+  release have no host and are shown to global accounts only.
 - Upgrading ends every open SSO session once, so each operator signs in
   again and gets its scope from the new claims.
 

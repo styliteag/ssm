@@ -26,9 +26,12 @@ defmodule SsmWeb.HostsLive do
   alias Ssm.Diffs.StatusCache
   alias Ssm.Hosts
   alias Ssm.Hosts.Host
+  alias Ssm.Scope
   alias SsmWeb.Layouts
 
   @filters ~w(active all online offline unknown disabled)
+  @outside_scope "Not available: your account is limited to some customers or host groups, " <>
+                   "and this would act outside your scope."
 
   @impl true
   def mount(_params, _session, socket) do
@@ -42,16 +45,22 @@ defmodule SsmWeb.HostsLive do
      |> reload_hosts()}
   end
 
+  # Everything host-bearing is read through the user's scope (ADR-0012).
+  defp scope(socket), do: Scope.of(socket.assigns.current_user)
+
   defp reload_hosts(socket) do
-    hosts = Hosts.list_hosts()
+    scope = scope(socket)
+    hosts = Hosts.list_hosts(scope)
 
     socket
+    |> assign(:global, Scope.global?(scope))
+    |> assign(:admin, socket.assigns.current_user.role == "admin")
     |> assign(:all_hosts, hosts)
     |> assign(:host_names, Map.new(hosts, &{&1.id, &1.name}))
-    |> assign(:stored_checks, HostChecks.stored())
+    |> assign(:stored_checks, HostChecks.stored(scope))
     |> assign(
       :auth_counts,
-      Enum.frequencies_by(Authorizations.list_authorizations(), & &1.host_id)
+      Enum.frequencies_by(Authorizations.list_authorizations(scope, []), & &1.host_id)
     )
     |> refilter()
   end
@@ -131,6 +140,11 @@ defmodule SsmWeb.HostsLive do
     {:noreply, assign(socket, :view, view)}
   end
 
+  # A host created here has no customer or group, so it would be outside a
+  # scoped user's own scope; hosts reach them through Mission Control.
+  def handle_event("new", _params, %{assigns: %{global: false}} = socket),
+    do: {:noreply, put_flash(socket, :error, @outside_scope)}
+
   def handle_event("new", _params, socket) do
     {:noreply,
      assign(socket,
@@ -138,12 +152,12 @@ defmodule SsmWeb.HostsLive do
        # (React HostsPage default since 1.1.0).
        form: to_form(Hosts.change_host(%Host{}, %{"username" => "root"})),
        editing: nil,
-       jump_candidates: Hosts.jump_candidates(nil)
+       jump_candidates: Hosts.jump_candidates(scope(socket), nil)
      )}
   end
 
   def handle_event("edit", %{"id" => id}, socket) do
-    case Hosts.get_host(String.to_integer(id)) do
+    case Hosts.get_host(scope(socket), parse_id(id)) do
       nil ->
         {:noreply, put_flash(socket, :error, "Host not found.")}
 
@@ -152,7 +166,7 @@ defmodule SsmWeb.HostsLive do
          assign(socket,
            form: to_form(Hosts.change_host(host)),
            editing: host,
-           jump_candidates: Hosts.jump_candidates(host)
+           jump_candidates: Hosts.jump_candidates(scope(socket), host)
          )}
     end
   end
@@ -170,13 +184,16 @@ defmodule SsmWeb.HostsLive do
     {:noreply, assign(socket, form: to_form(changeset))}
   end
 
+  def handle_event("save", _params, %{assigns: %{editing: nil, global: false}} = socket),
+    do: {:noreply, put_flash(socket, :error, @outside_scope)}
+
   def handle_event("save", %{"host" => params}, socket) do
-    params = normalize_params(params)
+    params = params |> normalize_params() |> jump_via_for(socket)
 
     result =
       case socket.assigns.editing do
         nil -> Hosts.create_host(params)
-        host -> Hosts.update_host(host, params)
+        host -> update_in_scope(socket, host, params)
       end
 
     case result do
@@ -196,7 +213,7 @@ defmodule SsmWeb.HostsLive do
   end
 
   def handle_event("delete", %{"id" => id}, socket) do
-    with %Host{} = host <- Hosts.get_host(String.to_integer(id)),
+    with %Host{} = host <- Hosts.get_host(scope(socket), parse_id(id)),
          {:ok, _} <- Hosts.delete_host(host) do
       log_host_activity(socket, "delete", host)
       StatusCache.delete(host.id)
@@ -220,7 +237,7 @@ defmodule SsmWeb.HostsLive do
   end
 
   def handle_event("toggle_disabled", %{"id" => id}, socket) do
-    with %Host{} = host <- Hosts.get_host(String.to_integer(id)),
+    with %Host{} = host <- Hosts.get_host(scope(socket), parse_id(id)),
          {:ok, updated} <- Hosts.update_host(host, %{disabled: !host.disabled}) do
       action = if updated.disabled, do: "disable", else: "enable"
       log_host_activity(socket, action, updated)
@@ -235,7 +252,7 @@ defmodule SsmWeb.HostsLive do
   end
 
   def handle_event("test_connection", %{"id" => id}, socket) do
-    case Hosts.get_host(String.to_integer(id)) do
+    case Hosts.get_host(scope(socket), parse_id(id)) do
       nil ->
         {:noreply, put_flash(socket, :error, "Host not found.")}
 
@@ -268,6 +285,10 @@ defmodule SsmWeb.HostsLive do
          |> start_refresh(targets)}
     end
   end
+
+  # Pins every enabled host, so only for users who see every host.
+  def handle_event("pin_host_keys", _params, %{assigns: %{global: false}} = socket),
+    do: {:noreply, put_flash(socket, :error, @outside_scope)}
 
   def handle_event("pin_host_keys", _params, socket) do
     actor = socket.assigns.current_user.actor
@@ -469,11 +490,36 @@ defmodule SsmWeb.HostsLive do
     end)
   end
 
+  defp parse_id(id) do
+    case Integer.parse(to_string(id)) do
+      {id, ""} -> id
+      _ -> nil
+    end
+  end
+
+  # Jump hosts are global objects (ADR-0012 §3): only an admin sets or
+  # changes `jump_via`; for everyone else the field keeps its stored value.
+  defp jump_via_for(params, %{assigns: %{admin: true}}), do: params
+  defp jump_via_for(params, _socket), do: Map.delete(params, "jump_via")
+
+  # Re-read through the scope: the host may have left it since the form opened.
+  defp update_in_scope(socket, host, params) do
+    case Hosts.get_host(scope(socket), host.id) do
+      nil ->
+        {:error,
+         Hosts.change_host(host, params) |> Ecto.Changeset.add_error(:name, "host not found")}
+
+      current ->
+        Hosts.update_host(current, params)
+    end
+  end
+
   defp log_host_activity(socket, action, host) do
     Activity.log(%{
       activity_type: "host",
       action: action,
       target: host.name,
+      host_id: host.id,
       actor_username: socket.assigns.current_user.actor,
       details: %{address: host.address, port: host.port}
     })
@@ -538,6 +584,7 @@ defmodule SsmWeb.HostsLive do
             <% end %>
           </.button>
           <.button
+            :if={@global}
             id="pin-host-keys"
             phx-click="pin_host_keys"
             disabled={@pinning}
@@ -549,7 +596,7 @@ defmodule SsmWeb.HostsLive do
               class={["size-4", @pinning && "motion-safe:animate-spin"]}
             /> Pin host keys
           </.button>
-          <.button id="new-host" variant="primary" phx-click="new">
+          <.button :if={@global} id="new-host" variant="primary" phx-click="new">
             <.icon name="hero-plus" class="size-4" /> New host
           </.button>
         </:actions>
@@ -684,7 +731,12 @@ defmodule SsmWeb.HostsLive do
 
       <.modal :if={@form} id="host-modal" on_cancel={JS.push("cancel")}>
         <:title>{if @editing, do: "Edit host", else: "New host"}</:title>
-        <.host_modal_body form={@form} editing={@editing} jump_candidates={@jump_candidates} />
+        <.host_modal_body
+          form={@form}
+          editing={@editing}
+          jump_candidates={@jump_candidates}
+          admin={@admin}
+        />
       </.modal>
     </Layouts.app>
     """
@@ -754,6 +806,7 @@ defmodule SsmWeb.HostsLive do
   attr :form, :any, required: true
   attr :editing, :any, required: true
   attr :jump_candidates, :list, required: true
+  attr :admin, :boolean, required: true
 
   defp host_modal_body(assigns) do
     ~H"""
@@ -780,7 +833,11 @@ defmodule SsmWeb.HostsLive do
           label="Jump via"
           prompt="None (direct connection)"
           options={Enum.map(@jump_candidates, &{&1.name, &1.id})}
+          disabled={!@admin}
         />
+        <p :if={!@admin} id="host-form-jump-hint" class="-mt-1 text-xs opacity-70">
+          Jump hosts are set by an admin.
+        </p>
         <.input field={@form[:comment]} type="text" label="Comment" />
         <.input field={@form[:disabled]} type="checkbox" label="Disabled (blocks all SSH)" />
 

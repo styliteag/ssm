@@ -18,6 +18,8 @@ defmodule Ssm.Activity.ActivityLog do
     field :actor_username, :string
     field :timestamp, :integer
     field :meta, :string, source: :metadata
+    # host of a host-bearing entry (scope filter, ADR-0012); no FK, see migration
+    field :host_id, :integer
 
     belongs_to :user, Ssm.Users.User
   end
@@ -26,7 +28,15 @@ defmodule Ssm.Activity.ActivityLog do
 
   def changeset(entry, attrs) do
     entry
-    |> cast(attrs, [:activity_type, :action, :target, :user_id, :actor_username, :meta])
+    |> cast(attrs, [
+      :activity_type,
+      :action,
+      :target,
+      :user_id,
+      :host_id,
+      :actor_username,
+      :meta
+    ])
     |> validate_required([:activity_type, :action, :target, :actor_username])
     |> validate_inclusion(:activity_type, @activity_types)
     |> put_timestamp()

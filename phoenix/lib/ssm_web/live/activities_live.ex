@@ -50,8 +50,12 @@ defmodule SsmWeb.ActivitiesLive do
   end
 
   defp reload_entries(socket) do
+    user = socket.assigns.current_user
+
+    # scoped users: entries of hosts in scope and their own (ADR-0012)
     entries =
-      Activity.list(
+      Activity.list(Ssm.Scope.of(user),
+        actor: user.actor,
         limit: socket.assigns.limit + 1,
         activity_type: socket.assigns.filter_type,
         search: socket.assigns.search

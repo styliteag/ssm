@@ -55,7 +55,7 @@ defmodule Ssm.AuthorizationsTest do
     assert Authorizations.count_authorizations() == 1
   end
 
-  test "exists?/3 and get_by_grant/3 address one exact (user, host, login)" do
+  test "exists?/3 and get_by_grant/4 address one exact (user, host, login)" do
     user = user_fixture()
     host = host_fixture()
     auth = authorization_fixture(user, host, %{login: "deploy"})
@@ -63,8 +63,10 @@ defmodule Ssm.AuthorizationsTest do
     assert Authorizations.exists?(user.id, host.id, "deploy")
     refute Authorizations.exists?(user.id, host.id, "root")
 
-    assert Authorizations.get_by_grant(user.id, host.id, "deploy").id == auth.id
-    assert Authorizations.get_by_grant(user.id, host.id, "root") == nil
+    assert Authorizations.get_by_grant(Ssm.Scope.global(), user.id, host.id, "deploy").id ==
+             auth.id
+
+    assert Authorizations.get_by_grant(Ssm.Scope.global(), user.id, host.id, "root") == nil
   end
 
   test "existing_grant_pairs/3 returns the granted subset of the cross product" do

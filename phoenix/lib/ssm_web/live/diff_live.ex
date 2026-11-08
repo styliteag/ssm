@@ -56,10 +56,13 @@ defmodule SsmWeb.DiffLive do
   # `host_checks`). Hosts are read only on an explicit action: "Check" on a
   # row, "Check all" (asks first), or the detail view of one selected host.
   @impl true
+  # Only hosts in the user's scope (ADR-0012) are listed, and every action
+  # picks its host from that list: an out-of-scope id acts as a missing one.
   def mount(_params, _session, socket) do
-    hosts = Hosts.list_hosts()
+    scope = Ssm.Scope.of(socket.assigns.current_user)
+    hosts = Hosts.list_hosts(scope)
     cached = StatusCache.all()
-    checks = HostChecks.stored()
+    checks = HostChecks.stored(scope)
 
     statuses = Map.new(hosts, &{&1.id, initial_status(&1, cached[&1.id], checks[&1.id])})
 
@@ -583,6 +586,7 @@ defmodule SsmWeb.DiffLive do
       activity_type: "auth",
       action: "create",
       target: "#{user.username}@#{host.name}:#{login}",
+      host_id: host.id,
       actor_username: socket.assigns.current_user.actor,
       user_id: user.id
     })
@@ -628,7 +632,7 @@ defmodule SsmWeb.DiffLive do
 
   # every sync outcome (success, partial, failure) goes to the audit log
   defp log_sync(socket, host, outcome),
-    do: SyncAudit.log(socket.assigns.current_user.actor, host.name, outcome)
+    do: SyncAudit.log(socket.assigns.current_user.actor, host, outcome)
 
   defp format_reason({_code, message}) when is_binary(message), do: message
   defp format_reason(:not_found), do: "host not found"

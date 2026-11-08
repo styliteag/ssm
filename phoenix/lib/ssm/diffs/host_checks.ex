@@ -63,9 +63,13 @@ defmodule Ssm.Diffs.HostChecks do
     store(host_id, SyncCheck.result(diff, owners), now(opts))
   end
 
-  @doc "The stored check of every host that has one: host id → `%HostCheck{}`."
-  @spec stored() :: %{integer() => HostCheck.t()}
-  def stored, do: HostCheck |> Repo.all() |> Map.new(&{&1.host_id, &1})
+  @doc """
+  The stored check of every host in `scope` (default all) that has one:
+  host id → `%HostCheck{}`.
+  """
+  @spec stored(Ssm.Scope.t()) :: %{integer() => HostCheck.t()}
+  def stored(%Ssm.Scope{} = scope \\ Ssm.Scope.global()),
+    do: HostCheck |> Ssm.Scope.filter(scope) |> Repo.all() |> Map.new(&{&1.host_id, &1})
 
   @doc """
   The ssm users owning each key (key base64 → user name), for `:owners`.

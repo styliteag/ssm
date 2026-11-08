@@ -60,7 +60,7 @@ defmodule SsmWeb.KeysLive do
     socket
     |> assign(:all_keys, all_keys)
     |> assign(:stats, stats(all_keys))
-    |> assign(:hosts_by_user, hosts_per_owner())
+    |> assign(:hosts_by_user, hosts_per_owner(Ssm.Scope.of(socket.assigns.current_user)))
     |> refilter()
   end
 
@@ -406,8 +406,10 @@ defmodule SsmWeb.KeysLive do
   # Distinct hosts each owner can reach through their authorizations.
   # Orphaned grants (host row deleted in the Diesel era) are skipped so the
   # count never includes a host that no longer exists.
-  defp hosts_per_owner do
-    Authorizations.list_authorizations()
+  # Counts only hosts in the user's scope (ADR-0012).
+  defp hosts_per_owner(scope) do
+    scope
+    |> Authorizations.list_authorizations([])
     |> Enum.reject(&is_nil(&1.host))
     |> Enum.group_by(& &1.user_id, & &1.host_id)
     |> Map.new(fn {user_id, host_ids} -> {user_id, host_ids |> Enum.uniq() |> length()} end)
