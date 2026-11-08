@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.8.1] - 2026-11-08
+
 ### Fixed
 
 - SSH to an IPv6 address works: an IPv6 literal (e.g. `fdfd:4444:5::6:1`)
