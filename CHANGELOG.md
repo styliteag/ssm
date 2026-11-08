@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.12.3] - 2026-11-09
+
 ### Changed
 
 - A sync that wrote some logins and skipped others (e.g. a login that does not exist on
