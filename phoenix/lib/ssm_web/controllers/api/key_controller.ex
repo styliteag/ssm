@@ -9,6 +9,7 @@ defmodule SsmWeb.Api.KeyController do
 
   import Ecto.Query
 
+  alias Ssm.ControlChars
   alias Ssm.Repo
   alias Ssm.Users
   alias Ssm.Users.UserKey
@@ -20,13 +21,13 @@ defmodule SsmWeb.Api.KeyController do
     user_id: [type: :integer, required: true],
     key_type: [type: :string, required: true, min_len: 1, max_len: 32],
     key_base64: [type: :string, required: true, min_len: 16, max_len: 8192],
-    name: [type: :string, nilable: true, max_len: 128],
-    extra_comment: [type: :string, nilable: true, max_len: 1024]
+    name: [type: :string, nilable: true, max_len: 128, check: &ControlChars.check/1],
+    extra_comment: [type: :string, nilable: true, max_len: 1024, check: &ControlChars.check/1]
   ]
 
   @update_spec [
-    name: [type: :string, nilable: true, max_len: 128],
-    extra_comment: [type: :string, nilable: true, max_len: 1024]
+    name: [type: :string, nilable: true, max_len: 128, check: &ControlChars.check/1],
+    extra_comment: [type: :string, nilable: true, max_len: 1024, check: &ControlChars.check/1]
   ]
 
   @list_spec [

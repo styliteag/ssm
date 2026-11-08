@@ -15,13 +15,31 @@ defmodule SsmWeb.Api.DiffsApiTest do
     {:ok, conn: conn}
   end
 
-  defp stub_keyfiles(host_id, entries) do
+  defp stub_version(host_id) do
     payload = Jason.encode!(%{version: "x", sha256: Ssm.Ssh.ScriptRunner.script_sha256()})
     MockClient.set_exec(host_id, @version_probe, %Result{stdout: payload})
+  end
+
+  defp stub_keyfiles(host_id, entries) do
+    stub_version(host_id)
 
     MockClient.set_exec(host_id, "sh .ssm/script.sh get_ssh_keyfiles", %Result{
       stdout: Jason.encode!(entries)
     })
+  end
+
+  test "an unreadable host is 502 SSH_CONNECT_FAILED, never an empty host", %{conn: conn} do
+    host = host_fixture(%{name: "broken"})
+    stub_version(host.id)
+
+    MockClient.set_exec(host.id, "sh .ssm/script.sh get_ssh_keyfiles", %Result{
+      stdout: "not json"
+    })
+
+    body = conn |> get(~p"/api/v2/diffs/#{host.id}") |> json_response(502)
+    assert body["success"] == false
+    assert body["error"]["code"] == "SSH_CONNECT_FAILED"
+    assert body["error"]["message"] =~ "non-JSON"
   end
 
   test "diff reports per-login items with statuses", %{conn: conn} do
@@ -102,5 +120,130 @@ defmodule SsmWeb.Api.DiffsApiTest do
 
     body = conn |> post(~p"/api/v2/diffs/#{host.id}/sync") |> json_response(409)
     assert body["error"]["code"] == "SSH_READONLY"
+  end
+
+  test "a stored key line with control characters is refused: 422 VALIDATION_FAILED", %{
+    conn: conn
+  } do
+    user = user_fixture()
+    host = host_fixture(%{name: "web1", username: "ssm-admin"})
+
+    Ssm.Repo.insert!(%Ssm.Users.UserKey{
+      user_id: user.id,
+      key_type: "ssh-ed25519",
+      key_base64: "BADROW\nssh-ed25519 AAAAINJECTED",
+      name: "x"
+    })
+
+    authorization_fixture(user, host, %{login: "deploy"})
+    stub_keyfiles(host.id, [])
+    MockClient.set_default_exec(%Result{exit_code: 0})
+
+    body = conn |> post(~p"/api/v2/diffs/#{host.id}/sync") |> json_response(422)
+    assert body["success"] == false
+    assert body["error"]["code"] == "VALIDATION_FAILED"
+    assert body["error"]["message"] =~ "refused 1 stored key line"
+  end
+
+  defp audit(action) do
+    entry = Enum.find(Ssm.Activity.list(), &(&1.action == action))
+    entry && {entry.actor_username, entry.target, Ssm.Activity.details(entry)}
+  end
+
+  describe "sync audit log" do
+    test "a successful sync is logged with the API user", %{conn: conn} do
+      user = user_fixture()
+      host = host_fixture(%{name: "web1"})
+      key_fixture(user, %{key_type: "ssh-ed25519", key_base64: "AUDIT1", name: nil})
+      authorization_fixture(user, host, %{login: "deploy"})
+      stub_keyfiles(host.id, [])
+      MockClient.set_default_exec(%Result{exit_code: 0})
+
+      conn |> post(~p"/api/v2/diffs/#{host.id}/sync") |> json_response(200)
+      assert {"admin", "web1", %{"written" => "deploy", "keys" => 1}} = audit("sync")
+    end
+
+    test "a partial sync is 409 SSH_READONLY and logged", %{conn: conn} do
+      host = host_fixture(%{name: "web2", username: "ssm-admin"})
+
+      for login <- ["aaa", "bbb"] do
+        user = user_fixture()
+        key_fixture(user, %{key_type: "ssh-ed25519", key_base64: "AUD#{login}", name: nil})
+        authorization_fixture(user, host, %{login: login})
+      end
+
+      stub_keyfiles(host.id, [
+        %{login: "bbb", readonly_condition: "mine", readonly_scope: "user", keyfile: ""}
+      ])
+
+      MockClient.set_default_exec(%Result{exit_code: 0})
+
+      body = conn |> post(~p"/api/v2/diffs/#{host.id}/sync") |> json_response(409)
+      assert body["success"] == false
+      assert body["error"]["code"] == "SSH_READONLY"
+      assert body["error"]["message"] =~ ~s(skipped "bbb")
+      assert body["error"]["message"] =~ "written: aaa"
+      assert {"admin", "web2", details} = audit("sync_partial")
+      assert details["written"] == "aaa"
+      assert details["skipped"] =~ ~s("bbb")
+    end
+
+    test "a refused sync (disabled host) is logged as failed", %{conn: conn} do
+      host = host_fixture(%{name: "off", disabled: true})
+      conn |> post(~p"/api/v2/diffs/#{host.id}/sync") |> json_response(409)
+      assert {"admin", "off", %{"error" => error}} = audit("sync_failed")
+      assert error =~ "disabled"
+    end
+  end
+
+  describe "approved wire changes (2026-11-08)" do
+    test "ssm's own key unavailable: sync is 500 INTERNAL_ERROR, nothing written", %{conn: conn} do
+      Application.put_env(:ssm, :test_own_public_key, :unavailable)
+      on_exit(fn -> Application.delete_env(:ssm, :test_own_public_key) end)
+      user = user_fixture()
+      host = host_fixture(%{name: "root-host", username: "root"})
+      key_fixture(user, %{key_type: "ssh-ed25519", key_base64: "OWNLESS", name: nil})
+      authorization_fixture(user, host, %{login: "root"})
+      stub_keyfiles(host.id, [])
+      MockClient.set_default_exec(%Result{exit_code: 0})
+
+      body = conn |> post(~p"/api/v2/diffs/#{host.id}/sync") |> json_response(500)
+      assert body["success"] == false
+      assert body["error"]["code"] == "INTERNAL_ERROR"
+      assert body["error"]["message"] =~ "SSH_KEY"
+
+      refute Enum.any?(MockClient.calls().exec, fn {_id, cmd} ->
+               String.contains?(cmd, "set_authorized_keyfile")
+             end)
+    end
+
+    test "a user_readonly not owned by root shows up in the sync audit entry", %{conn: conn} do
+      user = user_fixture()
+      host = host_fixture(%{name: "web3", username: "ssm-admin"})
+      key_fixture(user, %{key_type: "ssh-ed25519", key_base64: "IGN1", name: nil})
+      authorization_fixture(user, host, %{login: "deploy"})
+
+      stub_keyfiles(host.id, [
+        %{login: "deploy", readonly_ignored: "user_readonly not owned by root", keyfile: ""}
+      ])
+
+      MockClient.set_default_exec(%Result{exit_code: 0})
+
+      conn |> post(~p"/api/v2/diffs/#{host.id}/sync") |> json_response(200)
+      assert {"admin", "web3", details} = audit("sync")
+      assert details["ignored"] =~ ~s("deploy" \(user_readonly not owned by root\))
+    end
+  end
+
+  test "an unsafe ~/.ssh shows its note in the API diff (per-login read_error)", %{conn: conn} do
+    host = host_fixture(%{name: "symssh"})
+
+    stub_keyfiles(host.id, [
+      %{login: "labtest", unsafe: "ssh_dir", keyfile: ""}
+    ])
+
+    body = conn |> get(~p"/api/v2/diffs/#{host.id}") |> json_response(200)
+    assert [login] = body["data"]["logins"]
+    assert login["read_error"] =~ "revocation blocked: unsafe ~/.ssh"
   end
 end

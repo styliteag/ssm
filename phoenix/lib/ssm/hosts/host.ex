@@ -24,6 +24,7 @@ defmodule Ssm.Hosts.Host do
   use Ecto.Schema
   import Ecto.Changeset
 
+  alias Ssm.ControlChars
   alias Ssm.Hosts.SshFields
   alias Ssm.Ssh.HostKey
 
@@ -66,6 +67,7 @@ defmodule Ssm.Hosts.Host do
     |> validate_required([:name, :username, :address, :port])
     |> validate_length(:name, min: 1, max: 255)
     |> validate_number(:port, greater_than: 0, less_than: 65_536)
+    |> ControlChars.validate([:name, :username])
     # Both reach the local ssh command line (jump chains): no option-like or
     # separator characters (see Ssm.Hosts.SshFields).
     |> validate_change(:username, &ssh_field(&1, &2, SshFields.valid_username?(&2)))

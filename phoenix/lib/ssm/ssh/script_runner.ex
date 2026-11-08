@@ -18,12 +18,23 @@ defmodule Ssm.Ssh.ScriptRunner do
   defmodule LoginKeyfile do
     @moduledoc "One login's authorized_keys as reported by script.sh."
     @enforce_keys [:login, :has_pragma, :keyfile]
-    defstruct [:login, :has_pragma, :readonly_condition, :keyfile]
+    defstruct [
+      :login,
+      :has_pragma,
+      :readonly_condition,
+      :readonly_scope,
+      :readonly_ignored,
+      :unsafe,
+      :keyfile
+    ]
 
     @type t :: %__MODULE__{
             login: String.t(),
             has_pragma: boolean(),
             readonly_condition: String.t() | nil,
+            readonly_scope: :user | :host | nil,
+            readonly_ignored: String.t() | nil,
+            unsafe: String.t() | nil,
             keyfile: String.t()
           }
   end
@@ -90,8 +101,12 @@ defmodule Ssm.Ssh.ScriptRunner do
     end
   end
 
+  # A user-writable authorized_keys or user_readonly may hold bytes that are
+  # not UTF-8 (a Latin-1 comment); script.sh only emits them inside JSON
+  # strings, so replacing them (U+FFFD) keeps the JSON valid and the host
+  # readable. Keys compare by type and base64, so only a comment changes.
   defp parse_keyfiles(stdout, target) do
-    case Jason.decode(String.trim(stdout)) do
+    case stdout |> String.replace_invalid() |> String.trim() |> Jason.decode() do
       {:ok, entries} when is_list(entries) ->
         {:ok, Enum.map(entries, &parse_entry/1)}
 
@@ -115,10 +130,25 @@ defmodule Ssm.Ssh.ScriptRunner do
       login: to_string(raw["login"]),
       has_pragma: !!raw["has_pragma"],
       readonly_condition: readonly,
-      # The shell script encodes "\n" as a literal two-char escape.
-      keyfile: raw |> Map.get("keyfile", "") |> to_string() |> String.replace("\\n", "\n")
+      readonly_scope: readonly_scope(readonly, raw["readonly_scope"]),
+      # a user_readonly the login's user owns: not honoured, but reported
+      readonly_ignored: blank_to_nil(raw["readonly_ignored"]),
+      # "symlink" | "hardlink" | "special": not read (keyfile empty), not written
+      unsafe: blank_to_nil(raw["unsafe"]),
+      # script.sh (json_escape) emits a proper JSON string: backslashes,
+      # quotes and newlines arrive decoded; nothing to unescape here.
+      keyfile: raw |> Map.get("keyfile", "") |> to_string()
     }
   end
+
+  defp blank_to_nil(value) when value in [nil, ""], do: nil
+  defp blank_to_nil(value), do: to_string(value)
+
+  # `user_readonly` affects one login only; every other marker (and one an
+  # older script does not classify) is host-wide
+  defp readonly_scope(nil, _scope), do: nil
+  defp readonly_scope(_readonly, "user"), do: :user
+  defp readonly_scope(_readonly, _scope), do: :host
 
   @doc """
   Replace `login`'s authorized_keys with `content`. The script enforces the
@@ -135,6 +165,13 @@ defmodule Ssm.Ssh.ScriptRunner do
       cond do
         result.exit_code == 0 ->
           :ok
+
+        # script.sh refuses symlinked/hardlinked files (root write-through)
+        unsafe_refusal?(result) ->
+          {:error,
+           {:ssh_unsafe,
+            "host #{inspect(target.name)} refused write for #{inspect(login)}: " <>
+              refusal_reason(result)}}
 
         readonly_refusal?(result) ->
           {:error,
@@ -157,6 +194,9 @@ defmodule Ssm.Ssh.ScriptRunner do
       stderr -> stderr
     end
   end
+
+  defp unsafe_refusal?(%Result{} = result),
+    do: result |> refusal_reason() |> String.contains?("Keyfile is unsafe")
 
   defp readonly_refusal?(%Result{} = result) do
     result |> refusal_reason() |> String.downcase() |> String.contains?("readonly")

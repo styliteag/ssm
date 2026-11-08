@@ -7,6 +7,7 @@ defmodule SsmWeb.Api.HostController do
 
   use SsmWeb, :controller
 
+  alias Ssm.ControlChars
   alias Ssm.Hosts
   alias Ssm.Hosts.Host
   alias SsmWeb.Api.Errors
@@ -14,8 +15,14 @@ defmodule SsmWeb.Api.HostController do
   alias SsmWeb.Api.Params
 
   @create_spec [
-    name: [type: :string, required: true, min_len: 1, max_len: 128],
-    username: [type: :string, required: true, min_len: 1, max_len: 128],
+    name: [type: :string, required: true, min_len: 1, max_len: 128, check: &ControlChars.check/1],
+    username: [
+      type: :string,
+      required: true,
+      min_len: 1,
+      max_len: 128,
+      check: &ControlChars.check/1
+    ],
     address: [type: :string, required: true, min_len: 1, max_len: 253],
     port: [type: :integer, default: 22, min: 1, max: 65_535],
     key_fingerprint: [type: :string, nilable: true, max_len: 1024],
@@ -25,8 +32,8 @@ defmodule SsmWeb.Api.HostController do
   ]
 
   @update_spec [
-    name: [type: :string, min_len: 1, max_len: 128],
-    username: [type: :string, min_len: 1, max_len: 128],
+    name: [type: :string, min_len: 1, max_len: 128, check: &ControlChars.check/1],
+    username: [type: :string, min_len: 1, max_len: 128, check: &ControlChars.check/1],
     address: [type: :string, min_len: 1, max_len: 253],
     port: [type: :integer, min: 1, max: 65_535],
     key_fingerprint: [type: :string, nilable: true, max_len: 1024],

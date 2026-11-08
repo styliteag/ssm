@@ -42,7 +42,28 @@ recreated.
 remote `login`. `host.disabled` blocks all SSH operations. `operators` (OIDC web accounts) and newer tables for the mctl
 contract are plural (contract spec names): `customers`, `groups`, `host_groups`, plus
 the `mctl_contract` library's `mctl_tokens`, `mctl_jobs`, `mctl_idempotency`, and `host_checks`
-(last result of the periodic key check per host, `ON DELETE CASCADE`).
+(last result of the periodic key check per host, `ON DELETE CASCADE`), and `managed_logins`
+(every `(host, login)` that ever held a grant; written by `Authorizations.create_authorization/1`,
+never pruned, `ON DELETE CASCADE` — a sync empties such a login's file after its last grant is gone).
+Sync and readonly markers (`Ssm.Diffs.sync_host/2`): a host-wide marker (`system_readonly`, vendor
+platform) stops a sync before any write; a login's own `~/.ssh/user_readonly` counts only when root
+owns it (`script.sh` `user_readonly_state`, `find -user 0`) and then skips only that login, the
+others are written and the sync fails with `{:ssh_readonly, _}` naming skipped and written logins (a
+partial sync, API 409 `SSH_READONLY`). A `user_readonly` owned by anyone else is ignored (reported as
+`readonly_ignored`, shown in the diff and the audit entry); the marker must be a plain file with one
+link, and its content is never shown (fixed reason `user_readonly (root-owned)`). `script.sh` runs as
+root and never reads or writes through a link. A symlinked/hardlinked/non-regular `authorized_keys`
+is reported `unsafe` (`symlink|hardlink|special`), not read, but still written: the entry is
+replaced, never written through, so revocation reaches it. A symlinked `~/.ssh` (or one resolving
+outside the home) is `unsafe: ssh_dir`: not read, not written, skipped by a sync as "revocation
+blocked: unsafe ~/.ssh" (diff, periodic check, audit). Writes: cwd-pinned in the real `~/.ssh`, a
+fresh `O_EXCL` temp file (umask 022: root-owned 0644, as before), a handwritten file renamed to
+`authorized_keys.backup.<random>`, final rename with `mv -T`/`mv -h`; without either (busybox) a
+symlink target is `rm`'d first, then plain `mv` (a real directory there is refused, `unsafe:
+link-to-dir`, a per-login skip). An unsafe `~/.ssh` also sets the login's `read_error` (API diff);
+`SyncCheck` keeps it as blocked drift, not a host error. Reads: time-bounded; on Linux the opened fd is checked via
+`/proc` (same inode as the entry, one link).
+Every sync outcome is audit-logged (`Ssm.Diffs.SyncAudit`).
 
 **Web login** (ADR-0011, `lib/ssm/oidc/`, `ssm_web/oidc_controller.ex`): `.htpasswd`
 users are local admins (session `ssm_user`). With `OIDC_ISSUER` set, SSO users are
@@ -285,6 +306,10 @@ meta{total,page,page_size}}`.
 401, `VALIDATION_FAILED` 422, `{HOST,USER,KEY,AUTHORIZATION}_NOT_FOUND` 404,
 `RATE_LIMITED` 429 (failed-login lock, `Retry-After`), `HOST_DISABLED` 409, `SSH_READONLY` 409, `CONFLICT` 409, `SSH_CONNECT_FAILED` 502,
 `INTERNAL_ERROR` 500.
+Diff/sync outcomes (wire changes approved 2026-11-08): unreadable listing → 502
+`SSH_CONNECT_FAILED`; partial sync (root-owned `user_readonly`) or host-wide readonly → 409
+`SSH_READONLY`; own key (`SSH_KEY`) unavailable → 500 `INTERNAL_ERROR`; stored key row with control
+characters → 422 `VALIDATION_FAILED`. Contract tests: `test/ssm_web/api/diffs_api_test.exs`.
 
 **Auth quick test** (dev server):
 ```bash
@@ -324,7 +349,18 @@ key check is separate (`SSM_SYNC_INTERVAL`) and never writes to a host;
 `.secrets-whitelist` still carries Rust- and Python-era
 path entries (harmless, narrow — cleaning it needs user approval per rule #6);
 `./ssm.db` at the repo root is the final snapshot of the python stack's data, kept as
-the dev-DB import source (`just import-db`).
+the dev-DB import source (`just import-db`). Known limitations of the `script.sh`
+link checks: a root-owned file an admin left in a user's home can be moved by that user to
+`~/.ssh/user_readonly` and then freezes the login (the check sees a plain root-owned
+file); and without `/proc` (FreeBSD/pfSense) the read side checks before it reads, so a user
+who swaps `authorized_keys` for a link in the instant between check and read could still get
+one read through it (Linux checks the opened file; the write side has no such window). Without
+`timeout(1)` a FIFO swapped in at that instant can hang the listing until the SSH timeout.
+A user who symlinks their own `~/.ssh` blocks ssm's writes, and so the revocation, for that login
+on purpose: it stays a visible "revocation blocked: unsafe ~/.ssh" (diff, periodic check, audit)
+that staff must resolve on the host; ssm does not repair it. On busybox (no `mv -T`/`-h`) a
+symlink-to-dir planted in the instant between ssm's `rm` of the old link, its re-check and its
+`mv` could still receive the root-owned 0644 temp file.
 
 **Knowledge graph**: `.claude/settings.json` hooks keep a `code-review-graph` index
 (`.code-review-graph/`, gitignored) updated on every edit. The MCP server entry was

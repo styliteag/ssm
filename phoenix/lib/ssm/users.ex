@@ -83,6 +83,31 @@ defmodule Ssm.Users do
     UserKey |> Repo.get_by(key_base64: base64) |> Repo.preload(:user)
   end
 
+  @doc """
+  Stored keys with control characters (`Ssm.ControlChars`) in type,
+  material, comment or extra comment — rows of
+  `Ssm.Release.invalid_stored_rows/0` (`table: "user_key"`, one per field).
+  """
+  @spec invalid_stored_keys() :: [map()]
+  def invalid_stored_keys do
+    from(k in UserKey, order_by: k.id, preload: :user)
+    |> Repo.all()
+    |> Enum.flat_map(fn key ->
+      for field <- [:key_type, :key_base64, :name, :extra_comment],
+          Ssm.ControlChars.present?(Map.get(key, field)) do
+        %{
+          table: "user_key",
+          id: key.id,
+          field: Atom.to_string(field),
+          user: key.user && key.user.username,
+          host: nil,
+          login: nil,
+          reason: "must not contain control characters"
+        }
+      end
+    end)
+  end
+
   @spec create_key(map()) :: {:ok, UserKey.t()} | {:error, Ecto.Changeset.t()}
   def create_key(attrs), do: %UserKey{} |> UserKey.changeset(attrs) |> Repo.insert()
 

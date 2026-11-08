@@ -76,7 +76,7 @@ defmodule SsmWeb.MctlPeopleTest do
             login: login,
             has_pragma: true,
             readonly_condition: readonly,
-            keyfile: Enum.join([@head | lines], "\\n")
+            keyfile: Enum.join([@head | lines], "\n")
           }
         ])
     })

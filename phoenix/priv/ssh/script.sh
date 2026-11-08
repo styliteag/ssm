@@ -63,20 +63,157 @@ check_keyfile_condition() {
         return 0
     fi
     
-    # Check for user override
-    home=$(do_getent_passwd "${login}" | cut -d: -f6)
-    user_readonly="${home}/.ssh/user_readonly"
-    if [ -f "${user_readonly}" ]; then
-        content=$(cat "${user_readonly}")
-        if [ -n "${content}" ]; then
-            printf "%s" "${content}"
-        else
-            printf "Local override '%s' exists" "${user_readonly}"
-        fi
+    # Check for specific systems (host-wide, before any per-login marker)
+    platform=$(platform_condition)
+    if [ -n "${platform}" ]; then
+        printf "%s" "${platform}"
         return 0
     fi
-    
-    # Check for specific systems:
+
+    # Check for user override (only a plain root-owned marker counts). Its
+    # content is never shown: a marker could be a link to any file.
+    if [ "$(user_readonly_state "${login}")" = "root" ]; then
+        printf "user_readonly (root-owned)"
+        return 0
+    fi
+}
+
+# Path of a login's user_readonly marker.
+user_readonly_file() {
+    home=$(do_getent_passwd "$1" | cut -d: -f6)
+    printf "%s" "${home}/.ssh/user_readonly"
+}
+
+# State of a login's user_readonly: "root" (a plain file owned by uid 0 with
+# one link, in a ~/.ssh that is no link: honoured), "link" (a symlink or
+# hardlink, or ~/.ssh is unsafe: ignored), "other" (owned by someone else:
+# ignored, the login's user could freeze their own revocation) or "" (none).
+# find -user/-links/-type are POSIX (GNU, busybox, BSD), unlike stat.
+user_readonly_state() {
+    marker=$(user_readonly_file "$1")
+    if [ ! -e "${marker}" ] && [ ! -h "${marker}" ]; then
+        return 0
+    fi
+    if [ -h "${marker}" ] || [ -n "$(ssh_dir_unsafe "$1")" ] \
+        || [ -z "$(find "${marker}" -prune -type f -links 1 2>/dev/null)" ]; then
+        echo "link"
+    elif [ -n "$(find "${marker}" -prune -user 0 2>/dev/null)" ]; then
+        echo "root"
+    else
+        echo "other"
+    fi
+}
+
+# Home dir of a login (getent passwd field 6).
+login_home() {
+    do_getent_passwd "$1" | cut -d: -f6
+}
+
+# "ssh_dir" when the login's ~/.ssh is a symlink or does not resolve to the
+# .ssh directory inside its (resolved) home, else "". A home that is itself
+# reached through a symlink (FreeBSD /home -> /usr/home) is fine.
+ssh_dir_unsafe() {
+    home=$(login_home "$1")
+    dir="${home}/.ssh"
+    if [ -h "${dir}" ]; then
+        echo "ssh_dir"
+        return 0
+    fi
+    if [ -d "${dir}" ]; then
+        real_home=$(cd "${home}" 2>/dev/null && pwd -P) || real_home=""
+        real_dir=$(cd "${dir}" 2>/dev/null && pwd -P) || real_dir=""
+        if [ -z "${real_home}" ] || [ "${real_dir}" != "${real_home}/.ssh" ]; then
+            echo "ssh_dir"
+        fi
+    fi
+}
+
+# Why ssm (running as root) must not read a login's authorized_keys:
+# "ssh_dir" (~/.ssh is a link: not written either), "symlink", "hardlink"
+# (more than one link) or "special" (not a regular file) — these three are
+# replaced by a write, never written through — or "" (safe).
+keyfile_unsafe() {
+    dir_state=$(ssh_dir_unsafe "$1")
+    if [ -n "${dir_state}" ]; then
+        echo "${dir_state}"
+        return 0
+    fi
+    file="$(login_home "$1")/${authorized_keys_location}"
+    if [ -h "${file}" ]; then
+        echo "symlink"
+    elif [ ! -e "${file}" ]; then
+        return 0
+    elif [ ! -f "${file}" ]; then
+        echo "special"
+    elif [ -n "$(find "${file}" -prune -links +1 2>/dev/null)" ]; then
+        echo "hardlink"
+    fi
+}
+
+# Run "$@" with a time limit where timeout(1) exists (a FIFO swapped in
+# must not hang the script).
+bounded() {
+    if command -v timeout >/dev/null 2>&1; then
+        timeout 10 "$@"
+    else
+        "$@"
+    fi
+}
+
+# Print a plain authorized_keys. On Linux the opened file itself is checked
+# (/proc/<pid>/fd): it must be the very inode of the directory entry (not a
+# link swapped in after the checks) with one link; elsewhere only the checks
+# before the read apply (documented limitation).
+read_keyfile() {
+    if [ -d /proc/self/fd ]; then
+        # shellcheck disable=SC2016
+        bounded sh -c '
+            exec 3< "$1" || exit 1
+            opened=$(ls -iL "/proc/$$/fd/3" | awk "{ print \$1 }")
+            entry=$(ls -id "$1" | awk "{ print \$1 }")
+            [ "${opened}" = "${entry}" ] || exit 1
+            [ -n "$(find -L "/proc/$$/fd/3" -prune -type f -links 1)" ] || exit 1
+            cat <&3' sh "$1"
+    else
+        bounded cat "$1"
+    fi
+}
+
+# Rename $1 to $2 with rename(2) semantics: never into a directory that $2
+# (or a symlink at $2) names. GNU mv -T, BSD mv -h; otherwise (busybox) a
+# symlink at $2 is removed first (rm never follows) and $2 must then be gone
+# before the plain mv. A real directory at $2 is refused ("link-to-dir").
+replace_entry() {
+    if mv -f -T "$1" "$2" 2>/dev/null; then
+        return 0
+    fi
+    if mv -f -h "$1" "$2" 2>/dev/null; then
+        return 0
+    fi
+    if [ -h "$2" ]; then
+        rm -f "$2"
+    fi
+    if [ -d "$2" ] || [ -h "$2" ]; then
+        rm -f "$1"
+        echo "Keyfile is unsafe (link-to-dir), aborting."
+        exit 1
+    fi
+    mv -f "$1" "$2"
+}
+
+# 16 random hex digits for a temp file name nobody can predict; fails
+# (prints nothing) unless od really produced exactly 16 hex digits.
+random_suffix() {
+    suffix=$(od -An -N8 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n') || return 1
+    case "${suffix}" in
+        *[!0-9a-f]*) return 1 ;;
+    esac
+    [ "${#suffix}" -eq 16 ] || return 1
+    printf "%s" "${suffix}"
+}
+
+# Vendor platforms whose authorized_keys ssm must not manage (host-wide).
+platform_condition() {
     # PfSense
     if grep -qs "pfSense" "/etc/platform"; then
         echo "Product is pfSense"
@@ -106,20 +243,24 @@ get_authorized_keyfile_for() {
     login="$1"
     keyfile_location=$(get_authorized_keys_location "${login}")
 
+    # never read through a link (a user could point it at /etc/shadow)
+    if [ -n "$(keyfile_unsafe "${login}")" ]; then
+        exit 0
+    fi
+
     if [ ! -e "${keyfile_location}" ]; then
         echo "Couldn't find authorized_keys for this login."
         echo "Tried location: ${keyfile_location}"
         exit 1
     fi
 
-    cat "${keyfile_location}"
+    read_keyfile "${keyfile_location}" || exit 1
     echo ""
     exit 0
 }
 
 handle_set_authorized_keyfile() {
     login="$1"
-    keyfile_location=$(get_authorized_keys_location "${login}")
 
     readonly_condition=$(check_keyfile_condition "${login}")
     if [ -n "${readonly_condition}" ]; then
@@ -127,16 +268,51 @@ handle_set_authorized_keyfile() {
         exit 1
     fi
 
-    if [ -e "${keyfile_location}" ]; then
-        file_head=$(head -n1 < "${keyfile_location}")
+    # ~/.ssh itself a link: the write would land elsewhere, refuse. A linked
+    # authorized_keys is fine: its entry is replaced, never written through.
+    unsafe=$(keyfile_unsafe "${login}")
+    if [ "${unsafe}" = "ssh_dir" ]; then
+        echo "Keyfile is unsafe (ssh_dir), aborting."
+        exit 1
+    fi
 
+    home=$(login_home "${login}")
+
+    # Work inside the real ~/.ssh with relative names only: the cwd stays on
+    # that directory even if the user swaps the path to a link afterwards.
+    cd "${home}/.ssh" || { echo "Couldn't enter ${home}/.ssh"; exit 1; }
+    if [ "$(pwd -P)" != "$(cd "${home}" && pwd -P)/.ssh" ]; then
+        echo "Keyfile is unsafe (ssh_dir), aborting."
+        exit 1
+    fi
+
+    # every name ssm creates here must be unpredictable
+    suffix=$(random_suffix) || { echo "No random name available (od failed), aborting."; exit 1; }
+    tmp_suffix=$(random_suffix) || { echo "No random name available (od failed), aborting."; exit 1; }
+
+    # A handwritten plain file is kept: renamed to a fresh, unpredictable
+    # name (never into a directory a planted authorized_keys.backup names).
+    # Its header is read only from a plain single-link file, time-bounded.
+    if [ -z "${unsafe}" ] && [ -f authorized_keys ]; then
+        content=$(read_keyfile authorized_keys) || content=""
+        file_head="${content%%
+*}"
         if [ "${file_head}" != "${keyfile_head}" ]; then
-            mv "${keyfile_location}" "${keyfile_location}.backup"
+            replace_entry authorized_keys "authorized_keys.backup.${suffix}"
         fi
     fi
 
-    printf "%s\n" "${keyfile_head}" > "${keyfile_location}"
-    cat - >> "${keyfile_location}"
+    # A fresh, unpredictable name opened with O_CREAT|O_EXCL (noclobber):
+    # nothing can be waiting there, and a link put there later is never
+    # written through. Root-owned 0644 (umask 022), as the old script wrote
+    # it; sshd StrictModes accepts root- or user-owned, not group/world
+    # writable files.
+    tmp=".authorized_keys.ssm.${tmp_suffix}"
+    if ! (umask 022 && set -C && { printf "%s\n" "${keyfile_head}"; cat -; } > "${tmp}"); then
+        echo "Couldn't create a temporary keyfile in ${home}/.ssh"
+        exit 1
+    fi
+    replace_entry "${tmp}" authorized_keys
     exit 0
 }
 
@@ -153,11 +329,53 @@ get_ssh_users() {
     exit 0
 }
 
+# Encode stdin as the body of a JSON string (RFC 8259): backslash and double
+# quote are escaped, tab/CR become \t/\r, every other C0 byte \u00XX, and
+# lines are joined with \n. Byte-wise (LC_ALL=C), so any awk gives the same.
+json_escape() {
+    LC_ALL=C awk '
+        BEGIN {
+            for (i = 1; i < 32; i++) esc[sprintf("%c", i)] = sprintf("\\u%04x", i)
+            esc["\t"] = "\\t"; esc["\r"] = "\\r"; esc["\\"] = "\\\\"; esc["\""] = "\\\""
+        }
+        {
+            out = ""
+            n = length($0)
+            for (j = 1; j <= n; j++) {
+                c = substr($0, j, 1)
+                out = out ((c in esc) ? esc[c] : c)
+            }
+            printf "%s%s", (NR > 1 ? "\\n" : ""), out
+        }'
+}
+
+# Which marker makes a login readonly, checked in the order of
+# check_keyfile_condition: "system" (system_readonly, host-wide), "platform"
+# (pfSense, TrueNAS, Sophos; host-wide), "user" (the login's own
+# user_readonly, root-owned) or "".
+keyfile_condition_scope() {
+    login="$1"
+    if [ -f "${HOME}/.ssh/system_readonly" ]; then
+        echo "system"
+        return 0
+    fi
+    if [ -n "$(platform_condition)" ]; then
+        echo "platform"
+        return 0
+    fi
+    if [ "$(user_readonly_state "${login}")" = "root" ]; then
+        echo "user"
+    fi
+}
+
 handle_get_ssh_keyfiles() {
     isFirst=true
     printf "["
       get_ssh_users | while read -r login; do
-            keyfile=$(get_authorized_keyfile_for "${login}")
+            # a read that failed (a link swapped in, a timeout, the file
+            # deleted) is reported as "race", never shown; the listing goes on
+            raced=""
+            keyfile=$(get_authorized_keyfile_for "${login}") || { keyfile=""; raced="race"; }
             if [ "${isFirst}" = true ]; then
                 isFirst=false
             else
@@ -175,11 +393,22 @@ handle_get_ssh_keyfiles() {
                 [ "${head}" = "${keyfile_head}" ] && has_pragma="true"
             fi
 
-            printf '{"login":"%s", "has_pragma": %s, "readonly_condition": "%s",' "${login}" "${has_pragma}" "${readonly_condition}"
+            readonly_scope=$(keyfile_condition_scope "${login}")
+            readonly_ignored=""
+            case "$(user_readonly_state "${login}")" in
+                other) readonly_ignored="user_readonly not owned by root" ;;
+                link) readonly_ignored="user_readonly is a link" ;;
+            esac
+            unsafe=$(keyfile_unsafe "${login}")
+            [ -n "${unsafe}" ] || unsafe="${raced}"
 
-            # Remove carriage returns
-            # Escape double quotes and newlines
-            printf '"keyfile":"%s"}' "$(printf "%s" "${keyfile}" | tr -d '\r' | sed 's/\"/\\\"/g' | awk 1 ORS='\\n' )"
+            printf '{"login":"%s", "has_pragma": %s, "readonly_condition": "%s", "readonly_scope": "%s", "readonly_ignored": "%s", "unsafe": "%s",' \
+                "$(printf "%s" "${login}" | json_escape)" "${has_pragma}" \
+                "$(printf "%s" "${readonly_condition}" | json_escape)" "${readonly_scope}" \
+                "${readonly_ignored}" "${unsafe}"
+
+            # every string field is JSON-escaped (json_escape)
+            printf '"keyfile":"%s"}' "$(printf "%s" "${keyfile}" | json_escape)"
       done
     printf "]"
 }

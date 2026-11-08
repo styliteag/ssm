@@ -87,8 +87,12 @@ defmodule SsmWeb.Mctl.SummaryView do
     [{"missing", entry["missing"]}, {"extra", entry["extra"]}]
     |> Enum.reject(fn {_label, keys} -> keys in [nil, []] end)
     |> Enum.map_join("; ", fn {label, keys} -> "#{label}: #{Enum.join(keys, ", ")}" end)
+    |> with_blocked(entry["blocked"])
     |> String.slice(0, @max_text)
   end
+
+  defp with_blocked(text, nil), do: text
+  defp with_blocked(text, blocked), do: "#{text}; #{blocked}"
 
   defp drift_reason(drift) do
     missing = drift |> Enum.map(&length(&1["missing"] || [])) |> Enum.sum()

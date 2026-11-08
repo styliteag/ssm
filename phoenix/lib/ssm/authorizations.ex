@@ -6,7 +6,7 @@ defmodule Ssm.Authorizations do
 
   import Ecto.Query
 
-  alias Ssm.Authorizations.Authorization
+  alias Ssm.Authorizations.{Authorization, ManagedLogin, Options}
   alias Ssm.Repo
 
   @spec list_authorizations(keyword()) :: [Authorization.t()]
@@ -88,14 +88,93 @@ defmodule Ssm.Authorizations do
     end)
   end
 
+  @doc """
+  Create a grant and record its login as managed (`managed_logins`) in the
+  same transaction — every creation path (UI, `/api/v2`, `bulk_grant/4`,
+  key assignment, diff page "Allow") goes through here.
+  """
   @spec create_authorization(map()) :: {:ok, Authorization.t()} | {:error, Ecto.Changeset.t()}
   def create_authorization(attrs),
-    do: %Authorization{} |> Authorization.changeset(attrs) |> Repo.insert()
+    do: %Authorization{} |> Authorization.changeset(attrs) |> write_managed(&Repo.insert/1)
 
+  @doc "Update a grant; a new host/login pair is recorded as managed too."
   @spec update_authorization(Authorization.t(), map()) ::
           {:ok, Authorization.t()} | {:error, Ecto.Changeset.t()}
   def update_authorization(%Authorization{} = auth, attrs),
-    do: auth |> Authorization.changeset(attrs) |> Repo.update()
+    do: auth |> Authorization.changeset(attrs) |> write_managed(&Repo.update/1)
+
+  # an invalid changeset never reaches the DB: no transaction, so a caller's
+  # outer transaction is not rolled back by a plain validation error
+  defp write_managed(%Ecto.Changeset{valid?: false} = changeset, write), do: write.(changeset)
+
+  defp write_managed(changeset, write) do
+    Repo.transaction(fn ->
+      case write.(changeset) do
+        {:ok, auth} -> tap(auth, &record_managed_login(&1.host_id, &1.login))
+        {:error, failed} -> Repo.rollback(failed)
+      end
+    end)
+  end
+
+  @doc """
+  Mark `login` on `host_id` as managed by ssm (idempotent). A sync keeps
+  writing a managed login's file even after its last grant is gone.
+  """
+  @spec record_managed_login(integer(), String.t()) :: :ok
+  def record_managed_login(host_id, login) do
+    now = DateTime.truncate(DateTime.utc_now(), :second)
+
+    Repo.insert_all(ManagedLogin, [%{host_id: host_id, login: login, inserted_at: now}],
+      on_conflict: :nothing,
+      conflict_target: [:host_id, :login]
+    )
+
+    :ok
+  end
+
+  @doc """
+  Stored grants whose `options` fail today's rules (`Options.validate/1`),
+  e.g. written before the options were validated: `%{authorization_id, host,
+  login, user, options, reason}` sorted by id — rows of
+  `Ssm.Release.invalid_stored_rows/0` (`table: "authorization"`). A sync keeps the host's line
+  of such a key instead of writing it; fix or clear the options.
+  """
+  @spec invalid_stored_options() :: [map()]
+  def invalid_stored_options do
+    from(a in Authorization,
+      where: not is_nil(a.options) and a.options != "",
+      order_by: a.id,
+      preload: [:host, :user]
+    )
+    |> Repo.all()
+    |> Enum.flat_map(fn auth ->
+      case Options.validate(auth.options) do
+        :ok -> []
+        {:error, reason} -> [invalid_row(auth, reason)]
+      end
+    end)
+  end
+
+  defp invalid_row(auth, reason) do
+    %{
+      table: "authorization",
+      id: auth.id,
+      field: "options",
+      host: auth.host && auth.host.name,
+      login: auth.login,
+      user: auth.user && auth.user.username,
+      options: auth.options,
+      reason: reason
+    }
+  end
+
+  @doc "The managed logins of a host, sorted."
+  @spec managed_logins(integer()) :: [String.t()]
+  def managed_logins(host_id) do
+    Repo.all(
+      from m in ManagedLogin, where: m.host_id == ^host_id, order_by: m.login, select: m.login
+    )
+  end
 
   @spec delete_authorization(Authorization.t()) ::
           {:ok, Authorization.t()} | {:error, Ecto.Changeset.t()}

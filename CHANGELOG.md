@@ -7,6 +7,157 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `/api/v2` wire changes, approved by the user 2026-11-08 (AGENTS.md rule 3):
+  - `GET /diffs/{id}` for a host whose key listing cannot be read: 502
+    `SSH_CONNECT_FAILED` with the read error. Before, it returned 200 with
+    `logins: []`.
+  - `POST /diffs/{id}/sync` when root-owned `user_readonly` markers skip
+    logins: 409 `SSH_READONLY`. The message names the skipped logins with
+    their reason and the logins that were written (partial sync).
+  - `POST /diffs/{id}/sync` when ssm's own key (`SSH_KEY`) cannot be read and
+    the host's login user is a target: 500 `INTERNAL_ERROR`. Nothing is
+    written.
+  - `POST /diffs/{id}/sync` when a stored key row has control characters in
+    its key: 422 `VALIDATION_FAILED`, and the other lines are written.
+    Invalid options and control characters in input fields of
+    `/authorizations`, `/keys`, `/users` and `/hosts` also return 422
+    `VALIDATION_FAILED`.
+
+### Security
+
+- Fixed root escalations in the host script (`script.sh`), which ssm runs as
+  root:
+  - Before this fix, a sync wrote through a symlinked or hardlinked
+    `authorized_keys`, so a user could make ssm write the user's granted keys
+    into root's file. Now a linked `authorized_keys` is never written
+    through. ssm writes a new file and renames it into place, which replaces
+    the link, so revocation still reaches the login.
+  - If `~/.ssh` itself is a link or resolves outside the home, ssm skips the
+    login and marks it "revocation blocked: unsafe ~/.ssh" in the diff, the
+    periodic check (as drift) and the sync's activity-log entry. The note
+    also appears in the login's `read_error` in `GET /api/v2/diffs/{id}`.
+  - The backup of a handwritten file used a fixed name. A user could plant
+    `authorized_keys.backup` as a symlink to a directory (for example
+    `/etc/cron.hourly`), and ssm then moved the user's file there. This bug
+    also affected the previous release. The backup now gets a fresh random
+    name (`authorized_keys.backup.<random>`).
+  - The final rename never follows a link that points to a directory. It uses
+    `mv -T` or `mv -h`. On busybox, which has neither, the script first
+    removes a symlink at `authorized_keys` (`rm` never follows a link) and
+    then renames. If a real directory sits there, ssm skips that login with
+    the reason `unsafe: link-to-dir` and still writes the other logins.
+  - ssm no longer reads through links, so a link to `/etc/shadow` can no
+    longer show up in the diff. Such a login is shown as "unsafe
+    authorized_keys (…): not read; a sync replaces it". On Linux the opened
+    file is checked again through `/proc`, and every read is time-bounded, so
+    a FIFO cannot hang the listing. A read that fails (a link swapped in, a
+    timeout) marks only that login as `unsafe: race`, and the listing goes on.
+  - The script stops a write if it cannot get 16 random hex digits for its
+    temporary and backup file names, so it never uses a predictable name.
+- `authorized_keys` is now written atomically. ssm writes a new file next to
+  the old one and renames it over the old one. The new file is root-owned with
+  mode 0644, which is what the old script produced and what sshd StrictModes
+  accepts.
+- A `user_readonly` marker counts only if it is a plain root-owned file with
+  a single link. Its content is never shown any more; the reason is always
+  "user_readonly (root-owned)". A marker that is a link is ignored and shown
+  as "user_readonly is a link". `system_readonly` is unchanged.
+- Revocation now reaches the host. ssm remembers every login that ever held a
+  grant on a host (new table `managed_logins`, filled at upgrade from the
+  existing grants). A sync also rewrites such a login after its last grant is
+  deleted: if the login still has an `authorized_keys` file, it becomes empty
+  (the host's login user keeps only ssm's own key). Readonly markers and
+  disabled hosts are respected as before, and no file is ever deleted. Logins
+  whose grants were deleted before this upgrade are not covered; check them by
+  hand.
+- Keys of disabled SSH users are no longer deployed. The next sync removes them,
+  and until then the diff and the periodic check show them as "not authorized"
+  (drift).
+- Grant options (`authorization.options`) are now written to the host, e.g.
+  `no-pty,from="10.0.0.0/8" ssh-ed25519 AAAA… laptop`. Before, they were only
+  stored. A grant with options replaces the options of the host's line on the
+  next sync, and a different options prefix on the host shows as drift. If the
+  host line had restrictions the grant lacks (`from`, `command`, `restrict`,
+  `no-*`, `permitopen`, `permitlisten`, `expiry-time`, `principals`), the diff
+  page marks it "drops host restriction: …"; the sync still writes the grant. A
+  grant without options keeps the host's line as before, so options typed by
+  hand on the host survive.
+- Options are validated in the UI and in `/api/v2` (422 `VALIDATION_FAILED`).
+  Only these names are accepted: `restrict`, `no-pty`, `no-port-forwarding`,
+  `no-agent-forwarding`, `no-X11-forwarding`, `no-user-rc`, `from`, `command`,
+  `permitopen`, `permitlisten`, `environment`, `expiry-time`, `principals`,
+  `pty`, `port-forwarding`, `agent-forwarding`, `X11-forwarding`, `user-rc`,
+  `no-touch-required`, `verify-required`, `cert-authority`, `tunnel`. Flags take
+  no value, and the others need a value in double quotes. Quotes must be
+  balanced. Backslashes and control characters are refused, so a value can no
+  longer smuggle in a second key.
+- Before upgrading, list stored rows that the new rules refuse:
+  `bin/ssm eval 'Ssm.Release.invalid_stored_rows() |> IO.inspect()'`. The
+  report lists grant options and key fields that contain control characters.
+  For a grant with refused options, a sync keeps the host's existing line of
+  that key, or skips the key if the host has none. It logs the case, and the
+  diff page marks it "invalid stored options". A user merge or split copies
+  such options unchanged. A stored key comment with control characters (for
+  example a tab, a C1 character or old Latin-1 bytes) is left out: the key is
+  written without its comment, and ssm logs it.
+- ssm now reads authorized_keys lines the way sshd does. A key type inside a
+  quoted option value (e.g. `environment="X= ssh-ed25519 <granted key>"`) no
+  longer counts as that granted key or as ssm's own key. A sync replaces such
+  a line with the grant's line.
+- The host script (`script.sh`) now reports valid JSON in every case. It
+  escapes backslashes, quotes, tabs, CRs and other control characters in the
+  login, the readonly text and the `authorized_keys` content. It also reports
+  whether a readonly marker applies to the whole host (`system_readonly`, a
+  vendor platform) or to one login (`user_readonly`), and checks them in the
+  order system, platform, user. Bytes that are not valid UTF-8 (for example
+  a Latin-1 comment) no longer make a host unreadable: ssm replaces them with
+  U+FFFD. Before, the SSH client turned such output into an Erlang term, and
+  the whole host failed to read. Keys are still matched by type and key material, so only the shown
+  comment changes. The script changed, so ssm uploads the new version to each
+  host the next time it connects there, also during a read-only check.
+- A host-wide readonly marker (`system_readonly`, a vendor platform) now stops
+  a sync before the first write. Before, logins earlier in the order could
+  already have been written. A login's own `~/.ssh/user_readonly` now counts
+  only if root owns the file, so users can no longer freeze their own login
+  and block a revocation. A root-owned `user_readonly` skips only that login:
+  all other logins are written. ssm ignores a `user_readonly` owned by anyone
+  else and writes the login. The diff page shows it as "ignored: user_readonly
+  not owned by root", and the sync's activity-log entry lists it. The sync is then reported as failed and
+  names the skipped logins, their marker text and the logins that were
+  written (`/api/v2`: 409 `SSH_READONLY`). If such a login still holds keys
+  that ssm would remove, the diff page and the periodic check mark them
+  "revocation blocked by user_readonly". This note also appears in the Mission
+  Control host summary text. A login without an `authorized_keys` file is
+  handled the same way: when the host refuses the write as readonly, ssm skips
+  that login and syncs the next one.
+- Every sync now writes an entry to the activity log, from the UI and from
+  `/api/v2`: `sync` when it succeeds, `sync_partial` when it fails after some
+  logins were written, and `sync_failed` when nothing was written. Each entry
+  holds the actor, the host, the written logins and the skipped logins with
+  their reason, the ignored `user_readonly` markers, and the error for a
+  failed sync. Before, only a successful UI
+  sync was logged.
+- A host whose key listing cannot be read no longer looks like an empty host.
+  `GET /api/v2/diffs/{id}` returns 502 `SSH_CONNECT_FAILED` with the read
+  error instead of 200 with an empty `logins` list, and the diff page shows the
+  read error above the list.
+- A sync writes nothing when ssm's own key (`SSH_KEY`) cannot be read and the
+  host's login user is a target, because ssm would lock itself out. In
+  `/api/v2`, this is 500 `INTERNAL_ERROR`.
+- ssm now splits key lines on spaces and tabs only, as sshd does.
+- Control characters, Unicode line and paragraph separators, bidi controls,
+  BOMs and invalid UTF-8 are refused in key names, key extra comments, SSH user
+  names and comments, host names and host login users, grant logins and grant
+  comments, in the UI and in `/api/v2` (422 `VALIDATION_FAILED`). A pasted
+  single key that spans several lines is refused. Before, a line break in a key
+  comment could add an extra line to `authorized_keys`.
+- A sync never writes a stored key whose key type or key material contains
+  control characters. ssm logs the row, writes all other lines and reports the
+  sync of that host as failed with the key id. In `/api/v2`, this is 422
+  `VALIDATION_FAILED` on `POST /diffs/{id}/sync`.
+
 ## [4.9.2] - 2026-11-08
 
 ### Added

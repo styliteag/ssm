@@ -6,7 +6,8 @@ defmodule Ssm.Diffs.SyncCheck do
   The stored drift never contains key material: a key is labelled by its
   type, SHA256 fingerprint and comment. A line that is not a plain key line
   (authorized_keys options, odd text) is labelled `"unparsable key line"`
-  and nothing of it is kept. Read failures are reduced to a fixed sentence
+  and nothing of it is kept. A drift entry whose extra keys a sync cannot
+  remove (the login's `user_readonly`) carries `"blocked"`. Read failures are reduced to a fixed sentence
   (`Ssm.Ssh.ErrorCode`); the raw text (addresses, SSH output) stays out.
   """
 
@@ -24,6 +25,7 @@ defmodule Ssm.Diffs.SyncCheck do
         }
 
   @unparsable "unparsable key line"
+  @blocked "revocation blocked by user_readonly"
 
   @doc """
   The check result of a diff. `owners` maps a key's base64 to the name of
@@ -56,8 +58,9 @@ defmodule Ssm.Diffs.SyncCheck do
     end
   end
 
+  # a blocked login (unsafe ~/.ssh) is not read on purpose: drift, not error
   defp read_error(%HostDiff{read_error: nil, logins: logins}),
-    do: Enum.find_value(logins, & &1.read_error)
+    do: Enum.find_value(logins, &(is_nil(&1.blocked) && &1.read_error))
 
   defp read_error(%HostDiff{read_error: raw}), do: raw
 
@@ -67,7 +70,7 @@ defmodule Ssm.Diffs.SyncCheck do
   end
 
   defp compared(logins, owners) do
-    drift = Enum.flat_map(logins, &login_entries(&1, owners))
+    drift = Enum.flat_map(logins, &(login_entries(&1, owners) ++ blocked_entry(&1)))
 
     %{
       state: if(drift == [], do: "synced", else: "drift"),
@@ -90,7 +93,23 @@ defmodule Ssm.Diffs.SyncCheck do
         "missing" => labels(group, :missing_on_host),
         "extra" => labels(group, :extra_on_host)
       }
+      |> with_blocked(group)
     end)
+  end
+
+  # a login a sync cannot write at all (unsafe ~/.ssh): its revocation is
+  # blocked whatever its keys are
+  defp blocked_entry(%LoginDiff{blocked: nil}), do: []
+
+  defp blocked_entry(%LoginDiff{login: login, blocked: blocked}),
+    do: [%{"user" => nil, "login" => login, "missing" => [], "extra" => [], "blocked" => blocked}]
+
+  # a user_readonly marker keeps the sync from removing these extra keys
+  defp with_blocked(entry, group) do
+    case Enum.find(group, &(&1.note && &1.note =~ @blocked)) do
+      nil -> entry
+      _item -> Map.put(entry, "blocked", @blocked)
+    end
   end
 
   defp labels(items, status),

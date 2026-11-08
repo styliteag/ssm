@@ -87,6 +87,24 @@ defmodule Ssm.Users.BulkOpsTest do
       assert length(Authorizations.list_authorizations(user_id: target.id)) == 2
     end
 
+    test "copies a legacy grant with now-invalid options raw and records the login" do
+      target = user_fixture()
+      source = user_fixture()
+      host = host_fixture()
+
+      Ssm.Repo.insert!(%Ssm.Authorizations.Authorization{
+        user_id: source.id,
+        host_id: host.id,
+        login: "legacy",
+        options: "no-pty,bogus-option"
+      })
+
+      assert {:ok, %{copied_authorizations: 1}} = BulkOps.merge_users([source, target], target)
+      assert [copy] = Authorizations.list_authorizations(user_id: target.id)
+      assert copy.options == "no-pty,bogus-option"
+      assert Authorizations.managed_logins(host.id) == ["legacy"]
+    end
+
     test "into a brand-new user from attrs" do
       a = user_fixture(%{username: "a"})
       b = user_fixture(%{username: "b"})

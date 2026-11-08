@@ -96,4 +96,36 @@ defmodule Ssm.Users.KeyParserTest do
       assert {:error, _} = KeyParser.parse_authorized_line(~s(no-pty ssh-ed25519 NOTBASE64!))
     end
   end
+
+  describe "options are skipped like sshd does (quote-aware, only \\\" escapes)" do
+    test "a key type inside a quoted option value is not the line's key" do
+      line = ~s(environment="X= ssh-ed25519 GRANTED " ssh-ed25519 ATTACKER z)
+      assert KeyParser.identity(line) == {"ssh-ed25519", "ATTACKER"}
+      assert KeyParser.options(line) == ~s(environment="X= ssh-ed25519 GRANTED ")
+    end
+
+    test "an escaped quote does not close the value" do
+      line = ~s(command="echo \\" ssh-rsa INNER \\"" ssh-ed25519 REAL c)
+      assert KeyParser.identity(line) == {"ssh-ed25519", "REAL"}
+    end
+
+    test "a line that starts with a key has no options" do
+      assert KeyParser.options("ssh-rsa BLOB c") == ""
+      assert KeyParser.identity("ssh-rsa BLOB no-pty") == {"ssh-rsa", "BLOB"}
+    end
+
+    test "after the options there must be a key; unbalanced quotes hold none" do
+      assert KeyParser.identity(~s(no-pty junk ssh-rsa BLOB)) == nil
+      assert KeyParser.identity(~s(command="x ssh-rsa BLOB)) == nil
+    end
+  end
+
+  describe "fields split on space and tab only (as sshd)" do
+    test "tab separates, form feed does not" do
+      assert KeyParser.identity("ssh-rsa\tBLOB\tc") == {"ssh-rsa", "BLOB"}
+      assert KeyParser.identity("no-pty\tssh-rsa BLOB") == {"ssh-rsa", "BLOB"}
+      assert KeyParser.identity("ssh-rsa\fBLOB") == nil
+      assert KeyParser.identity("no-pty ssh-rsa\vBLOB") == nil
+    end
+  end
 end

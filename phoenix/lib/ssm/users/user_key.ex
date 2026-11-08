@@ -8,6 +8,8 @@ defmodule Ssm.Users.UserKey do
   use Ecto.Schema
   import Ecto.Changeset
 
+  alias Ssm.ControlChars
+
   @key_types ~w(ssh-rsa ssh-ed25519 ecdsa-sha2-nistp256 ecdsa-sha2-nistp384 ecdsa-sha2-nistp521 ssh-dss sk-ssh-ed25519@openssh.com sk-ecdsa-sha2-nistp256@openssh.com)
 
   schema "user_key" do
@@ -25,6 +27,7 @@ defmodule Ssm.Users.UserKey do
     user_key
     |> cast(attrs, [:key_type, :key_base64, :name, :extra_comment, :user_id])
     |> validate_required([:key_type, :key_base64, :user_id])
+    |> ControlChars.validate([:name, :extra_comment])
     |> update_change(:key_base64, &String.trim/1)
     |> validate_format(:key_base64, ~r/^[A-Za-z0-9+\/]+={0,2}$/,
       message: "must be base64 key material without type prefix or comment"

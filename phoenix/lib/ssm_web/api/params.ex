@@ -6,7 +6,9 @@ defmodule SsmWeb.Api.Params do
 
   A spec is a keyword list: `name: [type: :string, required: true, min_len: 1,
   max_len: 128]`. Supported types: `:string`, `:integer`, `:boolean`; options:
-  `required`, `default`, `nilable`, `min_len`/`max_len`, `min`/`max`.
+  `required`, `default`, `nilable`, `min_len`/`max_len`, `min`/`max`, and
+  `check` (a string-only `fn value -> :ok | {:error, message} end`, e.g.
+  `&Ssm.ControlChars.check/1`).
   """
 
   @type spec :: [{atom(), keyword()}]
@@ -87,11 +89,20 @@ defmodule SsmWeb.Api.Params do
     cond do
       size < min -> {:error, "must be at least #{min} characters"}
       max && size > max -> {:error, "must be at most #{max} characters"}
-      true -> {:ok, value}
+      true -> run_check(value, Keyword.get(opts, :check))
     end
   end
 
   defp cast_string(_value, _opts), do: {:error, "must be a string"}
+
+  defp run_check(value, nil), do: {:ok, value}
+
+  defp run_check(value, check) do
+    case check.(value) do
+      :ok -> {:ok, value}
+      {:error, message} -> {:error, message}
+    end
+  end
 
   defp cast_integer(value, opts) when is_integer(value), do: check_bounds(value, opts)
 

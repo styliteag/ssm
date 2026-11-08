@@ -3,8 +3,12 @@ defmodule SsmWeb.DiffLive do
   Diff viewer: per-host comparison of the DB's expected authorized_keys
   against what is on the host, with single-host sync and sync-all — the
   React DiffPage. Disabled hosts are marked and never touched
-  (non-negotiable rule #4); readonly logins surface as badges and sync
-  refusals, never partial writes (`Ssm.Diffs.sync_host/2` semantics).
+  (non-negotiable rule #4); readonly logins surface as badges. A host-wide
+  readonly marker stops a sync before any write; a login's own
+  `user_readonly` skips only that login, the others are written and the
+  sync reports as failed naming the skipped logins (a partial sync,
+  `Ssm.Diffs.sync_host/2`). Every sync outcome is audit-logged
+  (`Ssm.Diffs.SyncAudit`).
 
   Unauthorized keys found on a host can be legitimized in place (database
   writes only, the host itself is untouched until the next sync): a key
@@ -22,6 +26,7 @@ defmodule SsmWeb.DiffLive do
   alias Ssm.Diffs.HostChecks
   alias Ssm.Diffs.HostDiff
   alias Ssm.Diffs.StatusCache
+  alias Ssm.Diffs.SyncAudit
   alias Ssm.Diffs.SyncCheck
   alias Ssm.Hosts
   alias Ssm.Hosts.Host
@@ -210,14 +215,12 @@ defmodule SsmWeb.DiffLive do
      |> assign(detail_loading: false, detail_error: "Diff crashed: #{inspect(reason)}")}
   end
 
-  def handle_async(:sync, {:ok, {host, result}}, socket) do
+  def handle_async(:sync, {:ok, {host, outcome}}, socket) do
     socket = assign(socket, :syncing, false)
 
-    case result do
+    case log_sync(socket, host, outcome) do
       {:ok, synced} ->
         keys = synced |> Enum.map(& &1.written_keys) |> Enum.sum()
-
-        log_sync(socket, host, %{logins: length(synced), keys: keys})
 
         socket =
           socket
@@ -242,15 +245,14 @@ defmodule SsmWeb.DiffLive do
      |> put_flash(:error, "Sync crashed: #{inspect(reason)}")}
   end
 
-  def handle_async(:sync_all, {:ok, results}, socket) do
+  def handle_async(:sync_all, {:ok, outcomes}, socket) do
     socket = assign(socket, :syncing, false)
+
+    results =
+      Enum.map(outcomes, fn {host, outcome} -> {host, log_sync(socket, host, outcome)} end)
+
     ok = Enum.count(results, fn {_host, result} -> match?({:ok, _}, result) end)
     failed = length(results) - ok
-
-    for {host, {:ok, synced}} <- results do
-      keys = synced |> Enum.map(& &1.written_keys) |> Enum.sum()
-      log_sync(socket, host, %{logins: length(synced), keys: keys})
-    end
 
     # re-check only the hosts that were synced, not the whole fleet
     hosts = Enum.map(results, fn {host, _result} -> host end)
@@ -363,7 +365,7 @@ defmodule SsmWeb.DiffLive do
         {:noreply,
          socket
          |> assign(:syncing, true)
-         |> start_async(:sync, fn -> {host, Diffs.sync_host(host.id)} end)}
+         |> start_async(:sync, fn -> {host, Diffs.sync_host_reported(host.id)} end)}
 
       %Host{disabled: true} = host ->
         {:noreply, put_flash(socket, :error, "Host #{host.name} is disabled.")}
@@ -392,7 +394,7 @@ defmodule SsmWeb.DiffLive do
         {:noreply,
          socket
          |> assign(:syncing, true)
-         |> start_async(:sync, fn -> {host, Diffs.sync_host(host.id)} end)}
+         |> start_async(:sync, fn -> {host, Diffs.sync_host_reported(host.id)} end)}
 
       %Host{disabled: true} = host ->
         {:noreply, put_flash(socket, :error, "Host #{host.name} is disabled.")}
@@ -470,7 +472,7 @@ defmodule SsmWeb.DiffLive do
        socket
        |> assign(:syncing, true)
        |> start_async(:sync_all, fn ->
-         Enum.map(to_sync, fn host -> {host, Diffs.sync_host(host.id)} end)
+         Enum.map(to_sync, fn host -> {host, Diffs.sync_host_reported(host.id)} end)
        end)}
     end
   end
@@ -624,15 +626,9 @@ defmodule SsmWeb.DiffLive do
 
   ## Helpers
 
-  defp log_sync(socket, host, details) do
-    Activity.log(%{
-      activity_type: "host",
-      action: "sync",
-      target: host.name,
-      actor_username: socket.assigns.current_user.actor,
-      details: details
-    })
-  end
+  # every sync outcome (success, partial, failure) goes to the audit log
+  defp log_sync(socket, host, outcome),
+    do: SyncAudit.log(socket.assigns.current_user.actor, host.name, outcome)
 
   defp format_reason({_code, message}) when is_binary(message), do: message
   defp format_reason(:not_found), do: "host not found"
@@ -991,6 +987,15 @@ defmodule SsmWeb.DiffLive do
             {@detail_error}
           </div>
 
+          <div
+            :if={@detail && @detail.read_error}
+            class="alert alert-error text-sm"
+            id="diff-detail-read-error"
+          >
+            <.icon name="hero-exclamation-triangle" class="size-4" />
+            Could not read the host's authorized_keys — the list below is incomplete: {@detail.read_error}
+          </div>
+
           <p :if={@detail_loading && !@detail} class="text-sm opacity-60">Loading diff…</p>
 
           <div :for={login <- (@detail && @detail.logins) || []} class="space-y-1">
@@ -1001,6 +1006,11 @@ defmodule SsmWeb.DiffLive do
               <span :if={login.readonly_condition} class="badge badge-error badge-xs">
                 readonly: {login.readonly_condition}
               </span>
+              <span :if={login.readonly_ignored} class="badge badge-warning badge-xs">
+                ignored: {login.readonly_ignored}
+              </span>
+              <span :if={login.unsafe} class="badge badge-warning badge-xs">{login.unsafe}</span>
+              <span :if={login.blocked} class="badge badge-error badge-xs">{login.blocked}</span>
             </div>
 
             <div :if={login.read_error} class="alert alert-warning py-2 text-xs">
@@ -1016,6 +1026,12 @@ defmodule SsmWeb.DiffLive do
               >
                 <.item_badge status={item.status} />
                 <code class="truncate font-mono text-xs" title={item.line}>{item.line}</code>
+                <span
+                  :if={item.note}
+                  class="badge badge-ghost badge-sm shrink-0 whitespace-nowrap"
+                >
+                  {item.note}
+                </span>
                 <.extra_key_actions
                   :if={item.status == :extra_on_host and not @selected.disabled}
                   info={extra_key_info(item.line, @key_owners)}

@@ -7,6 +7,8 @@ defmodule Ssm.Users.User do
   use Ecto.Schema
   import Ecto.Changeset
 
+  alias Ssm.ControlChars
+
   schema "user" do
     field :username, :string
     field :enabled, :boolean, default: true
@@ -21,6 +23,7 @@ defmodule Ssm.Users.User do
     |> cast(attrs, [:username, :enabled, :comment])
     |> validate_required([:username])
     |> validate_length(:username, min: 1, max: 255)
+    |> ControlChars.validate([:username, :comment])
     # ecto_sqlite3 derives the name as <table>_<col>_index (see Ssm.Hosts.Host).
     |> unique_constraint(:username)
   end

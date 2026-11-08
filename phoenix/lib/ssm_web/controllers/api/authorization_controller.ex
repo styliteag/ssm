@@ -10,7 +10,8 @@ defmodule SsmWeb.Api.AuthorizationController do
   import Ecto.Query
 
   alias Ssm.Authorizations
-  alias Ssm.Authorizations.Authorization
+  alias Ssm.Authorizations.{Authorization, Options}
+  alias Ssm.ControlChars
   alias Ssm.Hosts
   alias Ssm.Repo
   alias Ssm.Users
@@ -21,15 +22,21 @@ defmodule SsmWeb.Api.AuthorizationController do
   @create_spec [
     host_id: [type: :integer, required: true],
     user_id: [type: :integer, required: true],
-    login: [type: :string, required: true, min_len: 1, max_len: 128],
-    options: [type: :string, nilable: true, max_len: 1024],
-    comment: [type: :string, nilable: true, max_len: 1024]
+    login: [
+      type: :string,
+      required: true,
+      min_len: 1,
+      max_len: 128,
+      check: &ControlChars.check/1
+    ],
+    options: [type: :string, nilable: true, max_len: 1024, check: &Options.validate/1],
+    comment: [type: :string, nilable: true, max_len: 1024, check: &ControlChars.check/1]
   ]
 
   @update_spec [
-    login: [type: :string, min_len: 1, max_len: 128],
-    options: [type: :string, nilable: true, max_len: 1024],
-    comment: [type: :string, nilable: true, max_len: 1024]
+    login: [type: :string, min_len: 1, max_len: 128, check: &ControlChars.check/1],
+    options: [type: :string, nilable: true, max_len: 1024, check: &Options.validate/1],
+    comment: [type: :string, nilable: true, max_len: 1024, check: &ControlChars.check/1]
   ]
 
   @list_spec [

@@ -6,7 +6,9 @@ defmodule Ssm.Diffs.HostCheck do
     * `state` – `"synced"`, `"drift"` or `"error"`
     * `logins` – how many logins were compared
     * `drift` – per user and login, `%{"user" => name | nil, "login" => …,
-      "missing" => [label], "extra" => [label]}`; a label is key type,
+      "missing" => [label], "extra" => [label]}` plus `"blocked"` when a
+      `user_readonly` marker keeps a sync from removing the extra keys; a
+      label is key type,
       SHA256 fingerprint and comment, never key material (`nil` user: a key
       no ssm user owns)
     * `error_code` / `error` – a fixed, address-free sentence

@@ -21,6 +21,28 @@ defmodule Ssm.Release do
     {:ok, _, _} = Ecto.Migrator.with_repo(repo, &Ecto.Migrator.run(&1, :down, to: version))
   end
 
+  @doc """
+  Pre-upgrade report of stored rows that today's validation refuses: grant
+  options (`Ssm.Authorizations.invalid_stored_options/0`; a sync keeps the
+  host's line of such a key) and key fields with control characters
+  (`Ssm.Users.invalid_stored_keys/0`; a bad comment is dropped when the key
+  is written, bad key material is never written). Each row: `table`, `id`,
+  `field`, `reason` and context. Run it in the release:
+  `bin/ssm eval 'Ssm.Release.invalid_stored_rows() |> IO.inspect()'`.
+  """
+  @spec invalid_stored_rows() :: [map()]
+  def invalid_stored_rows do
+    load_app()
+    [repo | _] = repos()
+
+    {:ok, rows, _} =
+      Ecto.Migrator.with_repo(repo, fn _repo ->
+        Ssm.Authorizations.invalid_stored_options() ++ Ssm.Users.invalid_stored_keys()
+      end)
+
+    rows
+  end
+
   defp repos do
     Application.fetch_env!(@app, :ecto_repos)
   end

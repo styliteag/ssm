@@ -250,6 +250,88 @@ defmodule SsmWeb.DiffLiveTest do
     assert render(view) =~ "readonly"
   end
 
+  defp audit(action) do
+    entry = Enum.find(Ssm.Activity.list(), &(&1.action == action))
+    entry && {entry.actor_username, entry.target, Ssm.Activity.details(entry)}
+  end
+
+  test "a failed sync is audit-logged with the reason", %{conn: conn} do
+    host = synced_setup()
+
+    MockClient.set_exec(host.id, "sh .ssm/script.sh set_authorized_keyfile deploy", %Result{
+      stderr: "readonly: system_readonly set",
+      exit_code: 1
+    })
+
+    {:ok, view, _html} = live(conn, ~p"/diff?host_id=#{host.id}")
+    render_async(view)
+    view |> element("#sync-host") |> render_click()
+    render_async(view)
+
+    assert {"admin", "web1", details} = audit("sync_failed")
+    assert details["written"] == ""
+    assert details["error"] =~ "readonly"
+  end
+
+  test "a partial sync (user_readonly) is audit-logged with written and skipped logins",
+       %{conn: conn} do
+    host = synced_setup()
+    other = user_fixture()
+    key_fixture(other, %{key_type: "ssh-ed25519", key_base64: "LOCKEDKEY", name: "x"})
+    authorization_fixture(other, host, %{login: "locked"})
+
+    stub_keyfiles(host.id, [
+      %{login: "deploy", has_pragma: true, keyfile: "ssh-ed25519 SYNCED laptop"},
+      %{
+        login: "locked",
+        has_pragma: true,
+        readonly_condition: "keep out",
+        readonly_scope: "user",
+        keyfile: ""
+      }
+    ])
+
+    MockClient.set_default_exec(%Result{exit_code: 0})
+
+    {:ok, view, _html} = live(conn, ~p"/diff?host_id=#{host.id}")
+    render_async(view)
+    view |> element("#sync-host") |> render_click()
+    render_async(view)
+
+    assert render(view) =~ "Sync of web1 failed"
+    assert {"admin", "web1", details} = audit("sync_partial")
+    assert details["written"] == "deploy"
+    assert details["skipped"] =~ ~s("locked")
+    assert details["skipped"] =~ "keep out"
+  end
+
+  test "an ignored user_readonly (not owned by root) is shown on the login", %{conn: conn} do
+    host = host_fixture(%{name: "ign"})
+
+    stub_keyfiles(host.id, [
+      %{login: "deploy", readonly_ignored: "user_readonly not owned by root", keyfile: ""}
+    ])
+
+    {:ok, view, _html} = live(conn, ~p"/diff?host_id=#{host.id}")
+    render_async(view)
+
+    assert has_element?(view, "#diff-detail .badge", "ignored: user_readonly not owned by root")
+  end
+
+  test "an unreadable host shows the read error, not an empty host", %{conn: conn} do
+    host = host_fixture(%{name: "broken"})
+    stub_version(host.id)
+
+    MockClient.set_exec(host.id, "sh .ssm/script.sh get_ssh_keyfiles", %Result{
+      stdout: "not json"
+    })
+
+    {:ok, view, _html} = live(conn, ~p"/diff?host_id=#{host.id}")
+    render_async(view)
+
+    assert has_element?(view, "#diff-detail-read-error", "non-JSON")
+  end
+
   test "disabled hosts show the disabled notice and sync stays unreachable", %{conn: conn} do
     host = host_fixture(%{name: "off", disabled: true})
 

@@ -12,6 +12,7 @@ defmodule Ssm.Users.BulkOps do
   import Ecto.Query
 
   alias Ecto.Multi
+  alias Ssm.Authorizations
   alias Ssm.Authorizations.Authorization
   alias Ssm.Repo
   alias Ssm.Users.{User, UserKey}
@@ -177,7 +178,9 @@ defmodule Ssm.Users.BulkOps do
       {:cont, {:ok, {copied, skipped + 1, seen, taken}}}
     else
       case repo.insert(authorization_copy_changeset(auth, target_id)) do
-        {:ok, _copy} ->
+        {:ok, copy} ->
+          :ok = Authorizations.record_managed_login(copy.host_id, copy.login)
+
           {:cont,
            {:ok,
             {copied + 1, skipped, MapSet.put(seen, fingerprint(auth)), MapSet.put(taken, pair)}}}
@@ -191,7 +194,7 @@ defmodule Ssm.Users.BulkOps do
   defp fingerprint(auth), do: {auth.host_id, auth.login, auth.options}
 
   defp authorization_copy_changeset(auth, user_id) do
-    Authorization.changeset(%Authorization{}, %{
+    Authorization.copy_changeset(%Authorization{}, %{
       user_id: user_id,
       host_id: auth.host_id,
       login: auth.login,

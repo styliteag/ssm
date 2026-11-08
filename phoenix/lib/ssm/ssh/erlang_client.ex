@@ -81,7 +81,7 @@ defmodule Ssm.Ssh.ErlangClient do
             _ -> nil
           end
 
-        {:ok, %RemoteFile{content: to_utf8(data), mtime: mtime}}
+        {:ok, %RemoteFile{content: output_to_string(data), mtime: mtime}}
       end
     end)
   end
@@ -987,8 +987,8 @@ defmodule Ssm.Ssh.ErlangClient do
       {:ssh_cm, ^conn, {:closed, ^chan}} ->
         {:ok,
          %Result{
-           stdout: to_utf8(IO.iodata_to_binary(stdout)),
-           stderr: to_utf8(IO.iodata_to_binary(stderr)),
+           stdout: output_to_string(IO.iodata_to_binary(stdout)),
+           stderr: output_to_string(IO.iodata_to_binary(stderr)),
            exit_code: status
          }}
     after
@@ -1009,11 +1009,16 @@ defmodule Ssm.Ssh.ErlangClient do
     end
   end
 
-  defp to_utf8(data) when is_binary(data) do
-    if String.valid?(data), do: data, else: inspect(data)
-  end
-
-  defp to_utf8(data), do: to_string(data)
+  @doc """
+  Command output and file content as a UTF-8 string. Bytes that are not
+  UTF-8 (a Latin-1 comment in a user-written authorized_keys or
+  user_readonly) become U+FFFD; the rest stays byte for byte, so the JSON
+  `script.sh` prints still parses. (It used to be `inspect/1`d, which turned
+  the whole output into `<<91, …>>`.)
+  """
+  @spec output_to_string(iodata() | charlist()) :: String.t()
+  def output_to_string(data) when is_binary(data), do: String.replace_invalid(data)
+  def output_to_string(data), do: data |> to_string() |> String.replace_invalid()
 
   defp ensure_ssh_started do
     case :ssh.start() do

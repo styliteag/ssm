@@ -5,6 +5,7 @@ defmodule SsmWeb.Api.UserController do
 
   import Ecto.Query
 
+  alias Ssm.ControlChars
   alias Ssm.Repo
   alias Ssm.Users
   alias Ssm.Users.User
@@ -13,15 +14,21 @@ defmodule SsmWeb.Api.UserController do
   alias SsmWeb.Api.Params
 
   @create_spec [
-    username: [type: :string, required: true, min_len: 1, max_len: 128],
+    username: [
+      type: :string,
+      required: true,
+      min_len: 1,
+      max_len: 128,
+      check: &ControlChars.check/1
+    ],
     enabled: [type: :boolean, default: true],
-    comment: [type: :string, nilable: true, max_len: 1024]
+    comment: [type: :string, nilable: true, max_len: 1024, check: &ControlChars.check/1]
   ]
 
   @update_spec [
-    username: [type: :string, min_len: 1, max_len: 128],
+    username: [type: :string, min_len: 1, max_len: 128, check: &ControlChars.check/1],
     enabled: [type: :boolean],
-    comment: [type: :string, nilable: true, max_len: 1024]
+    comment: [type: :string, nilable: true, max_len: 1024, check: &ControlChars.check/1]
   ]
 
   def index(conn, _params) do
