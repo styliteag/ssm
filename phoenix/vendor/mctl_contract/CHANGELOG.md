@@ -5,6 +5,49 @@ versions: [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-08
+
+### Security
+
+- Slug and attribute key checks anchor with `\A…\z`: a trailing newline
+  (`"web\n"`) is no longer a valid slug or key. OpenAPI keeps the
+  `^…$` form.
+- Person keys (`/people/{key}`) anchor with `\A…\z` too and must be
+  valid UTF-8 (invalid bytes are `400`, not a server error).
+- Path parameters are checked before the provider runs: `{slug}` of
+  `/customers` and `/groups` (including the merge source) must be a slug,
+  `{id}` of `/hosts`, `/jobs` and `/maintenance` at most 255 bytes without
+  whitespace or control characters; else `400 bad_request`.
+- `POST /hosts`: `attributes` get the same shape limits as in `PATCH`
+  (32 keys, key pattern, value types, 8 KiB); `addresses` at most 32, each
+  at most 253 characters without whitespace. Host names (create and
+  update) refuse control characters.
+- `POST /probe/ssh`: `jump_via` at most 255 characters without control
+  characters.
+- `POST /hosts/{id}/actions`: `action` at most 64 characters without
+  control characters; `params` at most 8 KiB as JSON and 6 levels deep.
+
+## [0.6.0] – 2026-11-08
+
+### Added
+
+- Host attributes in `PATCH /hosts/{id}` (contract section 16): the body
+  may carry `attributes` (an object). Optional Provider callback
+  `updatable_attributes/0` lists the keys the tool accepts; capability
+  `update_attributes` in `GET /me` and `HostUpdate.attributes` in OpenAPI
+  (with the keys as `propertyNames.enum`) only with it. The library checks
+  the shape (at most 32 keys matching `^[a-z][a-z0-9_]{0,63}$`; values
+  string, number, boolean, null or a list of at most 64 strings; at most
+  8 KiB as JSON) and refuses keys outside the list, and the whole field
+  without the callback ("are not supported by this tool"), with
+  `422 validation_failed` on `attributes` before `update_host/3` runs. The
+  provider gets `params["attributes"]` as sent and checks the values
+  (`{:validation, %{"attributes" => [...]}}`). `Params.host_update/2`
+  takes the updatable keys. ConformanceCase: new case
+  `MctlContract.ConformanceCase.UpdateAttributes` and optional fixture
+  `updatable_attribute/0` (`{key, value}` or nil). Use: omon's subfolder
+  on update (`attributes.folder`).
+
 ## [0.5.0] – 2026-11-08
 
 ### Added

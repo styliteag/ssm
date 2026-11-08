@@ -72,7 +72,7 @@ defmodule MctlContract.Plug.Handlers do
   that continues as a job, e.g. a mode switch) answers 202 with the job.
   """
   def write(conn, opts, check, {fun, args}, status, render) do
-    case apply(Params, check, [body(conn)]) do
+    case params(check, body(conn), opts[:provider]) do
       {:ok, params} ->
         with_provider(conn, fn ->
           case apply(opts[:provider], fun, [principal(conn) | args] ++ [params]) do
@@ -86,6 +86,13 @@ defmodule MctlContract.Plug.Handlers do
         Respond.error(conn, "validation_failed", "invalid input", details)
     end
   end
+
+  # `PATCH /hosts/{id}` checks `attributes` against the provider's
+  # updatable keys (capability `update_attributes`); the rest by shape only
+  defp params(:host_update, body, provider),
+    do: Params.host_update(body, Capabilities.updatable_attributes(provider))
+
+  defp params(check, body, _provider), do: apply(Params, check, [body])
 
   @doc """
   `POST /hosts/{id}/actions`: 404 without the capability, shape check,

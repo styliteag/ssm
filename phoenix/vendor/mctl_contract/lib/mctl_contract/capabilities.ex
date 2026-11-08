@@ -18,6 +18,9 @@ defmodule MctlContract.Capabilities do
     * `"delete_group"` – `delete_group/2` (`DELETE /groups/{slug}`)
     * `"delete_customer"` – `delete_customer/2` (`DELETE /customers/{slug}`)
     * `"probe_ssh"` – `probe_ssh/2` (`POST /probe/ssh`)
+    * `"update_attributes"` – `updatable_attributes/0`: the host attribute
+      keys `PATCH /hosts/{id}` accepts in `attributes` (the library refuses
+      other keys with 422 before `update_host/3` runs)
     * `"action:<name>"` – one per name of `host_actions/0` when the
       provider implements both `host_actions/0` and `host_action/3`
       (`POST /hosts/{id}/actions`)
@@ -33,7 +36,8 @@ defmodule MctlContract.Capabilities do
     {"merge_customer", [merge_customer: 3]},
     {"delete_group", [delete_group: 2]},
     {"delete_customer", [delete_customer: 2]},
-    {"probe_ssh", [probe_ssh: 2]}
+    {"probe_ssh", [probe_ssh: 2]},
+    {"update_attributes", [updatable_attributes: 0]}
   ]
 
   @spec list(module()) :: [String.t()]
@@ -60,6 +64,17 @@ defmodule MctlContract.Capabilities do
 
     function_exported?(provider, :host_actions, 0) and
       function_exported?(provider, :host_action, 3)
+  end
+
+  @doc """
+  The host attribute keys the provider lets `PATCH /hosts/{id}` change,
+  sorted and unique; nil without the `update_attributes` capability.
+  """
+  @spec updatable_attributes(module()) :: [String.t()] | nil
+  def updatable_attributes(provider) do
+    if has?(provider, "update_attributes"),
+      do: provider.updatable_attributes() |> Enum.map(&to_string/1) |> Enum.uniq() |> Enum.sort(),
+      else: nil
   end
 
   @doc "The provider's action names, sorted and unique; `[]` without host actions."

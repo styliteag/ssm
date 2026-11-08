@@ -264,6 +264,22 @@ defmodule MctlContract.Provider do
                }}
               | {:error, error()}
 
+  @doc """
+  Optional (host attributes in `PATCH /hosts/{id}`, contract section 16):
+  the attribute keys `update_host/3` may receive in `params["attributes"]`
+  (e.g. `["folder"]`). The library refuses any other key, and the whole
+  `attributes` field when this callback is missing, with
+  `422 validation_failed` on `attributes` before `update_host/3` runs; it
+  also checks the shape (an object of at most 32 keys matching
+  `^[a-z][a-z0-9_]{0,63}$`, values string, number, boolean, null or a list
+  of at most 64 strings, at most 8 KiB as JSON). The provider checks the
+  values and answers `{:error, {:validation, %{"attributes" => [why]}}}`
+  (422) for one it cannot apply. Present: capability `update_attributes`
+  in `GET /me`, and `HostUpdate.attributes` in the OpenAPI document lists
+  the keys.
+  """
+  @callback updatable_attributes() :: [String.t()]
+
   @optional_callbacks cursor_types: 1,
                       attributes_schema: 0,
                       list_host_summaries: 2,
@@ -280,5 +296,6 @@ defmodule MctlContract.Provider do
                       merge_customer: 3,
                       delete_group: 2,
                       delete_customer: 2,
-                      probe_ssh: 2
+                      probe_ssh: 2,
+                      updatable_attributes: 0
 end

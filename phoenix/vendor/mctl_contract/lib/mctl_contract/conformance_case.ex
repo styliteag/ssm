@@ -38,6 +38,10 @@ defmodule MctlContract.ConformanceCase do
         `{address, port}` of something the tool can reach in tests where
         a TCP connection is accepted (an SSH server, ideally), or nil to
         skip the happy path
+      * `updatable_attribute()` (optional, capability `update_attributes`)
+        – `{key, value}` of a host attribute the tool accepts in
+        `PATCH /hosts/{id}` for any freshly created host (e.g.
+        `{"folder", ""}`), or nil to skip the happy path
     """
     @callback setup(map()) :: :ok | keyword() | map()
     @callback token([String.t()]) :: String.t()
@@ -47,12 +51,14 @@ defmodule MctlContract.ConformanceCase do
     @callback person_key() :: String.t() | nil
     @callback bound_token([String.t()]) :: String.t() | nil
     @callback ssh_probe_target() :: {String.t(), pos_integer()} | nil
+    @callback updatable_attribute() :: {String.t(), term()} | nil
     @optional_callbacks setup: 1,
                         unsupported_mode: 0,
                         cleanup: 0,
                         person_key: 0,
                         bound_token: 1,
-                        ssh_probe_target: 0
+                        ssh_probe_target: 0,
+                        updatable_attribute: 0
   end
 
   using opts do
@@ -285,6 +291,11 @@ defmodule MctlContract.ConformanceCase do
       # contract section 15: a narrow SSH reachability probe from the tool
       test "conformance: probe_ssh is served exactly when /me advertises it", %{mctl: c} do
         MctlContract.ConformanceCase.ProbeSsh.check(c)
+      end
+
+      # contract section 16: host attributes in PATCH /hosts/{id}
+      test "conformance: PATCH /hosts/{id} attributes follow update_attributes", %{mctl: c} do
+        MctlContract.ConformanceCase.UpdateAttributes.check(c)
       end
 
       test "conformance: Idempotency-Key replays the first response", %{mctl: c} do

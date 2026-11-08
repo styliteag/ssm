@@ -5,15 +5,40 @@ defmodule MctlContract.Params do
   the known fields, or `{:error, %{field => [message]}}`.
   """
 
-  @slug ~r/^[a-z0-9][a-z0-9-]{0,62}$/
+  # \A…\z: `$` would accept a trailing newline. The OpenAPI document
+  # gets the ECMA form `^…$` (`slug_pattern/0`).
+  @slug_source "[a-z0-9][a-z0-9-]{0,62}"
+  @slug Regex.compile!("\\A#{@slug_source}\\z")
   @modes ~w(push pull snmp)
   @max_name 255
+  @max_addresses 32
+  @max_id 255
 
   @doc "Contract host modes."
   def modes, do: @modes
 
   @doc "The slug pattern as a string (OpenAPI)."
-  def slug_pattern, do: Regex.source(@slug)
+  def slug_pattern, do: "^#{@slug_source}$"
+
+  @doc """
+  A path slug (`/customers/{slug}`, `/groups/{slug}`): `:ok` or an error
+  message.
+  """
+  @spec path_slug(term()) :: :ok | {:error, String.t()}
+  def path_slug(v), do: slug(v)
+
+  @doc """
+  A path id (`/hosts/{id}`, `/jobs/{id}`, `/maintenance/{id}`): non-empty
+  UTF-8, at most #{@max_id} bytes, no control characters or whitespace.
+  """
+  @spec path_id(term()) :: :ok | {:error, String.t()}
+  def path_id(v) when is_binary(v) and v != "" and byte_size(v) <= @max_id do
+    if String.valid?(v) and not String.match?(v, ~r/[\s[:cntrl:]]/u),
+      do: :ok,
+      else: {:error, "id must be UTF-8 without whitespace or control characters"}
+  end
+
+  def path_id(_v), do: {:error, "id must be 1 to #{@max_id} bytes"}
 
   @spec host_create(term()) :: {:ok, map()} | {:error, map()}
   def host_create(body) do
@@ -23,19 +48,93 @@ defmodule MctlContract.Params do
       "mode" => {:optional, &mode/1},
       "customer" => {:optional, &nullable_slug/1},
       "groups" => {:optional, &slugs/1},
-      "attributes" => {:optional, &object/1}
+      "attributes" => {:optional, &create_attributes/1}
     })
   end
 
-  @spec host_update(term()) :: {:ok, map()} | {:error, map()}
-  def host_update(body) do
+  @max_attributes 32
+  @max_attribute_list 64
+  @max_attributes_bytes 8192
+  @attribute_key_source "[a-z][a-z0-9_]{0,63}"
+  @attribute_key Regex.compile!("\\A#{@attribute_key_source}\\z")
+
+  @doc """
+  `PATCH /hosts/{id}`: `name`, `customer`, `groups`, `mode` and, when the
+  provider lists updatable attribute keys (`updatable`, capability
+  `update_attributes`), `attributes`: a JSON object of at most
+  #{@max_attributes} keys matching `^#{@attribute_key_source}$`, each
+  value a string, number, boolean, null or a list of at most
+  #{@max_attribute_list} strings, #{@max_attributes_bytes} bytes encoded at
+  most, and only keys of `updatable`. `updatable` nil (no capability):
+  `attributes` are not supported.
+  """
+  @spec host_update(term(), [String.t()] | nil) :: {:ok, map()} | {:error, map()}
+  def host_update(body, updatable \\ nil) do
     check(body, %{
       "name" => {:optional, &name/1},
       "customer" => {:optional, &nullable_slug/1},
       "groups" => {:optional, &slugs/1},
-      "mode" => {:optional, &mode/1}
+      "mode" => {:optional, &mode/1},
+      "attributes" => {:optional, &updatable_attributes(&1, updatable)}
     })
   end
+
+  @doc "Most keys `attributes` in `PATCH /hosts/{id}` may have."
+  def max_attributes, do: @max_attributes
+
+  @doc "The attribute key pattern as a string (OpenAPI)."
+  def attribute_key_pattern, do: "^#{@attribute_key_source}$"
+
+  # `POST /hosts`: the same shape as on update; the provider decides
+  # which keys it accepts
+  defp create_attributes(attrs) when is_map(attrs), do: attribute_shape(attrs)
+  defp create_attributes(_attrs), do: {:error, "must be an object"}
+
+  defp updatable_attributes(_attrs, nil), do: {:error, "are not supported by this tool"}
+
+  defp updatable_attributes(attrs, updatable) when is_map(attrs) do
+    with :ok <- attribute_shape(attrs) do
+      case attrs |> Map.keys() |> Enum.reject(&(&1 in updatable)) |> Enum.sort() do
+        [] ->
+          :ok
+
+        unknown ->
+          {:error,
+           "not updatable: #{Enum.join(unknown, ", ")} (this tool accepts #{Enum.join(updatable, ", ")})"}
+      end
+    end
+  end
+
+  defp updatable_attributes(_attrs, _updatable), do: {:error, "must be an object"}
+
+  defp attribute_shape(attrs) do
+    cond do
+      map_size(attrs) > @max_attributes ->
+        {:error, "must have at most #{@max_attributes} keys"}
+
+      not Enum.all?(Map.keys(attrs), &(is_binary(&1) and Regex.match?(@attribute_key, &1))) ->
+        {:error, "keys must match #{attribute_key_pattern()}"}
+
+      not Enum.all?(Map.values(attrs), &attribute_value?/1) ->
+        {:error,
+         "values must be a string, number, boolean, null or a list of at most " <>
+           "#{@max_attribute_list} strings"}
+
+      byte_size(Jason.encode!(attrs)) > @max_attributes_bytes ->
+        {:error, "must be at most #{@max_attributes_bytes} bytes as JSON"}
+
+      true ->
+        :ok
+    end
+  end
+
+  defp attribute_value?(v) when is_binary(v) or is_number(v) or is_boolean(v) or is_nil(v),
+    do: true
+
+  defp attribute_value?(list) when is_list(list),
+    do: length(list) <= @max_attribute_list and Enum.all?(list, &is_binary/1)
+
+  defp attribute_value?(_v), do: false
 
   @spec named_create(term()) :: {:ok, map()} | {:error, map()}
   def named_create(body),
@@ -113,20 +212,58 @@ defmodule MctlContract.Params do
   defp probe_ports(_v), do: {:error, "must be a list of ports"}
 
   defp jump_via(v) when is_binary(v) do
-    if String.trim(v) == "", do: {:error, "must not be empty"}, else: :ok
+    cond do
+      String.trim(v) == "" -> {:error, "must not be empty"}
+      String.length(v) > @max_name -> {:error, "must be at most #{@max_name} characters"}
+      control?(v) -> {:error, "must not contain control characters"}
+      true -> :ok
+    end
   end
 
   defp jump_via(v) when is_integer(v) and v > 0, do: :ok
   defp jump_via(_v), do: {:error, "must be a host name or a positive id"}
 
-  @doc "`POST /hosts/{id}/actions`: `action` (string), `params` (object, default `%{}`)."
+  @max_action 64
+  @max_action_params_bytes 8192
+  @max_action_params_depth 6
+
+  @doc """
+  `POST /hosts/{id}/actions`: `action` (string, at most #{@max_action}
+  characters, no control characters), `params` (object, default `%{}`, at
+  most #{@max_action_params_bytes} bytes as JSON and
+  #{@max_action_params_depth} levels deep). The provider checks the values.
+  """
   @spec host_action(term()) :: {:ok, map()} | {:error, map()}
   def host_action(body) do
     with {:ok, params} <-
-           check(body, %{"action" => {:required, &action/1}, "params" => {:optional, &object/1}}) do
+           check(body, %{
+             "action" => {:required, &action/1},
+             "params" => {:optional, &action_params/1}
+           }) do
       {:ok, Map.put_new(params, "params", %{})}
     end
   end
+
+  defp action_params(v) when is_map(v) do
+    cond do
+      depth(v) > @max_action_params_depth ->
+        {:error, "must be nested at most #{@max_action_params_depth} levels deep"}
+
+      byte_size(Jason.encode!(v)) > @max_action_params_bytes ->
+        {:error, "must be at most #{@max_action_params_bytes} bytes as JSON"}
+
+      true ->
+        :ok
+    end
+  end
+
+  defp action_params(_v), do: {:error, "must be an object"}
+
+  defp depth(v) when is_map(v), do: 1 + max_depth(Map.values(v))
+  defp depth(v) when is_list(v), do: 1 + max_depth(v)
+  defp depth(_v), do: 0
+
+  defp max_depth(values), do: values |> Enum.map(&depth/1) |> Enum.max(fn -> 0 end)
 
   @max_window_days 30
   @max_lead_days 90
@@ -182,14 +319,14 @@ defmodule MctlContract.Params do
 
   @doc """
   A person key: `oidc:<iss>|<sub>` (both parts non-empty) or
-  `email:<address>`; at most 1024 bytes, no control characters.
+  `email:<address>`; UTF-8, at most 1024 bytes, no control characters.
   """
   @spec person_key(term()) :: :ok | {:error, String.t()}
   def person_key(key) when is_binary(key) and byte_size(key) <= 1024 do
     cond do
-      String.match?(key, ~r/[[:cntrl:]]/u) -> person_key(nil)
-      String.match?(key, ~r/^oidc:[^|]+\|.+$/u) -> :ok
-      String.match?(key, ~r/^email:[^@\s]+@[^@\s]+$/u) -> :ok
+      not String.valid?(key) or String.match?(key, ~r/[[:cntrl:]]/u) -> person_key(nil)
+      String.match?(key, ~r/\Aoidc:[^|]+\|.+\z/u) -> :ok
+      String.match?(key, ~r/\Aemail:[^@\s]+@[^@\s]+\z/u) -> :ok
       true -> person_key(nil)
     end
   end
@@ -226,14 +363,17 @@ defmodule MctlContract.Params do
     cond do
       trimmed == "" -> {:error, "must not be empty"}
       String.length(v) > @max_name -> {:error, "must be at most #{@max_name} characters"}
+      control?(v) -> {:error, "must not contain control characters"}
       true -> :ok
     end
   end
 
   defp name(_v), do: {:error, "must be a string"}
 
+  defp control?(v), do: String.match?(v, ~r/[[:cntrl:]]/u)
+
   defp slug(v) when is_binary(v) do
-    if Regex.match?(@slug, v), do: :ok, else: {:error, "must match #{Regex.source(@slug)}"}
+    if Regex.match?(@slug, v), do: :ok, else: {:error, "must match #{slug_pattern()}"}
   end
 
   defp slug(_v), do: {:error, "must be a string"}
@@ -244,15 +384,24 @@ defmodule MctlContract.Params do
   defp slugs(list) when is_list(list) do
     if Enum.all?(list, &(slug(&1) == :ok)),
       do: :ok,
-      else: {:error, "must be a list of slugs (#{Regex.source(@slug)})"}
+      else: {:error, "must be a list of slugs (#{slug_pattern()})"}
   end
 
   defp slugs(_v), do: {:error, "must be a list of slugs"}
 
   defp addresses(list) when is_list(list) do
-    if Enum.all?(list, &(is_binary(&1) and &1 != "")),
-      do: :ok,
-      else: {:error, "must be a list of non-empty strings"}
+    cond do
+      length(list) > @max_addresses ->
+        {:error, "must hold at most #{@max_addresses} addresses"}
+
+      Enum.all?(list, &(probe_address(&1) == :ok)) ->
+        :ok
+
+      true ->
+        {:error,
+         "must be a list of non-empty strings of at most #{@max_address} characters " <>
+           "without whitespace"}
+    end
   end
 
   defp addresses(_v), do: {:error, "must be a list of strings"}
@@ -260,7 +409,12 @@ defmodule MctlContract.Params do
   defp mode(v) when v in @modes or is_nil(v), do: :ok
   defp mode(_v), do: {:error, "must be one of #{Enum.join(@modes, ", ")} or null"}
 
-  defp action(v) when is_binary(v) and v != "", do: :ok
+  defp action(v) when is_binary(v) and v != "" do
+    if String.length(v) <= @max_action and not control?(v),
+      do: :ok,
+      else: {:error, "must be at most #{@max_action} characters without control characters"}
+  end
+
   defp action(_v), do: {:error, "must be a non-empty string"}
 
   defp timestamp(v) when is_binary(v) do
@@ -294,7 +448,4 @@ defmodule MctlContract.Params do
   end
 
   defp host_ids(_v), do: {:error, "must be a non-empty list of host ids"}
-
-  defp object(v) when is_map(v), do: :ok
-  defp object(_v), do: {:error, "must be an object"}
 end

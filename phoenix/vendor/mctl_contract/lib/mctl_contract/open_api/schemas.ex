@@ -5,8 +5,10 @@ defmodule MctlContract.OpenAPI.Schemas do
 
   # actions: the provider's action names, or nil without host actions
   # caps: the provider's capabilities (section 10 schemas)
-  def all(attributes, summaries? \\ false, actions \\ nil, caps \\ []) do
+  # updatable: the attribute keys PATCH /hosts/{id} accepts, or nil
+  def all(attributes, summaries? \\ false, actions \\ nil, caps \\ [], updatable \\ nil) do
     base(attributes)
+    |> then(&if(updatable, do: Map.put(&1, "HostUpdate", host_update(updatable)), else: &1))
     |> then(&if(summaries?, do: Map.put(&1, "HostSummary", host_summary()), else: &1))
     |> then(&if(actions, do: Map.put(&1, "HostAction", host_action(actions)), else: &1))
     |> then(&if("maintenance" in caps, do: Map.merge(&1, maintenance()), else: &1))
@@ -273,16 +275,40 @@ defmodule MctlContract.OpenAPI.Schemas do
     )
   end
 
-  defp host_update do
-    obj(
-      %{
-        "name" => str(),
-        "customer" => nullable(slug()),
-        "groups" => list(slug()),
-        "mode" => nullable(enum(Params.modes()))
-      },
-      []
-    )
+  defp host_update(updatable \\ nil) do
+    props = %{
+      "name" => str(),
+      "customer" => nullable(slug()),
+      "groups" => list(slug()),
+      "mode" => nullable(enum(Params.modes()))
+    }
+
+    props =
+      if updatable,
+        do: Map.put(props, "attributes", updatable_attributes(updatable)),
+        else: props
+
+    obj(props, [])
+  end
+
+  # capability update_attributes: only the provider's keys (section 16)
+  defp updatable_attributes(keys) do
+    value = %{
+      "oneOf" => [
+        %{"type" => ["string", "number", "boolean", "null"]},
+        %{"type" => "array", "items" => %{"type" => "string"}, "maxItems" => 64}
+      ]
+    }
+
+    %{
+      "type" => "object",
+      "maxProperties" => Params.max_attributes(),
+      "propertyNames" => %{"enum" => keys, "pattern" => Params.attribute_key_pattern()},
+      "additionalProperties" => value,
+      "description" =>
+        "Host attributes to change (capability update_attributes): only the keys " <>
+          "listed here; any other key is 422 on attributes. The tool checks the values."
+    }
   end
 
   defp named, do: obj(%{"slug" => slug(), "name" => str()}, ["slug", "name"])

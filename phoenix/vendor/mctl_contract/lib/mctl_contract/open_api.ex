@@ -131,7 +131,14 @@ defmodule MctlContract.OpenAPI do
         "securitySchemes" => %{
           "bearer" => %{"type" => "http", "scheme" => "bearer"}
         },
-        "schemas" => Schemas.all(attributes(provider), summaries?, actions, caps)
+        "schemas" =>
+          Schemas.all(
+            attributes(provider),
+            summaries?,
+            actions,
+            caps,
+            provider && Capabilities.updatable_attributes(provider)
+          )
       },
       "x-error-codes" =>
         Enum.map(Envelope.error_codes(), fn {code, status, desc} ->

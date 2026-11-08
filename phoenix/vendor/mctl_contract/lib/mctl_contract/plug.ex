@@ -53,6 +53,7 @@ defmodule MctlContract.Plug do
   # clients never make the server parse a body
   plug :match
   plug :authenticate
+  plug :check_path
   plug :parse_body
   plug :dispatch
 
@@ -246,4 +247,20 @@ defmodule MctlContract.Plug do
   end
 
   defp authenticate(conn, _opts), do: Auth.call(conn, opts(conn))
+
+  # path slugs and ids are checked before any provider sees them:
+  # `400 bad_request` on a malformed one
+  defp check_path(conn, _opts) do
+    case Enum.find_value(conn.path_params, &path_error/1) do
+      nil -> conn
+      message -> Respond.error(conn, "bad_request", message)
+    end
+  end
+
+  defp path_error({"slug", v}), do: error_message(MctlContract.Params.path_slug(v), "slug ")
+  defp path_error({"id", v}), do: error_message(MctlContract.Params.path_id(v), "")
+  defp path_error(_param), do: nil
+
+  defp error_message(:ok, _prefix), do: nil
+  defp error_message({:error, message}, prefix), do: prefix <> message
 end

@@ -102,6 +102,12 @@ through the tool's jump host). Keep it narrow: at most 5 ports, a TCP
 connect and the first line only, nothing sent, no login. Providers refuse
 targets they do not allow, and must rate-limit and audit every probe.
 
+Since 0.6.0 `PATCH /hosts/{id}` may change host attributes: a provider
+lists the keys it accepts in `updatable_attributes/0` (capability
+`update_attributes`), the library refuses every other key with 422, and
+the provider checks the values (e.g. omon's `folder`, a subfolder below
+the customer's folder).
+
 ## Conformance
 
 Every tool runs the same requests and assertions against its own endpoint:
