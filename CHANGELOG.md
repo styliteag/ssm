@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.9.1] - 2026-11-08
+
 ### Changed
 
 - Diff page: opening it no longer connects to any host. Each host shows its
