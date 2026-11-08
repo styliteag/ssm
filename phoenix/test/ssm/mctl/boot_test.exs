@@ -3,15 +3,28 @@ defmodule Ssm.Mctl.BootTest do
 
   alias MctlContract.Jobs.Ecto, as: Jobs
 
-  @moduletag :tmp_dir
-
   # Test-only, deliberately low-entropy (secret scanner + not a secret).
   @token "ssm_test-only-service-token-00000000000000000000000000000000"
 
+  setup do
+    # failed-auth counters are global (ETS); the 401 checks here count too
+    Ssm.RateLimit.reset()
+    on_exit(&Ssm.RateLimit.reset/0)
+  end
+
+  # A fresh file outside the project tree: the dev container bind-mounts the
+  # project, and a file re-created under the same path (ExUnit's tmp_dir on
+  # every run) could read back empty there, so the token was not installed.
+  defp token_file(content) do
+    path = Path.join(System.tmp_dir!(), "ssm-boot-token-#{System.unique_integer([:positive])}")
+    File.write!(path, content)
+    on_exit(fn -> File.rm(path) end)
+    path
+  end
+
   test "installs the service token from MCTL_TOKEN_FILE; it opens /api/mctl/v1 only",
-       %{conn: conn, tmp_dir: dir} do
-    path = Path.join(dir, "token")
-    File.write!(path, @token <> "\n")
+       %{conn: conn} do
+    path = token_file(@token <> "\n")
 
     assert :ok =
              Ssm.Mctl.Boot.run(env: %{"MCTL_TOKEN_FILE" => path, "MCTL_TOKEN_SCOPES" => "read"})
@@ -40,18 +53,16 @@ defmodule Ssm.Mctl.BootTest do
   end
 
   @tag :capture_log
-  test "a token without the ssm_ prefix is refused", %{tmp_dir: dir} do
-    path = Path.join(dir, "token")
-    File.write!(path, "omon_test-only-service-token-00000000000000000000000000000000")
+  test "a token without the ssm_ prefix is refused" do
+    path = token_file("omon_test-only-service-token-00000000000000000000000000000000")
 
     assert :ok = Ssm.Mctl.Boot.run(env: %{"MCTL_TOKEN_FILE" => path})
     assert MctlContract.Tokens.Ecto.list() == []
   end
 
   test "a revoked service token stays revoked across boots; boot logs it and goes on",
-       %{conn: conn, tmp_dir: dir} do
-    path = Path.join(dir, "token")
-    File.write!(path, @token)
+       %{conn: conn} do
+    path = token_file(@token)
     assert :ok = Ssm.Mctl.Boot.run(env: %{"MCTL_TOKEN_FILE" => path})
     :ok = MctlContract.Tokens.Ecto.revoke(MctlContract.Bootstrap.name())
 
@@ -70,9 +81,8 @@ defmodule Ssm.Mctl.BootTest do
   end
 
   @tag :capture_log
-  test "removing MCTL_TOKEN_FILE revokes the installed service token", %{conn: conn, tmp_dir: dir} do
-    path = Path.join(dir, "token")
-    File.write!(path, @token)
+  test "removing MCTL_TOKEN_FILE revokes the installed service token", %{conn: conn} do
+    path = token_file(@token)
     assert :ok = Ssm.Mctl.Boot.run(env: %{"MCTL_TOKEN_FILE" => path})
     assert :ok = Ssm.Mctl.Boot.run(env: %{})
 
