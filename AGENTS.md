@@ -79,7 +79,11 @@ Who may create: admin any; operator only targets in its scope (`{:error, :out_of
 `{:error, :forbidden}`. Migration `20261109100000` has no `down` (SQLite cannot drop an FK column).
 Sync and readonly markers (`Ssm.Diffs.sync_host/2`): a host-wide marker (`system_readonly`, vendor
 platform) stops a sync before any write; a login's own `~/.ssh/user_readonly` counts only when root
-owns it (`script.sh` `user_readonly_state`, `find -user 0`) and then skips only that login, the
+owns it (`script.sh` `user_readonly_state`, `find -user 0`), inside a `~/.ssh` that root owns and
+group/other cannot write, and its first line is not ssm's keyfile header — else it is
+`tampered` (reported in `readonly_ignored` as "user_readonly unsafe (tampered?) …", never honoured:
+in a user-owned `~/.ssh` the user could rename ssm's own root-owned `authorized_keys` to
+`user_readonly`) — and then skips only that login, the
 others are written and the sync fails with `{:ssh_readonly, _}` naming skipped and written logins (a
 partial sync, API 409 `SSH_READONLY`). A `user_readonly` owned by anyone else is ignored (reported as
 `readonly_ignored`, shown in the diff and the audit entry); the marker must be a plain file with one
@@ -101,11 +105,14 @@ managed: shares the SSH user's home"). A symlinked `~/.ssh` (or one resolving
 outside the home) is `unsafe: ssh_dir`: not read, not written, skipped by a sync as "revocation
 blocked: unsafe ~/.ssh" (diff, periodic check, audit). Writes: cwd-pinned in the real `~/.ssh`, a
 fresh `O_EXCL` temp file (umask 022: root-owned 0644, as before), a handwritten file renamed to
-`authorized_keys.backup.<random>`, final rename with `mv -T`/`mv -h`; without either (busybox) a
-symlink target is `rm`'d first, then plain `mv` (a real directory there is refused, `unsafe:
-link-to-dir`, a per-login skip). An unsafe `~/.ssh` also sets the login's `read_error` (API diff);
-`SyncCheck` keeps it as blocked drift, not a host error. Reads: time-bounded; on Linux the opened fd is checked via
-`/proc` (same inode as the entry, one link).
+`authorized_keys.backup.<random>`, final rename with `mv -T`/`mv -h`, then the entry must be a
+plain file with the renamed file's inode (else `unsafe: race`); a host whose `mv` has neither
+option (old busybox) is refused (`unsafe: no_safe_rename`), a real directory there too (`unsafe:
+link-to-dir`), both per-login skips. An unsafe `~/.ssh` also sets the login's `read_error` (API diff);
+`SyncCheck` keeps it as blocked drift, not a host error. Reads: time-bounded; with perl (`Fcntl`)
+opened `O_NOFOLLOW|O_NONBLOCK` and the opened file checked (regular, one link, same dev+inode as the
+entry); without perl on Linux the opened fd is checked via `/proc` (same inode as the entry, one
+link); elsewhere the entry is checked before and after the read. The listing uses no temp file.
 Every sync outcome is audit-logged (`Ssm.Diffs.SyncAudit`). Sync (full and removal-only,
 `RevocationSync.run/2` incl. its audit), `KeyRemoval`, `Mctl.People` scrub and
 `ManagedLogins.forget` run under one per-host lock (`Ssm.Hosts.WriteLock`, `:global`, re-entrant
@@ -472,17 +479,21 @@ path entries (harmless, narrow — cleaning it needs user approval per rule #6);
 `./ssm.db` at the repo root is the final snapshot of the python stack's data, kept as
 the dev-DB import source (`just import-db`). Without `getent` (busybox) `script.sh` reads `/etc/passwd` with an exact awk field match
 (`ENVIRON`, no regex). Known limitations of the `script.sh`
-link checks: a root-owned file an admin left in a user's home can be moved by that user to
-`~/.ssh/user_readonly` and then freezes the login (the check sees a plain root-owned
-file); and without `/proc` (FreeBSD/pfSense) the read side checks before it reads, so a user
-who swaps `authorized_keys` for a link in the instant between check and read could still get
-one read through it (Linux checks the opened file; the write side has no such window). Without
-`timeout(1)` a FIFO swapped in at that instant can hang the listing until the SSH timeout.
+link checks: without perl and without `/proc` (FreeBSD/pfSense) the read side checks the entry
+before and after it reads, so a user who swaps `authorized_keys` for a link and back in the
+instant of the read could still get one read through it (perl or Linux `/proc` check the opened
+file; the write side has no such window); without perl, a link swapped in at that instant is
+opened (a device behind it sees the open). Without perl and `timeout(1)` a FIFO swapped in at that
+instant can hang the listing until the SSH timeout. A `user_readonly` is trusted only in a
+root-owned `~/.ssh`; a root-owned file that root itself left in such a directory is not checked
+further (only ssm's keyfile header is recognised).
 A user who symlinks their own `~/.ssh` blocks ssm's writes, and so the revocation, for that login
 on purpose: it stays a visible "revocation blocked: unsafe ~/.ssh" (diff, periodic check, audit)
-that staff must resolve on the host; ssm does not repair it. On busybox (no `mv -T`/`-h`) a
-symlink-to-dir planted in the instant between ssm's `rm` of the old link, its re-check and its
-`mv` could still receive the root-owned 0644 temp file.
+that staff must resolve on the host; ssm does not repair it. Grants (design, not fixed): a grant
+names an SSH user, not a person or a key. An operator may create SSH users (with keys) that hold
+no authorization yet; when someone with a wider scope later grants such an SSH user (claim
+first, then wait), the keys planted beforehand reach every host of the grant's target. Check an
+SSH user's keys before granting it.
 
 **Knowledge graph**: `.claude/settings.json` hooks keep a `code-review-graph` index
 (`.code-review-graph/`, gitignored) updated on every edit. The MCP server entry was

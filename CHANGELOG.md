@@ -105,6 +105,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- A login's user could block every revocation for their login: in their own `~/.ssh`
+  they could rename the root-owned `authorized_keys` that ssm wrote to `user_readonly`,
+  which then counted as a root-owned readonly marker and made every sync skip the
+  login. A `user_readonly` now counts only inside a `~/.ssh` that root owns and that
+  group and others cannot write, and never when it is an ssm-written keyfile. Any
+  other root-owned marker is ignored, the login is written, and the diff and the
+  activity log show "user_readonly unsafe (tampered?)". To freeze a login on purpose,
+  make its `~/.ssh` root-owned (not group/world-writable) and put a root-owned
+  `user_readonly` there. This affects released versions up to and including 4.10.0.
+- Writing `authorized_keys` now checks after the final rename that the file in place
+  is the one ssm wrote ("unsafe (race)" otherwise), and hosts whose `mv` supports
+  neither `-T` nor `-h` (old busybox) are refused with "unsafe (no_safe_rename)":
+  a plain `mv` could put ssm's file into a directory a user links there at the right
+  moment. Other logins of the host are still written.
+- Reading `authorized_keys` no longer opens a link swapped in after ssm's checks:
+  where perl is available the file is opened with `O_NOFOLLOW` and checked after the
+  open (also on FreeBSD); without perl, Linux keeps the `/proc` check and other systems
+  now check the file before and after the read.
+- The host listing no longer writes a predictable temp file (`$TMPDIR/homedirs.<pid>`)
+  as root.
+
 - "Revocation pending" now covers every change that takes SSH access away, not only
   grants and deleted authorizations: an authorization moved to another host, login or
   SSH user (the old host), an SSH user disabled, deleted, merged away or split (the
@@ -159,6 +180,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   write replaced the file that holds ssm's own key, so a grant for the alias could lock
   ssm out of the host and wipe root's keys. A sync now skips that login with "not
   managed: shares the SSH user's home"; manage the keys under the SSH login instead.
+
+### Known limitations
+
+- A grant names an SSH user, not a person or a key. An SSO operator may create an SSH
+  user with keys that has no authorization yet; when someone with a wider scope later
+  grants that SSH user on a customer or group, those keys reach every host of it.
+  Check an SSH user's keys before granting it.
 
 ## [4.11.0] - 2026-11-08
 

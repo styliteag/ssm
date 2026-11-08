@@ -256,17 +256,19 @@ defmodule Ssm.Ssh.ScriptSafetyTest do
       )
     end
 
-    test "without mv -T/-h a symlink-to-dir authorized_keys is removed and replaced", ctx do
+    # a plain mv could move the file into a directory linked there in between
+    test "without mv -T/-h a symlink-to-dir authorized_keys is refused, nothing lands there",
+         ctx do
       busybox_mv(ctx)
       ssh = ssh_dir(add_user(ctx, "bbx"))
       target = Path.join(ctx.dir, "sudoers.d")
       File.mkdir_p!(target)
       File.ln_s!(target, Path.join(ssh, "authorized_keys"))
 
-      assert {_, 0} = write(ctx, "bbx", "ssh-rsa NEW y\n")
+      assert {out, 1} = write(ctx, "bbx", "ssh-rsa NEW y\n")
+      assert out =~ "Keyfile is unsafe (no_safe_rename)"
       assert File.ls!(target) == []
-      assert stat!(Path.join(ssh, "authorized_keys")).type == :regular
-      assert File.read!(Path.join(ssh, "authorized_keys")) =~ "ssh-rsa NEW y"
+      assert Path.wildcard(Path.join(ssh, ".authorized_keys.ssm.*")) == []
     end
 
     test "a real directory named authorized_keys is refused as unsafe (link-to-dir)", ctx do
