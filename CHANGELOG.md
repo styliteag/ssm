@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- SSH to an IPv6 address works: an IPv6 literal (e.g. `fdfd:4444:5::6:1`)
+  is connected over IPv6 instead of being looked up as an IPv4 name, which
+  failed with "the host name does not resolve" (Mission Control onboarding
+  of a host by its IPv6 address). A DNS name is tried over IPv4 first and
+  over IPv6 when it has no IPv4 record; an unreachable IPv6 address now
+  reports "the host is unreachable".
+
 ## [4.8.0] - 2026-11-08
 
 ### Added

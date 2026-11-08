@@ -88,6 +88,14 @@ defmodule Ssm.Ssh.HostKeyTest do
       assert HostKey.known_hosts_line("10.0.0.1", 22, key) == "10.0.0.1 #{key}"
       assert HostKey.known_hosts_line("jump.example", 2222, key) == "[jump.example]:2222 #{key}"
     end
+
+    test "an IPv6 literal is bare on port 22 and bracketed with another port" do
+      {:ok, key} = HostKey.public_key(@ed25519)
+      assert HostKey.known_hosts_line("fdfd:4444:5::6:1", 22, key) == "fdfd:4444:5::6:1 #{key}"
+
+      assert HostKey.known_hosts_line("2001:db8::5", 9922, key) ==
+               "[2001:db8::5]:9922 #{key}"
+    end
   end
 
   describe "algorithm_preference/1" do

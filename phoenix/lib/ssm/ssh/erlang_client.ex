@@ -416,26 +416,55 @@ defmodule Ssm.Ssh.ErlangClient do
   # `modify_algorithms prepend` (reorder only): replacing the public_key list
   # via preferred_algorithms would also restrict user-auth key algorithms.
   defp ssh_connect(address, port, username, key_dir, key_mode, prefer) do
-    :ssh.connect(
-      String.to_charlist(address),
-      port,
-      [
-        user: String.to_charlist(username),
-        user_dir: String.to_charlist(key_dir),
-        key_cb: {HostKeyCb, mode: key_mode, reply_to: self()},
-        modify_algorithms: [prepend: [public_key: HostKey.algorithm_preference(prefer)]],
-        silently_accept_hosts: false,
-        save_accepted_host: false,
-        user_interaction: false,
-        quiet_mode: true,
-        auth_methods: ~c"publickey",
-        connect_timeout: connect_timeout_ms()
-      ],
-      connect_timeout_ms()
-    )
+    opts = [
+      user: String.to_charlist(username),
+      user_dir: String.to_charlist(key_dir),
+      key_cb: {HostKeyCb, mode: key_mode, reply_to: self()},
+      modify_algorithms: [prepend: [public_key: HostKey.algorithm_preference(prefer)]],
+      silently_accept_hosts: false,
+      save_accepted_host: false,
+      user_interaction: false,
+      quiet_mode: true,
+      auth_methods: ~c"publickey",
+      connect_timeout: connect_timeout_ms()
+    ]
+
+    address
+    |> connect_attempts()
+    |> Enum.reduce_while(nil, fn {host, family}, _last ->
+      result = connect_once(host, port, family ++ opts)
+      if retry_over_ipv6?(result), do: {:cont, result}, else: {:halt, result}
+    end)
+  end
+
+  defp connect_once(host, port, opts) do
+    :ssh.connect(host, port, opts, connect_timeout_ms())
   catch
     kind, reason -> {:error, {kind, reason}}
   end
+
+  @doc false
+  # How an address reaches `:ssh.connect`: an IPv4 or IPv6 literal as the
+  # parsed tuple with its address family (without `inet: :inet6` an IPv6
+  # literal is looked up as an IPv4 name and fails with nxdomain); a DNS
+  # name over IPv4 first, then over IPv6 for names with only AAAA records.
+  @spec connect_attempts(String.t()) :: [{:inet.ip_address() | charlist(), keyword()}]
+  def connect_attempts(address) do
+    charlist = String.to_charlist(address)
+
+    case :inet.parse_address(charlist) do
+      {:ok, {_, _, _, _} = ip} -> [{ip, [inet: :inet]}]
+      {:ok, ip} -> [{ip, [inet: :inet6]}]
+      {:error, _} -> [{charlist, [inet: :inet]}, {charlist, [inet: :inet6]}]
+    end
+  end
+
+  @doc false
+  # Only a name without an IPv4 record goes on to the IPv6 attempt; a refused,
+  # timed-out or failed connect is the answer.
+  @spec retry_over_ipv6?(term()) :: boolean()
+  def retry_over_ipv6?({:error, reason}), do: inspect(reason) =~ "nxdomain"
+  def retry_over_ipv6?(_result), do: false
 
   ## OpenSSH local forwarder for jump chains
 

@@ -81,6 +81,26 @@ defmodule Ssm.Ssh.ErlangClientHostKeyTest do
     refute_received {:ssm_host_key, _, _}
   end
 
+  test "connects to an IPv6 literal (::1)", %{tmp_dir: tmp_dir} do
+    host_key = :public_key.generate_key({:namedCurve, :ed25519})
+
+    case :ssh.daemon({0, 0, 0, 0, 0, 0, 0, 1}, 0,
+           system_dir: String.to_charlist(tmp_dir),
+           key_cb: {FakeServerKeyCb, host_key: host_key},
+           auth_methods: ~c"publickey"
+         ) do
+      {:ok, daemon} ->
+        on_exit(fn -> :ssh.stop_daemon(daemon) end)
+        {:ok, info} = :ssh.daemon_info(daemon)
+        {:ok, offered} = host_key |> public_part() |> HostKey.from_erlang_key()
+        v6 = %{target(Keyword.fetch!(info, :port), offered.fingerprint, 7) | address: "::1"}
+        assert :ok = ErlangClient.connect(v6)
+
+      {:error, _no_ipv6_loopback} ->
+        :ok
+    end
+  end
+
   test "a bare legacy SHA256 pin matches too", %{port: port, offered: offered} do
     [_type, hash] = String.split(offered.fingerprint, " ")
     assert :ok = ErlangClient.connect(target(port, hash))
