@@ -20,6 +20,11 @@ defmodule Ssm.Authorizations.Options do
 
   @valued ~w(from command permitopen permitlisten environment expiry-time principals tunnel)
 
+  # options that widen what a key may do (or re-enable what `restrict`
+  # takes away): set by admins only on the web UI (`validate_role/2`)
+  @admin_only ~w(environment cert-authority user-rc permitopen permitlisten pty
+                 port-forwarding agent-forwarding x11-forwarding tunnel no-touch-required)
+
   # options that narrow what a key may do; dropping one widens access
   @restrictions ~w(from command restrict permitopen permitlisten expiry-time principals)
 
@@ -60,6 +65,49 @@ defmodule Ssm.Authorizations.Options do
         {:error, message} -> [options: message]
       end
     end)
+  end
+
+  @doc """
+  The admin-only (permissive) option names in `options`, lower-case, once
+  each, in order: `environment`, `cert-authority`, `user-rc`,
+  `permitopen`, `permitlisten`, the re-enabling `pty`, `port-forwarding`,
+  `agent-forwarding`, `x11-forwarding`, `tunnel`, and `no-touch-required`
+  (drops the FIDO touch check). Everything else on the allow-list only
+  narrows what a key may do.
+  """
+  @spec admin_only(String.t() | nil) :: [String.t()]
+  def admin_only(nil), do: []
+
+  def admin_only(options) when is_binary(options),
+    do: options |> names() |> Enum.filter(&(&1 in @admin_only)) |> Enum.uniq()
+
+  @doc """
+  Changeset check for a web user's `role`: only `"admin"` may write
+  permissive options (`admin_only/1`). Anyone else gets an `:options` error
+  when the grant's options carry one and the change sets the options or
+  moves the grant (new grant, other host, user or login); editing the
+  comment of an admin's grant stays possible.
+  """
+  @spec validate_role(Ecto.Changeset.t(), String.t() | nil) :: Ecto.Changeset.t()
+  def validate_role(changeset, "admin"), do: changeset
+
+  def validate_role(changeset, _role) do
+    names = changeset |> Ecto.Changeset.get_field(:options) |> admin_only()
+
+    if names != [] and writes_options?(changeset),
+      do: Ecto.Changeset.add_error(changeset, :options, role_message(names)),
+      else: changeset
+  end
+
+  @doc "The error text for permissive option `names` set by a non-admin."
+  @spec role_message([String.t()]) :: String.t()
+  def role_message(names),
+    do:
+      "#{Enum.join(names, ", ")} may be set by an admin only (operators: restrictive options only)"
+
+  defp writes_options?(%Ecto.Changeset{data: data, changes: changes}) do
+    is_nil(Map.get(data, :id)) or
+      Enum.any?([:options, :host_id, :user_id, :login], &Map.has_key?(changes, &1))
   end
 
   @doc """

@@ -17,6 +17,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Permissive `authorized_keys` options can be set from the web UI by admins only:
+  `environment`, `cert-authority`, `user-rc`, `permitopen`, `permitlisten`, and the
+  re-enabling `pty`, `port-forwarding`, `agent-forwarding`, `X11-forwarding`, `tunnel`,
+  plus `no-touch-required`. SSO operators may set restrictive options only (`restrict`,
+  `no-*`, `from`, `command`, `expiry-time`, `principals`, `verify-required`), in the
+  authorization form and in bulk grant; they can still edit the comment of an
+  admin's grant but not move it. The `/api/v2` token path is unchanged.
+
 - ssm no longer writes the `authorized_keys` of a login that shares the home of the
   host's SSH login (for example a uid-0 alias such as `toor` in root's home). Such a
   write replaced the file that holds ssm's own key, so a grant for the alias could lock

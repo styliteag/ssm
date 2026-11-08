@@ -115,7 +115,12 @@ cannot create hosts or pin all host keys, and `Hosts.update_host/3` drops their 
 connection fields (`address`, `port`, `username`, `key_fingerprint`, `jump_via`) and refuses a
 host other hosts jump through (`:jump_host`); only admins set `jump_via` (jump hosts are global).
 `Hosts.delete_host/2` refuses a jump host in use for every UI user (`jump_via` cascades), as mctl
-does. Bulk grant intersects client-sent host ids with the scope.
+does. Bulk grant intersects client-sent host ids with the scope. Permissive authorized_keys options
+(`Options.admin_only/1`: `environment`, `cert-authority`, `user-rc`, `permitopen`, `permitlisten`,
+`pty`, `port-forwarding`, `agent-forwarding`, `X11-forwarding`, `tunnel`, `no-touch-required`) are
+admin-only on the scoped write paths: `create_/update_authorization` and `bulk_grant` take
+`role:` in `opts` (`Options.validate_role/2`, fails closed without a role; a comment-only edit of
+an admin's grant passes, moving it does not); the scope-less `/api/v2` path is unchanged.
 Activity entries of a host carry `activity_log.host_id` (cleared by `Hosts.delete_host/1`, SQLite
 reuses ids); a scoped user sees those of hosts in scope plus its own hostless ones. SSH user catalog: every web user
 reads all SSH users and keys; a scoped user changes a user, its keys, split/merge/bulk delete and
