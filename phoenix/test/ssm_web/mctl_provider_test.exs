@@ -511,8 +511,9 @@ defmodule SsmWeb.MctlProviderTest do
                  create_params(%{"attributes" => %{"key_fingerprint" => @ed_fp}})
                )
 
+      # a job turns running before its first progress line is written
       running =
-        wait_for_job(job.id, &(&1.state == "running" and &1.progress =~ "attempt"))
+        wait_for_job(job.id, &(&1.state == "running" and (&1.progress || "") =~ "attempt"))
 
       assert running.result == %{
                "ssm_public_key" => Ssm.Test.OwnKeyStub.default(),
