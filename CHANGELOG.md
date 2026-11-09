@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Offboarding a person from Mission Control no longer writes to any host: ssm deletes the
+  person's authorizations and shared keys and disables the operator, and the affected
+  hosts show "revocation pending" until someone presses Sync in ssm. The job result lists
+  them as `revocation_pending` (`hosts` is empty: nothing was written).
+
 ## [4.13.2] - 2026-11-09
 
 ### Changed

@@ -132,7 +132,7 @@ opened `O_NOFOLLOW|O_NONBLOCK` and the opened file checked (regular, one link, s
 entry); without perl on Linux the opened fd is checked via `/proc` (same inode as the entry, one
 link); elsewhere the entry is checked before and after the read. The listing uses no temp file.
 Every sync outcome is audit-logged (`Ssm.Diffs.SyncAudit`). Sync (full and removal-only,
-`RevocationSync.run/2` incl. its audit), `KeyRemoval`, `Mctl.People` scrub and
+`RevocationSync.run/2` incl. its audit), `KeyRemoval` and
 `ManagedLogins.forget` run under one per-host lock (`Ssm.Hosts.WriteLock`, `:global`, re-entrant
 for the holder through the process dictionary — a bare nested `:global.trans` releases early);
 the listing reports each file's `sha256` and a write passes it back (`set_authorized_keyfile
@@ -277,7 +277,8 @@ refreshes every `SSM_SYNC_INTERVAL` through `Ssm.Diffs.HostChecks.sweep/1` (disa
 are never touched and keep no row — disabling forgets it; the stored drift holds fingerprints and comments only).
 Contract section 10: `DELETE /hosts/{id}` (refused for a jump host in use — `jump_via` cascades)
 and people (`Ssm.People` matches operator by issuer+subject, SSH users and key comments by e-mail;
-`SsmWeb.Mctl.People` removes only the person's key lines per login through `script.sh`).
+`SsmWeb.Mctl.People` offboards in the database only — authorizations, shared keys, operator;
+the hosts are marked revocation pending and change at a user's next Sync, never from mctl).
 `probe_ssh` (contract 0.5.0, `SsmWeb.Mctl.Probe` → `Ssm.Ssh.Probe`): TCP connect + first line only, directly
 or via a jump host (`ErlangClient.banner_via/4`, `ssh -W`); refused ranges, 30/min per token, audited.
 
