@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Disabled hosts no longer show "pending sync" (badge, filter, header count): nothing can be
+  synced there. The mark is kept and shows again when the host is enabled.
+
 ### Added
 
 - `SSM_KEY_FROM` (comma-separated IPs/CIDRs: ssm's own address and the jump hosts' inner
