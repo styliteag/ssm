@@ -151,12 +151,12 @@ defmodule SsmWeb.Layouts do
     items = [
       {"Dashboard", ~p"/dashboard", "hero-squares-2x2", :dashboard},
       {"Hosts", ~p"/hosts", "hero-server", :hosts},
-      {"Users", ~p"/users", "hero-users", :users},
-      {"SSH Keys", ~p"/keys", "hero-key", :keys},
-      {"Authorizations", ~p"/authorizations", "hero-shield-check", :authorizations},
+      {"SSH users", ~p"/users", "hero-users", :users},
+      {"SSH keys", ~p"/keys", "hero-key", :keys},
+      {"Access", ~p"/authorizations", "hero-shield-check", :authorizations},
       {"Grants", ~p"/grants", "hero-user-group", :grants},
-      {"Diff Viewer", ~p"/diff", "hero-arrows-right-left", :diff},
-      {"Activities", ~p"/activities", "hero-clock", :activities}
+      {"Sync", ~p"/diff", "hero-arrows-right-left", :diff},
+      {"Activity", ~p"/activities", "hero-clock", :activities}
     ]
 
     if match?(%{role: "admin"}, user),

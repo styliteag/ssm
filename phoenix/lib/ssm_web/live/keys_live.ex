@@ -30,7 +30,7 @@ defmodule SsmWeb.KeysLive do
   def mount(_params, _session, socket) do
     {:ok,
      assign(socket,
-       page_title: "SSH Keys",
+       page_title: "SSH keys",
        form: nil,
        editing: nil,
        viewing: nil,
@@ -531,7 +531,7 @@ defmodule SsmWeb.KeysLive do
       active={:keys}
     >
       <.header>
-        SSH Keys
+        SSH keys
         <:subtitle>{@stats.total} stored public keys</:subtitle>
         <:actions>
           <.button id="import-keys" phx-click="import-open">

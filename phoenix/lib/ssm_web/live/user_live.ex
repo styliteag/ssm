@@ -42,10 +42,8 @@ defmodule SsmWeb.UserLive do
 
   defp key_line(key), do: Diffs.format_key_line(key.key_type, key.key_base64, key.name)
 
-  defp check_label(nil), do: {"unchecked", "badge-ghost"}
-  defp check_label(%HostCheck{state: "synced"}), do: {"synced", "badge-success"}
-  defp check_label(%HostCheck{state: "drift"}), do: {"needs sync", "badge-warning"}
-  defp check_label(%HostCheck{}), do: {"error", "badge-error"}
+  defp check_label(nil), do: SsmWeb.StatusText.check_state(nil)
+  defp check_label(%HostCheck{state: state}), do: SsmWeb.StatusText.check_state(state)
 
   defp grant_target(%{customer: %{name: name}}), do: "customer " <> name
   defp grant_target(%{group: %{name: name}}), do: "group " <> name

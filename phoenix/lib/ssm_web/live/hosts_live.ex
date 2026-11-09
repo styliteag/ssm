@@ -13,7 +13,7 @@ defmodule SsmWeb.HostsLive do
   "offline". Rows are a plain assign, not a stream — filtering and status
   overlays must re-render rows.
 
-  "Refresh all" runs the same connection test for every enabled host the
+  "Test connections" runs the same connection test for every enabled host the
   current filter lists (after a confirm), `SSH_CONCURRENCY` at a time, and
   each result lands in its row as it arrives. A connection test is not a
   key check, so it is not written to `host_checks`; the row shows "checked
@@ -38,6 +38,7 @@ defmodule SsmWeb.HostsLive do
   alias Ssm.Scope
   alias SsmWeb.ErrorText
   alias SsmWeb.Layouts
+  alias SsmWeb.StatusText
 
   @filters ~w(active all online offline unknown disabled pending)
   @jump_host_locked "Read-only: this host is the jump host of other hosts, " <>
@@ -422,7 +423,7 @@ defmodule SsmWeb.HostsLive do
     {:noreply,
      socket
      |> assign(:refreshing, false)
-     |> put_flash(:error, ErrorText.crashed("Refresh all", reason))}
+     |> put_flash(:error, ErrorText.crashed("Testing connections", reason))}
   end
 
   def handle_async(:pin_host_keys, {:ok, report}, socket) do
@@ -486,6 +487,9 @@ defmodule SsmWeb.HostsLive do
      |> put_flash(:error, ErrorText.crashed("The connection test", reason))}
   end
 
+  defp access_entries(1), do: "1 access entry"
+  defp access_entries(n), do: "#{n} access entries"
+
   # Deleting a host only forgets it: ssm never connects again, so whatever
   # it placed there (the authorized key lines, its own key) stays.
   defp delete_confirm(host, 0),
@@ -513,7 +517,7 @@ defmodule SsmWeb.HostsLive do
     |> refilter()
   end
 
-  ## Refresh all
+  ## Test connections (all listed hosts)
 
   # every enabled host the current filter lists; disabled hosts are never
   # contacted (rule #4), whatever the filter shows
@@ -641,20 +645,6 @@ defmodule SsmWeb.HostsLive do
   defp log_host_activity(socket, action, host),
     do: Entries.host(action, host, socket.assigns.current_user.actor)
 
-  defp status_label(:disabled), do: "disabled"
-  defp status_label(:unchecked), do: "unknown"
-  defp status_label({:auth_failed, _message}), do: "auth failed"
-  defp status_label({:host_key_changed, _message}), do: "host key changed"
-  defp status_label({:unreachable, _message}), do: "offline"
-  defp status_label(_reachable), do: "online"
-
-  defp status_class(:disabled), do: "badge-neutral"
-  defp status_class(:unchecked), do: "badge-ghost"
-  defp status_class({:host_key_changed, _message}), do: "badge-error"
-  defp status_class({:auth_failed, _message}), do: "badge-error"
-  defp status_class({:unreachable, _message}), do: "badge-error"
-  defp status_class(_reachable), do: "badge-success"
-
   defp status_title(:disabled), do: "Disabled — all SSH operations blocked"
   defp status_title(:unchecked), do: "Not checked yet — run the diff viewer or a connection test"
   defp status_title({:auth_failed, message}), do: "The host refused ssm's key: #{message}"
@@ -753,7 +743,7 @@ defmodule SsmWeb.HostsLive do
             <%= if @refreshing do %>
               Refreshing {@refresh_done}/{@refresh_total}
             <% else %>
-              Refresh all ({refreshable_count(@rows)})
+              Test connections ({refreshable_count(@rows)})
             <% end %>
           </.button>
           <.button
@@ -782,8 +772,8 @@ defmodule SsmWeb.HostsLive do
               {"active", "Active"},
               {"all", "All"},
               {"online", "Online"},
-              {"offline", "Offline"},
-              {"unknown", "Unknown"},
+              {"offline", "Unreachable"},
+              {"unknown", "Not checked"},
               {"disabled", "Disabled"},
               {"pending", "Pending sync"}
             ]
@@ -825,10 +815,10 @@ defmodule SsmWeb.HostsLive do
               <span class="block truncate text-xs opacity-60">{host.address}:{host.port}</span>
             </span>
             <span
-              class={["badge badge-sm flex-none", status_class(@statuses[host.id])]}
+              class={["badge badge-sm flex-none", StatusText.connection_class(@statuses[host.id])]}
               title={status_title(@statuses[host.id])}
             >
-              {status_label(@statuses[host.id])}
+              {StatusText.connection(@statuses[host.id])}
             </span>
           </div>
           <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs opacity-70">
@@ -844,7 +834,7 @@ defmodule SsmWeb.HostsLive do
               class="link link-hover"
               title="Authorizations on this host"
             >
-              {Map.get(@auth_counts, host.id, 0)} grant(s)
+              {access_entries(Map.get(@auth_counts, host.id, 0))}
             </.link>
           </div>
           <p :if={host.comment} class="mt-1 truncate text-xs opacity-60">{host.comment}</p>
@@ -873,7 +863,7 @@ defmodule SsmWeb.HostsLive do
             <p :if={host.comment} class="text-xs opacity-60">{host.comment}</p>
           </:col>
           <:col :let={host} label="Address" sort="address">{host.address}:{host.port}</:col>
-          <:col :let={host} label="Login" sort="login">
+          <:col :let={host} label="Connection user" sort="login">
             {host.username} <.limited_badge host={host} />
           </:col>
           <:col :let={host} label="Jump via" sort="jump">
@@ -891,10 +881,10 @@ defmodule SsmWeb.HostsLive do
           <:col :let={host} label="Status" sort="status">
             <.link
               navigate={host_path(host.id)}
-              class={["badge badge-sm", status_class(@statuses[host.id])]}
+              class={["badge badge-sm", StatusText.connection_class(@statuses[host.id])]}
               title={status_title(@statuses[host.id])}
             >
-              {status_label(@statuses[host.id])}
+              {StatusText.connection(@statuses[host.id])}
             </.link>
             <.revocation_badge host={host} pending={@pending_revocations[host.id]} />
             <p :if={not host.disabled} id={"checked-#{host.id}"} class="text-xs opacity-60">
@@ -1027,7 +1017,7 @@ defmodule SsmWeb.HostsLive do
         <.input
           field={@form[:username]}
           type="text"
-          label="SSH login user"
+          label="Connection user (ssm logs in as)"
           required
           readonly={!@global}
         />

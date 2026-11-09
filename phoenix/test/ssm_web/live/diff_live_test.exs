@@ -96,7 +96,7 @@ defmodule SsmWeb.DiffLiveTest do
     view |> element("#recheck-all") |> render_click()
     render_async(view)
 
-    assert has_element?(view, "#diff-host-#{synced_host.id} .badge", "synchronized")
+    assert has_element?(view, "#diff-host-#{synced_host.id} .badge", "in sync")
     assert has_element?(view, "#diff-host-#{drifted.id} .badge", "needs sync (+1/−1)")
     assert has_element?(view, "#diff-host-#{disabled.id} .badge", "disabled")
     assert %{state: "synced"} = Ssm.Diffs.HostChecks.stored()[synced_host.id]
@@ -177,7 +177,7 @@ defmodule SsmWeb.DiffLiveTest do
     view |> element("#recheck-all") |> render_click()
     render_async(view)
 
-    assert has_element?(view, "#diff-host-#{host.id} .badge", "synchronized")
+    assert has_element?(view, "#diff-host-#{host.id} .badge", "in sync")
     refute MockClient.calls().exec == []
   end
 
@@ -603,7 +603,7 @@ defmodule SsmWeb.DiffLiveTest do
       view |> element("#recheck-row-#{host.id}") |> render_click()
       render_async(view)
 
-      assert has_element?(view, "#diff-row-#{host.id} .badge", "synchronized")
+      assert has_element?(view, "#diff-row-#{host.id} .badge", "in sync")
       assert %{state: "synced"} = Ssm.Diffs.HostChecks.stored()[host.id]
     end
   end

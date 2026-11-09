@@ -20,6 +20,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- One vocabulary across the UI. Navigation: "SSH users", "SSH keys", "Access" (was
+  Authorizations), "Sync" (was Diff Viewer), "Activity". A user → host → login row is an
+  "access entry" (no longer also called a grant; "Grant" is only the customer/group rule).
+  The account on the target host is the "target login"; the account ssm logs in as is the
+  "connection user". Host states have one word each on every page: not checked, in sync,
+  needs sync, online, unreachable, key not accepted, host key changed, disabled. The hosts
+  page "Refresh all" is "Test connections", the sync detail "Refresh" is "Read again".
+  The `/api/v2` API is unchanged.
+
 - Deleting a host says that ssm never connects to it again, so the key lines it placed and
   ssm's own key stay on the host — delete the authorizations and sync first to take access
   away.

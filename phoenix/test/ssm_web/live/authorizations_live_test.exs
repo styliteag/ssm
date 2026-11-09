@@ -71,9 +71,9 @@ defmodule SsmWeb.AuthorizationsLiveTest do
 
     # id order: zeta first. Sort by login asc: alpha first, desc flips.
     assert render(view) =~ ~r/zeta.*alpha/s
-    view |> element("th button", "Login") |> render_click()
+    view |> element("th button", "Target login") |> render_click()
     assert render(view) =~ ~r/alpha.*zeta/s
-    view |> element("th button", "Login") |> render_click()
+    view |> element("th button", "Target login") |> render_click()
     assert render(view) =~ ~r/zeta.*alpha/s
 
     view |> element("#authorizations-search") |> render_change(%{q: "alice"})
@@ -118,7 +118,7 @@ defmodule SsmWeb.AuthorizationsLiveTest do
     |> element("#bulk-grant-form")
     |> render_change(%{bulk: %{login: "root", options: "no-pty"}})
 
-    assert has_element?(view, "#bulk-preview", "3 new grant(s)")
+    assert has_element?(view, "#bulk-preview", "3 new access entries")
     assert has_element?(view, "#bulk-preview", "1 already exist")
 
     view |> element("#bulk-grant-form") |> render_submit()

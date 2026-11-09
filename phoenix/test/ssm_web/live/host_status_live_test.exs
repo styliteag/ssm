@@ -43,11 +43,11 @@ defmodule SsmWeb.HostStatusLiveTest do
       {:ok, view, _html} = live(conn, ~p"/hosts")
 
       assert has_element?(view, "#hosts-#{synced.id} .badge", "online")
-      assert has_element?(view, "#hosts-#{denied.id} .badge", "auth failed")
+      assert has_element?(view, "#hosts-#{denied.id} .badge", "key not accepted")
       assert has_element?(view, "#hosts-#{rekeyed.id} .badge", "host key changed")
-      assert has_element?(view, "#hosts-#{dead.id} .badge", "offline")
-      assert has_element?(view, "#filter-offline", "Offline (3)")
-      assert has_element?(view, "#filter-unknown", "Unknown (0)")
+      assert has_element?(view, "#hosts-#{dead.id} .badge", "unreachable")
+      assert has_element?(view, "#filter-offline", "Unreachable (3)")
+      assert has_element?(view, "#filter-unknown", "Not checked (0)")
     end
 
     test "a cached auth failure is named, not 'offline'", %{conn: conn} do
@@ -55,7 +55,7 @@ defmodule SsmWeb.HostStatusLiveTest do
       StatusCache.put(host.id, {:error, @auth_raw})
 
       {:ok, view, _html} = live(conn, ~p"/hosts")
-      assert has_element?(view, "#hosts-#{host.id} .badge", "auth failed")
+      assert has_element?(view, "#hosts-#{host.id} .badge", "key not accepted")
     end
 
     test "disable and re-enable shows no stale status", %{conn: conn} do
@@ -71,7 +71,7 @@ defmodule SsmWeb.HostStatusLiveTest do
       assert has_element?(view, "#hosts-#{host.id} .badge", "disabled")
 
       view |> element("#toggle-host-#{host.id}") |> render_click()
-      assert has_element?(view, "#hosts-#{host.id} .badge", "unknown")
+      assert has_element?(view, "#hosts-#{host.id} .badge", "not checked")
     end
 
     test "a host deleted through the API does not leave its status to a reused id",
@@ -96,7 +96,7 @@ defmodule SsmWeb.HostStatusLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/diff")
 
-      assert has_element?(view, "#diff-row-#{denied.id} .badge", "auth failed")
+      assert has_element?(view, "#diff-row-#{denied.id} .badge", "key not accepted")
       assert has_element?(view, "#diff-row-#{rekeyed.id} .badge", "host key changed")
     end
   end

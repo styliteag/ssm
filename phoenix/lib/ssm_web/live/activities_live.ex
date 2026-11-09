@@ -26,7 +26,7 @@ defmodule SsmWeb.ActivitiesLive do
 
   @impl true
   def mount(_params, _session, socket) do
-    {:ok, assign(socket, page_title: "Activities")}
+    {:ok, assign(socket, page_title: "Activity")}
   end
 
   @impl true
@@ -135,7 +135,7 @@ defmodule SsmWeb.ActivitiesLive do
       active={:activities}
     >
       <.header>
-        Activities
+        Activity
         <:subtitle>Audit trail, newest first</:subtitle>
       </.header>
 

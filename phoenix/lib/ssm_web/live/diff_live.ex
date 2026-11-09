@@ -46,6 +46,7 @@ defmodule SsmWeb.DiffLive do
   alias Ssm.Users.UserKey
   alias SsmWeb.ErrorText
   alias SsmWeb.Layouts
+  alias SsmWeb.StatusText
   alias SsmWeb.SyncConfirm
 
   # Result filters: value, label. `kinds/1` maps a filter to the result
@@ -57,7 +58,7 @@ defmodule SsmWeb.DiffLive do
     {"unreachable", "Unreachable / timeout"},
     {"dns", "Name does not resolve"},
     {"other", "Other errors"},
-    {"unchecked", "Never checked"},
+    {"unchecked", "Not checked"},
     {"disabled", "Disabled"}
   ]
 
@@ -80,7 +81,7 @@ defmodule SsmWeb.DiffLive do
 
     socket =
       socket
-      |> assign(page_title: "Diff Viewer")
+      |> assign(page_title: "Sync")
       |> assign(hosts: hosts, statuses: statuses, checks: checks, syncing: false)
       |> assign(detail: nil, detail_error: nil, detail_loading: false)
       |> assign(key_owners: %{}, host_auths: %{}, keyfiles: %{}, unknown_key: nil)
@@ -983,25 +984,9 @@ defmodule SsmWeb.DiffLive do
 
   defp status_badge(assigns) do
     ~H"""
-    <span class={["badge badge-sm", status_class(@status)]}>{status_text(@status)}</span>
+    <span class={["badge badge-sm", StatusText.class(@status)]}>{StatusText.label(@status)}</span>
     """
   end
-
-  defp status_class(:disabled), do: "badge-neutral"
-  defp status_class(:loading), do: "badge-ghost"
-  defp status_class(:unchecked), do: "badge-ghost"
-  defp status_class(:synced), do: "badge-success"
-  defp status_class({:drift, _, _}), do: "badge-warning"
-  defp status_class({_error, _message}), do: "badge-error"
-
-  defp status_text(:disabled), do: "disabled"
-  defp status_text(:loading), do: "checking…"
-  defp status_text(:unchecked), do: "not checked"
-  defp status_text(:synced), do: "synchronized"
-  defp status_text({:drift, missing, extra}), do: "needs sync (+#{missing}/−#{extra})"
-  defp status_text({:auth_failed, _}), do: "auth failed"
-  defp status_text({:host_key_changed, _}), do: "host key changed"
-  defp status_text({:unreachable, _}), do: "error"
 
   defp item_badge(assigns) do
     ~H"""
@@ -1029,7 +1014,7 @@ defmodule SsmWeb.DiffLive do
       active={:diff}
     >
       <.header>
-        Diff Viewer
+        Sync
         <:subtitle>Expected authorized_keys (database) vs actual (host)</:subtitle>
         <:actions :if={!@selected}>
           <.button
@@ -1228,7 +1213,7 @@ defmodule SsmWeb.DiffLive do
                 <.icon
                   name="hero-arrow-path"
                   class={["size-4", @detail_loading && "motion-safe:animate-spin"]}
-                /> Refresh
+                /> Read again
               </button>
               <button
                 id="sync-host"

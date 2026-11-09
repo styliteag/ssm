@@ -86,7 +86,7 @@ defmodule SsmWeb.ApiTokensLive do
     >
       <.header>
         API tokens
-        <:subtitle>Setup</:subtitle>
+        <:subtitle>Tokens other tools use to call ssm (Mission Control)</:subtitle>
       </.header>
 
       <section id="connect-mctl" class="card border border-base-300 bg-base-100">

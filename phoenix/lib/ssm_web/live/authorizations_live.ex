@@ -28,7 +28,7 @@ defmodule SsmWeb.AuthorizationsLive do
   def mount(_params, _session, socket) do
     {:ok,
      assign(socket,
-       page_title: "Authorizations",
+       page_title: "Access",
        form: nil,
        editing: nil,
        bulk: nil,
@@ -650,8 +650,10 @@ defmodule SsmWeb.AuthorizationsLive do
       active={:authorizations}
     >
       <.header>
-        Authorizations
-        <:subtitle>{@authorization_count} grants (user → host under a login)</:subtitle>
+        Access
+        <:subtitle>
+          {@authorization_count} access entries: an SSH user may log in to a host as a target login
+        </:subtitle>
         <:actions>
           <a
             id="export-csv"
@@ -799,7 +801,7 @@ defmodule SsmWeb.AuthorizationsLive do
               </.link>
             </span>
           </:col>
-          <:col :let={{_id, auth}} label="Login" sort="login">
+          <:col :let={{_id, auth}} label="Target login" sort="login">
             <.link
               :if={auth.host}
               navigate={host_path(auth.host_id)}
@@ -878,7 +880,7 @@ defmodule SsmWeb.AuthorizationsLive do
           <.input
             field={@form[:login]}
             type="text"
-            label="Remote login"
+            label="Target login"
             placeholder="e.g. deploy"
             required
           />
@@ -953,7 +955,7 @@ defmodule SsmWeb.AuthorizationsLive do
             type="select"
             name="login"
             value={@matrix_login}
-            label="Login account"
+            label="Target login"
             options={
               [{"all (view only)", "all"}] ++
                 Enum.map(@login_accounts, fn {login, count} -> {"#{login} (#{count})", login} end)
@@ -1091,7 +1093,7 @@ defmodule SsmWeb.AuthorizationsLive do
     <div id="auth-stats" class="space-y-4">
       <div class="stats stats-vertical sm:stats-horizontal w-full bg-base-200 shadow-sm">
         <div class="stat">
-          <div class="stat-title">Total grants</div>
+          <div class="stat-title">Access entries</div>
           <div class="stat-value text-2xl" id="stat-auth-total">{@stats.total}</div>
         </div>
         <div class="stat">
@@ -1104,7 +1106,7 @@ defmodule SsmWeb.AuthorizationsLive do
           <div class="stat-value text-2xl" id="stat-auth-inactive">{@stats.inactive}</div>
         </div>
         <div class="stat">
-          <div class="stat-title">Login accounts</div>
+          <div class="stat-title">Target logins</div>
           <div class="stat-value text-2xl" id="stat-auth-logins">{@stats.login_count}</div>
         </div>
       </div>
@@ -1346,7 +1348,7 @@ defmodule SsmWeb.AuthorizationsLive do
             type="text"
             name="bulk[login]"
             value={@bulk.login}
-            label="Remote login"
+            label="Target login"
             placeholder="e.g. deploy"
             required
           />
@@ -1364,7 +1366,7 @@ defmodule SsmWeb.AuthorizationsLive do
           class="flex items-center gap-2 rounded-box bg-base-200 px-3 py-2 text-sm"
         >
           <span class={["badge", (@bulk.new_count > 0 && "badge-success") || "badge-ghost"]}>
-            {@bulk.new_count} new grant(s)
+            {@bulk.new_count} new access entr{if @bulk.new_count == 1, do: "y", else: "ies"}
           </span>
           <span class="badge badge-ghost">{@bulk.existing_count} already exist</span>
           <span class="opacity-60">

@@ -33,7 +33,7 @@ defmodule SsmWeb.HostsLiveTest do
     assert has_element?(view, "#hosts-#{host.id}", "web1")
     assert has_element?(view, "#hosts-#{host.id}", "bastion")
     assert has_element?(view, "#hosts-#{host.id} .badge", "disabled")
-    assert has_element?(view, "#hosts-#{bastion.id} .badge", "unknown")
+    assert has_element?(view, "#hosts-#{bastion.id} .badge", "not checked")
   end
 
   test "a non-root login is marked limited with a hint, in list and cards", %{conn: conn} do
@@ -67,11 +67,11 @@ defmodule SsmWeb.HostsLiveTest do
 
     assert has_element?(view, "#hosts-#{up.id} .badge", "online")
     assert has_element?(view, "#hosts-#{drifted.id} .badge", "online")
-    assert has_element?(view, "#hosts-#{down.id} .badge", "offline")
-    assert has_element?(view, "#hosts-#{fresh.id} .badge", "unknown")
+    assert has_element?(view, "#hosts-#{down.id} .badge", "unreachable")
+    assert has_element?(view, "#hosts-#{fresh.id} .badge", "not checked")
 
     assert has_element?(view, "#filter-online", "Online (2)")
-    assert has_element?(view, "#filter-offline", "Offline (1)")
+    assert has_element?(view, "#filter-offline", "Unreachable (1)")
 
     view |> element("#filter-offline") |> render_click()
     assert has_element?(view, "#hosts-#{down.id}")
@@ -235,7 +235,7 @@ defmodule SsmWeb.HostsLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/hosts")
 
-      assert has_element?(view, "#hosts-#{host.id} .badge", "unknown")
+      assert has_element?(view, "#hosts-#{host.id} .badge", "not checked")
 
       view |> element("#test-host-#{host.id}") |> render_click()
       render_async(view)
@@ -284,7 +284,7 @@ defmodule SsmWeb.HostsLiveTest do
       {:ok, view, _html} = live(conn, ~p"/hosts")
 
       button = element(view, "#refresh-all")
-      assert render(button) =~ "Refresh all (2)"
+      assert render(button) =~ "Test connections (2)"
       assert render(button) =~ ~s(data-confirm="Refresh 2 hosts?)
       assert MockClient.calls().connect == []
     end
@@ -299,14 +299,14 @@ defmodule SsmWeb.HostsLiveTest do
       {:ok, view, _html} = live(conn, ~p"/hosts")
       # "All" lists the disabled host too: it is skipped all the same
       view |> element("#filter-all") |> render_click()
-      assert render(element(view, "#refresh-all")) =~ "Refresh all (2)"
+      assert render(element(view, "#refresh-all")) =~ "Test connections (2)"
 
       view |> element("#refresh-all") |> render_click()
       render_async(view)
 
       assert Enum.sort(MockClient.calls().connect) == Enum.sort([ok.id, bad.id])
       assert has_element?(view, "#hosts-#{ok.id} .badge", "online")
-      assert has_element?(view, "#hosts-#{bad.id} .badge", "offline")
+      assert has_element?(view, "#hosts-#{bad.id} .badge", "unreachable")
       assert has_element?(view, "#hosts-#{off.id} .badge", "disabled")
       assert has_element?(view, "#checked-#{ok.id}", "checked just now")
       assert render(view) =~ "Refreshed 2 hosts: 1 online, 1 offline"

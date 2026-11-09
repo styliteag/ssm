@@ -24,7 +24,7 @@ defmodule SsmWeb.UsersLive do
   def mount(_params, _session, socket) do
     {:ok,
      socket
-     |> assign(page_title: "Users")
+     |> assign(page_title: "SSH users")
      |> assign(form: nil, editing: nil)
      |> assign(selected: MapSet.new(), splitting: nil, merging: nil, bulk_deleting: false)
      |> assign(sort: nil, view: "list", q: nil, status: nil)
@@ -525,8 +525,8 @@ defmodule SsmWeb.UsersLive do
       active={:users}
     >
       <.header>
-        Users
-        <:subtitle>{@user_count} managed key owners</:subtitle>
+        SSH users
+        <:subtitle>{@user_count} people or services whose keys ssm places on hosts</:subtitle>
         <:actions>
           <.button id="new-user" variant="primary" phx-click="new">
             <.icon name="hero-plus" class="size-4" /> New user
@@ -604,7 +604,9 @@ defmodule SsmWeb.UsersLive do
               {row.key_count} key(s)
             </.link>
             <.link navigate={~p"/authorizations?user_id=#{row.id}"} class="link link-hover">
-              {row.authorization_count} grant(s)
+              {row.authorization_count} access entr{if row.authorization_count == 1,
+                do: "y",
+                else: "ies"}
             </.link>
             <.link navigate={~p"/grants?user_id=#{row.id}"} class="link link-hover">
               {row.grant_count} customer/group grant(s)

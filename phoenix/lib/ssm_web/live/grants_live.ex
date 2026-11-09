@@ -292,7 +292,7 @@ defmodule SsmWeb.GrantsLive do
             </.link>
             <p :if={@limits[grant.id]} class="text-xs opacity-60">{@limits[grant.id]}</p>
           </:col>
-          <:col :let={grant} label="Login" sort="login">
+          <:col :let={grant} label="Target login" sort="login">
             <span class="font-mono text-sm">{grant.login}</span>
           </:col>
           <:col :let={grant} label="Comment">{grant.comment || "—"}</:col>
@@ -345,7 +345,7 @@ defmodule SsmWeb.GrantsLive do
             errors={target_errors(@form)}
             required
           />
-          <.input field={@form[:login]} type="text" label="Login on the hosts" required />
+          <.input field={@form[:login]} type="text" label="Target login on the hosts" required />
           <.input field={@form[:comment]} type="text" label="Comment" />
 
           <div class="modal-action">
