@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `release.sh --yes` (`-y`) answers its questions; a version that is not above the current one
+  now always stops the release (before, a failed version check still went on).
+
 ## [4.14.1] - 2026-11-09
 
 ### Fixed

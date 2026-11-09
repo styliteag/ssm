@@ -15,9 +15,22 @@ print_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 print_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
 print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
+ASSUME_YES=false
+
+# y/N question; --yes answers y (the question is still printed for the log)
+confirm() {
+    if [ "$ASSUME_YES" = true ]; then
+        echo "$1 (y/N): y (--yes)"
+        REPLY=y
+        return 0
+    fi
+    read -p "$1 (y/N): " -n 1 -r
+    echo
+}
+
 # Function to show usage
 show_usage() {
-    echo "Usage: $0 [major|minor|patch|X.Y.Z]"
+    echo "Usage: $0 [major|minor|patch|X.Y.Z] [-y|--yes]"
     echo ""
     echo "This script will:"
     echo "  1. Update CHANGELOG.md (move [Unreleased] to new version)"
@@ -30,6 +43,9 @@ show_usage() {
     echo "  major: X.0.0 (breaking changes)"
     echo "  minor: X.Y.0 (new features, backward compatible)"
     echo "  patch: X.Y.Z (bug fixes, backward compatible)"
+    echo ""
+    echo "  -y, --yes: answer every question with yes (untracked files, branch, proceed);"
+    echo "             a version that is not above the current one still aborts"
     echo ""
     echo "Current version: $(cat VERSION 2>/dev/null || echo 'VERSION file not found')"
 }
@@ -103,8 +119,7 @@ check_git_status() {
     if [ -n "$untracked_files" ]; then
         print_warning "Untracked files found:"
         echo "$untracked_files" | sed 's/^/  /'
-        read -p "Continue with untracked files? (y/N): " -n 1 -r
-        echo
+        confirm "Continue with untracked files?"
         if [[ ! $REPLY =~ ^[Yy]$ ]]; then
             exit 1
         fi
@@ -113,8 +128,7 @@ check_git_status() {
     local current_branch=$(git branch --show-current)
     if [[ ! "$current_branch" =~ ^(main|master|develop)$ ]]; then
         print_warning "Current branch is '$current_branch'. It's recommended to create releases from main/master/develop."
-        read -p "Continue anyway? (y/N): " -n 1 -r
-        echo
+        confirm "Continue anyway?"
         if [[ ! $REPLY =~ ^[Yy]$ ]]; then
             exit 1
         fi
@@ -194,11 +208,20 @@ run_build_tests() {
 
 # Main script
 main() {
+    local args=()
+    for arg in "$@"; do
+        case "$arg" in
+            -y|--yes) ASSUME_YES=true ;;
+            -h|--help) show_usage; exit 0 ;;
+            *) args+=("$arg") ;;
+        esac
+    done
+
     # Check if increment type is provided, default to patch
-    if [ $# -eq 0 ]; then
+    if [ ${#args[@]} -eq 0 ]; then
         local increment_type="patch"
-    elif [ $# -eq 1 ]; then
-        local increment_type="$1"
+    elif [ ${#args[@]} -eq 1 ]; then
+        local increment_type="${args[0]}"
     else
         show_usage
         exit 1
@@ -226,8 +249,10 @@ main() {
     print_info "Current version: $current_version"
     
     # Calculate new version
-    local new_version=$(increment_version "$current_version" "$increment_type")
-    if [ $? -ne 0 ]; then
+    # declared apart: `local x=$(…)` would hide the command's exit status
+    local new_version
+    if ! new_version=$(increment_version "$current_version" "$increment_type") || [ -z "$new_version" ]; then
+        print_error "No release: ${new_version:-version $increment_type is not above $current_version}"
         exit 1
     fi
     
@@ -255,8 +280,7 @@ main() {
     echo "  • Create git tag: v$new_version"
     echo "  • Push tag to origin (this will trigger the Docker build)"
     echo
-    read -p "Proceed with release? (y/N): " -n 1 -r
-    echo
+    confirm "Proceed with release?"
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
         print_info "Release cancelled"
         exit 0
