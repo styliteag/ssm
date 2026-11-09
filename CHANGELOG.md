@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.14.2] - 2026-11-09
+
 ### Fixed
 
 - "Pending sync" on an HA standby (homes on a pool the active node holds) ends on a clean
