@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.14.3] - 2026-11-10
+
 ### Added
 
 - `OIDC_LOGIN_HOSTS` (e.g. `ssm.orbit.my.sty=orbit.my.sty`): an SSO login or logout started on
