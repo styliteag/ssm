@@ -726,11 +726,11 @@ defmodule SsmWeb.HostsLive do
       :if={@pending}
       id={"revocation-pending-#{@host.id}"}
       navigate={~p"/diff?host_id=#{@host.id}"}
-      class="badge badge-error badge-sm align-middle"
-      title={"Revocation pending (#{@pending.reason}, #{ago(@pending.inserted_at)}): access was removed in ssm; it ends with a sync or a refresh that finds nothing revoked left on the host"}
-      aria-label={"Revocation pending (#{@pending.reason}, #{ago(@pending.inserted_at)}): access was removed in ssm; it ends with a sync or a refresh that finds nothing revoked left on the host"}
+      class="badge badge-warning badge-sm whitespace-nowrap align-middle"
+      title={"Pending sync (#{@pending.reason}, #{ago(@pending.inserted_at)}): access was removed in ssm; the keys stay on the host until a sync, or a read that finds nothing revoked left"}
+      aria-label={"Pending sync (#{@pending.reason}, #{ago(@pending.inserted_at)}): access was removed in ssm; the keys stay on the host until a sync, or a read that finds nothing revoked left"}
     >
-      revocation pending · {@pending.reason} · {ago(@pending.inserted_at)}
+      pending sync · {ago(@pending.inserted_at)}
     </.link>
     """
   end

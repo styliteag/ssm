@@ -11,7 +11,8 @@ defmodule SsmWeb.Attention do
   @type item :: %{
           id: String.t(),
           count: pos_integer(),
-          text: String.t(),
+          title: String.t(),
+          hint: String.t(),
           path: String.t(),
           tone: :warning | :error
         }
@@ -23,22 +24,22 @@ defmodule SsmWeb.Attention do
     count = fn fun -> Enum.count(enabled, fun) end
 
     [
-      {"host-key", count.(&match?({:host_key_changed, _}, statuses[&1.id])),
-       "presented a different host key — check before trusting it", "/diff?filter=other", :error},
-      {"auth", count.(&match?({:auth_failed, _}, statuses[&1.id])), "do not accept ssm's key",
-       "/diff?filter=auth", :error},
-      {"pending", count.(&Map.has_key?(pending, &1.id)),
-       "keep keys that lost access until their next sync", "/hosts?filter=pending", :warning},
-      {"drift", count.(&match?({:drift, _, _}, statuses[&1.id])), "need a sync",
-       "/diff?filter=needs_sync", :warning},
-      {"unreachable", count.(&match?({:unreachable, _}, statuses[&1.id])),
-       "could not be reached at the last check", "/diff?filter=unreachable", :warning},
-      {"unpinned", count.(&(PinState.of(&1) == :unpinned)),
-       "have no pinned SSH host key; ssm refuses to connect", "/hosts", :warning}
+      {"host-key", count.(&match?({:host_key_changed, _}, statuses[&1.id])), "Host key changed",
+       "check the host before trusting the new key", "/diff?filter=other", :error},
+      {"auth", count.(&match?({:auth_failed, _}, statuses[&1.id])), "Key not accepted",
+       "the host refuses ssm's key", "/diff?filter=auth", :error},
+      {"pending", count.(&Map.has_key?(pending, &1.id)), "Pending sync",
+       "keys that lost access stay until the next sync", "/hosts?filter=pending", :warning},
+      {"drift", count.(&match?({:drift, _, _}, statuses[&1.id])), "Needs sync",
+       "the host differs from the database", "/diff?filter=needs_sync", :warning},
+      {"unreachable", count.(&match?({:unreachable, _}, statuses[&1.id])), "Unreachable",
+       "at the last check", "/diff?filter=unreachable", :warning},
+      {"unpinned", count.(&(PinState.of(&1) == :unpinned)), "No pinned host key",
+       "ssm refuses to connect until the key is pinned", "/hosts", :warning}
     ]
-    |> Enum.filter(fn {_id, n, _text, _path, _tone} -> n > 0 end)
-    |> Enum.map(fn {id, n, text, path, tone} ->
-      %{id: id, count: n, text: text, path: path, tone: tone}
+    |> Enum.filter(fn {_id, n, _title, _hint, _path, _tone} -> n > 0 end)
+    |> Enum.map(fn {id, n, title, hint, path, tone} ->
+      %{id: id, count: n, title: title, hint: hint, path: path, tone: tone}
     end)
   end
 end

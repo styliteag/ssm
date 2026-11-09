@@ -99,8 +99,9 @@ defmodule SsmWeb.DashboardLive do
                   }
                   class={["size-4", if(item.tone == :error, do: "text-error", else: "text-warning")]}
                 />
-                <span class="font-semibold">{item.count}</span>
-                <span>{if item.count == 1, do: "host", else: "hosts"} {item.text}</span>
+                <span class="font-semibold">{item.title}:</span>
+                <span>{item.count} {if item.count == 1, do: "host", else: "hosts"}</span>
+                <span class="hidden opacity-60 sm:inline">— {item.hint}</span>
                 <.icon name="hero-chevron-right" class="ml-auto size-4 opacity-50" />
               </.link>
             </li>

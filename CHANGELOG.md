@@ -31,6 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Hosts page: the "revocation pending" badge reads "pending sync · <age>" and no longer
+  overflows; the reason is in its tooltip.
 - Phones and narrow windows: page header buttons wrap instead of running off the screen,
   search and filter fields use the full width, the SSH user's access table scrolls, and the
   mobile menu marks the current page.

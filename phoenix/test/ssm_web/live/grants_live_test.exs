@@ -142,6 +142,6 @@ defmodule SsmWeb.GrantsLiveTest do
     {:ok, _} = Grants.delete_grant(%{role: "admin", scope: Scope.global(), actor: "a"}, grant)
 
     {:ok, lv, _} = live(conn, ~p"/hosts")
-    assert has_element?(lv, "#revocation-pending-#{ctx.host.id}", "revocation pending")
+    assert has_element?(lv, "#revocation-pending-#{ctx.host.id}", "pending sync")
   end
 end
