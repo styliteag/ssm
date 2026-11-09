@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.14.1] - 2026-11-09
+
 ### Fixed
 
 - Disabled hosts no longer show "pending sync" (badge, filter, header count): nothing can be
