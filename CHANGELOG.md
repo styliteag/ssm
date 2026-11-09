@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.14.0] - 2026-11-09
+
 ### Added
 
 - Every picker of SSH users, hosts and grant targets (access form and filters, keys, key
