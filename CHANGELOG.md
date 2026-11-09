@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.13.2] - 2026-11-09
+
 ### Changed
 
 - Diff viewer: only the "Sync" buttons write to a host. "Remove" and "Remove all extra
