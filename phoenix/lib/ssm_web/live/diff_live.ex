@@ -38,6 +38,7 @@ defmodule SsmWeb.DiffLive do
   alias Ssm.Diffs.SyncRunner
   alias Ssm.Hosts
   alias Ssm.Hosts.Host
+  alias Ssm.Hosts.ManagedLogins
   alias Ssm.HostStatus
   alias Ssm.Users
   alias Ssm.Users.KeyAssignment
@@ -210,6 +211,28 @@ defmodule SsmWeb.DiffLive do
     {:noreply,
      socket
      |> assign(detail_loading: false, detail_error: ErrorText.crashed("Reading the host", reason))}
+  end
+
+  def handle_async(:remove_login, {:ok, {host, login, result}}, socket) do
+    socket =
+      case result do
+        {:ok, _} ->
+          put_flash(socket, :info, "Removed login #{login} from #{host.name}.")
+
+        {:error, reason} ->
+          put_flash(
+            socket,
+            :error,
+            "Authorizations of #{login} removed, but ssm still manages the login: " <>
+              ErrorText.reason(reason)
+          )
+      end
+
+    {:noreply, refresh_detail(socket)}
+  end
+
+  def handle_async(:remove_login, {:exit, reason}, socket) do
+    {:noreply, put_flash(socket, :error, ErrorText.crashed("Removing the login", reason))}
   end
 
   # the runner (Ssm.Diffs.SyncRunner) has audited the outcome already
@@ -424,6 +447,27 @@ defmodule SsmWeb.DiffLive do
       allow_grant(socket, host, key.user, login)
     else
       _ -> {:noreply, put_flash(socket, :error, "Cannot authorize this key.")}
+    end
+  end
+
+  # "Remove login from host" (admin, a login the host does not know): delete
+  # the login's manual authorizations here, then forget the managed login
+  # even though the host cannot confirm there is no file
+  # (`ManagedLogins.forget/5`, `unknown_login: :forget`).
+  def handle_event("remove-login", %{"login" => login}, socket) do
+    with false <- read_only?(socket),
+         true <- socket.assigns.current_user.role == "admin",
+         %Host{disabled: false} = host <- fresh_selected(socket),
+         :ok <- delete_login_authorizations(socket, host, login) do
+      actor = socket.assigns.current_user.actor
+
+      {:noreply,
+       start_async(socket, :remove_login, fn ->
+         {host, login, ManagedLogins.forget(Ssm.Ssh, host, login, actor, unknown_login: :forget)}
+       end)}
+    else
+      {:error, message} when is_binary(message) -> {:noreply, put_flash(socket, :error, message)}
+      _ -> {:noreply, put_flash(socket, :error, "Cannot remove this login.")}
     end
   end
 
@@ -798,6 +842,53 @@ defmodule SsmWeb.DiffLive do
   end
 
   ## Helpers
+
+  defp refresh_detail(socket) do
+    case fresh_selected(socket) do
+      %Host{} = host -> start_detail_async(socket, host)
+      nil -> socket
+    end
+  end
+
+  # every manual row of `login` on `host`; a grant row stops it (only its grant removes it)
+  defp delete_login_authorizations(socket, host, login) do
+    auths =
+      socket
+      |> scope()
+      |> Authorizations.list_authorizations(host_id: host.id)
+      |> Enum.filter(&(&1.login == login))
+
+    if Enum.any?(auths, & &1.grant_id) do
+      {:error, "#{login} has access from a grant on this host; delete the grant first."}
+    else
+      Enum.reduce_while(auths, :ok, fn auth, :ok ->
+        case Authorizations.delete_authorization(scope(socket), auth) do
+          {:ok, _} ->
+            Ssm.Activity.Entries.authorization(:delete, auth, socket.assigns.current_user.actor)
+            {:cont, :ok}
+
+          {:error, {:grant_takeover, _}} ->
+            {:halt,
+             {:error,
+              "A grant covers #{login} without the restrictions of a row; " <>
+                "remove the restrictions first or delete the grant."}}
+
+          {:error, _} ->
+            {:halt, {:error, "Could not delete the authorizations of #{login}."}}
+        end
+      end)
+    end
+  end
+
+  defp remove_login_confirm(host, login, host_auths) do
+    count = Enum.count(host_auths, fn {{_user_id, l}, _auth} -> l == login end)
+    entries = if count == 1, do: "1 authorization", else: "#{count} authorizations"
+
+    "Remove login #{login} from #{host.name}? ssm deletes its #{entries} here and stops " <>
+      "managing #{login} on this host. The host says it does not know #{login}. " <>
+      "If that is only a directory outage (LDAP/AD/SSSD), an old authorized_keys of " <>
+      "#{login} can come back with the login, and a sync no longer empties it."
+  end
 
   defp format_reason({_code, message}) when is_binary(message), do: message
   defp format_reason(:not_found), do: "host not found"
@@ -1201,6 +1292,21 @@ defmodule SsmWeb.DiffLive do
                   name="hero-check"
                   class="hidden size-4 text-success [[data-copied]_&]:inline-block"
                 /> Copy authorized_keys
+              </button>
+              <button
+                :if={
+                  login.home_state == "unknown_login" and @current_user.role == "admin" and
+                    not @selected.disabled and not @syncing
+                }
+                id={"remove-login-#{login.login}"}
+                type="button"
+                class="btn btn-ghost btn-xs text-error"
+                phx-click="remove-login"
+                phx-value-login={login.login}
+                data-confirm={remove_login_confirm(@selected, login.login, @host_auths)}
+                title={"Delete #{login.login}'s authorizations on this host and stop managing it"}
+              >
+                <.icon name="hero-user-minus" class="size-4" /> Remove login from host
               </button>
             </div>
 

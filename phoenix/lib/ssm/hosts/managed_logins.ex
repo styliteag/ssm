@@ -6,7 +6,13 @@ defmodule Ssm.Hosts.ManagedLogins do
   left to revoke: the login has no authorization on the host and the host
   has no `authorized_keys` for it (asked fresh through `script.sh
   has_keyfile`; a link counts as a file; a login the host cannot resolve
-  or whose home is missing is never forgotten — ssm cannot tell). A disabled host is never
+  or whose home is missing is never forgotten — ssm cannot tell — unless the
+  caller passes `unknown_login: :forget` and a fresh listing says the host
+  does not know the login (`home_state` `unknown_login`; a missing or
+  unreadable home is still refused). That is an admin's explicit choice in
+  the diff page ("Remove login from host"): a directory outage
+  (LDAP/AD/SSSD) looks the same, and a file that comes back with the login
+  is then no longer emptied by a sync. A disabled host is never
   contacted. The check of the authorizations and the delete run in one
   IMMEDIATE transaction, after the host answered.
 
@@ -46,13 +52,24 @@ defmodule Ssm.Hosts.ManagedLogins do
   `:managed_login_not_found`, `{:conflict, message}` (authorizations left,
   or a file on the host), `{:host_disabled, message}` or
   `{:ssh_connect_failed, message}`.
+
+  Option `unknown_login: :forget` also forgets a login the host reports
+  unknown (see the moduledoc); the audit entry then carries
+  `login_unknown_on_host: true`.
   """
-  @spec forget(module(), Host.t(), String.t(), String.t()) :: {:ok, String.t()} | {:error, term()}
-  def forget(client \\ Ssm.Ssh, %Host{} = host, login, actor) do
+  @spec forget(module(), Host.t(), String.t(), String.t(), keyword()) ::
+          {:ok, String.t()} | {:error, term()}
+  def forget(client \\ Ssm.Ssh, %Host{} = host, login, actor, opts \\ []) do
+    unknown? = Keyword.get(opts, :unknown_login) == :forget
+
     with true <- managed?(host.id, login) || {:error, :managed_login_not_found} do
-      host
-      |> do_forget(client, login)
-      |> tap(&audit(&1, host, login, actor))
+      result = do_forget(host, client, login, unknown?)
+      audit(result, host, login, actor)
+
+      case result do
+        {:ok, login, _how} -> {:ok, login}
+        {:error, _} = error -> error
+      end
     end
   end
 
@@ -61,12 +78,14 @@ defmodule Ssm.Hosts.ManagedLogins do
   # ssm can create the file in between. A file created on the host by
   # someone else after that last answer is not seen (residual race,
   # AGENTS.md).
-  defp do_forget(host, client, login) do
+  defp do_forget(host, client, login, unknown?) do
     with :ok <- no_authorizations(host.id, login),
          :ok <- ensure_enabled(host),
-         :ok <- no_file(client, host, login) do
+         {:ok, _how} <- no_file(client, host, login, unknown?) do
       WriteLock.run(host.id, fn ->
-        with :ok <- no_file(client, host, login), do: delete(host.id, login)
+        with {:ok, how} <- no_file(client, host, login, unknown?),
+             {:ok, login} <- delete(host.id, login),
+             do: {:ok, login, how}
       end)
     end
   end
@@ -94,10 +113,11 @@ defmodule Ssm.Hosts.ManagedLogins do
 
   defp ensure_enabled(_host), do: :ok
 
-  defp no_file(client, host, login) do
+  # {:ok, :no_file} | {:ok, :unknown_login} (only with `unknown?`) | {:error, _}
+  defp no_file(client, host, login, unknown?) do
     case ScriptRunner.has_keyfile(client, Hosts.target_for(host), login) do
       {:ok, false} ->
-        :ok
+        {:ok, :no_file}
 
       {:ok, true} ->
         {:error,
@@ -105,7 +125,25 @@ defmodule Ssm.Hosts.ManagedLogins do
           "#{inspect(login)} still has an authorized_keys on #{inspect(host.name)}; " <>
             "a sync keeps it empty — remove the file on the host first"}}
 
+      {:error, _} = error when unknown? ->
+        unknown_login(client, host, login, error)
+
       {:error, _} = error ->
+        error
+    end
+  end
+
+  # has_keyfile answers "unknown" for an unknown login and a missing home
+  # alike; the listing tells them apart. Anything but `unknown_login` keeps
+  # the original error.
+  defp unknown_login(client, host, login, error) do
+    case ScriptRunner.get_ssh_keyfiles(client, Hosts.target_for(host), [login]) do
+      {:ok, entries} ->
+        if Enum.any?(entries, &(&1.login == login and &1.home_state == "unknown_login")),
+          do: {:ok, :unknown_login},
+          else: error
+
+      {:error, _} ->
         error
     end
   end
@@ -131,7 +169,7 @@ defmodule Ssm.Hosts.ManagedLogins do
   defp audit(result, host, login, actor) do
     Activity.log(%{
       activity_type: "host",
-      action: if(match?({:ok, _}, result), do: "forget_login", else: "forget_login_failed"),
+      action: if(match?({:ok, _, _}, result), do: "forget_login", else: "forget_login_failed"),
       target: host.name,
       host_id: host.id,
       actor_username: actor,
@@ -139,7 +177,8 @@ defmodule Ssm.Hosts.ManagedLogins do
     })
   end
 
-  defp details({:ok, _}, login), do: %{login: login}
+  defp details({:ok, _, :unknown_login}, login), do: %{login: login, login_unknown_on_host: true}
+  defp details({:ok, _, _how}, login), do: %{login: login}
 
   defp details({:error, {_tag, message}}, login),
     do: %{login: login, error: String.slice(message, 0, 500)}

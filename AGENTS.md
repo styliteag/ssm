@@ -60,7 +60,12 @@ the `mctl_contract` library's `mctl_tokens`, `mctl_jobs`, `mctl_idempotency`, an
 has_keyfile` says the host has no file for it — an unknown login or missing home answers `unknown`,
 exit 1, never "no"; asked again under the host lock right before the delete — audited
 `forget_login`; residual race: a file someone creates on the host after that last answer is not
-seen).
+seen). Exception, admin choice in the diff page ("Remove login from host", shown only for a login
+whose listing `home_state` is `unknown_login`): it deletes the login's manual authorizations on the
+host (a grant row refuses) and calls `forget/5` with `unknown_login: :forget`, which accepts a fresh
+listing's `unknown_login` as "no file" (a missing or unreadable home still refuses); the audit entry
+carries `login_unknown_on_host: true`. Risk, stated in the confirm: a directory outage looks the
+same, and a file that comes back with the login is no longer emptied by a sync.
 **Grants** (ADR-0012 phase 2, `Ssm.Grants`, `Ssm.Grants.Expansion`, page `/grants`): table `grants`
 (`ssh_user_id`, `customer_id` XOR `group_id`, the creator's scope as id lists `scope_customer_ids` /
 `scope_group_ids` — nil = all, `login`, `comment`, `created_by`; all FKs `ON DELETE CASCADE`) is

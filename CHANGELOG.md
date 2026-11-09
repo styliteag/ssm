@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Diff page: "Remove login from host" for a login the host does not know ("home not available:
+  the host does not know this login"), admins only. It deletes the login's authorizations on
+  that host and ssm stops managing the login there. The question warns that a directory outage
+  (LDAP/AD/SSSD) looks the same. A login whose home is only missing (an inactive HA node) gets
+  no such button; access from a grant must be removed through the grant.
 - The header shows on every page how many hosts wait for a sync after access was taken away
   there ("N hosts pending sync"); it links to the new "Pending sync" filter on the hosts page.
   The count follows changes made on the same page at once and others within 30 seconds.

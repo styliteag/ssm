@@ -96,6 +96,53 @@ defmodule Ssm.Hosts.ManagedLoginsTest do
     assert Authorizations.managed_logins(host.id) == ["old"]
   end
 
+  describe "unknown_login: :forget" do
+    defp listing(host, login, home_state) do
+      MockClient.set_exec(host.id, "sh .ssm/script.sh get_ssh_keyfiles #{login}", %Result{
+        stdout:
+          Jason.encode!([
+            %{login: login, has_pragma: false, keyfile: "", home_state: home_state}
+          ])
+      })
+    end
+
+    test "forgets a login the host does not know, and audits it" do
+      host = host_fixture(%{name: "web1"})
+      revoked(host, "tm")
+      has_keyfile(host, "tm", "unknown", 1)
+      listing(host, "tm", "unknown_login")
+
+      assert {:ok, "tm"} =
+               ManagedLogins.forget(MockClient, host, "tm", "admin", unknown_login: :forget)
+
+      assert Authorizations.managed_logins(host.id) == []
+      audit = hd(Activity.list())
+      assert audit.action == "forget_login"
+      assert Activity.details(audit)["login_unknown_on_host"] == true
+    end
+
+    test "keeps a login whose home is only missing (an HA node, an unmounted home)" do
+      host = host_fixture()
+      revoked(host, "tm")
+      has_keyfile(host, "tm", "unknown", 1)
+      listing(host, "tm", "home_missing")
+
+      assert {:error, {:ssh_connect_failed, _}} =
+               ManagedLogins.forget(MockClient, host, "tm", "a", unknown_login: :forget)
+
+      assert Authorizations.managed_logins(host.id) == ["tm"]
+    end
+
+    test "still refuses a login whose file is on the host" do
+      host = host_fixture()
+      revoked(host, "tm")
+      has_keyfile(host, "tm", "yes")
+
+      assert {:error, {:conflict, _}} =
+               ManagedLogins.forget(MockClient, host, "tm", "a", unknown_login: :forget)
+    end
+  end
+
   test "a disabled host is refused before any SSH" do
     host = host_fixture(%{disabled: true})
     revoked(host, "old")
