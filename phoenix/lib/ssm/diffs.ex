@@ -26,7 +26,7 @@ defmodule Ssm.Diffs do
   """
 
   alias Ssm.Authorizations.{Login, Options}
-  alias Ssm.Diffs.{Compare, Expected, KeyLine}
+  alias Ssm.Diffs.{Compare, Expected, KeyLine, Revocations}
   alias Ssm.Hosts
   alias Ssm.Hosts.{Host, MachineId}
   alias Ssm.Ssh.ScriptRunner
@@ -83,7 +83,10 @@ defmodule Ssm.Diffs do
     with {:ok, host} <- Hosts.fetch_host(host_id),
          :ok <- ensure_not_disabled(host) do
       expected_logins = Expected.logins(host_id)
-      {observed, read_error} = read_observed(client, Hosts.target_for(host), expected_logins)
+      # read before the host: a mark made while it is read stays (clear/2)
+      seen = Revocations.seen(host_id)
+      asked = Enum.uniq(expected_logins ++ Ssm.Authorizations.managed_logins(host_id))
+      {observed, read_error} = read_observed(client, Hosts.target_for(host), asked)
       all_logins = (expected_logins ++ Map.keys(observed)) |> Enum.uniq() |> Enum.sort()
       own = own_key_or_none(host)
 
@@ -91,6 +94,8 @@ defmodule Ssm.Diffs do
         Enum.map(all_logins, fn login ->
           build_login_diff(host_id, login, Map.get(observed, login), read_error, own[login])
         end)
+
+      if seen && clean_read?(read_error, logins), do: Revocations.clear(host_id, seen)
 
       {:ok,
        %HostDiff{
@@ -473,6 +478,18 @@ defmodule Ssm.Diffs do
       items: blocked_by_user_readonly(items, entry)
     }
   end
+
+  # Every login was read and none holds an unauthorized line: nothing that
+  # was revoked is left on the host, so "revocation pending" can end without
+  # a write. Unread, unsafe, blocked or home-less logins keep the mark.
+  defp clean_read?(nil, logins) do
+    Enum.all?(logins, fn l ->
+      is_nil(l.read_error) and is_nil(l.home_state) and is_nil(l.unsafe) and is_nil(l.blocked) and
+        not Enum.any?(l.items, &(&1.status == :extra_on_host))
+    end)
+  end
+
+  defp clean_read?(_read_error, _logins), do: false
 
   @doc "Text for a login whose home is not there (`home_state` of the listing)."
   def home_text("unknown_login"), do: "home not available: the host does not know this login"

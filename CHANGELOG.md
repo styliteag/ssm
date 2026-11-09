@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- "Revocation pending" also ends on a read — the diff, Refresh or the periodic check — that
+  finds every login readable and no unauthorized line left on the host; nothing is
+  written. Before, only a sync cleared it, even when the removed key had never been on the
+  host. A login that could not be read (home not available, unsafe, blocked) keeps the
+  mark. The hosts page badge shows the reason and its age.
 - A login whose home is not there — an inactive HA node with its pool not imported, an
   unmounted home, a login the host does not know — no longer shows its keys as "missing on
   host". `script.sh get_ssh_keyfiles <login>…` reports it with a code (`home_missing`,

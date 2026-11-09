@@ -698,9 +698,9 @@ defmodule SsmWeb.HostsLive do
       id={"revocation-pending-#{@host.id}"}
       navigate={~p"/diff?host_id=#{@host.id}"}
       class="badge badge-error badge-sm align-middle"
-      title={"Revocation pending (#{@pending.reason}): removed access is still on the host until a sync succeeds"}
+      title={"Revocation pending (#{@pending.reason}, #{ago(@pending.inserted_at)}): access was removed in ssm; it ends with a sync or a refresh that finds nothing revoked left on the host"}
     >
-      revocation pending
+      revocation pending · {@pending.reason} · {ago(@pending.inserted_at)}
     </.link>
     """
   end

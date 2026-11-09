@@ -147,8 +147,9 @@ readonly/unsafe logins refused, audited (`remove_keys`/`remove_keys_failed`, fin
 (the state, table `pending_revocations`, one row per host), `Ssm.Diffs.RevocationSync` (the opt-in
 removal-only sync) and `Ssm.Hosts.WriteLock` (one host write at a time); nothing else writes the
 table. States: none → pending(reason, t) → none. `Revocations.mark/2` (or `mark_user_hosts/2`)
-enters or re-enters pending — a new mark replaces reason and t. Only a fully successful sync (full
-or removal-only) leaves it: under the write lock it reads the mark (`seen/1`) before any grant, and
+enters or re-enters pending — a new mark replaces reason and t. A fully successful sync (full
+or removal-only) leaves it, and so does a clean read (`Diffs.host_diff/2`: every login read, none
+home-less/unsafe/blocked, no `extra_on_host` line; clears exactly the mark seen before the read): under the write lock it reads the mark (`seen/1`) before any grant, and
 afterwards `clear/2` deletes exactly that (host, t), so a mark committed while it ran stays. A
 partial/failed sync, `KeyRemoval`, offboarding scrub and `forget` never clear. Marks are made in the
 domain function, inside the write's `Ssm.Grants.transaction/1`, and hand off to `RevocationSync`
