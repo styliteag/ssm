@@ -145,6 +145,25 @@ defmodule SsmWeb.KeysLiveTest do
     assert has_element?(view, "#import-results", "Line 1: imported")
     assert has_element?(view, "#import-results", "Line 2: unsupported key type")
     assert [_] = Users.list_keys(user_id: user.id)
+
+    # imported lines leave the box, so a second submit cannot import them twice
+    text = view |> element("#key-import-form textarea") |> render()
+    refute text =~ "AAAAC3NzaC1lZDI1NTE5AAAAINEW"
+    assert text =~ "not-a-key AAAA junk"
+  end
+
+  test "keys show their SHA256 fingerprint and are found by it", %{conn: conn} do
+    user = user_fixture(%{username: "alice"})
+    key = key_fixture(user, %{name: "laptop"})
+    other = key_fixture(user, %{name: "desktop"})
+    fingerprint = Ssm.People.fingerprint(key.key_base64)
+
+    {:ok, view, _html} = live(conn, ~p"/keys")
+    assert has_element?(view, "#keys", fingerprint)
+
+    {:ok, view, _html} = live(conn, ~p"/keys?#{[q: String.slice(fingerprint, 7, 12)]}")
+    assert has_element?(view, "#keys", "laptop")
+    refute has_element?(view, "#keys", other.name)
   end
 
   test "edits only name and comment", %{conn: conn} do

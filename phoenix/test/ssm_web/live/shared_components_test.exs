@@ -34,6 +34,7 @@ defmodule SsmWeb.SharedComponentsTest do
     assert has_element?(view, ~s(#host-modal-box[role="dialog"][aria-modal="true"]))
     assert has_element?(view, ~s(#host-modal-box[aria-labelledby="host-modal-title"]))
     assert has_element?(view, "#host-modal-title", "New host")
+    assert has_element?(view, ~s(#host-modal input[name="host[port]"][value="22"]))
     refute has_element?(view, "#host-modal .modal-backdrop[phx-click]")
   end
 
@@ -72,5 +73,14 @@ defmodule SsmWeb.SharedComponentsTest do
     {:ok, view, _html} = live(conn, ~p"/diff?#{[q: "web", filter: "unchecked"]}")
     assert has_element?(view, ~s(#diff-search input[value="web"]))
     assert has_element?(view, ~s(#diff-filter option[selected][value="unchecked"]))
+  end
+
+  test "a slow host read can be cancelled", %{conn: conn} do
+    host = host_fixture(%{name: "slow"})
+
+    {:ok, view, _html} = live(conn, ~p"/diff?host_id=#{host.id}")
+
+    # the event directly: the mocked read may already be done (no race on the button)
+    assert render_click(view, "cancel-read", %{}) =~ "Reading the host was cancelled."
   end
 end

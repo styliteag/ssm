@@ -215,6 +215,29 @@ defmodule Ssm.Grants do
   @spec change_grant(map()) :: Ecto.Changeset.t()
   def change_grant(attrs \\ %{}), do: Grant.create_changeset(%Grant{}, attrs, %{})
 
+  @doc """
+  How many hosts a grant on the target reaches today (form preview):
+  `"customer:<id>"` or `"group:<id>"`, else 0. Hosts added to the target
+  later are reached too.
+  """
+  @spec target_host_count(String.t() | nil) :: non_neg_integer()
+  def target_host_count("customer:" <> id), do: count_ids(id, &customer_hosts/1)
+  def target_host_count("group:" <> id), do: count_ids(id, &group_hosts/1)
+  def target_host_count(_target), do: 0
+
+  defp count_ids(id, query) do
+    case Integer.parse(id) do
+      {id, ""} -> Repo.one(query.(id))
+      _ -> 0
+    end
+  end
+
+  defp customer_hosts(id),
+    do: from(h in Ssm.Hosts.Host, where: h.customer_id == ^id, select: count(h.id))
+
+  defp group_hosts(id),
+    do: from(hg in "host_groups", where: hg.group_id == ^id, select: count(hg.host_id, :distinct))
+
   @doc ~S|"customer Acme" / "group Web" (the grant's target, for "via …" labels).|
   @spec target_label(Grant.t()) :: String.t()
   def target_label(%Grant{customer: %Customer{name: name}}), do: "customer #{name}"

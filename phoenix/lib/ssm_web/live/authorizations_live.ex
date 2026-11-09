@@ -391,9 +391,10 @@ defmodule SsmWeb.AuthorizationsLive do
      update_bulk(socket, &%{&1 | host_ids: in_scope_ids(socket, toggle(&1.host_ids, id))})}
   end
 
+  # "All visible": what the search shows, never more (and never disabled)
   def handle_event("bulk-all-users", _params, socket) do
-    enabled = for user <- socket.assigns.users, user.enabled, do: user.id
-    {:noreply, update_bulk(socket, &%{&1 | user_ids: MapSet.new(enabled)})}
+    ids = socket.assigns |> visible_bulk_users() |> Enum.map(& &1.id)
+    {:noreply, update_bulk(socket, &%{&1 | user_ids: MapSet.union(&1.user_ids, MapSet.new(ids))})}
   end
 
   def handle_event("bulk-no-users", _params, socket) do
@@ -401,8 +402,13 @@ defmodule SsmWeb.AuthorizationsLive do
   end
 
   def handle_event("bulk-all-hosts", _params, socket) do
+    ids = socket.assigns |> visible_bulk_hosts() |> Enum.map(& &1.id)
+
     {:noreply,
-     update_bulk(socket, &%{&1 | host_ids: MapSet.new(socket.assigns.hosts, fn h -> h.id end)})}
+     update_bulk(
+       socket,
+       &%{&1 | host_ids: in_scope_ids(socket, MapSet.union(&1.host_ids, MapSet.new(ids)))}
+     )}
   end
 
   def handle_event("bulk-no-hosts", _params, socket) do
@@ -1234,19 +1240,23 @@ defmodule SsmWeb.AuthorizationsLive do
   attr :users, :list, required: true
   attr :hosts, :list, required: true
 
+  defp visible_bulk_users(assigns) do
+    assigns.users
+    |> Enum.filter(& &1.enabled)
+    |> filter_by_name(assigns.bulk.user_search, & &1.username)
+  end
+
+  defp visible_bulk_hosts(assigns) do
+    assigns.hosts
+    |> Enum.reject(& &1.disabled)
+    |> filter_by_name(assigns.bulk.host_search, & &1.name)
+  end
+
   defp bulk_modal(assigns) do
     assigns =
       assigns
-      |> assign(
-        :visible_users,
-        assigns.users
-        |> Enum.filter(& &1.enabled)
-        |> filter_by_name(assigns.bulk.user_search, & &1.username)
-      )
-      |> assign(
-        :visible_hosts,
-        filter_by_name(assigns.hosts, assigns.bulk.host_search, & &1.name)
-      )
+      |> assign(:visible_users, visible_bulk_users(assigns))
+      |> assign(:visible_hosts, visible_bulk_hosts(assigns))
 
     ~H"""
     <.modal id="bulk-grant-modal" box_class="max-w-3xl" on_cancel={JS.push("cancel")}>
@@ -1264,8 +1274,13 @@ defmodule SsmWeb.AuthorizationsLive do
               Users <span class="ml-1 opacity-60">{MapSet.size(@bulk.user_ids)} selected</span>
             </span>
             <div class="join">
-              <button type="button" class="btn btn-ghost btn-xs join-item" phx-click="bulk-all-users">
-                All enabled
+              <button
+                id="bulk-all-users"
+                type="button"
+                class="btn btn-ghost btn-xs join-item"
+                phx-click="bulk-all-users"
+              >
+                All visible ({length(@visible_users)})
               </button>
               <button type="button" class="btn btn-ghost btn-xs join-item" phx-click="bulk-no-users">
                 None
@@ -1308,8 +1323,13 @@ defmodule SsmWeb.AuthorizationsLive do
               Hosts <span class="ml-1 opacity-60">{MapSet.size(@bulk.host_ids)} selected</span>
             </span>
             <div class="join">
-              <button type="button" class="btn btn-ghost btn-xs join-item" phx-click="bulk-all-hosts">
-                All
+              <button
+                id="bulk-all-hosts"
+                type="button"
+                class="btn btn-ghost btn-xs join-item"
+                phx-click="bulk-all-hosts"
+              >
+                All visible ({length(@visible_hosts)})
               </button>
               <button type="button" class="btn btn-ghost btn-xs join-item" phx-click="bulk-no-hosts">
                 None

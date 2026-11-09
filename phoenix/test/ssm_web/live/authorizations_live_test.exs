@@ -132,6 +132,24 @@ defmodule SsmWeb.AuthorizationsLiveTest do
            )
   end
 
+  test "bulk grant: All picks only the visible, enabled hosts", %{conn: conn} do
+    web1 = host_fixture(%{name: "web1"})
+    db1 = host_fixture(%{name: "db1"})
+    web2 = host_fixture(%{name: "web2", disabled: true})
+
+    {:ok, view, _html} = live(conn, ~p"/authorizations")
+    view |> element("#bulk-grant") |> render_click()
+
+    view |> element("#bulk-host-search") |> render_change(%{q: "web"})
+    assert has_element?(view, "#bulk-all-hosts", "All visible (1)")
+    view |> element("#bulk-all-hosts") |> render_click()
+
+    assert has_element?(view, "#bulk-host-#{web1.id}[checked]")
+    view |> element("#bulk-host-search") |> render_change(%{q: ""})
+    refute has_element?(view, "#bulk-host-#{db1.id}[checked]")
+    refute has_element?(view, "#bulk-host-#{web2.id}")
+  end
+
   test "bulk grant search narrows the user and host lists", %{conn: conn} do
     alice = user_fixture(%{username: "alice"})
     bob = user_fixture(%{username: "bob"})

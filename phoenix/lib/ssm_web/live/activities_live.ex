@@ -18,6 +18,7 @@ defmodule SsmWeb.ActivitiesLive do
 
   alias Ssm.Activity
 
+  alias SsmWeb.ActivityText
   alias SsmWeb.Layouts
 
   @page_size 50
@@ -95,21 +96,7 @@ defmodule SsmWeb.ActivitiesLive do
 
   ## Helpers
 
-  defp format_timestamp(nil), do: ""
-
-  defp format_timestamp(unix) when is_integer(unix) do
-    unix
-    |> DateTime.from_unix!()
-    |> Calendar.strftime("%Y-%m-%d %H:%M:%S")
-  end
-
-  defp type_badge_class("host"), do: "badge-info"
-  defp type_badge_class("user"), do: "badge-success"
-  defp type_badge_class("key"), do: "badge-warning"
-  defp type_badge_class("auth"), do: "badge-secondary"
-  defp type_badge_class(_), do: "badge-ghost"
-
-  defp display(nil), do: "null"
+  defp display(nil), do: "—"
   defp display(value) when is_binary(value), do: value
   defp display(value) when is_number(value) or is_boolean(value), do: to_string(value)
   defp display(value), do: Jason.encode!(value)
@@ -173,10 +160,10 @@ defmodule SsmWeb.ActivitiesLive do
           class="rounded-box bg-base-200 px-3 py-2 text-sm"
         >
           <div class="flex items-center gap-3">
-            <span class={["badge badge-sm flex-none", type_badge_class(entry.activity_type)]}>
+            <span class={["badge badge-sm flex-none", ActivityText.type_class(entry.activity_type)]}>
               {entry.activity_type}
             </span>
-            <span class="font-medium">{entry.action}</span>
+            <span class="font-medium" title={entry.action}>{ActivityText.action(entry.action)}</span>
             <.link
               :if={target_path(entry)}
               navigate={target_path(entry)}
@@ -188,7 +175,7 @@ defmodule SsmWeb.ActivitiesLive do
             </.link>
             <span :if={!target_path(entry)} class="truncate opacity-75">{entry.target}</span>
             <span class="ml-auto flex-none text-xs opacity-60">
-              {format_timestamp(entry.timestamp)} · {entry.actor_username}
+              <.local_time at={entry.timestamp} fmt="datetime-sec" /> · {entry.actor_username}
             </span>
           </div>
 

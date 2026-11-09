@@ -116,7 +116,10 @@ defmodule SsmWeb.Layouts do
                 </.link>
               </li>
               <li><.theme_switcher /></li>
-              <li :if={@current_user} class="text-sm opacity-75">{@current_user.username}</li>
+              <li :if={@current_user} class="text-sm opacity-75">
+                <span class="sr-only">Signed in as</span>
+                {@current_user.username}
+              </li>
               <li :if={@current_user}>
                 <.link href={~p"/sign-out"} method="delete" class="btn btn-ghost btn-sm">
                   Sign out

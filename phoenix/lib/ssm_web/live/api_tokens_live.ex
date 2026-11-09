@@ -189,7 +189,14 @@ defmodule SsmWeb.ApiTokensLive do
         <pre id="connect-snippet" class="overflow-x-auto rounded bg-base-200 p-3 text-xs">{@secret.snippet}</pre>
         <.copy id="copy-connect-snippet" text={@secret.snippet} />
       </div>
-      <button id="connect-done" type="button" phx-click="done" class="btn btn-sm btn-primary">
+      <button
+        id="connect-done"
+        type="button"
+        phx-click="done"
+        class="btn btn-sm btn-primary"
+        data-confirm="Did you copy the token? It is shown only once; after this it can only be rotated."
+        data-confirm-label="Close, I copied it"
+      >
         Done
       </button>
     </div>

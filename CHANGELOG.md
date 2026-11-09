@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Dashboard "Needs attention": hosts with a changed host key, hosts that refuse ssm's key,
+  hosts pending sync, hosts that need a sync, unreachable and unpinned hosts — each with a
+  link to the matching list. The version pill says "schema" instead of "db".
+- SSH keys show their SHA256 fingerprint (as sshd logs it), and the search finds keys by it.
+- The grant form says how many hosts the target reaches today.
+- Sync detail: "Cancel" while a slow host is being read.
+
 - Confirmations open a styled dialog instead of the browser's box. "Sync all" asks to type
   "sync N" (the number of hosts it writes) before it starts.
 - Empty hosts and SSH users lists offer the first step ("New host", "New SSH user").
@@ -24,6 +31,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Activity and dashboard: actions read as words ("host key pinned", "signed in (SSO)"), times
+  show in the browser's time zone, empty detail values show "—" instead of "null".
+- "Sync all" and "Pin host keys" name at most a few failed hosts instead of a message as long
+  as the fleet.
+- Bulk grant: "All visible (N)" selects only what the search shows, and disabled hosts are
+  not offered.
+- Key import keeps only the lines that failed in the box, so a second submit cannot import
+  the others twice.
+- New host: port 22 is filled in. API token: "Done" asks whether the one-time token was copied.
 - Dialogs are announced as dialogs, keep the keyboard focus inside, start on the first field
   and no longer close on a click beside them (a stray click lost the form). Icon-only buttons,
   search fields and filters have accessible names. Enable/disable a host use clearer icons.

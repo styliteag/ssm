@@ -61,6 +61,21 @@ defmodule SsmWeb.GrantsLiveTest do
     assert is_integer(grant_id)
   end
 
+  test "the form says how many hosts the target reaches", %{conn: conn} = ctx do
+    {:ok, _} = Hosts.update_membership(host_fixture(%{name: "acme-2"}), %{customer: "acme"})
+    {:ok, lv, _html} = live(conn, ~p"/grants")
+    lv |> element("#new-grant") |> render_click()
+
+    refute has_element?(lv, "#grant-preview")
+
+    lv
+    |> form("#grant-form", grant: %{target: "customer:#{ctx.acme.id}", login: "deploy"})
+    |> render_change()
+
+    assert has_element?(lv, "#grant-preview", "2 hosts")
+    assert has_element?(lv, "#grant-preview", "deploy")
+  end
+
   test "a missing target re-renders the form with an error", %{conn: conn} = ctx do
     {:ok, lv, _} = live(conn, ~p"/grants")
     lv |> element("#new-grant") |> render_click()

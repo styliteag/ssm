@@ -200,6 +200,15 @@ defmodule SsmWeb.GrantsLive do
     end
   end
 
+  defp grant_preview(target, login) do
+    n = Grants.target_host_count(target)
+    hosts = if n == 1, do: "1 host", else: "#{n} hosts"
+    as = if login in [nil, ""], do: "the target login", else: login
+
+    "Gives the SSH user access as #{as} on #{hosts} now, and on every host added to " <>
+      "the target later. The keys reach each host at its next sync."
+  end
+
   defp target_options(targets) do
     [
       {"Customers", Enum.map(targets.customers, &{&1.name, "customer:#{&1.id}"})},
@@ -349,6 +358,13 @@ defmodule SsmWeb.GrantsLive do
             required
           />
           <.input field={@form[:login]} type="text" label="Target login on the hosts" required />
+          <p
+            :if={@target not in [nil, ""]}
+            id="grant-preview"
+            class="rounded-box bg-base-200 px-3 py-2 text-sm"
+          >
+            {grant_preview(@target, @form[:login].value)}
+          </p>
           <.input field={@form[:comment]} type="text" label="Comment" />
 
           <div class="modal-action">

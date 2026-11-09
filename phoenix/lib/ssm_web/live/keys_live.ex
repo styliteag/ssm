@@ -241,7 +241,11 @@ defmodule SsmWeb.KeysLive do
 
     socket =
       socket
-      |> assign(import_results: results, import_text: text, import_user_id: user_id)
+      |> assign(
+        import_results: results,
+        import_text: remaining_lines(text, results),
+        import_user_id: user_id
+      )
       |> reload_keys()
 
     socket =
@@ -352,6 +356,18 @@ defmodule SsmWeb.KeysLive do
 
   ## Import
 
+  # the box keeps only the lines that failed, so a second submit cannot
+  # import the others twice
+  defp remaining_lines(text, results) do
+    failed = for %{line: n, status: status} <- results, status != :ok, into: MapSet.new(), do: n
+
+    text
+    |> String.split(["\r\n", "\n"])
+    |> Enum.with_index(1)
+    |> Enum.filter(fn {_line, n} -> MapSet.member?(failed, n) end)
+    |> Enum.map_join("\n", fn {line, _n} -> line end)
+  end
+
   defp import_lines(socket, text, user_id) do
     text
     |> String.split(["\r\n", "\n"])
@@ -418,7 +434,7 @@ defmodule SsmWeb.KeysLive do
 
         Enum.filter(keys, fn key ->
           Enum.any?(
-            [key.name, key.user.username, key.extra_comment, key.key_type],
+            [key.name, key.user.username, key.extra_comment, key.key_type, fingerprint(key)],
             &(is_binary(&1) and String.contains?(String.downcase(&1), needle))
           )
         end)
@@ -491,8 +507,8 @@ defmodule SsmWeb.KeysLive do
 
   defp full_key_line(key), do: Diffs.format_key_line(key.key_type, key.key_base64, key.name)
 
-  defp truncate_key(base64) when byte_size(base64) <= 32, do: base64
-  defp truncate_key(base64), do: String.slice(base64, 0, 32) <> "…"
+  # OpenSSH style, as sshd logs it ("Accepted publickey … SHA256:…")
+  defp fingerprint(key), do: Ssm.People.fingerprint(key.key_base64)
 
   defp log_key_activity(socket, action, key),
     do: Entries.key(action, key, socket.assigns.current_user.actor)
@@ -562,7 +578,7 @@ defmodule SsmWeb.KeysLive do
             name="q"
             value={@search}
             label="Search"
-            placeholder="Name, user, comment, type"
+            placeholder="Name, user, comment, type, SHA256 fingerprint"
             phx-debounce="200"
           />
         </form>
@@ -614,7 +630,9 @@ defmodule SsmWeb.KeysLive do
               {Map.get(@hosts_by_user, key.user_id, 0)} host(s)
             </span>
           </div>
-          <p class="mt-1 truncate font-mono text-xs opacity-60">{truncate_key(key.key_base64)}</p>
+          <p class="mt-1 truncate font-mono text-xs opacity-60" title="SHA256 fingerprint">
+            {fingerprint(key)}
+          </p>
           <p :if={key.extra_comment} class="mt-1 truncate text-xs opacity-60">
             {key.extra_comment}
           </p>
@@ -631,7 +649,9 @@ defmodule SsmWeb.KeysLive do
           </:col>
           <:col :let={{_id, key}} label="Name" sort="name">
             <span class="font-medium">{key.name || "—"}</span>
-            <p class="font-mono text-xs opacity-60">{truncate_key(key.key_base64)}</p>
+            <p class="font-mono text-xs opacity-60" title="SHA256 fingerprint, as sshd logs it">
+              {fingerprint(key)}
+            </p>
           </:col>
           <:col :let={{_id, key}} label="Type" sort="type">
             <span class={["badge badge-sm whitespace-nowrap", key_type_badge_class(key.key_type)]}>

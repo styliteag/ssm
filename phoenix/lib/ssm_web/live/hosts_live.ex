@@ -187,9 +187,8 @@ defmodule SsmWeb.HostsLive do
   def handle_event("new", _params, socket) do
     {:noreply,
      assign(socket,
-       # SSH login pre-filled with root — the overwhelmingly common case
-       # (React HostsPage default since 1.1.0).
-       form: to_form(Hosts.change_host(%Host{}, %{"username" => "root"})),
+       # connection user root and port 22 — the overwhelmingly common case
+       form: to_form(Hosts.change_host(%Host{}, %{"username" => "root", "port" => "22"})),
        editing: nil,
        jump_candidates: Hosts.jump_candidates(scope(socket), nil)
      )}
@@ -598,10 +597,14 @@ defmodule SsmWeb.HostsLive do
         base
 
       _ ->
-        details =
-          Enum.map_join(failed, "; ", fn {name, reason} -> "#{name}: #{pin_error(reason)}" end)
+        {shown, rest} = Enum.split(failed, 3)
 
-        base <> " Failed (still unpinned or changed): " <> details
+        details =
+          Enum.map_join(shown, "; ", fn {name, reason} -> "#{name}: #{pin_error(reason)}" end)
+
+        more = if rest == [], do: "", else: "; and #{length(rest)} more (filter Unreachable)"
+
+        base <> " Failed (still unpinned or changed): " <> details <> more
     end
   end
 

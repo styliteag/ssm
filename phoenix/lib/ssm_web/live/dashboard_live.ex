@@ -1,12 +1,14 @@
 defmodule SsmWeb.DashboardLive do
   @moduledoc """
-  Landing page after sign-in: entity counts plus the most recent activity —
-  parity with the React DashboardPage (stat cards + activity feed).
+  Landing page after sign-in: what needs attention (`SsmWeb.Attention`),
+  entity counts and the most recent activity.
   """
 
   use SsmWeb, :live_view
 
-  alias Ssm.{Activity, Authorizations, Hosts, Scope, Users}
+  alias Ssm.{Activity, Authorizations, Hosts, HostStatus, Scope, Users}
+  alias Ssm.Diffs.{HostChecks, Revocations, StatusCache}
+  alias SsmWeb.Attention
   alias SsmWeb.Layouts
 
   @impl true
@@ -18,6 +20,7 @@ defmodule SsmWeb.DashboardLive do
      socket
      |> assign(page_title: "Dashboard")
      |> assign(stats(scope))
+     |> assign(:attention, attention(scope))
      |> assign(:version, to_string(Application.spec(:ssm, :vsn)))
      |> assign(:schema_version, schema_version())
      |> assign(:recent_activity, Activity.list(scope, actor: user.actor, limit: 10))}
@@ -30,6 +33,14 @@ defmodule SsmWeb.DashboardLive do
       [] -> "none"
       versions -> versions |> Enum.max() |> to_string()
     end
+  end
+
+  defp attention(scope) do
+    hosts = Hosts.list_hosts(scope)
+    cached = StatusCache.all()
+    stored = HostChecks.stored(scope)
+    statuses = Map.new(hosts, &{&1.id, HostStatus.derive(&1, cached[&1.id], stored[&1.id])})
+    Attention.items(hosts, statuses, Revocations.pending(scope))
   end
 
   # Host and authorization counts follow the user's scope (ADR-0012); the
@@ -55,17 +66,47 @@ defmodule SsmWeb.DashboardLive do
     >
       <.header>
         Dashboard
-        <:subtitle>Signed in as {@current_user.username}</:subtitle>
+        <:subtitle>What needs attention, and the latest changes</:subtitle>
         <:actions>
           <span
             id="version-pill"
             class="badge badge-ghost font-mono text-xs"
             title={"App v#{@version} · schema revision #{@schema_version}"}
           >
-            v{@version} · db {@schema_version}
+            v{@version} · schema {@schema_version}
           </span>
         </:actions>
       </.header>
+
+      <section id="attention" class="card bg-base-200">
+        <div class="card-body gap-2">
+          <h2 class="card-title text-base">Needs attention</h2>
+          <p :if={@attention == []} id="attention-none" class="text-sm opacity-70">
+            <.icon name="hero-check-circle" class="size-4 text-success" />
+            Nothing needs attention: every checked host is in sync.
+          </p>
+          <ul class="space-y-1">
+            <li :for={item <- @attention} id={"attention-#{item.id}"}>
+              <.link
+                navigate={item.path}
+                class="flex items-center gap-2 rounded px-2 py-1 hover:bg-base-300"
+              >
+                <.icon
+                  name={
+                    if item.tone == :error,
+                      do: "hero-exclamation-triangle",
+                      else: "hero-exclamation-circle"
+                  }
+                  class={["size-4", if(item.tone == :error, do: "text-error", else: "text-warning")]}
+                />
+                <span class="font-semibold">{item.count}</span>
+                <span>{if item.count == 1, do: "host", else: "hosts"} {item.text}</span>
+                <.icon name="hero-chevron-right" class="ml-auto size-4 opacity-50" />
+              </.link>
+            </li>
+          </ul>
+        </div>
+      </section>
 
       <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <.stat_card
@@ -80,21 +121,21 @@ defmodule SsmWeb.DashboardLive do
           id="stat-users"
           navigate={~p"/users"}
           icon="hero-users"
-          title="Users"
+          title="SSH users"
           value={@user_count}
         />
         <.stat_card
           id="stat-keys"
           navigate={~p"/keys"}
           icon="hero-key"
-          title="Keys"
+          title="SSH keys"
           value={@key_count}
         />
         <.stat_card
           id="stat-authorizations"
           navigate={~p"/authorizations"}
           icon="hero-shield-check"
-          title="Authorizations"
+          title="Access entries"
           value={@authorization_count}
         />
       </div>
@@ -111,10 +152,12 @@ defmodule SsmWeb.DashboardLive do
               class="flex items-center gap-3 rounded px-2 py-1.5 text-sm"
             >
               <.activity_badge type={entry.activity_type} />
-              <span class="font-medium">{entry.action}</span>
+              <span class="font-medium" title={entry.action}>
+                {SsmWeb.ActivityText.action(entry.action)}
+              </span>
               <span class="opacity-75">{entry.target}</span>
               <span class="ml-auto flex-none text-xs opacity-60">
-                {format_timestamp(entry.timestamp)} · {entry.actor_username}
+                <.local_time at={entry.timestamp} /> · {entry.actor_username}
               </span>
             </li>
           </ul>
@@ -154,24 +197,10 @@ defmodule SsmWeb.DashboardLive do
     ~H"""
     <span class={[
       "badge badge-sm flex-none",
-      activity_badge_class(@type)
+      SsmWeb.ActivityText.type_class(@type)
     ]}>
       {@type}
     </span>
     """
-  end
-
-  defp activity_badge_class("host"), do: "badge-info"
-  defp activity_badge_class("user"), do: "badge-success"
-  defp activity_badge_class("key"), do: "badge-warning"
-  defp activity_badge_class("auth"), do: "badge-secondary"
-  defp activity_badge_class(_), do: "badge-ghost"
-
-  defp format_timestamp(nil), do: ""
-
-  defp format_timestamp(unix) when is_integer(unix) do
-    unix
-    |> DateTime.from_unix!()
-    |> Calendar.strftime("%Y-%m-%d %H:%M")
   end
 end

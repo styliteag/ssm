@@ -218,6 +218,8 @@ defmodule SsmWeb.DiffLive do
     end
   end
 
+  def handle_async(:detail, {:exit, {:shutdown, :cancel}}, socket), do: {:noreply, socket}
+
   def handle_async(:detail, {:exit, reason}, socket) do
     {:noreply,
      socket
@@ -310,7 +312,11 @@ defmodule SsmWeb.DiffLive do
       if failed == 0 do
         "Sync all done: #{ok} hosts synced."
       else
-        "Sync all done: #{ok} synced, #{failed} failed."
+        failed_names =
+          for {host, result} <- results, not match?({:ok, _}, result), do: host.name
+
+        "Sync all done: #{ok} synced, #{failed} failed: #{SsmWeb.Names.short_list(failed_names)}. " <>
+          "Each failure is in Activity."
       end
 
     message = if busy == [], do: message, else: message <> " #{length(busy)} already running."
@@ -367,6 +373,14 @@ defmodule SsmWeb.DiffLive do
 
   def handle_event("deselect", _params, socket) do
     {:noreply, push_patch(socket, to: ~p"/diff?#{diff_query(socket, host_id: nil)}")}
+  end
+
+  # stop waiting for a slow host; the read itself is time-bounded on the host
+  def handle_event("cancel-read", _params, socket) do
+    {:noreply,
+     socket
+     |> cancel_async(:detail)
+     |> assign(detail_loading: false, detail_error: "Reading the host was cancelled.")}
   end
 
   def handle_event("refresh", _params, socket) do
@@ -1274,7 +1288,18 @@ defmodule SsmWeb.DiffLive do
             Could not read the host's authorized_keys — the list below is incomplete: {@detail.read_error}
           </div>
 
-          <p :if={@detail_loading && !@detail} class="text-sm opacity-60">Loading diff…</p>
+          <div :if={@detail_loading && !@detail} class="flex items-center gap-3 text-sm opacity-70">
+            <span class="loading loading-spinner loading-sm" aria-hidden="true"></span>
+            Reading the host over SSH… a host that does not answer takes up to the SSH timeout.
+            <button
+              id="cancel-read"
+              type="button"
+              class="btn btn-ghost btn-xs"
+              phx-click="cancel-read"
+            >
+              Cancel
+            </button>
+          </div>
 
           <div :for={login <- (@detail && @detail.logins) || []} class="space-y-1">
             <div class="flex items-center gap-2 pt-2">
