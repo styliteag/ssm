@@ -529,7 +529,7 @@ defmodule SsmWeb.UsersLive do
         <:subtitle>{@user_count} people or services whose keys ssm places on hosts</:subtitle>
         <:actions>
           <.button id="new-user" variant="primary" phx-click="new">
-            <.icon name="hero-plus" class="size-4" /> New user
+            <.icon name="hero-plus" class="size-4" /> New SSH user
           </.button>
         </:actions>
       </.header>
@@ -543,9 +543,19 @@ defmodule SsmWeb.UsersLive do
         ]}
       />
 
-      <p :if={@user_count == 0} class="text-sm opacity-60">
-        {if @q || @status, do: "No matching users.", else: "No users yet — create the first one."}
+      <p :if={@user_count == 0 and (@q || @status)} class="text-sm opacity-60">
+        No matching SSH users.
       </p>
+      <div
+        :if={@user_count == 0 and !(@q || @status)}
+        id="users-empty"
+        class="rounded-box border border-dashed border-base-300 p-6 text-center text-sm"
+      >
+        <p class="opacity-70">No SSH users yet. Add one, then give it keys and access.</p>
+        <.button variant="primary" class="mt-3" phx-click="new">
+          <.icon name="hero-plus" class="size-4" /> New SSH user
+        </.button>
+      </div>
 
       <div
         :if={MapSet.size(@selected) > 0}
@@ -662,6 +672,7 @@ defmodule SsmWeb.UsersLive do
               navigate={~p"/grants?user_id=#{row.user.id}"}
               class="link link-hover"
               title="Grants per customer or host group"
+              aria-label="Grants per customer or host group"
             >
               {row.grant_count}
             </.link>
@@ -673,7 +684,7 @@ defmodule SsmWeb.UsersLive do
       </div>
 
       <.modal :if={@form} id="user-modal" on_cancel={JS.push("cancel")}>
-        <:title>{if @editing, do: "Edit user", else: "New user"}</:title>
+        <:title>{if @editing, do: "Edit SSH user", else: "New SSH user"}</:title>
 
         <.form for={@form} id="user-form" phx-change="validate" phx-submit="save" class="space-y-2">
           <.input field={@form[:username]} type="text" label="Username" required />
@@ -707,6 +718,7 @@ defmodule SsmWeb.UsersLive do
       phx-click="split-open"
       phx-value-id={@row.id}
       title="Split keys to a new user"
+      aria-label="Split keys to a new user"
     >
       <.icon name="hero-scissors" class="size-4" />
     </button>
@@ -716,6 +728,7 @@ defmodule SsmWeb.UsersLive do
       phx-click="toggle_enabled"
       phx-value-id={@row.id}
       title={if @row.user.enabled, do: "Disable user", else: "Enable user"}
+      aria-label={if @row.user.enabled, do: "Disable user", else: "Enable user"}
     >
       <.icon name={if @row.user.enabled, do: "hero-pause", else: "hero-play"} class="size-4" />
     </button>
@@ -725,6 +738,7 @@ defmodule SsmWeb.UsersLive do
       phx-click="edit"
       phx-value-id={@row.id}
       title="Edit user"
+      aria-label="Edit user"
     >
       <.icon name="hero-pencil-square" class="size-4" />
     </button>
@@ -735,6 +749,7 @@ defmodule SsmWeb.UsersLive do
       phx-value-id={@row.id}
       data-confirm={"Delete user #{@row.user.username}? Their keys and authorizations go with them; the keys leave the hosts at the next sync."}
       title="Delete user"
+      aria-label="Delete user"
     >
       <.icon name="hero-trash" class="size-4" />
     </button>

@@ -47,6 +47,11 @@ defmodule SsmWeb.ManagedLoginsComponents do
                 do: "Revoke its authorizations first",
                 else: "Stop managing this login (checks the host first)"
             }
+            aria-label={
+              if entry.authorizations > 0,
+                do: "Revoke its authorizations first",
+                else: "Stop managing this login (checks the host first)"
+            }
           >
             <.icon name="hero-trash" class="size-4" /> Forget
           </button>

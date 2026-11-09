@@ -708,6 +708,7 @@ defmodule SsmWeb.HostsLive do
       navigate={~p"/diff?host_id=#{@host.id}"}
       class="badge badge-error badge-sm align-middle"
       title={"Revocation pending (#{@pending.reason}, #{ago(@pending.inserted_at)}): access was removed in ssm; it ends with a sync or a refresh that finds nothing revoked left on the host"}
+      aria-label={"Revocation pending (#{@pending.reason}, #{ago(@pending.inserted_at)}): access was removed in ssm; it ends with a sync or a refresh that finds nothing revoked left on the host"}
     >
       revocation pending · {@pending.reason} · {ago(@pending.inserted_at)}
     </.link>
@@ -793,9 +794,20 @@ defmodule SsmWeb.HostsLive do
 
       <.list_search id="hosts-search" q={@q} placeholder="Search name, address, comment" />
 
-      <p :if={@host_count == 0} class="text-sm opacity-60">
-        No hosts yet — create the first one.
-      </p>
+      <div
+        :if={@host_count == 0}
+        id="hosts-empty"
+        class="rounded-box border border-dashed border-base-300 p-6 text-center text-sm"
+      >
+        <p class="opacity-70">
+          {if @global,
+            do: "No hosts yet. Add the first host ssm should manage.",
+            else: "No hosts in your scope yet."}
+        </p>
+        <.button :if={@global} variant="primary" class="mt-3" phx-click="new">
+          <.icon name="hero-plus" class="size-4" /> New host
+        </.button>
+      </div>
 
       <.view_toggle id="hosts-view" view={@view} />
 
@@ -833,6 +845,7 @@ defmodule SsmWeb.HostsLive do
               navigate={~p"/authorizations?host_id=#{host.id}"}
               class="link link-hover"
               title="Authorizations on this host"
+              aria-label="Authorizations on this host"
             >
               {access_entries(Map.get(@auth_counts, host.id, 0))}
             </.link>
@@ -874,6 +887,7 @@ defmodule SsmWeb.HostsLive do
               navigate={~p"/authorizations?host_id=#{host.id}"}
               class="link link-hover tabular-nums"
               title="Authorizations on this host"
+              aria-label="Authorizations on this host"
             >
               {Map.get(@auth_counts, host.id, 0)}
             </.link>
@@ -883,6 +897,7 @@ defmodule SsmWeb.HostsLive do
               navigate={host_path(host.id)}
               class={["badge badge-sm", StatusText.connection_class(@statuses[host.id])]}
               title={status_title(@statuses[host.id])}
+              aria-label={status_title(@statuses[host.id])}
             >
               {StatusText.connection(@statuses[host.id])}
             </.link>
@@ -932,6 +947,7 @@ defmodule SsmWeb.HostsLive do
       phx-click="managed-logins"
       phx-value-id={@host.id}
       title="Managed logins (admin)"
+      aria-label="Managed logins (admin)"
     >
       <.icon name="hero-user-group" class="size-4" />
     </button>
@@ -939,7 +955,8 @@ defmodule SsmWeb.HostsLive do
       id={"diff-link-#{@host.id}"}
       navigate={~p"/diff?host_id=#{@host.id}"}
       class="btn btn-ghost btn-xs"
-      title="Open in diff viewer"
+      title="Open in Sync"
+      aria-label="Open in Sync"
     >
       <.icon name="hero-arrows-right-left" class="size-4" />
     </.link>
@@ -950,6 +967,7 @@ defmodule SsmWeb.HostsLive do
       phx-value-id={@host.id}
       disabled={@testing_id != nil}
       title="Test SSH connection"
+      aria-label="Test SSH connection"
     >
       <.icon
         name={
@@ -966,8 +984,9 @@ defmodule SsmWeb.HostsLive do
       phx-click="toggle_disabled"
       phx-value-id={@host.id}
       title={if @host.disabled, do: "Enable host", else: "Disable host"}
+      aria-label={if @host.disabled, do: "Enable host", else: "Disable host"}
     >
-      <.icon name={if @host.disabled, do: "hero-play", else: "hero-pause"} class="size-4" />
+      <.icon name={if @host.disabled, do: "hero-power", else: "hero-no-symbol"} class="size-4" />
     </button>
     <button
       id={"edit-host-#{@host.id}"}
@@ -975,6 +994,7 @@ defmodule SsmWeb.HostsLive do
       phx-click="edit"
       phx-value-id={@host.id}
       title="Edit host"
+      aria-label="Edit host"
     >
       <.icon name="hero-pencil-square" class="size-4" />
     </button>
@@ -985,6 +1005,7 @@ defmodule SsmWeb.HostsLive do
       phx-value-id={@host.id}
       data-confirm={delete_confirm(@host, @auth_count)}
       title="Delete host"
+      aria-label="Delete host"
     >
       <.icon name="hero-trash" class="size-4" />
     </button>

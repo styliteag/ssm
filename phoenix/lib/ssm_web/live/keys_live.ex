@@ -716,6 +716,7 @@ defmodule SsmWeb.KeysLive do
       phx-click="view"
       phx-value-id={@key.id}
       title="View full key"
+      aria-label="View full key"
     >
       <.icon name="hero-eye" class="size-4" />
     </button>
@@ -725,6 +726,7 @@ defmodule SsmWeb.KeysLive do
       phx-click="edit"
       phx-value-id={@key.id}
       title="Edit key"
+      aria-label="Edit key"
     >
       <.icon name="hero-pencil-square" class="size-4" />
     </button>
@@ -735,6 +737,7 @@ defmodule SsmWeb.KeysLive do
       phx-value-id={@key.id}
       data-confirm={"Delete key #{key_label(@key)} of #{@key.user.username}? It leaves the hosts at the next sync."}
       title="Delete key"
+      aria-label="Delete key"
     >
       <.icon name="hero-trash" class="size-4" />
     </button>
@@ -754,6 +757,7 @@ defmodule SsmWeb.KeysLive do
       phx-hook="CopyToClipboard"
       data-copy={@line}
       title="Copy full key line"
+      aria-label="Copy full key line"
     >
       <.icon name="hero-clipboard" class="size-4 [[data-copied]_&]:hidden" />
       <.icon name="hero-check" class="hidden size-4 text-success [[data-copied]_&]:inline-block" />

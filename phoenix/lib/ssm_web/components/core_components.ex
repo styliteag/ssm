@@ -399,8 +399,21 @@ defmodule SsmWeb.CoreComponents do
   def modal(assigns) do
     ~H"""
     <div id={@id} class="modal modal-open" phx-window-keydown={@on_cancel} phx-key="escape">
-      <div class="modal-backdrop bg-black/50" phx-click={@on_cancel} aria-hidden="true"></div>
-      <div class={["modal-box", @box_class]}>
+      <%!-- no close on a backdrop click: a stray click would drop the form --%>
+      <div class="modal-backdrop bg-black/50" aria-hidden="true"></div>
+      <.focus_wrap
+        id={"#{@id}-box"}
+        class={["modal-box", @box_class]}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={@title != [] && "#{@id}-title"}
+        phx-mounted={JS.focus_first(to: "##{@id}-box")}
+      >
+        <h3 :if={@title != []} id={"#{@id}-title"} class="mb-4 text-lg font-semibold">
+          {render_slot(@title)}
+        </h3>
+        {render_slot(@inner_block)}
+        <%!-- after the content in the DOM: focus_first lands on the first field --%>
         <button
           type="button"
           class="btn btn-circle btn-ghost btn-sm absolute top-2 right-2"
@@ -409,9 +422,7 @@ defmodule SsmWeb.CoreComponents do
         >
           <.icon name="hero-x-mark" class="size-4" />
         </button>
-        <h3 :if={@title != []} class="mb-4 text-lg font-semibold">{render_slot(@title)}</h3>
-        {render_slot(@inner_block)}
-      </div>
+      </.focus_wrap>
     </div>
     """
   end

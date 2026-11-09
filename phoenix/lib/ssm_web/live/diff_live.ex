@@ -101,8 +101,18 @@ defmodule SsmWeb.DiffLive do
 
     view = if params["view"] == "cards", do: "cards", else: "list"
 
+    filter =
+      if params["filter"] in Enum.map(@filters, &elem(&1, 0)), do: params["filter"], else: "all"
+
     socket =
-      assign(socket, selected: selected, detail: nil, detail_error: nil, diff_view: view)
+      assign(socket,
+        selected: selected,
+        detail: nil,
+        detail_error: nil,
+        diff_view: view,
+        diff_search: params["q"] || "",
+        diff_filter: filter
+      )
 
     socket =
       cond do
@@ -352,11 +362,11 @@ defmodule SsmWeb.DiffLive do
 
   @impl true
   def handle_event("select", %{"id" => id}, socket) do
-    {:noreply, push_patch(socket, to: ~p"/diff?#{[view: socket.assigns.diff_view, host_id: id]}")}
+    {:noreply, push_patch(socket, to: ~p"/diff?#{diff_query(socket, host_id: id)}")}
   end
 
   def handle_event("deselect", _params, socket) do
-    {:noreply, push_patch(socket, to: ~p"/diff?#{[view: socket.assigns.diff_view]}")}
+    {:noreply, push_patch(socket, to: ~p"/diff?#{diff_query(socket, host_id: nil)}")}
   end
 
   def handle_event("refresh", _params, socket) do
@@ -367,21 +377,16 @@ defmodule SsmWeb.DiffLive do
   end
 
   def handle_event("diff-view", %{"view" => view}, socket) when view in ~w(cards list) do
-    query =
-      if socket.assigns.selected,
-        do: [view: view, host_id: socket.assigns.selected.id],
-        else: [view: view]
-
-    {:noreply, push_patch(socket, to: ~p"/diff?#{query}")}
+    {:noreply, push_patch(socket, to: ~p"/diff?#{diff_query(socket, view: view)}")}
   end
 
+  # search and filter live in the URL (like the hosts and users lists)
   def handle_event("diff-search", %{"q" => q}, socket) do
-    {:noreply, assign(socket, :diff_search, q)}
+    {:noreply, push_patch(socket, to: ~p"/diff?#{diff_query(socket, q: q)}")}
   end
 
   def handle_event("diff-filter", %{"filter" => filter}, socket) do
-    filter = if filter in Enum.map(@filters, &elem(&1, 0)), do: filter, else: "all"
-    {:noreply, assign(socket, :diff_filter, filter)}
+    {:noreply, push_patch(socket, to: ~p"/diff?#{diff_query(socket, filter: filter)}")}
   end
 
   def handle_event("sort", %{"key" => key}, socket) do
@@ -891,6 +896,22 @@ defmodule SsmWeb.DiffLive do
       "#{login} can come back with the login, and a sync no longer empties it."
   end
 
+  # The page's URL query: defaults are left out (list view, no search, all).
+  defp diff_query(socket, overrides) do
+    a = socket.assigns
+
+    [
+      view: a.diff_view,
+      q: a.diff_search,
+      filter: a.diff_filter,
+      host_id: a.selected && a.selected.id
+    ]
+    |> Keyword.merge(overrides)
+    |> Enum.reject(fn {key, value} ->
+      value in [nil, ""] or {key, value} in [view: "list", filter: "all"]
+    end)
+  end
+
   defp format_reason({_code, message}) when is_binary(message), do: message
   defp format_reason(:not_found), do: "host not found"
   defp format_reason(other), do: ErrorText.reason(other)
@@ -1030,6 +1051,8 @@ defmodule SsmWeb.DiffLive do
             phx-click="sync_all"
             disabled={@syncing}
             data-confirm={SyncConfirm.all(@hosts, @statuses, @checks)}
+            data-confirm-type={"sync #{SyncConfirm.drifting_count(@hosts, @statuses)}"}
+            data-confirm-label="Sync all"
           >
             <.icon
               name="hero-cloud-arrow-up"
@@ -1068,20 +1091,20 @@ defmodule SsmWeb.DiffLive do
       <div :if={!@selected} class="flex flex-wrap items-center gap-3">
         <div id="diff-view-switcher" class="join">
           <button
-            id="diff-view-cards"
-            class={["btn btn-sm join-item", @diff_view == "cards" && "btn-primary"]}
-            phx-click="diff-view"
-            phx-value-view="cards"
-          >
-            <.icon name="hero-squares-2x2" class="size-4" /> Cards
-          </button>
-          <button
             id="diff-view-list"
             class={["btn btn-sm join-item", @diff_view == "list" && "btn-primary"]}
             phx-click="diff-view"
             phx-value-view="list"
           >
             <.icon name="hero-bars-3" class="size-4" /> List
+          </button>
+          <button
+            id="diff-view-cards"
+            class={["btn btn-sm join-item", @diff_view == "cards" && "btn-primary"]}
+            phx-click="diff-view"
+            phx-value-view="cards"
+          >
+            <.icon name="hero-squares-2x2" class="size-4" /> Cards
           </button>
         </div>
         <form
@@ -1095,6 +1118,7 @@ defmodule SsmWeb.DiffLive do
             name="q"
             value={@diff_search}
             placeholder="Search hosts by name or address…"
+            aria-label="Search hosts by name or address"
             class="input input-sm w-full"
             phx-debounce="200"
             autocomplete="off"
@@ -1145,6 +1169,7 @@ defmodule SsmWeb.DiffLive do
               phx-value-id={host.id}
               disabled={host.disabled}
               title="Check this host (reads it over SSH)"
+              aria-label="Check this host (reads it over SSH)"
             >
               <.icon name="hero-arrow-path" class="size-4" />
             </button>
@@ -1156,6 +1181,7 @@ defmodule SsmWeb.DiffLive do
               disabled={host.disabled || @syncing}
               data-confirm={SyncConfirm.host(host, @statuses[host.id])}
               title="Sync this host"
+              aria-label="Sync this host"
             >
               <.icon name="hero-cloud-arrow-up" class="size-4" />
             </button>
@@ -1271,6 +1297,7 @@ defmodule SsmWeb.DiffLive do
                 phx-hook="CopyToClipboard"
                 data-copy={@keyfiles[login.login]}
                 title={"Copy the authorized_keys a sync would write for #{login.login}"}
+                aria-label={"Copy the authorized_keys a sync would write for #{login.login}"}
               >
                 <.icon name="hero-clipboard-document" class="size-4 [[data-copied]_&]:hidden" />
                 <.icon
@@ -1290,6 +1317,7 @@ defmodule SsmWeb.DiffLive do
                 phx-value-login={login.login}
                 data-confirm={remove_login_confirm(@selected, login.login, @host_auths)}
                 title={"Delete #{login.login}'s authorizations on this host and stop managing it"}
+                aria-label={"Delete #{login.login}'s authorizations on this host and stop managing it"}
               >
                 <.icon name="hero-user-minus" class="size-4" /> Remove login from host
               </button>
@@ -1327,6 +1355,7 @@ defmodule SsmWeb.DiffLive do
                   phx-hook="CopyToClipboard"
                   data-copy={item.line}
                   title="Copy the full key line"
+                  aria-label="Copy the full key line"
                 >
                   <.icon name="hero-clipboard" class="size-4 [[data-copied]_&]:hidden" />
                   <.icon
@@ -1354,6 +1383,7 @@ defmodule SsmWeb.DiffLive do
                     owner_auth(line_key(item.line, @key_owners), login.login, @host_auths).id
                   }
                   title="Remove this SSH user's access to this login (shows every key it holds here)"
+                  aria-label="Remove this SSH user's access to this login (shows every key it holds here)"
                 >
                   <.icon name="hero-user-minus" class="size-4" />
                   Remove {line_key(item.line, @key_owners).user.username}
@@ -1498,6 +1528,7 @@ defmodule SsmWeb.DiffLive do
         navigate={~p"/keys?user_id=#{@key.user_id}"}
         class="link link-hover"
         title={"Keys of #{@key.user.username}"}
+        aria-label={"Keys of #{@key.user.username}"}
       >
         {@key.user.username}
       </.link>
@@ -1508,6 +1539,7 @@ defmodule SsmWeb.DiffLive do
         navigate={~p"/grants?user_id=#{@key.user_id}"}
         class="badge badge-ghost badge-xs"
         title="This access comes from a grant"
+        aria-label="This access comes from a grant"
       >
         grant
       </.link>
@@ -1530,6 +1562,7 @@ defmodule SsmWeb.DiffLive do
       phx-value-login={@login}
       phx-value-index={@index}
       title={"Authorize #{elem(@info, 1).username} for #{@login} (database only)"}
+      aria-label={"Authorize #{elem(@info, 1).username} for #{@login} (database only)"}
     >
       <.icon name="hero-check-circle" class="size-4" /> Allow ({elem(@info, 1).username})
     </button>
@@ -1545,6 +1578,7 @@ defmodule SsmWeb.DiffLive do
       phx-value-login={@login}
       phx-value-index={@index}
       title="Key is unknown — assign it to a user"
+      aria-label="Key is unknown — assign it to a user"
     >
       <.icon name="hero-user-plus" class="size-4" /> Add key…
     </button>

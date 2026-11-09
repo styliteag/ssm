@@ -282,6 +282,7 @@ defmodule SsmWeb.GrantsLive do
               navigate={user_path(grant.ssh_user_id)}
               class="ml-1 opacity-60 hover:opacity-100"
               title="Open the SSH user"
+              aria-label="Open the SSH user"
             >
               <.icon name="hero-arrow-top-right-on-square" class="size-3" />
             </.link>
@@ -304,6 +305,7 @@ defmodule SsmWeb.GrantsLive do
               navigate={~p"/authorizations?user_id=#{grant.ssh_user_id}"}
               class="btn btn-ghost btn-xs"
               title="Authorizations of this user"
+              aria-label="Authorizations of this user"
             >
               <.icon name="hero-shield-check" class="size-4" />
             </.link>
@@ -315,6 +317,7 @@ defmodule SsmWeb.GrantsLive do
               phx-value-id={grant.id}
               data-confirm={"Delete the grant of #{grant.ssh_user.username} on #{Grants.target_label(grant)} (login #{grant.login})? Its access is removed from every host of the target at the next sync."}
               title="Delete grant"
+              aria-label="Delete grant"
             >
               <.icon name="hero-trash" class="size-4" />
             </button>

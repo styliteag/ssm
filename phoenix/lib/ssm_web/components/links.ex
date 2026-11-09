@@ -53,6 +53,7 @@ defmodule SsmWeb.Links do
       navigate={user_path(@id)}
       class={["link link-hover", @class]}
       title="Open the SSH user"
+      aria-label="Open the SSH user"
       {@rest}
     >
       {@name}
@@ -76,6 +77,7 @@ defmodule SsmWeb.Links do
       phx-hook="CopyToClipboard"
       data-copy={@text}
       title={@title}
+      aria-label={@title}
     >
       <.icon name="hero-clipboard" class="size-4 [[data-copied]_&]:hidden" />
       <.icon name="hero-check" class="hidden size-4 text-success [[data-copied]_&]:inline-block" />
@@ -144,11 +146,17 @@ defmodule SsmWeb.Links do
           name="q"
           value={@q}
           placeholder={@placeholder}
+          aria-label={@placeholder}
           phx-debounce="250"
           autocomplete="off"
         />
       </label>
-      <select :for={{name, current, options} <- @filters} name={name} class="select select-sm w-auto">
+      <select
+        :for={{name, current, options} <- @filters}
+        name={name}
+        class="select select-sm w-auto"
+        aria-label={"Filter by #{name}"}
+      >
         <option :for={{label, value} <- options} value={value} selected={value == (current || "")}>
           {label}
         </option>

@@ -28,6 +28,11 @@ defmodule SsmWeb.SyncConfirm do
   defp host_effect(_failed),
     do: "The last check of this host failed, so the changes are unknown. " <> @removal
 
+  @doc "How many enabled hosts \"Sync all\" would write (the typed confirmation)."
+  @spec drifting_count([Host.t()], map()) :: non_neg_integer()
+  def drifting_count(hosts, statuses),
+    do: Enum.count(hosts, &(not &1.disabled and match?({:drift, _, _}, statuses[&1.id])))
+
   @doc """
   Confirm text for "Sync all", or nil when no enabled host needs a sync
   (the page then answers "Nothing to sync." without asking).

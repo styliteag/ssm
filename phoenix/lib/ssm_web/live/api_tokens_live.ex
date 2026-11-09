@@ -208,6 +208,7 @@ defmodule SsmWeb.ApiTokensLive do
       phx-hook="CopyToClipboard"
       data-copy={@text}
       title="Copy"
+      aria-label="Copy"
     >
       <.icon name="hero-clipboard" class="size-4 [[data-copied]_&]:hidden" />
       <.icon name="hero-check" class="hidden size-4 text-success [[data-copied]_&]:inline-block" />

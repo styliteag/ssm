@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Confirmations open a styled dialog instead of the browser's box. "Sync all" asks to type
+  "sync N" (the number of hosts it writes) before it starts.
+- Empty hosts and SSH users lists offer the first step ("New host", "New SSH user").
+
 - Diff page: "Remove login from host" for a login the host does not know ("home not available:
   the host does not know this login"), admins only. It deletes the login's authorizations on
   that host and ssm stops managing the login there. The question warns that a directory outage
@@ -20,6 +24,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Dialogs are announced as dialogs, keep the keyboard focus inside, start on the first field
+  and no longer close on a click beside them (a stray click lost the form). Icon-only buttons,
+  search fields and filters have accessible names. Enable/disable a host use clearer icons.
+- Sync page: List comes before Cards as on the other pages, and search and filter stay in the
+  URL (reload, back button, shared links).
 - One vocabulary across the UI. Navigation: "SSH users", "SSH keys", "Access" (was
   Authorizations), "Sync" (was Diff Viewer), "Activity". A user → host → login row is an
   "access entry" (no longer also called a grant; "Grant" is only the customer/group rule).

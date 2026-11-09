@@ -182,6 +182,7 @@ defmodule SsmWeb.ActivitiesLive do
               navigate={target_path(entry)}
               class="link link-hover truncate opacity-75"
               title="Open"
+              aria-label="Open"
             >
               {entry.target}
             </.link>

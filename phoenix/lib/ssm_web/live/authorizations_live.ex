@@ -763,6 +763,7 @@ defmodule SsmWeb.AuthorizationsLive do
                 patch={~p"/authorizations?user_id=#{auth.user_id}"}
                 class="link link-hover"
                 title={"Filter this list by #{user_label(auth)}"}
+                aria-label={"Filter this list by #{user_label(auth)}"}
               >
                 {user_label(auth)}
               </.link>
@@ -770,6 +771,7 @@ defmodule SsmWeb.AuthorizationsLive do
                 navigate={user_path(auth.user_id)}
                 class="opacity-40 hover:opacity-100"
                 title={"Open the SSH user #{user_label(auth)}"}
+                aria-label={"Open the SSH user #{user_label(auth)}"}
               >
                 <.icon name="hero-user" class="size-3.5" />
               </.link>
@@ -777,6 +779,7 @@ defmodule SsmWeb.AuthorizationsLive do
                 navigate={~p"/keys?user_id=#{auth.user_id}"}
                 class="opacity-40 hover:opacity-100"
                 title={"Keys of #{user_label(auth)}"}
+                aria-label={"Keys of #{user_label(auth)}"}
               >
                 <.icon name="hero-key" class="size-3.5" />
               </.link>
@@ -789,6 +792,7 @@ defmodule SsmWeb.AuthorizationsLive do
                 patch={~p"/authorizations?host_id=#{auth.host_id}"}
                 class="link link-hover"
                 title={"Filter this list by #{host_label(auth)}"}
+                aria-label={"Filter this list by #{host_label(auth)}"}
               >
                 {host_label(auth)}
               </.link>
@@ -796,6 +800,7 @@ defmodule SsmWeb.AuthorizationsLive do
                 navigate={~p"/diff?host_id=#{auth.host_id}"}
                 class="opacity-40 hover:opacity-100"
                 title={"Open #{host_label(auth)} in the diff viewer"}
+                aria-label={"Open #{host_label(auth)} in the diff viewer"}
               >
                 <.icon name="hero-arrows-right-left" class="size-3.5" />
               </.link>
@@ -807,6 +812,7 @@ defmodule SsmWeb.AuthorizationsLive do
               navigate={host_path(auth.host_id)}
               class="link link-hover font-mono text-sm"
               title="This login in the diff viewer"
+              aria-label="This login in the diff viewer"
             >
               {auth.login}
             </.link>
@@ -823,6 +829,7 @@ defmodule SsmWeb.AuthorizationsLive do
               navigate={~p"/grants?user_id=#{auth.user_id}"}
               class="badge badge-ghost badge-sm whitespace-nowrap"
               title="Made by a grant: read-only here, change the grant instead"
+              aria-label="Made by a grant: read-only here, change the grant instead"
             >
               via {@grant_labels[auth.grant_id] || "grant"}
             </.link>
@@ -833,6 +840,7 @@ defmodule SsmWeb.AuthorizationsLive do
               phx-click="edit"
               phx-value-id={auth.id}
               title="Edit authorization"
+              aria-label="Edit authorization"
             >
               <.icon name="hero-pencil-square" class="size-4" />
             </button>
@@ -844,6 +852,7 @@ defmodule SsmWeb.AuthorizationsLive do
               phx-value-id={auth.id}
               data-confirm={"Revoke access for #{user_label(auth)} on #{host_label(auth)} (login #{auth.login})? The key lines leave the host at its next sync."}
               title="Delete authorization"
+              aria-label="Delete authorization"
             >
               <.icon name="hero-trash" class="size-4" />
             </button>
@@ -986,6 +995,7 @@ defmodule SsmWeb.AuthorizationsLive do
                   navigate={~p"/diff?host_id=#{host.id}"}
                   class="link link-hover inline-block max-h-36 truncate whitespace-nowrap [writing-mode:vertical-rl] rotate-180"
                   title={"#{host.name} (#{host.address}) — open in the diff viewer"}
+                  aria-label={"#{host.name} (#{host.address}) — open in the diff viewer"}
                 >
                   {host.name}
                 </.link>
@@ -999,6 +1009,7 @@ defmodule SsmWeb.AuthorizationsLive do
                   patch={~p"/authorizations?user_id=#{user.id}"}
                   class="link link-hover block truncate"
                   title={"#{user.username}#{if(user.enabled, do: "", else: " (disabled)")} — list this user's grants"}
+                  aria-label={"#{user.username}#{if(user.enabled, do: "", else: " (disabled)")} — list this user's grants"}
                 >
                   {user.username}
                 </.link>
@@ -1074,6 +1085,8 @@ defmodule SsmWeb.AuthorizationsLive do
           "Revoke #{@user.username} on #{@host.name} as #{@matrix_login}? The key lines leave the host at its next sync."
       }
       title={"#{@user.username} on #{@host.name} as #{@matrix_login}: " <>
+        if(@authorized, do: "authorized — click to revoke", else: "not authorized — click to grant")}
+      aria-label={"#{@user.username} on #{@host.name} as #{@matrix_login}: " <>
         if(@authorized, do: "authorized — click to revoke", else: "not authorized — click to grant")}
     >
       <.icon :if={@authorized} name="hero-check" class="size-3.5" />

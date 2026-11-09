@@ -40,6 +40,50 @@ const CopyToClipboard = {
   },
 }
 
+// data-confirm through the styled <dialog id="confirm-dialog"> (root layout)
+// instead of window.confirm. A capture listener on window runs before
+// phoenix_html and LiveView; on "ok" the attribute is lifted for one
+// re-dispatched click. Optional: data-confirm-type="<text>" (the user must
+// type it, for fleet-wide writes), data-confirm-label="<button text>".
+// Danger tone for elements styled text-error/btn-error.
+const openConfirm = (dialog, el) => {
+  const $ = id => document.getElementById(id)
+  const message = el.getAttribute("data-confirm")
+  const expected = el.dataset.confirmType || ""
+  const ok = $("confirm-dialog-ok")
+  const input = $("confirm-dialog-input")
+  const danger = el.classList.contains("text-error") || el.classList.contains("btn-error")
+
+  $("confirm-dialog-message").textContent = message
+  $("confirm-dialog-typed").classList.toggle("hidden", expected === "")
+  $("confirm-dialog-typed").classList.toggle("flex", expected !== "")
+  $("confirm-dialog-expected").textContent = expected
+  input.value = ""
+  ok.textContent = el.dataset.confirmLabel || "Confirm"
+  ok.classList.toggle("btn-error", danger)
+  ok.classList.toggle("btn-primary", !danger)
+  ok.disabled = expected !== ""
+  input.oninput = () => { ok.disabled = input.value.trim() !== expected }
+
+  dialog.returnValue = ""
+  dialog.addEventListener("close", () => {
+    if (dialog.returnValue !== "ok") return
+    el.removeAttribute("data-confirm")
+    try { el.click() } finally { el.setAttribute("data-confirm", message) }
+  }, {once: true})
+  dialog.showModal()
+  ;(expected === "" ? $("confirm-dialog-cancel") : input).focus()
+}
+
+window.addEventListener("click", e => {
+  const el = e.target.closest?.("[data-confirm]")
+  const dialog = document.getElementById("confirm-dialog")
+  if (!el || !dialog?.showModal || el.disabled) return
+  e.preventDefault()
+  e.stopImmediatePropagation()
+  openConfirm(dialog, el)
+}, true)
+
 // phoenix.js memorizes a long-poll fallback per tab in sessionStorage; after
 // a proxy hiccup that would leave the tab degraded forever. Full page load =
 // fresh chance for the WebSocket. (Lesson from ../dashboard 4.2.13.)

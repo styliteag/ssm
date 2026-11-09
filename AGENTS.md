@@ -252,6 +252,11 @@ enumerates every LiveView route: a new page fails the suite until it is classifi
 `host_link`/`user_link`/`copy_text` components, `short_key_line/1`, and `list_search` + `query_params/2`
 + `matches?/2` for list searches. List filters live in the URL (`push_patch`); `assets/js/app.js`
 remembers each page's query in `sessionStorage` and restores it when the page opens without one.
+Every `data-confirm` opens the styled `<dialog id="confirm-dialog">` of the root layout (`assets/js/app.js`
+intercepts the click in the capture phase, before `phoenix_html`'s `window.confirm`);
+`data-confirm-type="<text>"` makes the user type that text first (diff page "Sync all"),
+`data-confirm-label` names the button. `<.modal>` is a `role="dialog"` with a focus wrap and does
+not close on a backdrop click.
 
 **Host keys** (ADR-0008, `lib/ssm/ssh/host_key*.ex`, `lib/ssm/hosts/host_keys.ex`):
 every connect verifies `host.key_fingerprint`; unpinned hosts are refused.
