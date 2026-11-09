@@ -9,6 +9,8 @@ defmodule Ssm.OIDC.Config do
 
   require Logger
 
+  alias Ssm.OIDC.LoginHosts
+
   @provider Ssm.OIDC.Provider
 
   defstruct issuer: nil,
@@ -23,6 +25,7 @@ defmodule Ssm.OIDC.Config do
             session_max_hours: 8,
             local_login: :on,
             rp_logout: true,
+            login_hosts: %{},
             provider_opts: %{}
 
   @type t :: %__MODULE__{}
@@ -109,7 +112,8 @@ defmodule Ssm.OIDC.Config do
         role_map: parse_role_map(env["OIDC_ROLE_MAP"]),
         login_label: blank_to(env["OIDC_LOGIN_LABEL"], "Login with SSO"),
         session_max_hours: parse_hours(env["OIDC_SESSION_MAX_HOURS"]),
-        rp_logout: parse_flag(env["OIDC_RP_LOGOUT"])
+        rp_logout: parse_flag(env["OIDC_RP_LOGOUT"]),
+        login_hosts: LoginHosts.parse(env["OIDC_LOGIN_HOSTS"], own_hosts(env))
       }
     else
       {:error, reason} ->
@@ -119,6 +123,12 @@ defmodule Ssm.OIDC.Config do
   end
 
   defp parse_oidc(_env), do: nil
+
+  # ssm's own names: OIDC_LOGIN_HOSTS keys must be among them (§2a)
+  defp own_hosts(env) do
+    phx_host = env |> Map.get("PHX_HOST", "") |> String.trim() |> String.downcase()
+    Enum.reject([phx_host | SsmWeb.Hosts.parse(env["PHX_ALT_HOSTS"])], &(&1 == ""))
+  end
 
   defp required(env, key) do
     case env[key] do

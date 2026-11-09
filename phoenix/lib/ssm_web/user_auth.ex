@@ -96,7 +96,11 @@ defmodule SsmWeb.UserAuth do
     conn = renew_session(conn)
 
     target =
-      operator? && Logout.end_session_url(SsmWeb.Hosts.url(conn, ~p"/sign-in"), sealed, ref)
+      operator? &&
+        SsmWeb.Hosts.idp_url(
+          conn,
+          Logout.end_session_url(SsmWeb.Hosts.url(conn, ~p"/sign-in"), sealed, ref)
+        )
 
     Logout.forget(ref)
 

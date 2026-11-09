@@ -39,4 +39,20 @@ defmodule SsmWeb.Hosts do
       do: URI.to_string(%{base | host: host}),
       else: URI.to_string(base)
   end
+
+  @doc """
+  A provider front-channel URL (authorize, end session) for this request:
+  its host swapped per `OIDC_LOGIN_HOSTS` when the request came in on a
+  mapped name (`Ssm.OIDC.LoginHosts`), else unchanged.
+  """
+  @spec idp_url(Plug.Conn.t(), String.t() | nil) :: String.t() | nil
+  def idp_url(%Plug.Conn{host: host}, url) do
+    map =
+      case Ssm.OIDC.Config.get() do
+        %{login_hosts: map} -> map
+        _ -> %{}
+      end
+
+    Ssm.OIDC.LoginHosts.rewrite(url, host, map)
+  end
 end

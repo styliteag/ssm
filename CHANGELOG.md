@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `OIDC_LOGIN_HOSTS` (e.g. `ssm.orbit.my.sty=orbit.my.sty`): an SSO login or logout started on
+  one of ssm's other names (`PHX_ALT_HOSTS`) goes to Mission Control under the mapped name, where
+  you are already signed in, instead of always to the issuer's name. Token exchange and checks
+  still use `OIDC_ISSUER`. Keys must be ssm's own names; other entries are logged and ignored.
+
 ## [4.14.2] - 2026-11-09
 
 ### Fixed

@@ -149,6 +149,29 @@ defmodule Ssm.OIDC.ConfigTest do
     assert log =~ "LOCAL_LOGIN"
   end
 
+  test "OIDC_LOGIN_HOSTS keys must be own names (PHX_HOST, PHX_ALT_HOSTS)", %{path: path} do
+    extra = %{
+      "PHX_HOST" => "ssm.example.com",
+      "PHX_ALT_HOSTS" => "ssm.orbit.my.sty",
+      "OIDC_LOGIN_HOSTS" => "ssm.orbit.my.sty=orbit.my.sty"
+    }
+
+    assert {%Config{login_hosts: %{"ssm.orbit.my.sty" => "orbit.my.sty"}}, _} =
+             Config.from_env(env(path, extra))
+
+    log =
+      capture_log(fn ->
+        assert {%Config{login_hosts: %{}}, _} =
+                 Config.from_env(env(path, Map.delete(extra, "PHX_ALT_HOSTS")))
+      end)
+
+    assert log =~ "OIDC_LOGIN_HOSTS"
+  end
+
+  test "no OIDC_LOGIN_HOSTS: no mapping", %{path: path} do
+    assert {%Config{login_hosts: %{}}, _} = Config.from_env(env(path))
+  end
+
   test "empty or unset LOCAL_LOGIN is on", %{path: path} do
     assert {_, :on} = Config.from_env(env(path, %{"LOCAL_LOGIN" => ""}))
     assert {_, :on} = Config.from_env(env(path))

@@ -28,7 +28,7 @@ defmodule SsmWeb.OIDCController do
         |> put_session(:oidc_state, pending.state)
         |> put_session(:oidc_nonce, pending.nonce)
         |> put_session(:oidc_verifier, pending.verifier)
-        |> redirect(external: url)
+        |> redirect(external: SsmWeb.Hosts.idp_url(conn, url))
 
       {:error, :provider_unavailable} ->
         fail(conn, :provider_unavailable, nil)

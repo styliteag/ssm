@@ -532,7 +532,9 @@ defaults preserved): `DATABASE_URL` (or `DATABASE_PATH`), `HTPASSWD`, `SSH_KEY`,
 `Ssm.OIDC.Config` (not runtime.exs): `OIDC_ISSUER`, `OIDC_CLIENT_ID`,
 `OIDC_CLIENT_SECRET_FILE`, `OIDC_ROLE_CLAIM`, `OIDC_CUSTOMERS_CLAIM`, `OIDC_GROUPS_CLAIM`
 (default `orbit_groups`), `OIDC_GROUPS_DEFAULT` (only `*`, see "Operator scope"), `OIDC_ROLE_MAP`,
-`OIDC_LOGIN_LABEL`, `OIDC_SESSION_MAX_HOURS`, `OIDC_RP_LOGOUT`, `LOCAL_LOGIN`.
+`OIDC_LOGIN_LABEL`, `OIDC_SESSION_MAX_HOURS`, `OIDC_RP_LOGOUT`, `OIDC_LOGIN_HOSTS`
+(`toolhost=idphost,…`, `Ssm.OIDC.LoginHosts`: login and RP logout started on a mapped ssm name
+send the browser to that provider name; keys must be `PHX_HOST`/`PHX_ALT_HOSTS` names), `LOCAL_LOGIN`.
 
 **Secrets protection**: run `./install-hooks.sh` after cloning (installs
 `.githooks/pre-commit` secret scanner; other tools may overwrite
