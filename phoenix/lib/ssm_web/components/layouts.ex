@@ -86,8 +86,12 @@ defmodule SsmWeb.Layouts do
                 <.icon name="hero-bars-3" class="size-5" />
               </summary>
               <ul class="menu absolute left-0 z-30 mt-2 w-52 rounded-box border border-base-300 bg-base-100 p-2 shadow-lg">
-                <li :for={{label, path, icon, _key} <- nav_items(@current_user)}>
-                  <.link navigate={path} class="flex items-center gap-2">
+                <li :for={{label, path, icon, key} <- nav_items(@current_user)}>
+                  <.link
+                    navigate={path}
+                    class={["flex items-center gap-2", @active == key && "menu-active"]}
+                    aria-current={@active == key && "page"}
+                  >
                     <.icon name={icon} class="size-4" />
                     {label}
                   </.link>

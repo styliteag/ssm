@@ -1125,7 +1125,7 @@ defmodule SsmWeb.DiffLive do
           :if={@diff_view == "list"}
           id="diff-search"
           phx-change="diff-search"
-          class="w-64"
+          class="w-full sm:w-64"
         >
           <input
             type="search"
@@ -1138,7 +1138,7 @@ defmodule SsmWeb.DiffLive do
             autocomplete="off"
           />
         </form>
-        <form id="diff-filter" phx-change="diff-filter" class="w-64">
+        <form id="diff-filter" phx-change="diff-filter" class="w-full sm:w-64">
           <select name="filter" class="select select-sm w-full" aria-label="Filter by result">
             {Phoenix.HTML.Form.options_for_select(filter_options(assigns), @diff_filter)}
           </select>
@@ -1155,7 +1155,16 @@ defmodule SsmWeb.DiffLive do
           row_click={&JS.push("select", value: %{id: &1.id})}
         >
           <:col :let={host} label="Name" sort="name">
-            <span class="font-medium">{host.name}</span>
+            <%!-- a real button: the row click alone is not reachable by keyboard --%>
+            <button
+              id={"diff-open-#{host.id}"}
+              type="button"
+              class="link link-hover font-medium"
+              phx-click="select"
+              phx-value-id={host.id}
+            >
+              {host.name}
+            </button>
             <p :if={host.comment} class="text-xs opacity-60">{host.comment}</p>
           </:col>
           <:col :let={host} label="Address" sort="address">{host.address}:{host.port}</:col>

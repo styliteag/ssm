@@ -309,7 +309,7 @@ defmodule SsmWeb.HostsLiveTest do
       assert has_element?(view, "#hosts-#{bad.id} .badge", "unreachable")
       assert has_element?(view, "#hosts-#{off.id} .badge", "disabled")
       assert has_element?(view, "#checked-#{ok.id}", "checked just now")
-      assert render(view) =~ "Refreshed 2 hosts: 1 online, 1 offline"
+      assert render(view) =~ "Tested 2 hosts: 1 online, 1 unreachable"
     end
 
     test "only the hosts the filter lists", %{conn: conn} do

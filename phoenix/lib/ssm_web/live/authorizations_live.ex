@@ -744,7 +744,7 @@ defmodule SsmWeb.AuthorizationsLive do
             />
           </div>
         </form>
-        <form id="authorizations-search" phx-change="list-search" class="w-72">
+        <form id="authorizations-search" phx-change="list-search" class="w-full sm:w-72">
           <.input
             type="search"
             name="q"

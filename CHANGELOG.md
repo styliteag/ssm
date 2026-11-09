@@ -31,6 +31,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Phones and narrow windows: page header buttons wrap instead of running off the screen,
+  search and filter fields use the full width, the SSH user's access table scrolls, and the
+  mobile menu marks the current page.
+- Sortable columns announce their order to screen readers; on the Sync list a host opens with
+  the keyboard (its name is a button).
+- Hosts "Test connections" rebuilds the list once per batch of results instead of once per
+  host, and some unreachable hosts are reported as information, not as an error.
 - Activity and dashboard: actions read as words ("host key pinned", "signed in (SSO)"), times
   show in the browser's time zone, empty detail values show "—" instead of "null".
 - "Sync all" and "Pin host keys" name at most a few failed hosts instead of a message as long

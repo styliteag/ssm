@@ -53,6 +53,7 @@ defmodule SsmWeb.HostsLive do
      |> assign(page_title: "Hosts")
      |> assign(form: nil, editing: nil, testing_id: nil, pinning: false)
      |> assign(filter: "active", q: nil, conn_results: %{}, sort: nil, view: "list")
+     |> assign(:refilter_queued, false)
      |> assign(refreshing: false, refresh_done: 0, refresh_total: 0, refresh_ids: [])
      |> assign(:tested_at, %{})
      |> assign(:managed, nil)
@@ -402,7 +403,21 @@ defmodule SsmWeb.HostsLive do
      socket
      |> update(:refresh_done, &(&1 + 1))
      |> update(:tested_at, &Map.put(&1, host_id, DateTime.utc_now()))
-     |> put_conn_result(host_id, result)}
+     |> update(:conn_results, &Map.put(&1, host_id, result))
+     |> queue_refilter()}
+  end
+
+  def handle_info(:refilter, socket),
+    do: {:noreply, socket |> assign(:refilter_queued, false) |> refilter()}
+
+  # Results of "Test connections" arrive one per host; the results already
+  # waiting are taken in first, then the list is rebuilt once (refilter reads
+  # the whole status cache and sorts), not once per host.
+  defp queue_refilter(%{assigns: %{refilter_queued: true}} = socket), do: socket
+
+  defp queue_refilter(socket) do
+    send(self(), :refilter)
+    assign(socket, :refilter_queued, true)
   end
 
   @impl true
@@ -412,9 +427,11 @@ defmodule SsmWeb.HostsLive do
     {:noreply,
      socket
      |> assign(:refreshing, false)
+     |> refilter()
      |> put_flash(
-       if(offline == 0, do: :info, else: :error),
-       "Refreshed #{online + offline} hosts: #{online} online, #{offline} offline."
+       # some unreachable hosts are a normal fleet state, not an error
+       if(online == 0 and offline > 0, do: :error, else: :info),
+       "Tested #{online + offline} hosts: #{online} online, #{offline} unreachable."
      )}
   end
 

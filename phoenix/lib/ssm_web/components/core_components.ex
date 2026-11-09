@@ -308,6 +308,11 @@ defmodule SsmWeb.CoreComponents do
     """
   end
 
+  # aria-sort on a sortable column: the active one says its direction
+  defp aria_sort({key, :asc}, key), do: "ascending"
+  defp aria_sort({key, :desc}, key), do: "descending"
+  defp aria_sort(_sort, _key), do: "none"
+
   defp sort_icon({key, :asc}, key), do: "hero-chevron-up"
   defp sort_icon({key, :desc}, key), do: "hero-chevron-down"
   defp sort_icon(_sort, _key), do: "hero-chevron-up-down"
@@ -364,8 +369,11 @@ defmodule SsmWeb.CoreComponents do
 
   def header(assigns) do
     ~H"""
-    <header class={[@actions != [] && "flex items-center justify-between gap-6", "pb-4"]}>
-      <div>
+    <header class={[
+      @actions != [] && "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6",
+      "pb-4"
+    ]}>
+      <div class="min-w-0">
         <h1 class="text-lg font-semibold leading-8">
           {render_slot(@inner_block)}
         </h1>
@@ -373,7 +381,9 @@ defmodule SsmWeb.CoreComponents do
           {render_slot(@subtitle)}
         </p>
       </div>
-      <div class="flex-none">{render_slot(@actions)}</div>
+      <div class="flex flex-wrap items-center gap-2 sm:flex-none sm:justify-end">
+        {render_slot(@actions)}
+      </div>
     </header>
     """
   end
@@ -471,7 +481,7 @@ defmodule SsmWeb.CoreComponents do
     <table class="table table-zebra">
       <thead>
         <tr>
-          <th :for={col <- @col}>
+          <th :for={col <- @col} aria-sort={col[:sort] && aria_sort(@sort, col[:sort])}>
             <button
               :if={col[:sort]}
               type="button"

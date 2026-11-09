@@ -103,49 +103,51 @@ defmodule SsmWeb.UserLive do
         <section class="space-y-2">
           <h2 class="font-semibold">Access ({length(@auths)})</h2>
           <p :if={@auths == []} class="text-sm opacity-60">No access on hosts you can see.</p>
-          <table :if={@auths != []} id="user-access" class="table table-sm">
-            <thead>
-              <tr>
-                <th>Host</th>
-                <th>Login</th>
-                <th>Options</th>
-                <th>Source</th>
-                <th>Host check</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr :for={auth <- @auths} id={"user-auth-#{auth.id}"}>
-                <td><.host_link id={auth.host_id} name={auth.host.name} /></td>
-                <td>
-                  <.link
-                    navigate={host_path(auth.host_id)}
-                    class="link link-hover font-mono text-xs"
-                  >
-                    {auth.login}
-                  </.link>
-                </td>
-                <td class="max-w-xs truncate font-mono text-xs" title={auth.options}>
-                  {auth.options}
-                </td>
-                <td>
-                  <.link
-                    :if={auth.grant_id}
-                    navigate={grants_path(@user.id)}
-                    class="badge badge-ghost badge-sm"
-                  >
-                    grant
-                  </.link>
-                  <span :if={!auth.grant_id} class="text-xs opacity-60">manual</span>
-                </td>
-                <td>
-                  <% {label, class} = check_label(@checks[auth.host_id]) %>
-                  <.link navigate={host_path(auth.host_id)} class={["badge badge-sm", class]}>
-                    {label}
-                  </.link>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+          <div :if={@auths != []} class="overflow-x-auto">
+            <table id="user-access" class="table table-sm">
+              <thead>
+                <tr>
+                  <th>Host</th>
+                  <th>Login</th>
+                  <th>Options</th>
+                  <th>Source</th>
+                  <th>Host check</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr :for={auth <- @auths} id={"user-auth-#{auth.id}"}>
+                  <td><.host_link id={auth.host_id} name={auth.host.name} /></td>
+                  <td>
+                    <.link
+                      navigate={host_path(auth.host_id)}
+                      class="link link-hover font-mono text-xs"
+                    >
+                      {auth.login}
+                    </.link>
+                  </td>
+                  <td class="max-w-xs truncate font-mono text-xs" title={auth.options}>
+                    {auth.options}
+                  </td>
+                  <td>
+                    <.link
+                      :if={auth.grant_id}
+                      navigate={grants_path(@user.id)}
+                      class="badge badge-ghost badge-sm"
+                    >
+                      grant
+                    </.link>
+                    <span :if={!auth.grant_id} class="text-xs opacity-60">manual</span>
+                  </td>
+                  <td>
+                    <% {label, class} = check_label(@checks[auth.host_id]) %>
+                    <.link navigate={host_path(auth.host_id)} class={["badge badge-sm", class]}>
+                      {label}
+                    </.link>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </section>
 
         <section class="space-y-2">

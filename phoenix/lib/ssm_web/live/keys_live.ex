@@ -572,7 +572,7 @@ defmodule SsmWeb.KeysLive do
             options={Enum.map(@users, &{&1.username, &1.id})}
           />
         </form>
-        <form id="keys-search" phx-change="search" class="w-64">
+        <form id="keys-search" phx-change="search" class="w-full sm:w-64">
           <.input
             type="search"
             name="q"

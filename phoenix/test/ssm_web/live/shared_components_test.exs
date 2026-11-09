@@ -75,6 +75,19 @@ defmodule SsmWeb.SharedComponentsTest do
     assert has_element?(view, ~s(#diff-filter option[selected][value="unchecked"]))
   end
 
+  test "sync list rows open by keyboard, sortable headers announce their order", %{conn: conn} do
+    host = host_fixture(%{name: "web1"})
+
+    {:ok, view, _html} = live(conn, ~p"/diff")
+
+    assert has_element?(view, ~s(#diff-open-#{host.id}[phx-click="select"]), "web1")
+    assert has_element?(view, ~s(th[aria-sort="none"]))
+
+    {:ok, view, _html} = live(conn, ~p"/hosts")
+    view |> element("th button", "Name") |> render_click()
+    assert has_element?(view, ~s(th[aria-sort="ascending"]), "Name")
+  end
+
   test "a slow host read can be cancelled", %{conn: conn} do
     host = host_fixture(%{name: "slow"})
 
