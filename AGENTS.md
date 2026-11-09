@@ -526,7 +526,7 @@ secret as the python stack, so pre-cutover tokens keep working.
 **Env vars** (env-only, read in `phoenix/config/runtime.exs`; python-stack names and
 defaults preserved): `DATABASE_URL` (or `DATABASE_PATH`), `HTPASSWD`, `SSH_KEY`,
 `SSH_KEY_PASSPHRASE`, `SSH_TIMEOUT`, `SSH_CONNECT_TIMEOUT`, `SSH_CONCURRENCY`,
-`SSH_CHECK_SCHEDULE`, `SSH_UPDATE_SCHEDULE`, `SSM_SYNC_INTERVAL`, `SSM_SYNC_CONCURRENCY`, `SSM_REVOCATION_SYNC`, `JWT_SECRET` (fallback `SESSION_KEY`),
+`SSH_CHECK_SCHEDULE`, `SSH_UPDATE_SCHEDULE`, `SSM_SYNC_INTERVAL`, `SSM_SYNC_CONCURRENCY`, `SSM_REVOCATION_SYNC`, `SSM_KEY_FROM` (`Ssm.Ssh.KeyFrom`: `from=` on ssm's own key, lockout-guarded), `JWT_SECRET` (fallback `SESSION_KEY`),
 `SECRET_KEY_BASE`, `LOGLEVEL`, `PORT`, `LISTEN`, `PHX_HOST`, `PHX_ALT_HOSTS` (extra UI names, `SsmWeb.Hosts`), `POOL_SIZE`,
 `TRUSTED_PROXIES`, `MCTL_TOKEN_FILE`, `MCTL_TOKEN_SCOPES`, and the OIDC set read at boot by
 `Ssm.OIDC.Config` (not runtime.exs): `OIDC_ISSUER`, `OIDC_CLIENT_ID`,

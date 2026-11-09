@@ -46,6 +46,14 @@ config :ssm, :sync_check,
 # automatic host writes stay opt-in. Checked at boot.
 config :ssm, :revocation_sync, System.get_env("SSM_REVOCATION_SYNC")
 
+# SSM_KEY_FROM: networks ssm connects from (own address, jump hosts' inner
+# addresses), comma-separated IPs/CIDRs. Set: ssm's own key is written with
+# from="…" (Ssm.Ssh.KeyFrom, lockout-guarded). Empty/unset: no from=.
+case Ssm.Ssh.KeyFrom.parse(System.get_env("SSM_KEY_FROM")) do
+  {:ok, list} -> config :ssm, :key_from, list
+  {:error, entry} -> raise "SSM_KEY_FROM: #{inspect(entry)} is not an IP or CIDR"
+end
+
 # LOGLEVEL accepts RUST_LOG-style directives ("info", "ssm=debug,actix=warn");
 # the most verbose known level wins, unknown tokens fall back to :info —
 # ported from config.py rust_log_to_python_level.

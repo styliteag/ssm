@@ -88,6 +88,23 @@ defmodule Ssm.Ssh.ScriptRunner do
     end
   end
 
+  @doc """
+  The address the host sees ssm connect from (first field of
+  `$SSH_CONNECTION`; a jump host's inner address behind a jump), or nil.
+  Read-only; does not need script.sh.
+  """
+  @spec client_address(module(), Target.t()) :: String.t() | nil
+  def client_address(client \\ Ssm.Ssh, target) do
+    case client.exec(target, ~s(printf '%s' "${SSH_CONNECTION%% *}"), []) do
+      {:ok, %Result{exit_code: 0, stdout: out}} ->
+        out = String.trim(out)
+        if Regex.match?(~r/\A[0-9A-Fa-f:.]{2,45}\z/, out), do: out
+
+      _ ->
+        nil
+    end
+  end
+
   @doc "One `LoginKeyfile` per login that has an authorized_keys file."
   @spec get_ssh_keyfiles(module(), Target.t()) :: {:ok, [LoginKeyfile.t()]} | {:error, term()}
   def get_ssh_keyfiles(client \\ Ssm.Ssh, target, logins \\ []) do

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `SSM_KEY_FROM` (comma-separated IPs/CIDRs: ssm's own address and the jump hosts' inner
+  networks): a sync writes ssm's own key with `from="<list>"`, so a stolen ssm key is of no
+  use from elsewhere. Lockout guard: the host is asked which address it sees ssm at
+  (`$SSH_CONNECTION`); outside the list the key is written without `from=` and a warning is
+  logged. To move a host behind a jump host in a new network, add the network first,
+  sync, then switch. Unset: unchanged. An invalid entry stops the boot.
+
 ## [4.14.0] - 2026-11-09
 
 ### Added

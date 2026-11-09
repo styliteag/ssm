@@ -29,7 +29,7 @@ defmodule Ssm.Diffs do
   alias Ssm.Diffs.{Compare, Expected, KeyLine, Revocations}
   alias Ssm.Hosts
   alias Ssm.Hosts.{Host, MachineId}
-  alias Ssm.Ssh.ScriptRunner
+  alias Ssm.Ssh.{KeyFrom, ScriptRunner}
   alias Ssm.Users.KeyParser
 
   @blocked_note "revocation blocked by user_readonly"
@@ -214,6 +214,8 @@ defmodule Ssm.Diffs do
              logins_to_skip(entries, logins) ++ unread_logins(mode, entries, logins),
          to_write = logins -- Enum.map(skipped, &elem(&1, 0)),
          {:ok, own} <- own_key_for_sync(host, to_write) do
+      own_options = own_options(client, target, host, own)
+
       ignored =
         for e <- entries, e.readonly_ignored, e.login in logins, do: {e.login, e.readonly_ignored}
 
@@ -222,6 +224,7 @@ defmodule Ssm.Diffs do
       ctx = %{
         host: host,
         own: own,
+        own_options: own_options,
         on_host: on_host,
         shas: shas,
         skipped: skipped,
@@ -316,7 +319,7 @@ defmodule Ssm.Diffs do
     lines =
       expected.lines
       |> Compare.lines_to_write(expected.legacy, Map.get(ctx.on_host, login, []))
-      |> with_own_key(ctx.own[login])
+      |> with_own_key(ctx.own[login], ctx.own_options)
 
     case lines_for(ctx.mode, lines, Map.get(ctx.on_host, login, [])) do
       :unchanged -> sync_logins(rest, client, target, ctx, acc)
@@ -411,7 +414,7 @@ defmodule Ssm.Diffs do
 
     expected.lines
     |> Compare.lines_to_write(expected.legacy, host_lines)
-    |> with_own_key(own_key_or_none(host)[login])
+    |> with_own_key(own_key_or_none(host)[login], KeyFrom.option(KeyFrom.list()))
     |> Enum.map_join("", &(&1 <> "\n"))
   end
 
@@ -601,11 +604,22 @@ defmodule Ssm.Diffs do
   defp split_own(lines, nil), do: {[], lines}
   defp split_own(lines, own), do: Enum.split_with(lines, &(KeyParser.identity(&1) == own))
 
-  defp with_own_key(lines, nil), do: lines
+  defp with_own_key(lines, nil, _options), do: lines
 
-  defp with_own_key(lines, {type, base64} = own) do
+  defp with_own_key(lines, {type, base64} = own, options) do
     {_, rest} = split_own(lines, own)
-    rest ++ [format_key_line(type, base64, "ssm")]
+    line = format_key_line(type, base64, "ssm")
+    rest ++ [if(options, do: options <> " " <> line, else: line)]
+  end
+
+  # from="SSM_KEY_FROM" on ssm's own key, only when the host sees ssm at an
+  # address in that list (Ssm.Ssh.KeyFrom: a sync never locks ssm out)
+  defp own_options(client, target, host, own) do
+    case KeyFrom.list() do
+      [] -> nil
+      _list when own == %{} -> nil
+      list -> KeyFrom.option_for(list, ScriptRunner.client_address(client, target), host.name)
+    end
   end
 
   @doc false
