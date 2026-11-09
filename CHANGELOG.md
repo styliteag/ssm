@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [] - 2026-11-09
+
 ### Added
 
 - `SSM_KEY_FROM` (comma-separated IPs/CIDRs: ssm's own address and the jump hosts' inner
