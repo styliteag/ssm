@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.13.3] - 2026-11-09
+
 ### Changed
 
 - Offboarding a person from Mission Control no longer writes to any host: ssm deletes the
