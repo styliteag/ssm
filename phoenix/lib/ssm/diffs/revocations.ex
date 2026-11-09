@@ -77,20 +77,29 @@ defmodule Ssm.Diffs.Revocations do
   def pending?(host_id),
     do: Repo.exists?(from p in PendingRevocation, where: p.host_id == ^host_id)
 
-  @doc "How many hosts in `scope` are marked (the header badge)."
+  @doc "How many enabled hosts in `scope` are marked (the header badge)."
   @spec count(Scope.t()) :: non_neg_integer()
-  def count(%Scope{} = scope) do
-    PendingRevocation
-    |> Scope.filter(scope)
-    |> Repo.aggregate(:count)
-  end
+  def count(%Scope{} = scope), do: scope |> shown() |> Repo.aggregate(:count)
 
-  @doc "Marked hosts in `scope`: `%{host_id => %PendingRevocation{}}`."
+  @doc """
+  Marked enabled hosts in `scope`: `%{host_id => %PendingRevocation{}}`. A
+  disabled host keeps its mark (it shows again when enabled) but is not
+  listed: nothing can be synced there.
+  """
   @spec pending(Scope.t()) :: %{integer() => PendingRevocation.t()}
   def pending(%Scope{} = scope) do
-    PendingRevocation
-    |> Scope.filter(scope)
+    scope
+    |> shown()
     |> Repo.all()
     |> Map.new(&{&1.host_id, &1})
+  end
+
+  defp shown(scope) do
+    from(p in PendingRevocation,
+      join: h in Ssm.Hosts.Host,
+      on: h.id == p.host_id,
+      where: h.disabled == false
+    )
+    |> Scope.filter(scope)
   end
 end

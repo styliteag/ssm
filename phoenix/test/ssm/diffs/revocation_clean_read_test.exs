@@ -79,4 +79,14 @@ defmodule Ssm.Diffs.RevocationCleanReadTest do
     :ok = Revocations.clear(host.id, DateTime.add(later, -60))
     assert Revocations.pending?(host.id)
   end
+
+  test "a disabled host's mark is kept but not listed or counted" do
+    host = setup_host()
+    assert Map.has_key?(Revocations.pending(Ssm.Scope.global()), host.id)
+    {:ok, _} = Ssm.Hosts.update_host(host, %{disabled: true})
+
+    refute Map.has_key?(Revocations.pending(Ssm.Scope.global()), host.id)
+    assert Revocations.count(Ssm.Scope.global()) == 0
+    assert Revocations.pending?(host.id)
+  end
 end
