@@ -303,7 +303,10 @@ defmodule SsmWeb.AuthorizationsLive do
 
       {:noreply,
        socket
-       |> put_flash(:info, "Authorization deleted.")
+       |> put_flash(
+         :info,
+         "Authorization deleted. The key lines leave the host at its next sync."
+       )
        |> reload_authorizations()}
     else
       {:error, :grant_row} -> {:noreply, put_flash(socket, :error, @grant_row)}
@@ -640,7 +643,12 @@ defmodule SsmWeb.AuthorizationsLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_user={@current_user} active={:authorizations}>
+    <Layouts.app
+      flash={@flash}
+      current_user={@current_user}
+      pending_sync={@pending_sync}
+      active={:authorizations}
+    >
       <.header>
         Authorizations
         <:subtitle>{@authorization_count} grants (user → host under a login)</:subtitle>
@@ -832,7 +840,7 @@ defmodule SsmWeb.AuthorizationsLive do
               class="btn btn-ghost btn-xs text-error"
               phx-click="delete"
               phx-value-id={auth.id}
-              data-confirm={"Revoke access for #{user_label(auth)} on #{host_label(auth)} (login #{auth.login})?"}
+              data-confirm={"Revoke access for #{user_label(auth)} on #{host_label(auth)} (login #{auth.login})? The key lines leave the host at its next sync."}
               title="Delete authorization"
             >
               <.icon name="hero-trash" class="size-4" />

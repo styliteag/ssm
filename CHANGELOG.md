@@ -7,7 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- The header shows on every page how many hosts wait for a sync after access was taken away
+  there ("N hosts pending sync"); it links to the new "Pending sync" filter on the hosts page.
+  The count follows changes made on the same page at once and others within 30 seconds.
+
 ### Changed
+
+- Deleting a host says that ssm never connects to it again, so the key lines it placed and
+  ssm's own key stay on the host — delete the authorizations and sync first to take access
+  away.
+- Deleting or disabling an SSH user, deleting a key or an authorization: the question and the
+  message say the keys leave the hosts at the next sync (enabling: they reach the hosts at the
+  next sync).
 
 - Diff page: "Sync all" now asks first, like the per-host "Sync" buttons. Every sync
   question names what the sync does as of the last check — how many hosts, how many key

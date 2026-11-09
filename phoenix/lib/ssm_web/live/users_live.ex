@@ -153,7 +153,10 @@ defmodule SsmWeb.UsersLive do
 
       {:noreply,
        socket
-       |> put_flash(:info, "User #{user.username} deleted.")
+       |> put_flash(
+         :info,
+         "User #{user.username} deleted. Their keys leave the hosts at the next sync."
+       )
        |> reload_users()}
     else
       {:error, :out_of_scope} -> {:noreply, put_flash(socket, :error, bulk_error(:out_of_scope))}
@@ -169,7 +172,7 @@ defmodule SsmWeb.UsersLive do
 
       {:noreply,
        socket
-       |> put_flash(:info, "User #{updated.username} #{action}d.")
+       |> put_flash(:info, "User #{updated.username} #{action}d. #{toggle_effect(updated)}")
        |> reload_users()}
     else
       {:error, :out_of_scope} -> {:noreply, put_flash(socket, :error, bulk_error(:out_of_scope))}
@@ -337,7 +340,10 @@ defmodule SsmWeb.UsersLive do
     socket =
       socket
       |> assign(bulk_deleting: false, selected: MapSet.new())
-      |> put_flash(:info, "#{length(result.deleted)} user(s) deleted.")
+      |> put_flash(
+        :info,
+        "#{length(result.deleted)} user(s) deleted. Their keys leave the hosts at the next sync."
+      )
       |> reload_users()
 
     socket =
@@ -354,6 +360,9 @@ defmodule SsmWeb.UsersLive do
   end
 
   ## Helpers
+
+  defp toggle_effect(%User{enabled: true}), do: "Their keys reach the hosts at the next sync."
+  defp toggle_effect(%User{enabled: false}), do: "Their keys leave the hosts at the next sync."
 
   # The SSH user catalog is readable in full; writes need a user whose
   # authorizations are all in the user's scope (ADR-0012 §3, `Users.writable?/2`).
@@ -509,7 +518,12 @@ defmodule SsmWeb.UsersLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_user={@current_user} active={:users}>
+    <Layouts.app
+      flash={@flash}
+      current_user={@current_user}
+      pending_sync={@pending_sync}
+      active={:users}
+    >
       <.header>
         Users
         <:subtitle>{@user_count} managed key owners</:subtitle>
@@ -717,7 +731,7 @@ defmodule SsmWeb.UsersLive do
       class="btn btn-ghost btn-xs text-error"
       phx-click="delete"
       phx-value-id={@row.id}
-      data-confirm={"Delete user #{@row.user.username}? Their keys and authorizations go with them."}
+      data-confirm={"Delete user #{@row.user.username}? Their keys and authorizations go with them; the keys leave the hosts at the next sync."}
       title="Delete user"
     >
       <.icon name="hero-trash" class="size-4" />

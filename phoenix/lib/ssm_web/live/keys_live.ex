@@ -217,7 +217,7 @@ defmodule SsmWeb.KeysLive do
 
       {:noreply,
        socket
-       |> put_flash(:info, "Key #{key_label(key)} deleted.")
+       |> put_flash(:info, "Key #{key_label(key)} deleted. It leaves the hosts at the next sync.")
        |> reload_keys()}
     else
       {:error, :out_of_scope} -> {:noreply, put_flash(socket, :error, @read_only_owner)}
@@ -524,7 +524,12 @@ defmodule SsmWeb.KeysLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_user={@current_user} active={:keys}>
+    <Layouts.app
+      flash={@flash}
+      current_user={@current_user}
+      pending_sync={@pending_sync}
+      active={:keys}
+    >
       <.header>
         SSH Keys
         <:subtitle>{@stats.total} stored public keys</:subtitle>
@@ -728,7 +733,7 @@ defmodule SsmWeb.KeysLive do
       class="btn btn-ghost btn-xs text-error"
       phx-click="delete"
       phx-value-id={@key.id}
-      data-confirm={"Delete key #{key_label(@key)} of #{@key.user.username}?"}
+      data-confirm={"Delete key #{key_label(@key)} of #{@key.user.username}? It leaves the hosts at the next sync."}
       title="Delete key"
     >
       <.icon name="hero-trash" class="size-4" />

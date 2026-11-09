@@ -35,6 +35,10 @@ defmodule SsmWeb.Layouts do
     default: nil,
     doc: "which sidebar entry to highlight (:dashboard, :hosts, ...)"
 
+  attr :pending_sync, :integer,
+    default: 0,
+    doc: "hosts in scope waiting for a sync after access was taken away (SsmWeb.PendingSync)"
+
   slot :inner_block, required: true
 
   def app(assigns) do
@@ -97,6 +101,20 @@ defmodule SsmWeb.Layouts do
           </div>
           <div class="flex-none">
             <ul class="flex items-center gap-3 px-1">
+              <li :if={@current_user && @pending_sync > 0}>
+                <.link
+                  id="pending-sync"
+                  navigate={~p"/hosts?filter=pending"}
+                  class="btn btn-warning btn-soft btn-sm"
+                  title="Access was taken away on these hosts; the keys stay there until the next sync"
+                >
+                  <.icon name="hero-clock" class="size-4" />
+                  {@pending_sync}
+                  <span class="hidden sm:inline">
+                    {if @pending_sync == 1, do: "host", else: "hosts"} pending sync
+                  </span>
+                </.link>
+              </li>
               <li><.theme_switcher /></li>
               <li :if={@current_user} class="text-sm opacity-75">{@current_user.username}</li>
               <li :if={@current_user}>

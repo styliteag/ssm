@@ -184,6 +184,28 @@ defmodule SsmWeb.HostsLiveTest do
     assert Hosts.get_host(host.id) == nil
   end
 
+  test "the delete question says the keys stay on the host", %{conn: conn} do
+    host = host_fixture(%{name: "web1"})
+    alice = user_fixture(%{username: "alice"})
+    authorization_fixture(alice, host, %{login: "deploy"})
+    authorization_fixture(alice, host, %{login: "root"})
+
+    {:ok, view, _html} = live(conn, ~p"/hosts")
+
+    confirm =
+      view
+      |> element("#delete-host-#{host.id}")
+      |> render()
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.attribute("data-confirm")
+      |> List.first("")
+
+    assert confirm =~ "Delete host web1?"
+    assert confirm =~ "2 authorizations"
+    assert confirm =~ "stay on the host"
+    assert confirm =~ "ssm's own key"
+  end
+
   test "toggle_disabled flips the flag and logs it", %{conn: conn} do
     host = host_fixture(%{name: "web1"})
 

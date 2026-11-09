@@ -218,7 +218,12 @@ defmodule SsmWeb.GrantsLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_user={@current_user} active={:grants}>
+    <Layouts.app
+      flash={@flash}
+      current_user={@current_user}
+      pending_sync={@pending_sync}
+      active={:grants}
+    >
       <.header>
         {@heading}
         <:subtitle>

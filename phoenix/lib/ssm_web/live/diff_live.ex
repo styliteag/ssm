@@ -931,7 +931,12 @@ defmodule SsmWeb.DiffLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_user={@current_user} active={:diff}>
+    <Layouts.app
+      flash={@flash}
+      current_user={@current_user}
+      pending_sync={@pending_sync}
+      active={:diff}
+    >
       <.header>
         Diff Viewer
         <:subtitle>Expected authorized_keys (database) vs actual (host)</:subtitle>

@@ -54,7 +54,12 @@ defmodule SsmWeb.UserLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_user={@current_user} active={:users}>
+    <Layouts.app
+      flash={@flash}
+      current_user={@current_user}
+      pending_sync={@pending_sync}
+      active={:users}
+    >
       <div class="space-y-6">
         <div class="flex flex-wrap items-center gap-3">
           <.link navigate={~p"/users"} class="btn btn-ghost btn-sm">

@@ -39,7 +39,7 @@ defmodule SsmWeb.HostsLive do
   alias SsmWeb.ErrorText
   alias SsmWeb.Layouts
 
-  @filters ~w(active all online offline unknown disabled)
+  @filters ~w(active all online offline unknown disabled pending)
   @jump_host_locked "Read-only: this host is the jump host of other hosts, " <>
                       "so only an account that sees all hosts may change it."
   @outside_scope "Not available: your account is limited to some customers or host groups, " <>
@@ -103,9 +103,11 @@ defmodule SsmWeb.HostsLive do
     cached = StatusCache.all()
     statuses = Map.new(hosts, &{&1.id, host_status(&1, tests[&1.id], cached, stored)})
 
+    pending = socket.assigns.pending_revocations
+
     rows =
       hosts
-      |> Enum.filter(&matches_filter?(filter, &1, statuses[&1.id]))
+      |> Enum.filter(&matches_filter?(filter, &1, statuses[&1.id], pending))
       |> Enum.filter(&matches?(socket.assigns.q, [&1.name, &1.address, &1.comment, &1.username]))
       |> SsmWeb.TableSort.sort(socket.assigns.sort, host_sorters(socket.assigns, statuses))
 
@@ -143,15 +145,17 @@ defmodule SsmWeb.HostsLive do
   defp host_status(%Host{disabled: true}, _tested, _cached, _stored), do: :disabled
   defp host_status(_host, tested, _cached, _stored), do: tested
 
-  defp matches_filter?("active", host, _status), do: not host.disabled
-  defp matches_filter?("all", _host, _status), do: true
-  defp matches_filter?("online", _host, status), do: HostStatus.reachable?(status)
-  defp matches_filter?("offline", _host, status), do: HostStatus.error?(status)
-  defp matches_filter?("unknown", _host, status), do: status == :unchecked
-  defp matches_filter?("disabled", _host, status), do: status == :disabled
+  # `pending`: the revocation-pending marks (`Revocations.pending/1`)
+  defp matches_filter?("active", host, _status, _pending), do: not host.disabled
+  defp matches_filter?("all", _host, _status, _pending), do: true
+  defp matches_filter?("online", _host, status, _pending), do: HostStatus.reachable?(status)
+  defp matches_filter?("offline", _host, status, _pending), do: HostStatus.error?(status)
+  defp matches_filter?("unknown", _host, status, _pending), do: status == :unchecked
+  defp matches_filter?("disabled", _host, status, _pending), do: status == :disabled
+  defp matches_filter?("pending", host, _status, pending), do: Map.has_key?(pending, host.id)
 
-  defp pill_count(hosts, statuses, filter) do
-    Enum.count(hosts, &matches_filter?(filter, &1, statuses[&1.id]))
+  defp pill_count(hosts, statuses, pending, filter) do
+    Enum.count(hosts, &matches_filter?(filter, &1, statuses[&1.id], pending))
   end
 
   ## Events
@@ -482,6 +486,20 @@ defmodule SsmWeb.HostsLive do
      |> put_flash(:error, ErrorText.crashed("The connection test", reason))}
   end
 
+  # Deleting a host only forgets it: ssm never connects again, so whatever
+  # it placed there (the authorized key lines, its own key) stays.
+  defp delete_confirm(host, 0),
+    do:
+      "Delete host #{host.name}? ssm never connects to it again; ssm's own key stays on the host until someone removes it there."
+
+  defp delete_confirm(host, count) do
+    entries = if count == 1, do: "1 authorization goes", else: "#{count} authorizations go"
+
+    "Delete host #{host.name}? Its #{entries} with it, but ssm never connects to it again: " <>
+      "the key lines it placed and ssm's own key stay on the host. " <>
+      "To take access away, delete the authorizations and sync first, then delete the host."
+  end
+
   defp open_managed(socket, host),
     do: assign(socket, :managed, %{host: host, logins: ManagedLogins.list(host.id), busy: false})
 
@@ -711,7 +729,12 @@ defmodule SsmWeb.HostsLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_user={@current_user} active={:hosts}>
+    <Layouts.app
+      flash={@flash}
+      current_user={@current_user}
+      pending_sync={@pending_sync}
+      active={:hosts}
+    >
       <.header>
         Hosts
         <:subtitle>{@host_count} managed SSH hosts</:subtitle>
@@ -761,7 +784,8 @@ defmodule SsmWeb.HostsLive do
               {"online", "Online"},
               {"offline", "Offline"},
               {"unknown", "Unknown"},
-              {"disabled", "Disabled"}
+              {"disabled", "Disabled"},
+              {"pending", "Pending sync"}
             ]
           }
           id={"filter-#{filter}"}
@@ -773,7 +797,7 @@ defmodule SsmWeb.HostsLive do
           phx-click="filter"
           phx-value-filter={filter}
         >
-          {label} ({pill_count(@all_hosts, @statuses, filter)})
+          {label} ({pill_count(@all_hosts, @statuses, @pending_revocations, filter)})
         </button>
       </div>
 
@@ -825,7 +849,12 @@ defmodule SsmWeb.HostsLive do
           </div>
           <p :if={host.comment} class="mt-1 truncate text-xs opacity-60">{host.comment}</p>
           <div class="mt-2 flex gap-1">
-            <.host_actions host={host} testing_id={@testing_id} admin={@admin} />
+            <.host_actions
+              host={host}
+              testing_id={@testing_id}
+              admin={@admin}
+              auth_count={Map.get(@auth_counts, host.id, 0)}
+            />
           </div>
         </li>
       </ul>
@@ -873,7 +902,12 @@ defmodule SsmWeb.HostsLive do
             </p>
           </:col>
           <:action :let={host}>
-            <.host_actions host={host} testing_id={@testing_id} admin={@admin} />
+            <.host_actions
+              host={host}
+              testing_id={@testing_id}
+              admin={@admin}
+              auth_count={Map.get(@auth_counts, host.id, 0)}
+            />
           </:action>
         </.table>
       </div>
@@ -897,6 +931,7 @@ defmodule SsmWeb.HostsLive do
   attr :host, :any, required: true
   attr :testing_id, :any, required: true
   attr :admin, :boolean, default: false
+  attr :auth_count, :integer, default: 0
 
   defp host_actions(assigns) do
     ~H"""
@@ -958,7 +993,7 @@ defmodule SsmWeb.HostsLive do
       class="btn btn-ghost btn-xs text-error"
       phx-click="delete"
       phx-value-id={@host.id}
-      data-confirm={"Delete host #{@host.name}? Its authorizations go with it."}
+      data-confirm={delete_confirm(@host, @auth_count)}
       title="Delete host"
     >
       <.icon name="hero-trash" class="size-4" />

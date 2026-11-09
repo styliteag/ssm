@@ -8,7 +8,9 @@ defmodule Ssm.Diffs.Revocations do
   `Ssm.Hosts.WriteLock` (AGENTS.md "State machines"). The keys
   stay on the host until then; a sync removes them (also for a login whose
   last row is gone, through `managed_logins`). The mark is shown on the
-  Hosts page; it never triggers an SSH write by itself.
+  Hosts page (badge, "Pending sync" filter) and counted in the header of
+  every page (`count/1`, `SsmWeb.PendingSync`); it never triggers an SSH
+  write by itself.
 
   `Ssm.Diffs.sync_host_reported/2` reads the mark before it reads any grant
   and clears exactly that mark after a fully successful sync.
@@ -74,6 +76,14 @@ defmodule Ssm.Diffs.Revocations do
   @spec pending?(integer()) :: boolean()
   def pending?(host_id),
     do: Repo.exists?(from p in PendingRevocation, where: p.host_id == ^host_id)
+
+  @doc "How many hosts in `scope` are marked (the header badge)."
+  @spec count(Scope.t()) :: non_neg_integer()
+  def count(%Scope{} = scope) do
+    PendingRevocation
+    |> Scope.filter(scope)
+    |> Repo.aggregate(:count)
+  end
 
   @doc "Marked hosts in `scope`: `%{host_id => %PendingRevocation{}}`."
   @spec pending(Scope.t()) :: %{integer() => PendingRevocation.t()}
