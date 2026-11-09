@@ -187,6 +187,14 @@ defmodule SsmWeb.CoreComponents do
   attr :prompt, :string, default: nil, doc: "the prompt for select inputs"
   attr :options, :list, doc: "the options to pass to Phoenix.HTML.Form.options_for_select/2"
   attr :multiple, :boolean, default: false, doc: "the multiple flag for select inputs"
+
+  attr :searchable, :boolean,
+    default: false,
+    doc:
+      "select only: a search field above it (hook SelectSearch) and options sorted by label, " <>
+        "also inside option groups; needs an id"
+
+  attr :sort, :boolean, default: true, doc: "searchable selects: sort the options by label"
   attr :class, :any, default: nil, doc: "the input class to use over defaults"
   attr :error_class, :any, default: nil, doc: "the input error class to use over defaults"
 
@@ -239,6 +247,43 @@ defmodule SsmWeb.CoreComponents do
           />{@label}
         </span>
       </label>
+      <.error :for={msg <- @errors}>{msg}</.error>
+    </div>
+    """
+  end
+
+  def input(%{type: "select", searchable: true} = assigns) do
+    assigns =
+      assign(
+        assigns,
+        :options,
+        if(assigns.sort, do: sort_options(assigns.options), else: assigns.options)
+      )
+
+    ~H"""
+    <div id={"#{@id}-picker"} class="fieldset mb-2" phx-hook="SelectSearch">
+      <label :if={@label} for={@id} class="label mb-1">{@label}</label>
+      <input
+        id={"#{@id}-search"}
+        type="search"
+        data-select-search
+        phx-update="ignore"
+        placeholder="Type to search…"
+        aria-label={"Search #{@label || "options"}"}
+        aria-controls={@id}
+        autocomplete="off"
+        class="input input-sm mb-1 w-full"
+      />
+      <select
+        id={@id}
+        name={@name}
+        class={[@class || "w-full select", @errors != [] && (@error_class || "select-error")]}
+        multiple={@multiple}
+        {@rest}
+      >
+        <option :if={@prompt} value="">{@prompt}</option>
+        {Phoenix.HTML.Form.options_for_select(@options, @value)}
+      </select>
       <.error :for={msg <- @errors}>{msg}</.error>
     </div>
     """
@@ -349,6 +394,22 @@ defmodule SsmWeb.CoreComponents do
     </div>
     """
   end
+
+  # Options by label, case-insensitive; option groups keep their order and
+  # sort their own options.
+  defp sort_options(options) do
+    if Enum.all?(options, &group?/1) do
+      Enum.map(options, fn {group, opts} -> {group, sort_options(opts)} end)
+    else
+      Enum.sort_by(options, &(&1 |> option_label() |> String.downcase()))
+    end
+  end
+
+  defp group?({_label, opts}), do: is_list(opts)
+  defp group?(_option), do: false
+
+  defp option_label({label, _value}), do: to_string(label)
+  defp option_label(label), do: to_string(label)
 
   # Helper used by inputs to generate form errors
   defp error(assigns) do

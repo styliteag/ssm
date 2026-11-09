@@ -341,6 +341,7 @@ defmodule SsmWeb.GrantsLive do
           <.input
             field={@form[:ssh_user_id]}
             type="select"
+            searchable
             label="SSH user"
             prompt="Select an SSH user"
             options={Enum.map(@users, &{&1.username, &1.id})}
@@ -350,6 +351,7 @@ defmodule SsmWeb.GrantsLive do
             id="grant_target"
             name="grant[target]"
             type="select"
+            searchable
             label="Customer or host group"
             prompt="Select a target"
             options={target_options(@targets)}

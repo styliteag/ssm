@@ -40,6 +40,66 @@ const CopyToClipboard = {
   },
 }
 
+// Searchable select (<.input type="select" searchable>): typing in the
+// field above the select hides the options that do not match and shows the
+// rest as an open list; Enter or a click picks one (a normal "change" event,
+// so phx-change sees it), Escape clears. Only attributes are toggled, so a
+// LiveView patch simply restores the options and updated() re-applies.
+const SelectSearch = {
+  mounted() {
+    this.input = this.el.querySelector("[data-select-search]")
+    // typing here is not a form change: keep it away from phx-change
+    for (const type of ["input", "change"]) {
+      this.input.addEventListener(type, e => {
+        e.stopPropagation()
+        if (type === "input") this.apply()
+      })
+    }
+    this.input.addEventListener("keydown", e => {
+      if (e.key === "Enter") { e.preventDefault(); this.pick(this.visible()[0]) }
+      if (e.key === "ArrowDown") { e.preventDefault(); this.select().focus() }
+      if (e.key === "Escape" && this.input.value) { e.preventDefault(); this.clear() }
+    })
+    this.el.addEventListener("change", e => {
+      if (e.target === this.select() && this.input.value) this.clear()
+    })
+  },
+  updated() { this.apply() },
+  select() { return this.el.querySelector("select") },
+  options() { return Array.from(this.select().options).filter(o => o.value !== "") },
+  visible() { return this.options().filter(o => !o.hidden) },
+  apply() {
+    const select = this.select()
+    const q = this.input.value.trim().toLowerCase()
+    for (const o of this.options()) {
+      const hide = q !== "" && !o.selected && !o.textContent.toLowerCase().includes(q)
+      o.hidden = hide
+      o.disabled = hide
+    }
+    for (const g of select.querySelectorAll("optgroup")) {
+      g.hidden = Array.from(g.children).every(o => o.hidden)
+    }
+    // while searching: an open list (daisyUI's .select styles a closed one only)
+    const prompt = select.querySelector('option[value=""]')
+    if (prompt) prompt.hidden = q !== ""
+    select.classList.toggle("select", q === "")
+    select.classList.toggle("picker-list", q !== "")
+    select.size = q === "" ? 0 : Math.max(2, Math.min(8, this.visible().length))
+  },
+  pick(option) {
+    if (!option) return
+    const select = this.select()
+    select.value = option.value
+    this.clear()
+    select.dispatchEvent(new Event("change", {bubbles: true}))
+    select.dispatchEvent(new Event("input", {bubbles: true}))
+  },
+  clear() {
+    this.input.value = ""
+    this.apply()
+  },
+}
+
 // data-confirm through the styled <dialog id="confirm-dialog"> (root layout)
 // instead of window.confirm. A capture listener on window runs before
 // phoenix_html and LiveView; on "ok" the attribute is lifted for one
@@ -114,7 +174,7 @@ const liveSocket = new LiveSocket("/live", Socket, {
   // heartbeat would race the proxy's timer (../dashboard 4.0.8).
   heartbeatIntervalMs: 20000,
   params: {_csrf_token: csrfToken},
-  hooks: {...colocatedHooks, CopyToClipboard},
+  hooks: {...colocatedHooks, CopyToClipboard, SelectSearch},
   // Localize timestamps in LiveView-patched DOM without flashing UTC.
   dom: {
     onNodeAdded(node) {

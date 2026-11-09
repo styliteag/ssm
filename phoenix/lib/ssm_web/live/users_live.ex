@@ -817,14 +817,28 @@ defmodule SsmWeb.UsersLive do
   attr :merging, :map, required: true
 
   defp merge_modal(assigns) do
+    assigns = assign(assigns, :preview, merge_preview(assigns.merging))
+
     ~H"""
     <.modal id="merge-modal" on_cancel={JS.push("cancel")}>
-      <:title>Merge {length(@merging.rows)} users</:title>
+      <:title>Merge {length(@merging.rows)} SSH users</:title>
 
-      <p class="mb-2 text-sm opacity-70">
-        All keys move to the target; authorizations are copied (duplicates skipped);
-        the other users are deleted.
-      </p>
+      <ul id="merge-preview" class="mb-3 space-y-1 rounded-box bg-base-200 p-3 text-sm">
+        <li>
+          Deletes {count(length(@preview.deleted), "SSH user")}: {Enum.join(@preview.deleted, ", ")}
+        </li>
+        <li>Moves {count(@preview.keys, "key")} to {@preview.target}</li>
+        <li>
+          Copies up to {count(@preview.entries, "access entry", "access entries")} to {@preview.target}
+          <span class="opacity-70">
+            (what {@preview.target} already has, and access that comes from grants, is skipped)
+          </span>
+        </li>
+        <li :if={@preview.grants > 0} id="merge-lost-grants" class="font-medium text-warning">
+          Drops {count(@preview.grants, "customer/group grant")} of the deleted users —
+          create them again for {@preview.target} if they are still needed
+        </li>
+      </ul>
 
       <form id="merge-form" phx-change="merge-change" phx-submit="merge-save" class="space-y-2">
         <div class="flex gap-4">
@@ -851,6 +865,8 @@ defmodule SsmWeb.UsersLive do
         <.input
           :if={@merging.mode == "existing"}
           type="select"
+          id="merge-target"
+          searchable
           name="merge[target_id]"
           value={@merging.target_id}
           label="Target user"
@@ -877,6 +893,38 @@ defmodule SsmWeb.UsersLive do
     </.modal>
     """
   end
+
+  # What a merge does with the selected rows: the sources are deleted, their
+  # keys move, their manual access entries are copied (at most), their grants
+  # go with them (FK cascade, Ssm.Users.BulkOps.merge_users/2).
+  defp merge_preview(%{mode: mode, rows: rows} = merging) do
+    {target, sources} =
+      case mode do
+        "new" ->
+          {(merging.username in [nil, ""] && "the new user") || merging.username, rows}
+
+        _existing ->
+          {target_rows, sources} = Enum.split_with(rows, &(&1.user.id == merging.target_id))
+          {target_name(target_rows), sources}
+      end
+
+    sum = fn field -> sources |> Enum.map(&Map.get(&1, field, 0)) |> Enum.sum() end
+
+    %{
+      target: target,
+      deleted: Enum.map(sources, & &1.user.username),
+      keys: sum.(:key_count),
+      entries: sum.(:authorization_count),
+      grants: sum.(:grant_count)
+    }
+  end
+
+  defp target_name([row | _]), do: row.user.username
+  defp target_name([]), do: "the target"
+
+  defp count(n, singular, plural \\ nil)
+  defp count(1, singular, _plural), do: "1 #{singular}"
+  defp count(n, singular, plural), do: "#{n} #{plural || singular <> "s"}"
 
   attr :rows, :list, required: true
 

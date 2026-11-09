@@ -256,7 +256,11 @@ Every `data-confirm` opens the styled `<dialog id="confirm-dialog">` of the root
 intercepts the click in the capture phase, before `phoenix_html`'s `window.confirm`);
 `data-confirm-type="<text>"` makes the user type that text first (diff page "Sync all"),
 `data-confirm-label` names the button. `<.modal>` is a `role="dialog"` with a focus wrap and does
-not close on a backdrop click.
+not close on a backdrop click. A select of SSH users, hosts or grant targets is
+`<.input type="select" searchable id=…>`: options sorted by label (also inside option groups;
+`sort={false}` keeps the given order) and a search field filtered by the `SelectSearch` hook
+(`assets/js/app.js`; it toggles `hidden`/`disabled` on options only, so LiveView patches stay
+in charge).
 
 **Host keys** (ADR-0008, `lib/ssm/ssh/host_key*.ex`, `lib/ssm/hosts/host_keys.ex`):
 every connect verifies `host.key_fingerprint`; unpinned hosts are refused.

@@ -565,9 +565,11 @@ defmodule SsmWeb.KeysLive do
         <form id="keys-filter" phx-change="filter" class="w-52">
           <.input
             type="select"
+            id="keys-filter-user"
+            searchable
             name="user_id"
             value={@filter_user_id}
-            label="Filter by user"
+            label="Filter by SSH user"
             prompt="All users"
             options={Enum.map(@users, &{&1.username, &1.id})}
           />
@@ -801,7 +803,8 @@ defmodule SsmWeb.KeysLive do
         <.input
           field={@form[:user_id]}
           type="select"
-          label="User"
+          searchable
+          label="SSH user"
           prompt="Select a user"
           options={Enum.map(@users, &{&1.username, &1.id})}
           disabled={@editing != nil}
@@ -866,6 +869,8 @@ defmodule SsmWeb.KeysLive do
       <form id="key-import-form" phx-submit="import" class="space-y-2">
         <.input
           type="select"
+          id="import-user"
+          searchable
           name="import[user_id]"
           value={@import_user_id}
           label="Assign all keys to"

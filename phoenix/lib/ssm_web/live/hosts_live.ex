@@ -1074,6 +1074,7 @@ defmodule SsmWeb.HostsLive do
         </p>
         <.input
           field={@form[:jump_via]}
+          searchable
           type="select"
           label="Jump via"
           prompt="None (direct connection)"

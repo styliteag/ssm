@@ -726,9 +726,11 @@ defmodule SsmWeb.AuthorizationsLive do
           <div class="flex-1">
             <.input
               type="select"
+              id="authorizations-filter-user"
+              searchable
               name="user_id"
               value={@filter_user_id}
-              label="Filter by user"
+              label="Filter by SSH user"
               prompt="All users"
               options={Enum.map(@users, &{&1.username, &1.id})}
             />
@@ -736,6 +738,8 @@ defmodule SsmWeb.AuthorizationsLive do
           <div class="flex-1">
             <.input
               type="select"
+              id="authorizations-filter-host"
+              searchable
               name="host_id"
               value={@filter_host_id}
               label="Filter by host"
@@ -879,7 +883,8 @@ defmodule SsmWeb.AuthorizationsLive do
           <.input
             field={@form[:user_id]}
             type="select"
-            label="User"
+            searchable
+            label="SSH user"
             prompt="Select a user"
             options={Enum.map(@users, &{&1.username, &1.id})}
             required
@@ -887,6 +892,7 @@ defmodule SsmWeb.AuthorizationsLive do
           <.input
             field={@form[:host_id]}
             type="select"
+            searchable
             label="Host"
             prompt="Select a host"
             options={Enum.map(@hosts, &{&1.name, &1.id})}

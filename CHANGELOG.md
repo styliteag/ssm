@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Every picker of SSH users, hosts and grant targets (access form and filters, keys, key
+  import, grants, jump host, merge target, unknown-key assignment) has a search field: type to
+  narrow the list, Enter picks the first match. The options are sorted by name.
+- Merging SSH users shows what the merge does before it runs: which users it deletes, how many
+  keys move, how many access entries are copied at most, and which customer/group grants of
+  the deleted users are dropped.
+
 - Dashboard "Needs attention": hosts with a changed host key, hosts that refuse ssm's key,
   hosts pending sync, hosts that need a sync, unreachable and unpinned hosts — each with a
   link to the matching list. The version pill says "schema" instead of "db".

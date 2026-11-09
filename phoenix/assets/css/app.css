@@ -451,3 +451,23 @@
 input:focus-visible, select:focus-visible, textarea:focus-visible {
   box-shadow: 0 0 0 2px color-mix(in oklab, var(--color-primary) 65%, transparent);
 }
+
+/* Searchable select while searching (SelectSearch hook in app.js): an open
+   list of the matching options instead of daisyUI's closed .select. */
+select.picker-list {
+  width: 100%;
+  height: auto;
+  padding: 0.25rem;
+  border: 1px solid var(--color-base-300);
+  border-radius: var(--radius-field);
+  background: var(--color-base-100);
+  color: var(--color-base-content);
+}
+select.picker-list option {
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius-field);
+}
+select.picker-list option:checked {
+  background: var(--color-primary);
+  color: var(--color-primary-content);
+}

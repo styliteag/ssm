@@ -1512,10 +1512,18 @@ defmodule SsmWeb.DiffLive do
         >
           <.input
             type="select"
+            id="unknown-key-user"
+            searchable
+            sort={false}
             name="assign[user_id]"
             value={@unknown_key.user_id}
-            label="Assign to user"
-            options={[{"Create user", "new"} | Enum.map(@unknown_key.users, &{&1.username, &1.id})]}
+            label="Assign to SSH user"
+            options={[
+              {"Create user", "new"}
+              | @unknown_key.users
+                |> Enum.sort_by(&String.downcase(&1.username))
+                |> Enum.map(&{&1.username, &1.id})
+            ]}
             required
           />
           <.input
