@@ -31,7 +31,8 @@ defmodule Ssm.Ssh.ScriptRunner do
       :readonly_ignored,
       :unsafe,
       :sha256,
-      :keyfile
+      :keyfile,
+      :home_state
     ]
 
     @type t :: %__MODULE__{
@@ -42,7 +43,8 @@ defmodule Ssm.Ssh.ScriptRunner do
             readonly_ignored: String.t() | nil,
             unsafe: String.t() | nil,
             sha256: String.t() | nil,
-            keyfile: String.t()
+            keyfile: String.t(),
+            home_state: String.t() | nil
           }
   end
 
@@ -88,10 +90,17 @@ defmodule Ssm.Ssh.ScriptRunner do
 
   @doc "One `LoginKeyfile` per login that has an authorized_keys file."
   @spec get_ssh_keyfiles(module(), Target.t()) :: {:ok, [LoginKeyfile.t()]} | {:error, term()}
-  def get_ssh_keyfiles(client \\ Ssm.Ssh, target) do
+  def get_ssh_keyfiles(client \\ Ssm.Ssh, target, logins \\ []) do
+    # logins ssm expects: an unreachable home comes back with "home_state"
+    asked =
+      logins
+      |> Enum.filter(&Login.host_safe?/1)
+      |> Enum.uniq()
+      |> Enum.map_join("", &(" " <> Shell.quote(&1)))
+
     with :ok <- ensure_uploaded(client, target),
          {:ok, %Result{} = result} <-
-           client.exec(target, "sh #{Shell.quote(@remote_path)} get_ssh_keyfiles", []) do
+           client.exec(target, "sh #{Shell.quote(@remote_path)} get_ssh_keyfiles" <> asked, []) do
       cond do
         result.exit_code != 0 ->
           {:error,
@@ -165,9 +174,14 @@ defmodule Ssm.Ssh.ScriptRunner do
       sha256: sha(raw["sha256"]),
       # script.sh (json_escape) emits a proper JSON string: backslashes,
       # quotes and newlines arrive decoded; nothing to unescape here.
-      keyfile: raw |> Map.get("keyfile", "") |> to_string()
+      keyfile: raw |> Map.get("keyfile", "") |> to_string(),
+      # unknown_login | home_missing | home_unreadable: the home is not there
+      home_state: home_state(raw["home_state"])
     }
   end
+
+  defp home_state(value) when value in ~w(unknown_login home_missing home_unreadable), do: value
+  defp home_state(_value), do: nil
 
   # host output goes into a command line: 64 hex digits or nothing
   defp sha(value) when is_binary(value),

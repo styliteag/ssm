@@ -152,11 +152,21 @@ defmodule Ssm.Ssh.MockClient do
 
         result =
           Map.get(state.exec_responses, {target.host_id, command}) ||
+            Map.get(state.exec_responses, {target.host_id, listing_base(command)}) ||
             state.default_exec ||
             %Result{}
 
         {{:ok, result}, state}
       end)
+    end
+  end
+
+  # a listing stub ("… get_ssh_keyfiles") also answers the listing that
+  # names logins to check ("… get_ssh_keyfiles a b")
+  defp listing_base(command) do
+    case String.split(command, " get_ssh_keyfiles ", parts: 2) do
+      [base, _logins] -> base <> " get_ssh_keyfiles"
+      _ -> command
     end
   end
 

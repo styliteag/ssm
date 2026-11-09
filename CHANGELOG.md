@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- A login whose home is not there — an inactive HA node with its pool not imported, an
+  unmounted home, a login the host does not know — no longer shows its keys as "missing on
+  host". `script.sh get_ssh_keyfiles <login>…` reports it with a code (`home_missing`,
+  `home_unreadable`, `unknown_login`); the diff says "home not available" for that login,
+  and the host status and periodic check leave it out (no "needs sync", no error).
+
 ## [4.13.3] - 2026-11-09
 
 ### Changed

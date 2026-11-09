@@ -35,7 +35,9 @@ defmodule Ssm.Diffs.SyncCheck do
   the ssm user who owns it (`%{}` when unknown).
   """
   @spec result(HostDiff.t(), %{String.t() => String.t()}) :: result()
-  def result(%HostDiff{logins: logins} = diff, owners) do
+  def result(%HostDiff{} = diff, owners) do
+    logins = readable(diff.logins)
+
     case read_error(diff) do
       nil -> compared(logins, owners)
       raw -> failed(raw, length(logins))
@@ -48,7 +50,9 @@ defmodule Ssm.Diffs.SyncCheck do
   """
   @spec status(HostDiff.t()) ::
           :synced | {:needs_sync, non_neg_integer(), non_neg_integer()} | {:error, String.t()}
-  def status(%HostDiff{logins: logins} = diff) do
+  def status(%HostDiff{} = diff) do
+    logins = readable(diff.logins)
+
     case read_error(diff) do
       nil ->
         items = Enum.flat_map(logins, & &1.items)
@@ -61,9 +65,13 @@ defmodule Ssm.Diffs.SyncCheck do
     end
   end
 
+  # a login whose home is not there (inactive HA node, unmounted home) has
+  # nothing to compare: neither drift nor an error of the host
+  defp readable(logins), do: Enum.reject(logins, & &1.home_state)
+
   # a blocked login (unsafe ~/.ssh) is not read on purpose: drift, not error
   defp read_error(%HostDiff{read_error: nil, logins: logins}),
-    do: Enum.find_value(logins, &(is_nil(&1.blocked) && &1.read_error))
+    do: Enum.find_value(readable(logins), &(is_nil(&1.blocked) && &1.read_error))
 
   defp read_error(%HostDiff{read_error: raw}), do: raw
 

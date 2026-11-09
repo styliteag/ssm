@@ -812,6 +812,25 @@ defmodule SsmWeb.DiffLiveTest do
              |> Enum.count() == 2
     end
 
+    test "a login whose home is not there is not shown as keys missing", %{conn: conn} do
+      owner = user_fixture(%{username: "blue"})
+      host = host_fixture(%{name: "red1"})
+      key_fixture(owner, %{key_type: "ssh-ed25519", key_base64: blob("ssh-ed25519", 32)})
+      authorization_fixture(owner, host, %{login: "blue"})
+
+      stub_keyfiles(host.id, [
+        %{login: "blue", has_pragma: false, home_state: "home_missing", keyfile: ""}
+      ])
+
+      {:ok, view, _html} = live(conn, ~p"/diff?host_id=#{host.id}")
+      render_async(view)
+
+      assert render(view) =~ "home not available"
+      assert render(view) =~ "inactive HA node"
+      # nothing to compare there: not "needs sync", not an error
+      assert Ssm.Diffs.SyncCheck.status(elem(Ssm.Diffs.host_diff(host.id), 1)) == :synced
+    end
+
     test "a missing key's manual access can be removed from the diff", %{conn: conn} do
       owner = user_fixture(%{username: "gone"})
       host = host_fixture(%{name: "web1"})

@@ -576,9 +576,35 @@ keyfile_condition_scope() {
     fi
 }
 
+# Why a login ssm asks about has no listing entry: "unknown_login" (getent
+# does not know it: LDAP/SSSD down), "home_missing" (the home does not exist:
+# an unmounted pool on an inactive HA node), "home_unreadable" (not a
+# directory root can enter), else "" (the home is there: no file).
+home_state() {
+    home=$(login_home "$1") || home=""
+    if [ -z "${home}" ]; then
+        echo "unknown_login"
+    elif [ ! -e "${home}" ] && [ ! -h "${home}" ]; then
+        echo "home_missing"
+    elif [ ! -d "${home}" ] || [ ! -x "${home}" ] || [ ! -r "${home}" ]; then
+        echo "home_unreadable"
+    fi
+}
+
+# get_ssh_keyfiles [login ...]: every login with an authorized_keys, plus an
+# entry with "home_state" for each given login whose home is not there, so
+# an unreachable home never reads as "no keys".
 handle_get_ssh_keyfiles() {
     isFirst=true
     printf "["
+    for login in "$@"; do
+        login_ok "${login}" || continue
+        state=$(home_state "${login}")
+        [ -n "${state}" ] || continue
+        if [ "${isFirst}" = true ]; then isFirst=false; else printf ','; fi
+        printf '{"login":"%s", "has_pragma": false, "readonly_condition": "", "readonly_scope": "", "readonly_ignored": "", "unsafe": "", "home_state":"%s", "sha256":"", "keyfile":""}' \
+            "$(printf "%s" "${login}" | json_escape)" "${state}"
+    done
       get_ssh_users | while read -r login; do
             # a read that failed (a link swapped in, a timeout, the file
             # deleted) is reported as "race", never shown; the listing goes on
@@ -674,7 +700,7 @@ command="$1"
 shift
 case "${command}" in
     set_authorized_keyfile)  handle_set_authorized_keyfile "$@" ;;
-    get_ssh_keyfiles)        handle_get_ssh_keyfiles ;;
+    get_ssh_keyfiles)        handle_get_ssh_keyfiles "$@" ;;
     has_keyfile)             handle_has_keyfile "$@" ;;
     update)                  handle_update ;;
     version)                 handle_version ;;

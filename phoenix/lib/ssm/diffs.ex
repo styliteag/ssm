@@ -57,6 +57,9 @@ defmodule Ssm.Diffs do
               unsafe: nil,
               blocked: nil,
               read_error: nil,
+              # unknown_login | home_missing | home_unreadable: nothing could
+              # be read (an inactive HA node, an unmounted home); not drift
+              home_state: nil,
               items: []
   end
 
@@ -79,8 +82,9 @@ defmodule Ssm.Diffs do
   def host_diff(client \\ Ssm.Ssh, host_id) do
     with {:ok, host} <- Hosts.fetch_host(host_id),
          :ok <- ensure_not_disabled(host) do
-      {observed, read_error} = read_observed(client, Hosts.target_for(host))
-      all_logins = (Expected.logins(host_id) ++ Map.keys(observed)) |> Enum.uniq() |> Enum.sort()
+      expected_logins = Expected.logins(host_id)
+      {observed, read_error} = read_observed(client, Hosts.target_for(host), expected_logins)
+      all_logins = (expected_logins ++ Map.keys(observed)) |> Enum.uniq() |> Enum.sort()
       own = own_key_or_none(host)
 
       logins =
@@ -99,8 +103,8 @@ defmodule Ssm.Diffs do
     end
   end
 
-  defp read_observed(client, target) do
-    case ScriptRunner.get_ssh_keyfiles(client, target) do
+  defp read_observed(client, target, logins) do
+    case ScriptRunner.get_ssh_keyfiles(client, target, logins) do
       {:ok, entries} -> {Map.new(entries, &{&1.login, &1}), nil}
       {:error, {_code, message}} -> {%{}, message}
     end
@@ -455,21 +459,47 @@ defmodule Ssm.Diffs do
       Compare.diff(lines, actual) ++
         legacy_items ++ Compare.to_sorted(MapSet.new(own_lines), :present)
 
+    items = if entry && entry.home_state, do: home_items(items, entry.home_state), else: items
+
     %LoginDiff{
       login: login,
       has_pragma: !!(entry && entry.has_pragma),
       readonly_condition: entry && entry.readonly_condition,
       readonly_ignored: entry && entry.readonly_ignored,
       read_error: login_read_error(entry, read_error),
+      home_state: entry && entry.home_state,
       unsafe: unsafe_text(entry),
       blocked: if(entry && entry.unsafe == "ssh_dir", do: @ssh_dir_blocked),
       items: blocked_by_user_readonly(items, entry)
     }
   end
 
+  @doc "Text for a login whose home is not there (`home_state` of the listing)."
+  def home_text("unknown_login"), do: "home not available: the host does not know this login"
+
+  def home_text("home_missing"),
+    do: "home not available: the home directory does not exist (not mounted? inactive HA node?)"
+
+  def home_text("home_unreadable"), do: "home not available: the home directory cannot be read"
+  def home_text(other), do: "home not available: " <> to_string(other)
+
+  # nothing could be read: a key ssm expects is not "missing", it is unknown
+  defp home_items(items, state) do
+    Enum.map(items, fn
+      %KeyDiff{status: :missing_on_host} = item -> %{item | note: home_note(state)}
+      item -> item
+    end)
+  end
+
+  defp home_note("unknown_login"), do: "login unknown on host"
+  defp home_note(_state), do: "home not available"
+
   # an unsafe ~/.ssh is not read: the per-login read_error (also in the API
   # diff) says so; the periodic check keeps it as blocked drift (SyncCheck)
   defp login_read_error(nil, read_error), do: read_error
+
+  defp login_read_error(%{home_state: state}, _read_error) when is_binary(state),
+    do: home_text(state)
 
   defp login_read_error(%{unsafe: "ssh_dir"}, _read_error),
     do: @ssh_dir_blocked <> " (not read, not written)"
