@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Diff viewer: only the "Sync" buttons write to a host. "Remove" and "Remove all extra
+  keys" (which took unauthorized lines off the host at once) and "Remove and sync now" are
+  gone; Allow, Add key and Remove <user> change the database and reload the diff, and the
+  next Sync updates the host (it also drops unauthorized lines).
+
 ## [4.13.1] - 2026-11-09
 
 ### Added

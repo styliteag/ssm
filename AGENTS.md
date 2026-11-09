@@ -137,8 +137,8 @@ Every sync outcome is audit-logged (`Ssm.Diffs.SyncAudit`). Sync (full and remov
 for the holder through the process dictionary — a bare nested `:global.trans` releases early);
 the listing reports each file's `sha256` and a write passes it back (`set_authorized_keyfile
 <login> <ssh_user> <sha256>`): a file changed since the read is refused `(stale)`, a sync skips
-the login. Diff page "Remove" / "Remove all extra keys"
-(`Ssm.Diffs.KeyRemoval`, events `remove-key`/`remove-extra-keys`): reads the login fresh,
+the login. `Ssm.Diffs.KeyRemoval` has no UI caller: in the web UI only the "Sync" buttons write to
+a host (user decision 2026-11-09). KeyRemoval reads the login fresh,
 re-diffs it (`Diffs.login_diff_for_write/2`, refuses without the own key like a sync), drops
 only lines still `extra_on_host` and writes the rest through `set_authorized_keyfile`;
 readonly/unsafe logins refused, audited (`remove_keys`/`remove_keys_failed`, fingerprints only).

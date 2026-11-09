@@ -810,8 +810,6 @@ defmodule SsmWeb.DiffLiveTest do
              |> LazyHTML.from_document()
              |> LazyHTML.query(".remove-marked")
              |> Enum.count() == 2
-
-      assert has_element?(view, "#remove-user-confirm-sync")
     end
 
     test "a missing key's manual access can be removed from the diff", %{conn: conn} do
@@ -840,6 +838,9 @@ defmodule SsmWeb.DiffLiveTest do
 
       refute Ssm.Repo.get(Ssm.Authorizations.Authorization, auth.id)
       refute has_element?(view, "#revoke-deploy-0")
+
+      # only the Sync button writes to a host
+      refute Enum.any?(MockClient.calls().exec, &(inspect(&1) =~ "set_authorized_keyfile"))
     end
   end
 end
