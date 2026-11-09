@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.13.4] - 2026-11-09
+
 ### Fixed
 
 - "Revocation pending" also ends on a read — the diff, Refresh or the periodic check — that
