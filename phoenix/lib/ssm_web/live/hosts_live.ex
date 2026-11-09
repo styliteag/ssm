@@ -36,6 +36,7 @@ defmodule SsmWeb.HostsLive do
   alias Ssm.Hosts.ManagedLogins
   alias Ssm.Hosts.PinState
   alias Ssm.Scope
+  alias SsmWeb.ErrorText
   alias SsmWeb.Layouts
 
   @filters ~w(active all online offline unknown disabled)
@@ -417,7 +418,7 @@ defmodule SsmWeb.HostsLive do
     {:noreply,
      socket
      |> assign(:refreshing, false)
-     |> put_flash(:error, "Refresh crashed: #{inspect(reason)}")}
+     |> put_flash(:error, ErrorText.crashed("Refresh all", reason))}
   end
 
   def handle_async(:pin_host_keys, {:ok, report}, socket) do
@@ -432,7 +433,7 @@ defmodule SsmWeb.HostsLive do
     {:noreply,
      socket
      |> assign(:pinning, false)
-     |> put_flash(:error, "Pinning host keys crashed: #{inspect(reason)}")}
+     |> put_flash(:error, ErrorText.crashed("Pinning host keys", reason))}
   end
 
   def handle_async(:test_connection, {:ok, {host, result}}, socket) do
@@ -471,14 +472,14 @@ defmodule SsmWeb.HostsLive do
     {:noreply,
      socket
      |> update(:managed, &(&1 && %{&1 | busy: false}))
-     |> put_flash(:error, "Forget crashed: #{inspect(reason)}")}
+     |> put_flash(:error, ErrorText.crashed("Forgetting the login", reason))}
   end
 
   def handle_async(:test_connection, {:exit, reason}, socket) do
     {:noreply,
      socket
      |> assign(:testing_id, nil)
-     |> put_flash(:error, "Connection test crashed: #{inspect(reason)}")}
+     |> put_flash(:error, ErrorText.crashed("The connection test", reason))}
   end
 
   defp open_managed(socket, host),
@@ -486,7 +487,7 @@ defmodule SsmWeb.HostsLive do
 
   defp forget_error(:managed_login_not_found), do: "it is not managed (any more)."
   defp forget_error({_tag, message}) when is_binary(message), do: message
-  defp forget_error(reason), do: inspect(reason)
+  defp forget_error(reason), do: ErrorText.reason(reason)
 
   defp put_conn_result(socket, host_id, result) do
     socket
@@ -586,7 +587,7 @@ defmodule SsmWeb.HostsLive do
     do: "host key changed (pinned #{pinned}, offered #{offered.fingerprint})"
 
   defp pin_error({_code, message}) when is_binary(message), do: message
-  defp pin_error(reason), do: inspect(reason)
+  defp pin_error(reason), do: ErrorText.reason(reason)
 
   # A cleared select posts `""`; Ecto's cast treats `""` as a missing value
   # rather than an explicit nil, so map it here (the jump_via pattern).

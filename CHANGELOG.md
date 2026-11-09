@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Diff page: "Sync all" now asks first, like the per-host "Sync" buttons. Every sync
+  question names what the sync does as of the last check — how many hosts, how many key
+  lines it adds and removes — and says that every key line ssm does not grant is removed,
+  including keys added by hand on the host. The detail view's "Sync" asks too.
+- Authorizations matrix: revoking a cell asks first; granting and revoking show a message
+  saying the change reaches the host at its next sync.
+- Error messages on the hosts and diff pages no longer show raw Elixir terms; the details
+  go to the server log and the page shows a plain sentence.
+
 ## [4.13.4] - 2026-11-09
 
 ### Fixed

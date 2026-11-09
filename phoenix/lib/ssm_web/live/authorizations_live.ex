@@ -448,7 +448,14 @@ defmodule SsmWeb.AuthorizationsLive do
     case Authorizations.create_authorization(scope(socket), attrs) do
       {:ok, auth} ->
         log_auth_activity(socket, :create, auth)
-        {:noreply, reload_authorizations(socket)}
+
+        {:noreply,
+         socket
+         |> reload_authorizations()
+         |> put_flash(
+           :info,
+           "Granted #{cell_label(socket, user_id, host_id, login)}. The key lines reach the host at its next sync."
+         )}
 
       {:error, _changeset} ->
         {:noreply, put_flash(socket, :error, "Could not create the authorization.")}
@@ -459,7 +466,14 @@ defmodule SsmWeb.AuthorizationsLive do
     case Authorizations.delete_authorization(scope(socket), auth) do
       {:ok, _} ->
         log_auth_activity(socket, :delete, auth)
-        {:noreply, reload_authorizations(socket)}
+
+        {:noreply,
+         socket
+         |> reload_authorizations()
+         |> put_flash(
+           :info,
+           "Revoked #{cell_label(socket, auth.user_id, auth.host_id, auth.login)}. The key lines leave the host at its next sync."
+         )}
 
       {:error, :grant_row} ->
         {:noreply, put_flash(socket, :error, @grant_row)}
@@ -470,6 +484,23 @@ defmodule SsmWeb.AuthorizationsLive do
       {:error, _changeset} ->
         {:noreply, put_flash(socket, :error, "Could not revoke the authorization.")}
     end
+  end
+
+  # "alice on web1 as deploy" for the matrix flashes
+  defp cell_label(socket, user_id, host_id, login) do
+    user_name =
+      case Enum.find(socket.assigns.users, &(&1.id == user_id)) do
+        nil -> "user ##{user_id}"
+        user -> user.username
+      end
+
+    host_name =
+      case Enum.find(socket.assigns.hosts, &(&1.id == host_id)) do
+        nil -> "host ##{host_id}"
+        host -> host.name
+      end
+
+    "#{user_name} on #{host_name} as #{login}"
   end
 
   defp matrix_query(assigns, overrides) do
@@ -1028,6 +1059,10 @@ defmodule SsmWeb.AuthorizationsLive do
       phx-click="matrix-toggle"
       phx-value-user-id={@user.id}
       phx-value-host-id={@host.id}
+      data-confirm={
+        @authorized &&
+          "Revoke #{@user.username} on #{@host.name} as #{@matrix_login}? The key lines leave the host at its next sync."
+      }
       title={"#{@user.username} on #{@host.name} as #{@matrix_login}: " <>
         if(@authorized, do: "authorized — click to revoke", else: "not authorized — click to grant")}
     >

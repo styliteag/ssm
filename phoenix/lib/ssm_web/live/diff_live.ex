@@ -18,7 +18,8 @@ defmodule SsmWeb.DiffLive do
   login; an unknown key can be assigned to a user, which also grants the
   login if missing.
 
-  Only the "Sync" buttons write to a host. Every other action here (Allow,
+  Only the "Sync" buttons write to a host, and each asks first with what the
+  write adds and removes (`SsmWeb.SyncConfirm`). Every other action here (Allow,
   Add key, Remove <user>) changes the database and reloads the diff; the
   host follows at the next sync.
   """
@@ -42,7 +43,9 @@ defmodule SsmWeb.DiffLive do
   alias Ssm.Users.KeyAssignment
   alias Ssm.Users.KeyParser
   alias Ssm.Users.UserKey
+  alias SsmWeb.ErrorText
   alias SsmWeb.Layouts
+  alias SsmWeb.SyncConfirm
 
   # Result filters: value, label. `kinds/1` maps a filter to the result
   # kinds it shows; `result_kind/2` classifies one host.
@@ -168,7 +171,7 @@ defmodule SsmWeb.DiffLive do
   end
 
   def handle_async(:statuses, {:exit, reason}, socket) do
-    {:noreply, put_flash(socket, :error, "Status check crashed: #{inspect(reason)}")}
+    {:noreply, put_flash(socket, :error, ErrorText.crashed("The status check", reason))}
   end
 
   def handle_async(:detail, {:ok, result}, socket) do
@@ -206,7 +209,7 @@ defmodule SsmWeb.DiffLive do
   def handle_async(:detail, {:exit, reason}, socket) do
     {:noreply,
      socket
-     |> assign(detail_loading: false, detail_error: "Diff crashed: #{inspect(reason)}")}
+     |> assign(detail_loading: false, detail_error: ErrorText.crashed("Reading the host", reason))}
   end
 
   # the runner (Ssm.Diffs.SyncRunner) has audited the outcome already
@@ -250,14 +253,14 @@ defmodule SsmWeb.DiffLive do
     {:noreply,
      socket
      |> assign(:syncing, false)
-     |> put_flash(:error, "Sync crashed: #{inspect(reason)}")}
+     |> put_flash(:error, ErrorText.crashed("Sync", reason))}
   end
 
   def handle_async(:sync_all, {:ok, {:error, reason}}, socket) do
     {:noreply,
      socket
      |> assign(:syncing, false)
-     |> put_flash(:error, "Sync all crashed: #{inspect(reason)}")}
+     |> put_flash(:error, ErrorText.crashed("Sync all", reason))}
   end
 
   def handle_async(:sync_all, {:ok, {:ok, %{results: results, busy: busy}}}, socket) do
@@ -290,7 +293,7 @@ defmodule SsmWeb.DiffLive do
     {:noreply,
      socket
      |> assign(:syncing, false)
-     |> put_flash(:error, "Sync all crashed: #{inspect(reason)}")}
+     |> put_flash(:error, ErrorText.crashed("Sync all", reason))}
   end
 
   @impl true
@@ -798,7 +801,7 @@ defmodule SsmWeb.DiffLive do
 
   defp format_reason({_code, message}) when is_binary(message), do: message
   defp format_reason(:not_found), do: "host not found"
-  defp format_reason(other), do: inspect(other)
+  defp format_reason(other), do: ErrorText.reason(other)
 
   # Hosts for the list view: filtered by result, searched (name/address) and
   # sorted.
@@ -853,14 +856,7 @@ defmodule SsmWeb.DiffLive do
     """
   end
 
-  defp ago(%DateTime{} = at) do
-    case DateTime.diff(DateTime.utc_now(), at) do
-      s when s < 60 -> "just now"
-      s when s < 3600 -> "#{div(s, 60)} min ago"
-      s when s < 86_400 -> "#{div(s, 3600)} h ago"
-      s -> "#{div(s, 86_400)} d ago"
-    end
-  end
+  defp ago(at), do: SyncConfirm.ago(at)
 
   defp filter_hosts(hosts, search) do
     case search |> String.trim() |> String.downcase() do
@@ -948,7 +944,12 @@ defmodule SsmWeb.DiffLive do
           >
             <.icon name="hero-arrow-path" class="size-4" /> Check all
           </.button>
-          <.button id="sync-all" phx-click="sync_all" disabled={@syncing}>
+          <.button
+            id="sync-all"
+            phx-click="sync_all"
+            disabled={@syncing}
+            data-confirm={SyncConfirm.all(@hosts, @statuses, @checks)}
+          >
             <.icon
               name="hero-cloud-arrow-up"
               class={["size-4", @syncing && "motion-safe:animate-spin"]}
@@ -1072,7 +1073,7 @@ defmodule SsmWeb.DiffLive do
               phx-click="sync-row"
               phx-value-id={host.id}
               disabled={host.disabled || @syncing}
-              data-confirm={"Sync #{host.name}? This writes the expected authorized_keys to the host."}
+              data-confirm={SyncConfirm.host(host, @statuses[host.id])}
               title="Sync this host"
             >
               <.icon name="hero-cloud-arrow-up" class="size-4" />
@@ -1138,6 +1139,7 @@ defmodule SsmWeb.DiffLive do
                 class="btn btn-primary btn-sm"
                 phx-click="sync"
                 disabled={@selected.disabled || @syncing || @detail_loading}
+                data-confirm={SyncConfirm.host(@selected, @statuses[@selected.id])}
               >
                 <.icon name="hero-cloud-arrow-up" class="size-4" /> Sync
               </button>

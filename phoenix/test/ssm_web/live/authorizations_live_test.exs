@@ -210,6 +210,31 @@ defmodule SsmWeb.AuthorizationsLiveTest do
       assert "delete" in actions
     end
 
+    test "revoking a cell asks first; both directions confirm with a flash", %{conn: conn} do
+      alice = user_fixture(%{username: "alice"})
+      host = host_fixture(%{name: "web1"})
+      bob = user_fixture(%{username: "bob"})
+      authorization_fixture(bob, host, %{login: "deploy"})
+
+      {:ok, view, _html} = live(conn, ~p"/authorizations?view=matrix&login=deploy")
+      cell = "#matrix-cell-#{alice.id}-#{host.id}"
+
+      # granting only adds access: no question
+      assert has_element?(view, "#{cell}:not([data-confirm])")
+      html = view |> element(cell) |> render_click()
+      assert html =~ "Granted alice on web1 as deploy"
+      assert html =~ "next sync"
+
+      assert has_element?(
+               view,
+               ~s(#{cell}[data-confirm*="Revoke alice on web1 as deploy?"])
+             )
+
+      assert has_element?(view, ~s(#{cell}[data-confirm*="next sync"]))
+      html = view |> element(cell) |> render_click()
+      assert html =~ "Revoked alice on web1 as deploy"
+    end
+
     test "the all login is view-only counts", %{conn: conn} do
       alice = user_fixture(%{username: "alice"})
       host = host_fixture(%{name: "web1"})
