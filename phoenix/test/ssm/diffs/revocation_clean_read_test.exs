@@ -56,7 +56,7 @@ defmodule Ssm.Diffs.RevocationCleanReadTest do
     assert Revocations.pending?(host.id)
   end
 
-  test "a login whose home is not there keeps the mark" do
+  test "a home that does not exist (HA standby) does not keep the mark" do
     host = setup_host()
 
     stub_host(host, [
@@ -65,7 +65,21 @@ defmodule Ssm.Diffs.RevocationCleanReadTest do
     ])
 
     assert {:ok, _diff} = Diffs.host_diff(host.id)
-    assert Revocations.pending?(host.id)
+    refute Revocations.pending?(host.id)
+  end
+
+  for state <- ["home_unreadable", "unknown_login"] do
+    test "#{state} keeps the mark" do
+      host = setup_host()
+
+      stub_host(host, [
+        %{login: "deploy", has_pragma: true, keyfile: "ssh-ed25519 KEEP k"},
+        %{login: "other", has_pragma: false, home_state: unquote(state), keyfile: ""}
+      ])
+
+      assert {:ok, _diff} = Diffs.host_diff(host.id)
+      assert Revocations.pending?(host.id)
+    end
   end
 
   test "a mark made while the host was read stays" do

@@ -484,11 +484,18 @@ defmodule Ssm.Diffs do
 
   # Every login was read and none holds an unauthorized line: nothing that
   # was revoked is left on the host, so "revocation pending" can end without
-  # a write. Unread, unsafe, blocked or home-less logins keep the mark.
+  # a write. A home that does not exist (an HA standby whose pool the active
+  # node holds) has nothing on this host and does not count; should it come
+  # back, its lines show as drift at the next read. Unread (home unreadable,
+  # login unknown), unsafe or blocked logins keep the mark.
   defp clean_read?(nil, logins) do
-    Enum.all?(logins, fn l ->
-      is_nil(l.read_error) and is_nil(l.home_state) and is_nil(l.unsafe) and is_nil(l.blocked) and
-        not Enum.any?(l.items, &(&1.status == :extra_on_host))
+    Enum.all?(logins, fn
+      %{home_state: "home_missing"} ->
+        true
+
+      l ->
+        is_nil(l.read_error) and is_nil(l.home_state) and is_nil(l.unsafe) and
+          is_nil(l.blocked) and not Enum.any?(l.items, &(&1.status == :extra_on_host))
     end)
   end
 

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- "Pending sync" on an HA standby (homes on a pool the active node holds) ends on a clean
+  read: a home that does not exist no longer keeps the mark — its lines show as drift if
+  it comes back. An unreadable home or an unknown login still keeps it.
+
 ### Changed
 
 - `release.sh --yes` (`-y`) answers its questions; a version that is not above the current one
