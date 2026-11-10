@@ -997,12 +997,27 @@ defmodule SsmWeb.AuthorizationsLive do
         No hosts hold a grant for this login yet.
       </p>
 
-      <div :if={@matrix.hosts != []} class="overflow-x-auto rounded-box border border-base-300">
+      <p
+        :if={length(@matrix.hosts) > 10}
+        id="matrix-many-hosts"
+        class="text-xs opacity-70"
+      >
+        {length(@matrix.hosts)} host columns. Use "Search hosts" to narrow them.
+      </p>
+
+      <div
+        :if={@matrix.hosts != []}
+        id="matrix-scroll"
+        class="max-h-[75vh] overflow-auto rounded-box border border-base-300"
+      >
         <table class="table table-xs w-auto border-collapse">
           <thead>
             <tr>
-              <th class="sticky left-0 z-10 bg-base-200 align-bottom">Users / Hosts</th>
-              <th :for={host <- @matrix.hosts} class="bg-base-200 px-1 pb-2 align-bottom">
+              <th class="sticky left-0 top-0 z-30 bg-base-200 align-bottom">Users / Hosts</th>
+              <th
+                :for={host <- @matrix.hosts}
+                class="sticky top-0 z-20 bg-base-200 px-1 pb-2 align-bottom"
+              >
                 <.link
                   navigate={~p"/diff?host_id=#{host.id}"}
                   class="link link-hover inline-block max-h-36 truncate whitespace-nowrap [writing-mode:vertical-rl] rotate-180"
@@ -1041,6 +1056,25 @@ defmodule SsmWeb.AuthorizationsLive do
           </tbody>
         </table>
       </div>
+
+      <p
+        :if={@matrix.hosts != []}
+        id="matrix-legend"
+        class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs opacity-70"
+      >
+        <span :if={@matrix_login != "all"} class="inline-flex items-center gap-1">
+          <.icon name="hero-check" class="size-3.5 text-success" /> authorized (click to revoke)
+        </span>
+        <span :if={@matrix_login != "all"} class="inline-flex items-center gap-1">
+          <.icon name="hero-x-mark" class="size-3.5" /> not authorized (click to grant)
+        </span>
+        <span :if={@matrix_login == "all"} class="inline-flex items-center gap-1">
+          <span class="badge badge-info badge-xs">n</span> n grants across all logins
+        </span>
+        <span :if={@matrix_login == "all"} class="inline-flex items-center gap-1">
+          <span class="badge badge-ghost badge-xs opacity-40">0</span> no grant
+        </span>
+      </p>
 
       <p :if={@matrix_login == "all"} class="text-xs opacity-60">
         Counts show grants across all login accounts — pick a login to edit.
