@@ -228,7 +228,7 @@ defmodule SsmWeb.DashboardLive do
         <.link
           :for={action <- @actions}
           navigate={action.path}
-          class="link link-warning font-medium"
+          class="link font-medium text-base-content underline decoration-warning decoration-2 underline-offset-2"
         >
           {action.text}
         </.link>

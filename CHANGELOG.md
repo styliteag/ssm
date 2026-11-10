@@ -39,7 +39,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The row checkboxes of the SSH users list had no accessible name.
 - The option lists of the new comboboxes are announced correctly by screen readers (message rows are disabled options).
-- Colour contrast of muted text, labels and stat titles in the light themes now meets WCAG AA (4.5:1).
+- Colour contrast of muted text, labels, stat titles and the dashboard card action links in the light
+  themes now meets WCAG AA (4.5:1).
 
 ## [4.14.4] - 2026-11-10
 
