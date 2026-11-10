@@ -154,12 +154,16 @@ const Combobox = {
     if (matches.length > COMBOBOX_MAX) {
       const more = document.createElement("li")
       more.className = "px-3 py-1 text-xs opacity-60"
+      more.setAttribute("role", "option")
+      more.setAttribute("aria-disabled", "true")
       more.textContent = `${matches.length - COMBOBOX_MAX} more: keep typing to narrow down`
       this.list.append(more)
     }
     if (matches.length === 0) {
       const none = document.createElement("li")
       none.className = "px-3 py-1 text-xs opacity-60"
+      none.setAttribute("role", "option")
+      none.setAttribute("aria-disabled", "true")
       none.textContent = "No match"
       this.list.append(none)
     }

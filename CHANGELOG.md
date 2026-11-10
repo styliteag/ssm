@@ -38,6 +38,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - The row checkboxes of the SSH users list had no accessible name.
+- The option lists of the new comboboxes are announced correctly by screen readers (message rows are disabled options).
+
 
 ## [4.14.4] - 2026-11-10
 
