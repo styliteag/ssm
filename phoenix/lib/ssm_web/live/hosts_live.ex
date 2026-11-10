@@ -1034,6 +1034,7 @@ defmodule SsmWeb.HostsLive do
       id={"host-menu-#{@host.id}"}
       class="dropdown dropdown-end"
       data-popover
+      data-menu
       phx-mounted={JS.ignore_attributes(["open"])}
     >
       <summary

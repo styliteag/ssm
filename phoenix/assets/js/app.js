@@ -209,6 +209,28 @@ const Combobox = {
   },
 }
 
+// Row menus (<details data-menu>): the list is placed with position: fixed next
+// to its button, so a table's scroll container cannot clip it; it flips upward
+// near the bottom edge and closes on scroll or resize.
+document.addEventListener("toggle", e => {
+  const details = e.target
+  if (!(details instanceof HTMLDetailsElement) || !details.matches("[data-menu]")) return
+  const list = details.querySelector("ul")
+  if (!details.open) { list.removeAttribute("style"); return }
+  const r = details.querySelector("summary").getBoundingClientRect()
+  list.style.position = "fixed"
+  list.style.left = "auto"
+  list.style.right = `${window.innerWidth - r.right}px`
+  const h = list.offsetHeight
+  const below = r.bottom + 4
+  const flip = below + h > window.innerHeight && r.top - h - 4 > 0
+  list.style.top = `${flip ? r.top - h - 4 : below}px`
+}, true)
+const closeMenus = () =>
+  document.querySelectorAll("details[data-menu][open]").forEach(d => d.removeAttribute("open"))
+window.addEventListener("scroll", closeMenus, true)
+window.addEventListener("resize", closeMenus)
+
 // data-confirm through the styled <dialog id="confirm-dialog"> (root layout)
 // instead of window.confirm. A capture listener on window runs before
 // phoenix_html and LiveView; on "ok" the attribute is lifted for one
