@@ -140,9 +140,31 @@ defmodule SsmWeb.MctlSummariesTest do
 
     s = summary(host)
     assert s.state == "crit"
-    assert s.reason == "unreachable or sync failed: the host refused the SSH connection"
+    assert s.reason == "unreachable: the host refused the SSH connection"
     assert s.counts.crit == 1
     assert [%{name: "ssh", state: "crit", text: "the host refused the SSH connection"}] = s.items
+  end
+
+  # mctl reads only the item "ssh" as "ssm cannot reach the host" (offline);
+  # a reachable host that refuses the login or shows a new host key is not offline
+  test "the failure kind names the item: ssh, ssh-login, ssh-hostkey, sync" do
+    for {code, item, reason} <- [
+          {"timeout", "ssh", "unreachable"},
+          {"dns_error", "ssh", "unreachable"},
+          {"auth_failed", "ssh-login", "SSH login refused"},
+          {"host_key_changed", "ssh-hostkey", "SSH host key not accepted"},
+          {"host_key_unpinned", "ssh-hostkey", "SSH host key not accepted"},
+          {"connect_failed", "sync", "sync failed"},
+          {nil, "sync", "sync failed"}
+        ] do
+      host = host_fixture()
+      put_check(host, %{state: "error", logins: 0, error_code: code, error: "x"})
+
+      s = summary(host)
+      assert s.state == "crit"
+      assert s.reason == reason <> ": x", inspect(code)
+      assert [%{name: ^item, state: "crit"}] = s.items
+    end
   end
 
   test "updated_at is the later of the last result change and the host row" do

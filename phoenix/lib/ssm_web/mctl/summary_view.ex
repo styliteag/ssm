@@ -6,7 +6,9 @@ defmodule SsmWeb.Mctl.SummaryView do
     * keys in sync: `ok`
     * drift: `warn`, one item per user and login with the missing and extra
       keys (type, fingerprint, comment; never key material)
-    * unreachable or sync failed: `crit`
+    * failed: `crit`, one item named by the failure: `ssh` (unreachable:
+      refused, timeout, no route, DNS), `ssh-login` (key refused),
+      `ssh-hostkey` (host key changed or not pinned), `sync` (anything else)
     * disabled, or never checked: `unknown`
 
   `counts` are the logins that are in sync, the drift items and the failure.
@@ -39,9 +41,21 @@ defmodule SsmWeb.Mctl.SummaryView do
 
   def render(%{check: %{state: "error"} = check} = row) do
     text = check.error || "the SSH connection failed"
-    item = %{name: "ssh", state: "crit", text: text, since: check.changed_at}
-    summary(row, check, "crit", "unreachable or sync failed: " <> text, %{crit: 1}, [item])
+    {name, reason} = failure(check.error_code)
+    item = %{name: name, state: "crit", text: text, since: check.changed_at}
+    summary(row, check, "crit", reason <> ": " <> text, %{crit: 1}, [item])
   end
+
+  # The item's name tells mctl what failed (`Ssm.Ssh.ErrorCode` codes): only
+  # "ssh" means ssm cannot reach the host (mctl shows it as offline); a host
+  # that answers but refuses the login or shows another host key is reachable.
+  @unreachable ~w(unreachable timeout connect_refused dns_error)
+  @host_key ~w(host_key_changed host_key_unpinned)
+
+  defp failure(code) when code in @unreachable, do: {"ssh", "unreachable"}
+  defp failure("auth_failed"), do: {"ssh-login", "SSH login refused"}
+  defp failure(code) when code in @host_key, do: {"ssh-hostkey", "SSH host key not accepted"}
+  defp failure(_code), do: {"sync", "sync failed"}
 
   defp blank(row, reason) do
     %{

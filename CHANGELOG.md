@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Mission Control host summary of a failed key check: the item names what failed, `ssh` only when
+  ssm cannot reach the host (refused, timed out, no route, name does not resolve), `ssh-login`
+  when the host refuses ssm's key, `ssh-hostkey` for a changed or unpinned host key, `sync` for
+  anything else; the reason says the same ("unreachable: …", "SSH login refused: …"). Mission
+  Control shows only `ssh` as "offline".
+
 ## [4.14.3] - 2026-11-10
 
 ### Added
