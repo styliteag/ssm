@@ -1,6 +1,7 @@
 defmodule Ssm.ActivityTest do
   use Ssm.DataCase, async: false
 
+  import Ecto.Query
   import Ssm.Fixtures
 
   alias Ssm.Activity
@@ -77,6 +78,37 @@ defmodule Ssm.ActivityTest do
 
     assert [%{target: "pct%host"}] = Activity.list(search: "pct%")
     assert Activity.list(search: "___n") == []
+  end
+
+  test "list/2 filters by exact actor, time range and system actors" do
+    log = fn actor, ts ->
+      {:ok, e} =
+        Activity.log(%{
+          activity_type: "host",
+          action: "create",
+          target: "t",
+          actor_username: actor
+        })
+
+      Ssm.Repo.update_all(
+        from(l in Ssm.Activity.ActivityLog, where: l.id == ^e.id),
+        set: [timestamp: ts]
+      )
+
+      e.id
+    end
+
+    a = log.("admin", 1_000)
+    m = log.("mctl:mission-control", 2_000)
+    b = log.("admin", 3_000)
+    ids = fn opts -> Activity.list(opts) |> Enum.map(& &1.id) |> Enum.sort() end
+
+    assert ids.(exclude_system: true) == Enum.sort([a, b])
+    assert ids.(actor_name: "mctl:mission-control") == [m]
+    assert ids.(from: 2_000) == Enum.sort([m, b])
+    assert ids.(to: 2_999) == Enum.sort([a, m])
+    assert ids.(from: 1_500, to: 2_500) == [m]
+    assert "mctl:mission-control" in Activity.actors(Ssm.Scope.global())
   end
 
   test "classify_details/1 shapes decoded metadata for rendering" do

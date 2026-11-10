@@ -23,7 +23,33 @@ defmodule SsmWeb.DashboardLive do
      |> assign(:attention, attention(scope))
      |> assign(:version, to_string(Application.spec(:ssm, :vsn)))
      |> assign(:schema_version, schema_version())
-     |> assign(:recent_activity, Activity.list(scope, actor: user.actor, limit: 10))}
+     |> assign(:system, false)}
+  end
+
+  # ?system=1 shows machine actors (Mission Control's service token) too
+  @impl true
+  def handle_params(params, _uri, socket) do
+    user = socket.assigns.current_user
+    system = params["system"] == "1"
+
+    entries =
+      Activity.list(Scope.of(user),
+        actor: user.actor,
+        limit: 10,
+        exclude_system: not system
+      )
+
+    {:noreply, assign(socket, system: system, recent_activity: entries)}
+  end
+
+  # What a stat card flags: the attention items that belong to hosts
+  defp host_actions(attention) do
+    for %{id: id} = item <- attention, id in ["pending", "unreachable"] do
+      case id do
+        "pending" -> %{text: "#{item.count} pending sync", path: ~p"/hosts?filter=pending"}
+        "unreachable" -> %{text: "#{item.count} unreachable", path: ~p"/hosts?filter=offline"}
+      end
+    end
   end
 
   # Latest applied Ecto migration — the dashboard version pill's "db" part
@@ -117,6 +143,7 @@ defmodule SsmWeb.DashboardLive do
           title="Hosts"
           value={@host_count}
           detail={"#{@disabled_host_count} disabled"}
+          actions={host_actions(@attention)}
         />
         <.stat_card
           id="stat-users"
@@ -143,7 +170,16 @@ defmodule SsmWeb.DashboardLive do
 
       <section class="card bg-base-200">
         <div class="card-body">
-          <h2 class="card-title text-base">Recent activity</h2>
+          <div class="flex items-center justify-between gap-2">
+            <h2 class="card-title text-base">Recent activity</h2>
+            <.link
+              id="toggle-system-activity"
+              patch={if @system, do: ~p"/dashboard", else: ~p"/dashboard?system=1"}
+              class="link link-hover text-xs opacity-70"
+            >
+              {if @system, do: "Hide system activity", else: "Show system activity"}
+            </.link>
+          </div>
 
           <p :if={@recent_activity == []} class="text-sm opacity-60">No activity yet.</p>
 
@@ -174,21 +210,30 @@ defmodule SsmWeb.DashboardLive do
   attr :title, :string, required: true
   attr :value, :integer, required: true
   attr :detail, :string, default: nil
+  attr :actions, :list, default: []
 
+  # The card is a div: its main link and the action links must not nest.
   defp stat_card(assigns) do
     ~H"""
-    <.link
-      navigate={@navigate}
-      id={@id}
-      class="stat rounded-box bg-base-200 transition hover:bg-base-300"
-    >
+    <div id={@id} class="stat rounded-box bg-base-200 transition hover:bg-base-300">
       <div class="stat-figure text-primary">
         <.icon name={@icon} class="size-6" />
       </div>
-      <div class="stat-title">{@title}</div>
-      <div class="stat-value text-3xl">{@value}</div>
+      <.link navigate={@navigate} class="contents">
+        <div class="stat-title">{@title}</div>
+        <div class="stat-value text-3xl">{@value}</div>
+      </.link>
       <div :if={@detail} class="stat-desc">{@detail}</div>
-    </.link>
+      <div :if={@actions != []} class="stat-desc flex flex-wrap gap-x-3">
+        <.link
+          :for={action <- @actions}
+          navigate={action.path}
+          class="link link-warning font-medium"
+        >
+          {action.text}
+        </.link>
+      </div>
+    </div>
     """
   end
 

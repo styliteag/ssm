@@ -84,4 +84,22 @@ defmodule SsmWeb.DashboardLiveTest do
     conn = Phoenix.ConnTest.build_conn()
     assert {:error, {:redirect, %{to: "/sign-in"}}} = live(conn, ~p"/dashboard")
   end
+
+  test "recent activity hides system actors unless ?system=1", %{conn: conn} do
+    for actor <- ["admin", "mctl:mission-control"] do
+      Ssm.Activity.log(%{
+        activity_type: "host",
+        action: "create",
+        target: "t-#{actor}",
+        actor_username: actor
+      })
+    end
+
+    {:ok, view, _} = live(conn, ~p"/dashboard")
+    assert has_element?(view, "#recent-activity", "t-admin")
+    refute has_element?(view, "#recent-activity", "mctl:mission-control")
+
+    {:ok, view, _} = live(conn, ~p"/dashboard?system=1")
+    assert has_element?(view, "#recent-activity", "mctl:mission-control")
+  end
 end

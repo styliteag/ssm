@@ -51,6 +51,9 @@ defmodule Ssm.Activity do
     * `:activity_type` — one of `key`, `host`, `user`, `auth`
     * `:search` — case-insensitive substring match against action, target,
       or actor_username (LIKE wildcards in the term are escaped)
+    * `:actor_name` — exact actor_username
+    * `:exclude_system` — hide `mctl:` actors
+    * `:from`, `:to` — inclusive unix-second bounds on the timestamp
   """
   @spec list(keyword()) :: [ActivityLog.t()]
   def list(opts \\ []), do: list(Scope.global(), opts)
@@ -74,7 +77,41 @@ defmodule Ssm.Activity do
     |> filter_scope(scope, Keyword.get(opts, :actor))
     |> filter_type(Keyword.get(opts, :activity_type))
     |> filter_search(Keyword.get(opts, :search))
+    |> filter_actor(Keyword.get(opts, :actor_name))
+    |> filter_system(Keyword.get(opts, :exclude_system, false))
+    |> filter_range(Keyword.get(opts, :from), Keyword.get(opts, :to))
     |> Repo.all()
+  end
+
+  @doc """
+  Distinct actor names visible in `scope`, for the actor filter. System
+  actors (`mctl:` prefix) are included.
+  """
+  @spec actors(Scope.t()) :: [String.t()]
+  def actors(%Scope{} = scope) do
+    from(l in ActivityLog, distinct: true, select: l.actor_username, order_by: l.actor_username)
+    |> filter_scope(scope, nil)
+    |> Repo.all()
+  end
+
+  @doc "Actors written by machine callers: Mission Control's service token (`mctl:<name>`)."
+  @spec system_actor?(String.t() | nil) :: boolean()
+  def system_actor?(name), do: is_binary(name) and String.starts_with?(name, "mctl:")
+
+  defp filter_actor(query, name) when is_binary(name) and name != "",
+    do: where(query, [l], l.actor_username == ^name)
+
+  defp filter_actor(query, _name), do: query
+
+  defp filter_system(query, true),
+    do: where(query, [l], not like(l.actor_username, "mctl:%"))
+
+  defp filter_system(query, _), do: query
+
+  # `from`/`to` are inclusive unix seconds
+  defp filter_range(query, from, to) do
+    query = if is_integer(from), do: where(query, [l], l.timestamp >= ^from), else: query
+    if is_integer(to), do: where(query, [l], l.timestamp <= ^to), else: query
   end
 
   defp filter_scope(query, scope, actor) do
