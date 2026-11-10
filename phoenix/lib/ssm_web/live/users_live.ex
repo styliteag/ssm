@@ -604,6 +604,7 @@ defmodule SsmWeb.UsersLive do
               checked={MapSet.member?(@selected, row.id)}
               phx-click="toggle-select"
               phx-value-id={row.id}
+              aria-label={"Select #{row.user.username}"}
             />
             <.user_link
               id={row.id}
@@ -660,6 +661,7 @@ defmodule SsmWeb.UsersLive do
               checked={MapSet.member?(@selected, row.id)}
               phx-click="toggle-select"
               phx-value-id={row.id}
+              aria-label={"Select #{row.user.username}"}
             />
           </:col>
           <:col :let={row} label="Username" sort="username">

@@ -7,12 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Single-choice lists of SSH users, hosts and grant targets are comboboxes: type to filter, arrows and
+  Enter to pick, Escape to close; with thousands of entries only the first 100 matches are shown.
+- Empty Grants and Keys lists say why they are empty and offer the next step (New grant, Add key, or
+  Clear filters).
+- Hosts: the column sort is part of the URL; sync and connection test stay visible, the rarer row
+  actions (managed logins, edit, enable/disable, delete) are in a labelled "More actions" menu.
+- Hosts, SSH users and SSH keys show the first 100 rows with a position line and "Show more".
+- Dashboard: the stat cards link to their lists, the Hosts card names hosts pending sync and
+  unreachable; activity of the Mission Control service token is hidden unless "Show system activity"
+  is chosen.
+- Activity: filter by actor and by UTC date range; details are collapsed the same way everywhere.
+- Access matrix: the header row and host column stay in view while scrolling; a legend explains the
+  cells and a hint appears when there are many hosts.
+- The bulk toolbar of the SSH users list stays at the bottom of the window.
+
 ### Changed
 
+- API tokens page: one status block (Active or Revoked, last used) and only the action that fits
+  (Rotate and Revoke, or Connect Mission Control).
+- A click on a cell of the access matrix in the "all logins" view says to pick a login first instead of
+  doing nothing.
 - Development mode (`mix phx.server`) honours `DATABASE_PATH`, `JWT_SECRET`, `PHX_HOST` and
   `PHX_ALT_HOSTS` when they are set, with the same meaning as in the release. This lets a dev
   container run behind a TLS proxy with SSO (the Orbit lab's live-reload setup). Without these
   variables nothing changes; releases are not affected.
+
+### Fixed
+
+- The row checkboxes of the SSH users list had no accessible name.
 
 ## [4.14.4] - 2026-11-10
 
