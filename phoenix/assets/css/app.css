@@ -471,3 +471,21 @@ select.picker-list option:checked {
   background: var(--color-primary);
   color: var(--color-primary-content);
 }
+
+/* WCAG AA in the light themes: muted text keeps 4.5:1 on the base colours. The
+   low-opacity text utilities are lifted to 72 % (60 % gave 4.4:1); the dark
+   themes already pass and are not touched. */
+:root:not([data-theme*="dark"]) .text-base-content\/40,
+:root:not([data-theme*="dark"]) .text-base-content\/50,
+:root:not([data-theme*="dark"]) .text-base-content\/60 {
+  color: color-mix(in oklab, var(--color-base-content) 72%, transparent);
+}
+:root:not([data-theme*="dark"]) .opacity-50,
+:root:not([data-theme*="dark"]) .opacity-60 {
+  opacity: 0.72;
+}
+:root:not([data-theme*="dark"]) .stat-title,
+:root:not([data-theme*="dark"]) .stat-desc,
+:root:not([data-theme*="dark"]) .label {
+  color: color-mix(in oklab, var(--color-base-content) 72%, transparent);
+}
