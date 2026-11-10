@@ -960,17 +960,6 @@ defmodule SsmWeb.HostsLive do
 
   defp host_actions(assigns) do
     ~H"""
-    <button
-      :if={@admin}
-      id={"managed-logins-#{@host.id}"}
-      class="btn btn-ghost btn-xs"
-      phx-click="managed-logins"
-      phx-value-id={@host.id}
-      title="Managed logins (admin)"
-      aria-label="Managed logins (admin)"
-    >
-      <.icon name="hero-user-group" class="size-4" />
-    </button>
     <.link
       id={"diff-link-#{@host.id}"}
       navigate={~p"/diff?host_id=#{@host.id}"}
@@ -998,38 +987,62 @@ defmodule SsmWeb.HostsLive do
         class={["size-4", @testing_id == @host.id && "motion-safe:animate-spin"]}
       />
     </button>
-    <button
-      id={"toggle-host-#{@host.id}"}
-      class="btn btn-ghost btn-xs"
-      phx-click="toggle_disabled"
-      phx-value-id={@host.id}
-      title={if @host.disabled, do: "Enable host", else: "Disable host"}
-      aria-label={if @host.disabled, do: "Enable host", else: "Disable host"}
+    <details
+      id={"host-menu-#{@host.id}"}
+      class="dropdown dropdown-end"
+      data-popover
+      phx-mounted={JS.ignore_attributes(["open"])}
     >
-      <.icon name={if @host.disabled, do: "hero-power", else: "hero-no-symbol"} class="size-4" />
-    </button>
-    <button
-      id={"edit-host-#{@host.id}"}
-      class="btn btn-ghost btn-xs"
-      phx-click="edit"
-      phx-value-id={@host.id}
-      title="Edit host"
-      aria-label="Edit host"
-    >
-      <.icon name="hero-pencil-square" class="size-4" />
-    </button>
-    <button
-      id={"delete-host-#{@host.id}"}
-      class="btn btn-ghost btn-xs text-error"
-      phx-click="delete"
-      phx-value-id={@host.id}
-      data-confirm={delete_confirm(@host, @auth_count)}
-      title="Delete host"
-      aria-label="Delete host"
-    >
-      <.icon name="hero-trash" class="size-4" />
-    </button>
+      <summary
+        class="btn btn-ghost btn-xs list-none"
+        title="More actions"
+        aria-label={"More actions for #{@host.name}"}
+      >
+        <.icon name="hero-ellipsis-vertical" class="size-4" />
+      </summary>
+      <ul class="menu dropdown-content z-30 w-52 rounded-box border border-base-300 bg-base-100 p-1 shadow-lg">
+        <li :if={@admin}>
+          <button
+            id={"managed-logins-#{@host.id}"}
+            phx-click={menu_click("managed-logins", @host)}
+          >
+            <.icon name="hero-user-group" class="size-4" /> Managed logins (admin)
+          </button>
+        </li>
+        <li>
+          <button id={"edit-host-#{@host.id}"} phx-click={menu_click("edit", @host)}>
+            <.icon name="hero-pencil-square" class="size-4" /> Edit host
+          </button>
+        </li>
+        <li>
+          <button id={"toggle-host-#{@host.id}"} phx-click={menu_click("toggle_disabled", @host)}>
+            <.icon
+              name={if @host.disabled, do: "hero-power", else: "hero-no-symbol"}
+              class="size-4"
+            />
+            {if @host.disabled, do: "Enable host", else: "Disable host"}
+          </button>
+        </li>
+        <li>
+          <button
+            id={"delete-host-#{@host.id}"}
+            class="text-error"
+            phx-click={menu_click("delete", @host)}
+            data-confirm={delete_confirm(@host, @auth_count)}
+          >
+            <.icon name="hero-trash" class="size-4" /> Delete host
+          </button>
+        </li>
+      </ul>
+    </details>
     """
+  end
+
+  # a menu entry: push the event for the host and close its menu
+  defp menu_click(event, host) do
+    event
+    |> JS.push(value: %{id: host.id})
+    |> JS.remove_attribute("open", to: "#host-menu-#{host.id}")
   end
 
   attr :form, :any, required: true

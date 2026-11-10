@@ -38,18 +38,26 @@ defmodule SsmWeb.SharedComponentsTest do
     refute has_element?(view, "#host-modal .modal-backdrop[phx-click]")
   end
 
-  test "icon-only row actions have an accessible name", %{conn: conn} do
+  test "icon-only row actions have an accessible name; the rare ones sit in a labelled menu",
+       %{conn: conn} do
     host = host_fixture(%{name: "web1"})
 
     {:ok, view, _html} = live(conn, ~p"/hosts")
 
     for {id, label} <- [
-          {"delete-host-#{host.id}", "Delete host"},
-          {"edit-host-#{host.id}", "Edit host"},
           {"test-host-#{host.id}", "Test SSH connection"},
-          {"toggle-host-#{host.id}", "Disable host"}
+          {"diff-link-#{host.id}", "Open in Sync"},
+          {"host-menu-#{host.id} summary", "More actions for web1"}
         ] do
       assert has_element?(view, ~s(##{id}[aria-label="#{label}"]))
+    end
+
+    for {id, text} <- [
+          {"delete-host-#{host.id}", "Delete host"},
+          {"edit-host-#{host.id}", "Edit host"},
+          {"toggle-host-#{host.id}", "Disable host"}
+        ] do
+      assert has_element?(view, ~s(#host-menu-#{host.id} ##{id}), text)
     end
   end
 
