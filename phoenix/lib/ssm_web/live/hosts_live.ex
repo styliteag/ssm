@@ -64,14 +64,38 @@ defmodule SsmWeb.HostsLive do
   @impl true
   def handle_params(params, _uri, socket) do
     filter = if params["filter"] in @filters, do: params["filter"], else: "active"
-    {:noreply, socket |> assign(filter: filter, q: params["q"]) |> refilter()}
+
+    {:noreply,
+     socket
+     |> assign(filter: filter, q: params["q"], sort: parse_sort(params["sort"]))
+     |> refilter()}
   end
+
+  @sort_keys ~w(name address login jump access status)
+
+  # ?sort=key:asc|desc; anything else is no sort
+  defp parse_sort(value) when is_binary(value) do
+    case String.split(value, ":") do
+      [key, "asc"] when key in @sort_keys -> {key, :asc}
+      [key, "desc"] when key in @sort_keys -> {key, :desc}
+      _ -> nil
+    end
+  end
+
+  defp parse_sort(_), do: nil
+
+  defp sort_param({key, dir}), do: "#{key}:#{dir}"
+  defp sort_param(nil), do: nil
 
   defp patch_query(socket, changes) do
     params =
-      %{"filter" => socket.assigns.filter, "q" => socket.assigns.q}
+      %{
+        "filter" => socket.assigns.filter,
+        "q" => socket.assigns.q,
+        "sort" => sort_param(socket.assigns.sort)
+      }
       |> Map.merge(changes)
-      |> query_params(~w(filter q))
+      |> query_params(~w(filter q sort))
       |> Map.reject(fn {k, v} -> k == "filter" and v == "active" end)
 
     push_patch(socket, to: ~p"/hosts?#{params}")
@@ -173,7 +197,7 @@ defmodule SsmWeb.HostsLive do
 
   def handle_event("sort", %{"key" => key}, socket) do
     sort = SsmWeb.TableSort.toggle(socket.assigns.sort, key)
-    {:noreply, socket |> assign(:sort, sort) |> refilter()}
+    {:noreply, patch_query(socket, %{"sort" => sort_param(sort)})}
   end
 
   def handle_event("view-mode", %{"view" => view}, socket) when view in ~w(list cards) do

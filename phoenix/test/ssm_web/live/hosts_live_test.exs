@@ -19,6 +19,23 @@ defmodule SsmWeb.HostsLiveTest do
     assert {:error, {:redirect, %{to: "/sign-in"}}} = live(conn, ~p"/hosts")
   end
 
+  test "the column sort lives in the URL and survives a reload", %{conn: conn} do
+    host_fixture(%{name: "b-host"})
+    host_fixture(%{name: "a-host"})
+
+    {:ok, view, _html} = live(conn, ~p"/hosts")
+    view |> element(~s([phx-click="sort"][phx-value-key="name"])) |> render_click()
+    assert_patch(view, ~p"/hosts?#{[sort: "name:asc"]}")
+
+    {:ok, view, _html} = live(conn, ~p"/hosts?sort=name:desc")
+    html = render(view)
+    assert :binary.match(html, "b-host") < :binary.match(html, "a-host")
+
+    # an unknown sort key or direction is ignored
+    {:ok, view, _html} = live(conn, ~p"/hosts?sort=bogus:up")
+    assert render(view) =~ "a-host"
+  end
+
   test "lists hosts with status badge and jump host name", %{conn: conn} do
     bastion = host_fixture(%{name: "bastion"})
     host = host_fixture(%{name: "web1", jump_via: bastion.id})
