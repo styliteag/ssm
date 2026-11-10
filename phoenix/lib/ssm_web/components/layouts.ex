@@ -42,7 +42,10 @@ defmodule SsmWeb.Layouts do
   slot :inner_block, required: true
 
   def app(assigns) do
-    assigns = assign(assigns, :read_only, read_only?(assigns.current_user))
+    assigns =
+      assigns
+      |> assign(:read_only, read_only?(assigns.current_user))
+      |> assign(:identity, identity(assigns.current_user))
 
     ~H"""
     <%!-- HEEx does not interpolate inside <style>; the CSS comes from module constants --%>
@@ -120,9 +123,16 @@ defmodule SsmWeb.Layouts do
                 </.link>
               </li>
               <li><.theme_switcher /></li>
-              <li :if={@current_user} class="text-sm opacity-75">
+              <li :if={@current_user} id="current-user" class="text-sm opacity-75">
                 <span class="sr-only">Signed in as</span>
-                {@current_user.username}
+                <span class="max-w-40 truncate align-bottom inline-block sm:max-w-72">
+                  {@identity.who}
+                </span>
+                <span aria-hidden="true">·</span>
+                <span id="current-role" class="font-medium">{@current_user.role}</span>
+                <span :if={@identity.scope} class="hidden opacity-75 lg:inline">
+                  · {@identity.scope}
+                </span>
               </li>
               <li :if={@current_user}>
                 <.link href={~p"/sign-out"} method="delete" class="btn btn-ghost btn-sm">
@@ -143,6 +153,25 @@ defmodule SsmWeb.Layouts do
 
     <.flash_group flash={@flash} />
     """
+  end
+
+  # Header text of the signed-in user: e-mail (OIDC) or login name, the role, and
+  # for a scoped user the customers and groups it may see (ADR-0014 §3).
+  defp identity(nil), do: nil
+
+  defp identity(user) do
+    %{who: user[:email] || user.username, scope: scope_text(Ssm.Scope.of(user))}
+  end
+
+  defp scope_text(%Ssm.Scope{customers: :all, groups: :all}), do: nil
+
+  defp scope_text(%Ssm.Scope{customers: customers, groups: groups}) do
+    [{"customers", customers}, {"groups", groups}]
+    |> Enum.reject(fn {_label, slugs} -> slugs == :all end)
+    |> Enum.map_join(", ", fn
+      {label, []} -> "no #{label}"
+      {label, slugs} -> "#{label} #{Enum.join(slugs, ", ")}"
+    end)
   end
 
   # viewers (OIDC role `viewer`) see no write controls (SsmWeb.ReadOnly)

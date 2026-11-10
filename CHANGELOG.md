@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- The header shows who is signed in and with which role (`e-mail · role`, for a viewer too) on every
+  page, plus the customers and host groups of a scoped user.
+
 ### Changed
 
 - One vocabulary: **Access** is an SSH user's right to log in as a login on a host (one row or matrix

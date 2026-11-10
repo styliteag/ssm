@@ -291,6 +291,7 @@ defmodule SsmWeb.UserAuth do
          false <- Accounts.sid_revoked?(operator.oidc_issuer, session["oidc_sid"]) do
       %{
         username: operator.name,
+        email: operator.email,
         actor: Accounts.actor_label(operator),
         role: operator.role,
         source: :oidc,
