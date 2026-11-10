@@ -121,7 +121,7 @@ defmodule SsmWeb.ApiTokensLive do
             </button>
           </form>
 
-          <div :if={@status} class="flex gap-2">
+          <div :if={@status && @status.state == "active"} class="flex gap-2">
             <button
               id="connect-rotate"
               type="button"
@@ -132,7 +132,6 @@ defmodule SsmWeb.ApiTokensLive do
               Rotate
             </button>
             <button
-              :if={@status.state == "active"}
               id="connect-revoke"
               type="button"
               phx-click="revoke"
@@ -159,7 +158,12 @@ defmodule SsmWeb.ApiTokensLive do
   defp status_line(assigns) do
     ~H"""
     <p id="connect-status" class="text-sm">
-      <span class="badge badge-sm">{@status.state}</span>
+      <span class={[
+        "badge badge-sm",
+        if(@status.state == "active", do: "badge-success", else: "badge-warning")
+      ]}>
+        {String.capitalize(@status.state)}
+      </span>
       Prefix <code>{@status.prefix}</code>, scopes {Enum.join(@status.scopes, ", ")}.
       Last used {format_time(@status.last_used_at)}{if @status.last_used_ip,
         do: " from #{@status.last_used_ip}"}. Updated {format_time(@status.updated_at)}.

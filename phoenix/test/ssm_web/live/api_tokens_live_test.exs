@@ -71,7 +71,7 @@ defmodule SsmWeb.ApiTokensLiveTest do
     html = view |> element("#connect-done") |> render_click()
     refute html =~ plain
     refute has_element?(view, "#connect-secret")
-    assert has_element?(view, "#connect-status", "active")
+    assert has_element?(view, "#connect-status", "Active")
     refute render(view) =~ plain
 
     {:ok, _view, fresh} = live(conn, ~p"/settings/api-tokens")
@@ -129,9 +129,9 @@ defmodule SsmWeb.ApiTokensLiveTest do
 
     view |> element("#connect-revoke") |> render_click()
     assert {:error, _} = verify(plain)
-    assert has_element?(view, "#connect-status", "revoked")
+    assert has_element?(view, "#connect-status", "Revoked")
     refute has_element?(view, "#connect-revoke")
-    assert has_element?(view, "#connect-rotate")
+    refute has_element?(view, "#connect-rotate")
     assert has_element?(view, "#connect-form")
     assert [entry] = audit("mctl.connect.revoke")
     assert Jason.decode!(entry.meta)["prefix"] == Connect.status(Tokens.Ecto).prefix
