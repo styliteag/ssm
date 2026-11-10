@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.14.4] - 2026-11-10
+
 ### Changed
 
 - Mission Control host summary of a failed key check: the item names what failed, `ssh` only when
