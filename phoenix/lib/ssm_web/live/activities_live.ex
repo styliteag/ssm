@@ -48,9 +48,37 @@ defmodule SsmWeb.ActivitiesLive do
      socket
      |> assign(:filter_type, filter_type)
      |> assign(:search, search)
+     |> assign(:actor_name, blank_to_nil(params["actor"]))
+     |> assign(:from, parse_date(params["from"]))
+     |> assign(:to, parse_date(params["to"]))
+     |> assign(:actors, Activity.actors(Ssm.Scope.of(socket.assigns.current_user)))
      |> assign(:limit, @page_size)
      |> reload_entries()}
   end
+
+  defp blank_to_nil(value) when is_binary(value) and value != "", do: value
+  defp blank_to_nil(_value), do: nil
+
+  # ?from= / ?to= are UTC calendar days (YYYY-MM-DD); anything else is no bound
+  @doc false
+  def parse_date(value) when is_binary(value) do
+    case Date.from_iso8601(value) do
+      {:ok, date} -> date
+      _ -> nil
+    end
+  end
+
+  def parse_date(_value), do: nil
+
+  @doc false
+  def day_start(nil), do: nil
+
+  def day_start(%Date{} = d),
+    do: d |> DateTime.new!(~T[00:00:00], "Etc/UTC") |> DateTime.to_unix()
+
+  @doc false
+  def day_end(nil), do: nil
+  def day_end(%Date{} = d), do: d |> DateTime.new!(~T[23:59:59], "Etc/UTC") |> DateTime.to_unix()
 
   defp reload_entries(socket) do
     user = socket.assigns.current_user
@@ -61,7 +89,10 @@ defmodule SsmWeb.ActivitiesLive do
         actor: user.actor,
         limit: socket.assigns.limit + 1,
         activity_type: socket.assigns.filter_type,
-        search: socket.assigns.search
+        search: socket.assigns.search,
+        actor_name: socket.assigns.actor_name,
+        from: day_start(socket.assigns.from),
+        to: day_end(socket.assigns.to)
       )
 
     {visible, more} = Enum.split(entries, socket.assigns.limit)
@@ -78,7 +109,13 @@ defmodule SsmWeb.ActivitiesLive do
   @impl true
   def handle_event("filter", params, socket) do
     query =
-      [{"type", params["type"]}, {"q", params["q"]}]
+      [
+        {"type", params["type"]},
+        {"q", params["q"]},
+        {"actor", params["actor"]},
+        {"from", params["from"]},
+        {"to", params["to"]}
+      ]
       |> Enum.reject(fn {_key, value} -> value in [nil, ""] end)
       |> Map.new()
 
@@ -126,8 +163,8 @@ defmodule SsmWeb.ActivitiesLive do
         <:subtitle>Audit trail, newest first</:subtitle>
       </.header>
 
-      <form id="activities-filter" phx-change="filter" class="flex max-w-xl gap-3">
-        <div class="flex-1">
+      <form id="activities-filter" phx-change="filter" class="flex flex-wrap items-end gap-3">
+        <div class="min-w-48 flex-1">
           <.input
             type="search"
             name="q"
@@ -137,7 +174,7 @@ defmodule SsmWeb.ActivitiesLive do
             phx-debounce="300"
           />
         </div>
-        <div class="flex-1">
+        <div class="min-w-40">
           <.input
             type="select"
             name="type"
@@ -147,10 +184,30 @@ defmodule SsmWeb.ActivitiesLive do
             options={[{"Host", "host"}, {"User", "user"}, {"Key", "key"}, {"Authorization", "auth"}]}
           />
         </div>
+        <div class="min-w-48">
+          <.input
+            id="activity-actor"
+            type="select"
+            name="actor"
+            value={@actor_name}
+            label="Actor"
+            prompt="All actors"
+            searchable
+            options={@actors}
+          />
+        </div>
+        <div>
+          <.input type="date" name="from" value={@from} label="From (UTC)" />
+        </div>
+        <div>
+          <.input type="date" name="to" value={@to} label="To (UTC)" />
+        </div>
       </form>
 
       <p :if={@entry_count == 0} class="text-sm opacity-60">
-        {if @search || @filter_type, do: "No matching activity.", else: "No activity recorded."}
+        {if @search || @filter_type || @actor_name || @from || @to,
+          do: "No matching activity.",
+          else: "No activity recorded."}
       </p>
 
       <ul :if={@entry_count > 0} id="activities" phx-update="stream" class="space-y-1">
@@ -214,14 +271,17 @@ defmodule SsmWeb.ActivitiesLive do
     assigns = assign(assigns, :changes, changes)
 
     ~H"""
-    <div class="mt-1.5 flex flex-wrap gap-1.5" data-details="changes">
-      <span :for={{field, old, new} <- @changes} class="badge badge-ghost badge-sm font-mono">
-        <span class="opacity-70">{field}:</span>
-        <s class="text-error">{display(old)}</s>
-        <span aria-hidden="true">→</span>
-        <span class="text-success">{display(new)}</span>
-      </span>
-    </div>
+    <details class="mt-1.5" data-details="changes" phx-mounted={JS.ignore_attributes(["open"])}>
+      <summary class="cursor-pointer text-xs opacity-60">Details ({length(@changes)})</summary>
+      <div class="mt-1 flex flex-wrap gap-1.5">
+        <span :for={{field, old, new} <- @changes} class="badge badge-ghost badge-sm font-mono">
+          <span class="opacity-70">{field}:</span>
+          <s class="text-error">{display(old)}</s>
+          <span aria-hidden="true">→</span>
+          <span class="text-success">{display(new)}</span>
+        </span>
+      </div>
+    </details>
     """
   end
 
@@ -229,11 +289,14 @@ defmodule SsmWeb.ActivitiesLive do
     assigns = assign(assigns, :pairs, pairs)
 
     ~H"""
-    <div class="mt-1.5 flex flex-wrap gap-1.5" data-details="summary">
-      <span :for={{key, value} <- @pairs} class="badge badge-ghost badge-sm font-mono">
-        {key}: {display(value)}
-      </span>
-    </div>
+    <details class="mt-1.5" data-details="summary" phx-mounted={JS.ignore_attributes(["open"])}>
+      <summary class="cursor-pointer text-xs opacity-60">Details ({length(@pairs)})</summary>
+      <div class="mt-1 flex flex-wrap gap-1.5">
+        <span :for={{key, value} <- @pairs} class="badge badge-ghost badge-sm font-mono">
+          {key}: {display(value)}
+        </span>
+      </div>
+    </details>
     """
   end
 

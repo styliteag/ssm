@@ -1,6 +1,7 @@
 defmodule SsmWeb.ActivitiesLiveTest do
   use SsmWeb.ConnCase, async: false
 
+  import Ecto.Query
   import Phoenix.LiveViewTest
 
   alias Ssm.Activity
@@ -134,5 +135,32 @@ defmodule SsmWeb.ActivitiesLiveTest do
     for _ <- 1..40, do: render_click(view, "load_more", %{})
 
     assert :sys.get_state(view.pid).socket.assigns.limit == 1000
+  end
+
+  test "filters by actor and UTC day range", %{conn: conn} do
+    a = log_entry(%{target: "by-alice", actor_username: "alice"})
+    b = log_entry(%{target: "by-bob", actor_username: "bob"})
+
+    Ssm.Repo.update_all(
+      from(l in Ssm.Activity.ActivityLog, where: l.id == ^a.id),
+      set: [timestamp: 1_700_000_000]
+    )
+
+    {:ok, view, _} = live(conn, ~p"/activities?actor=alice")
+    assert has_element?(view, "#activities-#{a.id}")
+    refute has_element?(view, "#activities-#{b.id}")
+
+    # 2023-11-14 22:13:20 UTC
+    {:ok, view, _} = live(conn, ~p"/activities?from=2023-11-14&to=2023-11-14")
+    assert has_element?(view, "#activities-#{a.id}")
+    refute has_element?(view, "#activities-#{b.id}")
+
+    {:ok, view, _} = live(conn, ~p"/activities?from=2023-11-15")
+    refute has_element?(view, "#activities-#{a.id}")
+    assert has_element?(view, "#activities-#{b.id}")
+
+    # garbage dates are ignored
+    {:ok, view, _} = live(conn, ~p"/activities?from=nope")
+    assert has_element?(view, "#activities-#{a.id}")
   end
 end
