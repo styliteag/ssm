@@ -568,7 +568,7 @@ defmodule SsmWeb.UsersLive do
       <div
         :if={MapSet.size(@selected) > 0}
         id="bulk-toolbar"
-        class="flex flex-wrap items-center gap-2 rounded-box bg-base-200 px-3 py-2"
+        class="sticky bottom-2 z-20 flex flex-wrap items-center gap-2 rounded-box border border-base-300 bg-base-200 px-3 py-2 shadow-lg"
       >
         <span class="text-sm">{MapSet.size(@selected)} selected</span>
         <button
