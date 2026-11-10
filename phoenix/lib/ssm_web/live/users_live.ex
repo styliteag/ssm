@@ -20,6 +20,8 @@ defmodule SsmWeb.UsersLive do
   alias Ssm.Users.User
   alias SsmWeb.Layouts
 
+  @page_size 100
+
   @impl true
   def mount(_params, _session, socket) do
     {:ok,
@@ -28,13 +30,16 @@ defmodule SsmWeb.UsersLive do
      |> assign(form: nil, editing: nil)
      |> assign(selected: MapSet.new(), splitting: nil, merging: nil, bulk_deleting: false)
      |> assign(sort: nil, view: "list", q: nil, status: nil)
+     |> assign(limit: @page_size, page_size: @page_size)
      |> reload_users()}
   end
 
   @impl true
   def handle_params(params, _uri, socket) do
     status = if params["status"] in ~w(enabled disabled), do: params["status"]
-    {:noreply, socket |> assign(q: params["q"], status: status) |> reload_users()}
+
+    {:noreply,
+     socket |> assign(q: params["q"], status: status, limit: @page_size) |> reload_users()}
   end
 
   defp row_matches?(row, q, status) do
@@ -55,7 +60,7 @@ defmodule SsmWeb.UsersLive do
     ids = MapSet.new(rows, & &1.id)
 
     socket
-    |> assign(:rows, rows)
+    |> assign(:rows, Enum.take(rows, socket.assigns.limit))
     |> assign(:user_count, length(rows))
     |> update(:selected, &MapSet.intersection(&1, ids))
   end
@@ -77,6 +82,9 @@ defmodule SsmWeb.UsersLive do
   ## Events: create/edit/delete/toggle (unchanged behavior)
 
   @impl true
+  def handle_event("more", _params, socket),
+    do: {:noreply, socket |> assign(:limit, socket.assigns.limit + @page_size) |> reload_users()}
+
   def handle_event("sort", %{"key" => key}, socket) do
     sort = SsmWeb.TableSort.toggle(socket.assigns.sort, key)
     {:noreply, socket |> assign(:sort, sort) |> reload_users()}
@@ -628,6 +636,13 @@ defmodule SsmWeb.UsersLive do
           </div>
         </li>
       </ul>
+
+      <div :if={@user_count > @page_size} class="flex items-center gap-3 text-sm">
+        <span id="users-position" class="opacity-70">{length(@rows)} of {@user_count}</span>
+        <.button :if={length(@rows) < @user_count} id="users-more" phx-click="more">
+          Show {min(@page_size, @user_count - length(@rows))} more
+        </.button>
+      </div>
 
       <div :if={@view == "list" and @user_count > 0} class="overflow-x-auto">
         <.table

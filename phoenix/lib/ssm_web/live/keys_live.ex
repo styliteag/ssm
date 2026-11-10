@@ -18,6 +18,7 @@ defmodule SsmWeb.KeysLive do
 
   # ids from params and events: a positive 64-bit row id, else "not found"
   @max_id 9_223_372_036_854_775_807
+  @page_size 100
 
   @type_filters ~w(all rsa ed25519 ecdsa other)
 
@@ -30,6 +31,9 @@ defmodule SsmWeb.KeysLive do
   def mount(_params, _session, socket) do
     {:ok,
      assign(socket,
+       limit: @page_size,
+       page_size: @page_size,
+       shown_count: 0,
        page_title: "SSH keys",
        form: nil,
        editing: nil,
@@ -58,6 +62,7 @@ defmodule SsmWeb.KeysLive do
     {:noreply,
      socket
      |> assign(:filter_user_id, filter_user_id)
+     |> assign(:limit, @page_size)
      |> assign(:search, params["q"] || "")
      |> assign(:users, Users.list_users())
      |> reload_keys()}
@@ -93,7 +98,8 @@ defmodule SsmWeb.KeysLive do
     socket
     |> assign(:type_counts, Enum.frequencies_by(searched, &category_id(&1.key_type)))
     |> assign(:key_count, length(keys))
-    |> stream(:keys, keys, reset: true)
+    |> assign(:shown_count, min(length(keys), socket.assigns.limit))
+    |> stream(:keys, Enum.take(keys, socket.assigns.limit), reset: true)
   end
 
   defp key_sorters(hosts_by_user) do
@@ -141,6 +147,9 @@ defmodule SsmWeb.KeysLive do
   def handle_event("type-filter", %{"type" => type}, socket) when type in @type_filters do
     {:noreply, socket |> assign(:type_filter, type) |> refilter()}
   end
+
+  def handle_event("more", _params, socket),
+    do: {:noreply, socket |> assign(:limit, socket.assigns.limit + @page_size) |> refilter()}
 
   def handle_event("new", _params, socket) do
     attrs =
@@ -659,6 +668,13 @@ defmodule SsmWeb.KeysLive do
           </div>
         </li>
       </ul>
+
+      <div :if={@key_count > @page_size} class="flex items-center gap-3 text-sm">
+        <span id="keys-position" class="opacity-70">{@shown_count} of {@key_count}</span>
+        <.button :if={@shown_count < @key_count} id="keys-more" phx-click="more">
+          Show {min(@page_size, @key_count - @shown_count)} more
+        </.button>
+      </div>
 
       <div :if={@view == "list" and @key_count > 0} class="overflow-x-auto">
         <.table id="keys" rows={@streams.keys} sort={@sort}>

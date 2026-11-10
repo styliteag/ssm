@@ -26,6 +26,23 @@ defmodule SsmWeb.KeysLiveTest do
     refute has_element?(view, "#keys-empty button", "Add key")
   end
 
+  test "a long key list shows 100 rows and a Show more button", %{conn: conn} do
+    user = user_fixture(%{username: "bulk"})
+    for _ <- 1..120, do: key_fixture(user)
+
+    {:ok, view, _html} = live(conn, ~p"/keys")
+    assert has_element?(view, "#keys-position", "100 of 120")
+    assert view |> element("#keys") |> render() |> String.split("<tr") |> length() == 101
+
+    view |> element("#keys-more") |> render_click()
+    assert has_element?(view, "#keys-position", "120 of 120")
+    refute has_element?(view, "#keys-more")
+
+    # a filter starts again at the first page of its result
+    {:ok, view, _html} = live(conn, ~p"/keys?q=key-")
+    assert has_element?(view, "#keys-position", "100 of 120")
+  end
+
   test "lists keys with owner and type badge", %{conn: conn} do
     user = user_fixture(%{username: "alice"})
     key = key_fixture(user, %{name: "laptop"})

@@ -13,6 +13,19 @@ defmodule SsmWeb.UsersLiveTest do
     assert {:error, {:redirect, %{to: "/sign-in"}}} = live(conn, ~p"/users")
   end
 
+  test "a long user list shows 100 rows and a Show more button", %{conn: conn} do
+    for n <- 1..120, do: user_fixture(%{username: "bulk#{String.pad_leading("#{n}", 3, "0")}"})
+
+    {:ok, view, _html} = live(conn, ~p"/users")
+    assert has_element?(view, "#users-position", "100 of 120")
+    assert has_element?(view, "#users", "bulk001")
+    refute has_element?(view, "#users", "bulk120")
+
+    view |> element("#users-more") |> render_click()
+    assert has_element?(view, "#users-position", "120 of 120")
+    assert has_element?(view, "#users", "bulk120")
+  end
+
   test "an event with a non-numeric id is a no-op, not a crash", %{conn: conn} do
     user = user_fixture()
     {:ok, view, _html} = live(conn, ~p"/users")
