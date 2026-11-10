@@ -31,6 +31,19 @@ defmodule SsmWeb.AuthorizationsLiveTest do
     assert Authorizations.get_authorization(auth.id)
   end
 
+  test "a click on a matrix cell in the all-logins view says to pick a login", %{conn: conn} do
+    user = user_fixture(%{username: "alice"})
+    host = host_fixture(%{name: "web1"})
+
+    {:ok, view, _html} = live(conn, ~p"/authorizations?view=matrix&login=all")
+
+    html =
+      render_click(view, "matrix-toggle", %{"user-id" => "#{user.id}", "host-id" => "#{host.id}"})
+
+    assert html =~ "Pick a remote login"
+    assert Authorizations.list_authorizations() == []
+  end
+
   test "lists authorizations with user, host, and login", %{conn: conn} do
     user = user_fixture(%{username: "alice"})
     host = host_fixture(%{name: "web1"})

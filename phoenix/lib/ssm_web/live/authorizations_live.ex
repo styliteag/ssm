@@ -352,7 +352,7 @@ defmodule SsmWeb.AuthorizationsLive do
 
   def handle_event("matrix-toggle", %{"user-id" => user_id, "host-id" => host_id}, socket) do
     case socket.assigns.matrix_login do
-      "all" -> {:noreply, socket}
+      "all" -> {:noreply, put_flash(socket, :info, "Pick a remote login above to change access.")}
       login -> matrix_toggle(socket, parse_id(user_id), parse_id(host_id), login)
     end
   end
