@@ -100,6 +100,115 @@ const SelectSearch = {
   },
 }
 
+// Combobox (<.input type="select" searchable>, one choice): a text field that
+// filters a listbox of the select's options. Arrow keys move, Enter or a click
+// picks, Escape closes, Tab leaves. The value stays in the native (visually
+// hidden) <select>, so forms, phx-change and server-side options work as for
+// any select. The list is built from the options on open, at most MAX rows.
+const COMBOBOX_MAX = 100
+const Combobox = {
+  mounted() {
+    this.select = this.el.querySelector("select")
+    this.input = this.el.querySelector("[data-combobox-input]")
+    this.list = this.el.querySelector("[data-combobox-list]")
+    this.index = -1
+    this.typed = false
+    this.sync()
+    this.input.addEventListener("focus", () => { this.input.select(); this.typed = false; this.open() })
+    this.input.addEventListener("click", () => { if (this.list.classList.contains("hidden")) this.open() })
+    this.input.addEventListener("input", e => { e.stopPropagation(); this.typed = true; this.open() })
+    this.input.addEventListener("change", e => e.stopPropagation())
+    this.input.addEventListener("keydown", e => this.key(e))
+    this.input.addEventListener("blur", () => { this.close(); this.sync() })
+    // mousedown, not click: the input's blur would close the list first
+    this.list.addEventListener("mousedown", e => {
+      const row = e.target.closest("[data-value]")
+      if (row) { e.preventDefault(); this.pick(row.dataset.value) }
+    })
+  },
+  updated() { this.sync() },
+  label() {
+    const o = this.select.selectedOptions[0]
+    return o && o.value !== "" ? o.textContent.trim() : ""
+  },
+  sync() {
+    if (document.activeElement !== this.input) this.input.value = this.label()
+  },
+  rows() { return Array.from(this.list.querySelectorAll("[data-value]")) },
+  open() {
+    const q = this.typed ? this.input.value.trim().toLowerCase() : ""
+    const matches = Array.from(this.select.options).filter(o =>
+      o.value === "" ? q === "" : q === "" || o.textContent.toLowerCase().includes(q))
+    this.list.replaceChildren(...matches.slice(0, COMBOBOX_MAX).map((o, i) => {
+      const li = document.createElement("li")
+      li.id = `${this.el.id}-opt-${i}`
+      li.setAttribute("role", "option")
+      li.dataset.value = o.value
+      li.setAttribute("aria-selected", String(o.selected && o.value !== ""))
+      const a = document.createElement("a")
+      a.textContent = o.value === "" ? (this.input.placeholder || "None") : o.textContent.trim()
+      if (o.value === "") a.className = "opacity-60"
+      li.append(a)
+      return li
+    }))
+    if (matches.length > COMBOBOX_MAX) {
+      const more = document.createElement("li")
+      more.className = "px-3 py-1 text-xs opacity-60"
+      more.textContent = `${matches.length - COMBOBOX_MAX} more: keep typing to narrow down`
+      this.list.append(more)
+    }
+    if (matches.length === 0) {
+      const none = document.createElement("li")
+      none.className = "px-3 py-1 text-xs opacity-60"
+      none.textContent = "No match"
+      this.list.append(none)
+    }
+    this.list.classList.remove("hidden")
+    this.input.setAttribute("aria-expanded", "true")
+    const rows = this.rows()
+    this.setActive(this.typed ? 0 : Math.max(0, rows.findIndex(r => r.getAttribute("aria-selected") === "true")))
+  },
+  close() {
+    this.list.classList.add("hidden")
+    this.input.setAttribute("aria-expanded", "false")
+    this.input.removeAttribute("aria-activedescendant")
+    this.index = -1
+  },
+  setActive(i) {
+    const rows = this.rows()
+    if (rows.length === 0) return
+    this.index = (i + rows.length) % rows.length
+    rows.forEach((r, n) => r.firstChild.classList.toggle("menu-active", n === this.index))
+    this.input.setAttribute("aria-activedescendant", rows[this.index].id)
+    rows[this.index].scrollIntoView({block: "nearest"})
+  },
+  key(e) {
+    const closed = this.list.classList.contains("hidden")
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault()
+      if (closed) this.open()
+      else this.setActive(this.index + (e.key === "ArrowDown" ? 1 : -1))
+    } else if (e.key === "Enter" && !closed) {
+      e.preventDefault()
+      const row = this.rows()[this.index]
+      if (row) this.pick(row.dataset.value)
+    } else if (e.key === "Escape" && !closed) {
+      e.preventDefault()
+      this.close()
+      this.typed = false
+      this.input.value = this.label()
+    }
+  },
+  pick(value) {
+    this.select.value = value
+    this.typed = false
+    this.close()
+    this.input.value = this.label()
+    this.select.dispatchEvent(new Event("input", {bubbles: true}))
+    this.select.dispatchEvent(new Event("change", {bubbles: true}))
+  },
+}
+
 // data-confirm through the styled <dialog id="confirm-dialog"> (root layout)
 // instead of window.confirm. A capture listener on window runs before
 // phoenix_html and LiveView; on "ok" the attribute is lifted for one
@@ -174,7 +283,7 @@ const liveSocket = new LiveSocket("/live", Socket, {
   // heartbeat would race the proxy's timer (../dashboard 4.0.8).
   heartbeatIntervalMs: 20000,
   params: {_csrf_token: csrfToken},
-  hooks: {...colocatedHooks, CopyToClipboard, SelectSearch},
+  hooks: {...colocatedHooks, CopyToClipboard, SelectSearch, Combobox},
   // Localize timestamps in LiveView-patched DOM without flashing UTC.
   dom: {
     onNodeAdded(node) {

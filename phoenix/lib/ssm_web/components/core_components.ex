@@ -252,6 +252,56 @@ defmodule SsmWeb.CoreComponents do
     """
   end
 
+  # one choice: a combobox (hook Combobox); the native select, visually hidden,
+  # still holds the value and carries phx-change and the other attributes
+  def input(%{type: "select", searchable: true, multiple: false} = assigns) do
+    assigns =
+      assign(
+        assigns,
+        :options,
+        if(assigns.sort, do: sort_options(assigns.options), else: assigns.options)
+      )
+
+    ~H"""
+    <div id={"#{@id}-picker"} class="fieldset relative mb-2" phx-hook="Combobox">
+      <label :if={@label} for={"#{@id}-combobox"} class="label mb-1">{@label}</label>
+      <input
+        id={"#{@id}-combobox"}
+        type="text"
+        role="combobox"
+        data-combobox-input
+        phx-update="ignore"
+        autocomplete="off"
+        aria-autocomplete="list"
+        aria-expanded="false"
+        aria-controls={"#{@id}-list"}
+        placeholder={@prompt || "Type to search…"}
+        class={["input input-sm w-full", @errors != [] && "input-error"]}
+      />
+      <ul
+        id={"#{@id}-list"}
+        role="listbox"
+        data-combobox-list
+        phx-update="ignore"
+        class="menu absolute top-full z-30 mt-1 hidden max-h-64 w-full flex-nowrap overflow-auto rounded-box border border-base-300 bg-base-100 p-1 shadow-lg"
+      >
+      </ul>
+      <select
+        id={@id}
+        name={@name}
+        class="sr-only"
+        tabindex="-1"
+        aria-hidden="true"
+        {@rest}
+      >
+        <option :if={@prompt} value="">{@prompt}</option>
+        {Phoenix.HTML.Form.options_for_select(@options, @value)}
+      </select>
+      <.error :for={msg <- @errors}>{msg}</.error>
+    </div>
+    """
+  end
+
   def input(%{type: "select", searchable: true} = assigns) do
     assigns =
       assign(

@@ -33,7 +33,7 @@ defmodule SsmWeb.PickersAndMergeTest do
       {:ok, view, _html} = live(conn, ~p"/authorizations")
       view |> element("button", "New authorization") |> render_click()
 
-      assert has_element?(view, ~s([phx-hook="SelectSearch"] input[data-select-search]))
+      assert has_element?(view, ~s([phx-hook="Combobox"] input[data-combobox-input]))
 
       assert option_labels(view, "#authorization_user_id") == [
                "Select a user",
@@ -51,7 +51,7 @@ defmodule SsmWeb.PickersAndMergeTest do
 
       {:ok, view, _html} = live(conn, ~p"/keys")
 
-      assert has_element?(view, ~s(#keys-filter [phx-hook="SelectSearch"]))
+      assert has_element?(view, ~s(#keys-filter [phx-hook="Combobox"]))
       assert option_labels(view, "#keys-filter-user") == ["All users", "amy", "zed"]
     end
 
@@ -67,7 +67,7 @@ defmodule SsmWeb.PickersAndMergeTest do
       assert option_labels(view, "#grant_target") ==
                ["Select a target", "Acme", "Zeta", "Databases", "Webservers"]
 
-      assert has_element?(view, ~s(#grant_target-picker input[data-select-search]))
+      assert has_element?(view, ~s(#grant_target-picker input[data-combobox-input]))
     end
   end
 
