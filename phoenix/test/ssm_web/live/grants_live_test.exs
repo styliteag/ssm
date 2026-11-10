@@ -34,6 +34,11 @@ defmodule SsmWeb.GrantsLiveTest do
     grant
   end
 
+  test "an empty grant list offers to create the first grant", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/grants")
+    assert has_element?(view, "#no-grants button", "New grant")
+  end
+
   test "creates a grant for an SSH user and expands it", %{conn: conn} = ctx do
     {:ok, lv, html} = live(conn, ~p"/grants?user_id=#{ctx.alice.id}")
     assert html =~ "Grants of alice"

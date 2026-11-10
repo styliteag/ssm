@@ -604,7 +604,23 @@ defmodule SsmWeb.KeysLive do
 
       <.view_toggle id="keys-view" view={@view} />
 
-      <p :if={@key_count == 0} class="text-sm opacity-60">No keys match the current filters.</p>
+      <.empty_state :if={@key_count == 0} id="keys-empty">
+        <%= if @filter_user_id || @search != "" do %>
+          No keys match the current filters.
+        <% else %>
+          No SSH keys yet.
+        <% end %>
+        <:action>
+          <.button :if={@filter_user_id || @search != ""} patch={~p"/keys"}>Clear filters</.button>
+          <.button
+            :if={!(@filter_user_id || @search != "")}
+            variant="primary"
+            phx-click="new"
+          >
+            Add key
+          </.button>
+        </:action>
+      </.empty_state>
 
       <ul
         :if={@view == "cards" and @key_count > 0}

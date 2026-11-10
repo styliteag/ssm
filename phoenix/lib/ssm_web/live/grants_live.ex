@@ -279,7 +279,12 @@ defmodule SsmWeb.GrantsLive do
 
       <.list_search id="grants-search" q={@q} placeholder="Search user, target, login, comment" />
 
-      <p :if={@grants == []} id="no-grants" class="text-sm opacity-60">No grants here.</p>
+      <.empty_state :if={@grants == []} id="no-grants">
+        No grants here.
+        <:action :if={@writer}>
+          <.button variant="primary" phx-click="new">New grant</.button>
+        </:action>
+      </.empty_state>
 
       <div :if={@grants != []} class="overflow-x-auto">
         <.table id="grants" rows={@grants} sort={@sort} row_id={&"grants-#{&1.id}"}>

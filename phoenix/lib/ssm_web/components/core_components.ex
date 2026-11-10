@@ -500,6 +500,26 @@ defmodule SsmWeb.CoreComponents do
   end
 
   @doc """
+  An empty list: why it is empty and the one next action (the `:action`
+  slot: "New ..." when there is nothing yet, "Clear filters" when filters
+  hide everything).
+  """
+  attr :id, :string, default: nil
+  slot :inner_block, required: true
+  slot :action
+
+  def empty_state(assigns) do
+    ~H"""
+    <div id={@id} class="rounded-box border border-dashed border-base-300 p-6 text-center text-sm">
+      <p class="opacity-70">{render_slot(@inner_block)}</p>
+      <div :if={@action != []} class="mt-3 flex justify-center gap-2">
+        {render_slot(@action)}
+      </div>
+    </div>
+    """
+  end
+
+  @doc """
   Renders a modal dialog. Render it conditionally (`:if={@form}`); it is
   always open while mounted. `on_cancel` fires on backdrop click, Esc, and
   the ✕ button.

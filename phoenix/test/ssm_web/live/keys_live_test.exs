@@ -13,6 +13,19 @@ defmodule SsmWeb.KeysLiveTest do
     assert {:error, {:redirect, %{to: "/sign-in"}}} = live(conn, ~p"/keys")
   end
 
+  test "an empty key list offers to add a key; a filtered one offers to clear the filter",
+       %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/keys")
+    assert has_element?(view, "#keys-empty button", "Add key")
+
+    user = user_fixture(%{username: "alice"})
+    key_fixture(user, %{name: "laptop"})
+
+    {:ok, view, _html} = live(conn, ~p"/keys?q=nomatch")
+    assert has_element?(view, "#keys-empty a", "Clear filters")
+    refute has_element?(view, "#keys-empty button", "Add key")
+  end
+
   test "lists keys with owner and type badge", %{conn: conn} do
     user = user_fixture(%{username: "alice"})
     key = key_fixture(user, %{name: "laptop"})
