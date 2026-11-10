@@ -106,6 +106,31 @@ if config_env() == :dev do
         ~r"lib/ssm_web/(controllers|live|components)/.*\.(ex|heex)$"E
       ]
     ]
+
+  # Container dev behind a proxy (lab/compose.dev.yml): the release's env
+  # contract, opt-in per variable, so a plain `mix phx.server` stays as in
+  # config/dev.exs. Same names and meaning as in the prod block below.
+  if database_path = System.get_env("DATABASE_PATH") do
+    config :ssm, Ssm.Repo, database: database_path
+  end
+
+  # The python stack's JWT_SECRET signs the API bearer tokens (also the lab's).
+  if jwt_secret = System.get_env("JWT_SECRET") do
+    config :ssm, :jwt_secret, jwt_secret
+  end
+
+  # Public name: SSO callback and post-logout URL are built from it, and
+  # PHX_ALT_HOSTS adds further names (`SsmWeb.Hosts`).
+  if phx_host = System.get_env("PHX_HOST") do
+    config :ssm,
+           :alt_hosts,
+           System.get_env("PHX_ALT_HOSTS", "")
+           |> String.split(",")
+           |> Enum.map(&(&1 |> String.trim() |> String.downcase()))
+           |> Enum.reject(&(&1 == ""))
+
+    config :ssm, SsmWeb.Endpoint, url: [host: phx_host, port: 443, scheme: "https"]
+  end
 end
 
 if config_env() == :prod do

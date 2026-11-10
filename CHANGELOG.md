@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Development mode (`mix phx.server`) honours `DATABASE_PATH`, `JWT_SECRET`, `PHX_HOST` and
+  `PHX_ALT_HOSTS` when they are set, with the same meaning as in the release. This lets a dev
+  container run behind a TLS proxy with SSO (the Orbit lab's live-reload setup). Without these
+  variables nothing changes; releases are not affected.
+
 ## [4.14.4] - 2026-11-10
 
 ### Changed
