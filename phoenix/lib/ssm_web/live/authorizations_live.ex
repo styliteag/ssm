@@ -1,14 +1,16 @@
 defmodule SsmWeb.AuthorizationsLive do
   @moduledoc """
-  Authorizations page in three views (`?view=list|matrix|stats`), the React
-  AuthorizationsPage:
+  Access page (`/access`) in three views (`?view=list|matrix|stats`). One
+  access entry = an SSH user may log in as a login on a host; a grant (page
+  `/grants`) is the rule that creates such entries on all hosts of a customer
+  or host group.
 
-    * list — grants filterable by user or host (`?user_id=` / `?host_id=`),
-      add/edit modal, delete, bulk grant (users × hosts cross product,
-      existing grants skipped), CSV export honoring the filters
+    * list — entries filterable by user or host (`?user_id=` / `?host_id=`),
+      add/edit modal, delete, bulk add (users × hosts cross product,
+      existing entries skipped), CSV export honoring the filters
     * matrix — users × hosts grid per login account (`?login=`, sorted by
       usage, smart default root-or-most-used, `all` is view-only counts),
-      cell click toggles the grant, `?authorized=1` hides unauthorized users
+      cell click toggles the entry, `?authorized=1` hides users without access
     * stats — totals plus hosts-by-user-access and users-by-host-access
       rankings
   """
@@ -41,7 +43,7 @@ defmodule SsmWeb.AuthorizationsLive do
 
   @view_modes ~w(list matrix stats)
 
-  @grant_row "This authorization comes from a grant and is read-only here; " <>
+  @grant_row "This access comes from a grant and is read-only here; " <>
                "change or delete the grant instead."
 
   @grant_takeover "A grant covers this SSH user and login without this row's restrictions; " <>
@@ -220,7 +222,7 @@ defmodule SsmWeb.AuthorizationsLive do
       [user_id: params["user_id"], host_id: params["host_id"]]
       |> Enum.reject(fn {_k, v} -> v in [nil, ""] end)
 
-    {:noreply, push_patch(socket, to: ~p"/authorizations?#{query}")}
+    {:noreply, push_patch(socket, to: ~p"/access?#{query}")}
   end
 
   def handle_event("new", _params, socket) do
@@ -239,7 +241,7 @@ defmodule SsmWeb.AuthorizationsLive do
   def handle_event("edit", %{"id" => id}, socket) do
     case Authorizations.get_authorization(scope(socket), parse_id(id)) do
       nil ->
-        {:noreply, put_flash(socket, :error, "Authorization not found.")}
+        {:noreply, put_flash(socket, :error, "Access entry not found.")}
 
       %Authorization{grant_id: grant_id} when not is_nil(grant_id) ->
         {:noreply, put_flash(socket, :error, @grant_row)}
@@ -281,7 +283,7 @@ defmodule SsmWeb.AuthorizationsLive do
         {:noreply,
          socket
          |> assign(form: nil, editing: nil)
-         |> put_flash(:info, "Authorization #{action}d.")
+         |> put_flash(:info, "Access entry #{action}d.")
          |> reload_authorizations()}
 
       {:error, :grant_row} ->
@@ -305,26 +307,25 @@ defmodule SsmWeb.AuthorizationsLive do
        socket
        |> put_flash(
          :info,
-         "Authorization deleted. The key lines leave the host at its next sync."
+         "Access entry deleted. The key lines leave the host at its next sync."
        )
        |> reload_authorizations()}
     else
       {:error, :grant_row} -> {:noreply, put_flash(socket, :error, @grant_row)}
       {:error, {:grant_takeover, _}} -> {:noreply, put_flash(socket, :error, @grant_takeover)}
-      _ -> {:noreply, put_flash(socket, :error, "Authorization not found.")}
+      _ -> {:noreply, put_flash(socket, :error, "Access entry not found.")}
     end
   end
 
   ## Events: matrix
 
   def handle_event("matrix-login", %{"login" => login}, socket) do
-    {:noreply,
-     push_patch(socket, to: ~p"/authorizations?#{matrix_query(socket.assigns, login: login)}")}
+    {:noreply, push_patch(socket, to: ~p"/access?#{matrix_query(socket.assigns, login: login)}")}
   end
 
   def handle_event("matrix-authorized", _params, socket) do
     query = matrix_query(socket.assigns, authorized: not socket.assigns.show_authorized_only)
-    {:noreply, push_patch(socket, to: ~p"/authorizations?#{query}")}
+    {:noreply, push_patch(socket, to: ~p"/access?#{query}")}
   end
 
   def handle_event("sort", %{"key" => key}, socket) do
@@ -339,7 +340,7 @@ defmodule SsmWeb.AuthorizationsLive do
       |> Map.put("q", q)
       |> query_params(~w(view user_id host_id authorized login q))
 
-    {:noreply, push_patch(socket, to: ~p"/authorizations?#{params}")}
+    {:noreply, push_patch(socket, to: ~p"/access?#{params}")}
   end
 
   def handle_event("matrix-user-search", %{"q" => q}, socket) do
@@ -463,11 +464,11 @@ defmodule SsmWeb.AuthorizationsLive do
          |> reload_authorizations()
          |> put_flash(
            :info,
-           "Granted #{cell_label(socket, user_id, host_id, login)}. The key lines reach the host at its next sync."
+           "Added access: #{cell_label(socket, user_id, host_id, login)}. The key lines reach the host at its next sync."
          )}
 
       {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Could not create the authorization.")}
+        {:noreply, put_flash(socket, :error, "Could not create the access entry.")}
     end
   end
 
@@ -481,7 +482,7 @@ defmodule SsmWeb.AuthorizationsLive do
          |> reload_authorizations()
          |> put_flash(
            :info,
-           "Revoked #{cell_label(socket, auth.user_id, auth.host_id, auth.login)}. The key lines leave the host at its next sync."
+           "Revoked access: #{cell_label(socket, auth.user_id, auth.host_id, auth.login)}. The key lines leave the host at its next sync."
          )}
 
       {:error, :grant_row} ->
@@ -491,7 +492,7 @@ defmodule SsmWeb.AuthorizationsLive do
         {:noreply, put_flash(socket, :error, @grant_takeover)}
 
       {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Could not revoke the authorization.")}
+        {:noreply, put_flash(socket, :error, "Could not revoke the access entry.")}
     end
   end
 
@@ -538,7 +539,7 @@ defmodule SsmWeb.AuthorizationsLive do
          |> assign(:bulk, nil)
          |> put_flash(
            :info,
-           "#{length(created)} authorization(s) created, #{skipped} already existed."
+           "#{access_entries(length(created))} created, #{skipped} already existed."
          )
          |> reload_authorizations()}
 
@@ -608,7 +609,7 @@ defmodule SsmWeb.AuthorizationsLive do
     case {changeset.errors[:login], changeset.errors[:options]} do
       {{message, _}, _} -> "Login #{message}."
       {nil, {message, _}} -> "Nothing created: options #{message}."
-      {nil, nil} -> "Could not create the authorizations — check the form fields."
+      {nil, nil} -> "Could not create the access entries — check the form fields."
     end
   end
 
@@ -638,6 +639,10 @@ defmodule SsmWeb.AuthorizationsLive do
   defp user_label(%{user: %{username: username}}), do: username
   defp user_label(auth), do: "missing user ##{auth.user_id}"
 
+  # Grants.labels/2 answers "grant" for a target outside the viewer's scope
+  defp grant_origin(label) when label in [nil, "grant"], do: "from a grant"
+  defp grant_origin(label), do: "from grant #{label}"
+
   defp host_label(%{host: %{name: name}}), do: name
   defp host_label(auth), do: "missing host ##{auth.host_id}"
 
@@ -653,7 +658,7 @@ defmodule SsmWeb.AuthorizationsLive do
       flash={@flash}
       current_user={@current_user}
       pending_sync={@pending_sync}
-      active={:authorizations}
+      active={:access}
     >
       <.header>
         Access
@@ -664,35 +669,35 @@ defmodule SsmWeb.AuthorizationsLive do
           <a
             id="export-csv"
             class="btn"
-            href={~p"/authorizations/export?#{export_query(assigns)}"}
+            href={~p"/access/export?#{export_query(assigns)}"}
             title="Download the filtered list as CSV"
           >
             <.icon name="hero-arrow-down-tray" class="size-4" /> Export CSV
           </a>
           <.button id="bulk-grant" phx-click="bulk-open">
-            <.icon name="hero-user-group" class="size-4" /> Bulk grant
+            <.icon name="hero-user-group" class="size-4" /> Bulk add
           </.button>
           <.button id="new-authorization" variant="primary" phx-click="new">
-            <.icon name="hero-plus" class="size-4" /> New authorization
+            <.icon name="hero-plus" class="size-4" /> New access
           </.button>
         </:actions>
       </.header>
 
       <div id="view-switcher" class="join">
         <.link
-          patch={~p"/authorizations"}
+          patch={~p"/access"}
           class={["btn btn-sm join-item", @view == "list" && "btn-primary"]}
         >
           List
         </.link>
         <.link
-          patch={~p"/authorizations?#{matrix_query(assigns, [])}"}
+          patch={~p"/access?#{matrix_query(assigns, [])}"}
           class={["btn btn-sm join-item", @view == "matrix" && "btn-primary"]}
         >
           Matrix
         </.link>
         <.link
-          patch={~p"/authorizations?view=stats"}
+          patch={~p"/access?view=stats"}
           class={["btn btn-sm join-item", @view == "stats" && "btn-primary"]}
         >
           Stats
@@ -761,7 +766,7 @@ defmodule SsmWeb.AuthorizationsLive do
       </div>
 
       <p :if={@view == "list" and @authorization_count == 0} class="text-sm opacity-60">
-        No authorizations found.
+        No access found.
       </p>
 
       <div :if={@view == "list" and @authorization_count > 0} class="overflow-x-auto">
@@ -770,7 +775,7 @@ defmodule SsmWeb.AuthorizationsLive do
             <span :if={is_nil(auth.user)} class="text-error italic">{user_label(auth)}</span>
             <span :if={auth.user} class="inline-flex items-center gap-1">
               <.link
-                patch={~p"/authorizations?user_id=#{auth.user_id}"}
+                patch={~p"/access?user_id=#{auth.user_id}"}
                 class="link link-hover"
                 title={"Filter this list by #{user_label(auth)}"}
                 aria-label={"Filter this list by #{user_label(auth)}"}
@@ -799,7 +804,7 @@ defmodule SsmWeb.AuthorizationsLive do
             <span :if={is_nil(auth.host)} class="text-error italic">{host_label(auth)}</span>
             <span :if={auth.host} class="inline-flex items-center gap-1">
               <.link
-                patch={~p"/authorizations?host_id=#{auth.host_id}"}
+                patch={~p"/access?host_id=#{auth.host_id}"}
                 class="link link-hover"
                 title={"Filter this list by #{host_label(auth)}"}
                 aria-label={"Filter this list by #{host_label(auth)}"}
@@ -841,7 +846,7 @@ defmodule SsmWeb.AuthorizationsLive do
               title="Made by a grant: read-only here, change the grant instead"
               aria-label="Made by a grant: read-only here, change the grant instead"
             >
-              via {@grant_labels[auth.grant_id] || "grant"}
+              {grant_origin(@grant_labels[auth.grant_id])}
             </.link>
             <button
               :if={is_nil(auth.grant_id)}
@@ -849,8 +854,8 @@ defmodule SsmWeb.AuthorizationsLive do
               class="btn btn-ghost btn-xs"
               phx-click="edit"
               phx-value-id={auth.id}
-              title="Edit authorization"
-              aria-label="Edit authorization"
+              title="Edit access entry"
+              aria-label="Edit access entry"
             >
               <.icon name="hero-pencil-square" class="size-4" />
             </button>
@@ -861,8 +866,8 @@ defmodule SsmWeb.AuthorizationsLive do
               phx-click="delete"
               phx-value-id={auth.id}
               data-confirm={"Revoke access for #{user_label(auth)} on #{host_label(auth)} (login #{auth.login})? The key lines leave the host at its next sync."}
-              title="Delete authorization"
-              aria-label="Delete authorization"
+              title="Delete access entry"
+              aria-label="Delete access entry"
             >
               <.icon name="hero-trash" class="size-4" />
             </button>
@@ -871,7 +876,7 @@ defmodule SsmWeb.AuthorizationsLive do
       </div>
 
       <.modal :if={@form} id="authorization-modal" on_cancel={JS.push("cancel")}>
-        <:title>{if @editing, do: "Edit authorization", else: "New authorization"}</:title>
+        <:title>{if @editing, do: "Edit access entry", else: "New access entry"}</:title>
 
         <.form
           for={@form}
@@ -916,7 +921,7 @@ defmodule SsmWeb.AuthorizationsLive do
           <div class="modal-action">
             <button type="button" class="btn btn-ghost" phx-click="cancel">Cancel</button>
             <button type="submit" class="btn btn-primary">
-              {if @editing, do: "Save changes", else: "Create authorization"}
+              {if @editing, do: "Save changes", else: "Add access"}
             </button>
           </div>
         </.form>
@@ -989,12 +994,12 @@ defmodule SsmWeb.AuthorizationsLive do
           class={["btn btn-sm mb-2", @show_authorized_only && "btn-primary"]}
           phx-click="matrix-authorized"
         >
-          <.icon name="hero-eye" class="size-4" /> Show authorized only
+          <.icon name="hero-eye" class="size-4" /> Only users with access
         </button>
       </div>
 
       <p :if={@matrix.hosts == []} class="text-sm opacity-60">
-        No hosts hold a grant for this login yet.
+        No host has access for this login yet.
       </p>
 
       <p
@@ -1033,10 +1038,10 @@ defmodule SsmWeb.AuthorizationsLive do
             <tr :for={user <- @matrix.users} id={"matrix-row-#{user.id}"} class="hover:bg-base-200">
               <th class="sticky left-0 z-10 max-w-56 bg-base-100 font-medium">
                 <.link
-                  patch={~p"/authorizations?user_id=#{user.id}"}
+                  patch={~p"/access?user_id=#{user.id}"}
                   class="link link-hover block truncate"
-                  title={"#{user.username}#{if(user.enabled, do: "", else: " (disabled)")} — list this user's grants"}
-                  aria-label={"#{user.username}#{if(user.enabled, do: "", else: " (disabled)")} — list this user's grants"}
+                  title={"#{user.username}#{if(user.enabled, do: "", else: " (disabled)")} — list this user's access"}
+                  aria-label={"#{user.username}#{if(user.enabled, do: "", else: " (disabled)")} — list this user's access"}
                 >
                   {user.username}
                 </.link>
@@ -1063,21 +1068,21 @@ defmodule SsmWeb.AuthorizationsLive do
         class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs opacity-70"
       >
         <span :if={@matrix_login != "all"} class="inline-flex items-center gap-1">
-          <.icon name="hero-check" class="size-3.5 text-success" /> authorized (click to revoke)
+          <.icon name="hero-check" class="size-3.5 text-success" /> has access (click to revoke)
         </span>
         <span :if={@matrix_login != "all"} class="inline-flex items-center gap-1">
-          <.icon name="hero-x-mark" class="size-3.5" /> not authorized (click to grant)
+          <.icon name="hero-x-mark" class="size-3.5" /> no access (click to add)
         </span>
         <span :if={@matrix_login == "all"} class="inline-flex items-center gap-1">
-          <span class="badge badge-info badge-xs">n</span> n grants across all logins
+          <span class="badge badge-info badge-xs">n</span> n access entries across all logins
         </span>
         <span :if={@matrix_login == "all"} class="inline-flex items-center gap-1">
-          <span class="badge badge-ghost badge-xs opacity-40">0</span> no grant
+          <span class="badge badge-ghost badge-xs opacity-40">0</span> no access
         </span>
       </p>
 
       <p :if={@matrix_login == "all"} class="text-xs opacity-60">
-        Counts show grants across all login accounts — pick a login to edit.
+        Counts show access entries across all login accounts — pick a login to edit.
       </p>
     </div>
     """
@@ -1131,9 +1136,9 @@ defmodule SsmWeb.AuthorizationsLive do
           "Revoke #{@user.username} on #{@host.name} as #{@matrix_login}? The key lines leave the host at its next sync."
       }
       title={"#{@user.username} on #{@host.name} as #{@matrix_login}: " <>
-        if(@authorized, do: "authorized — click to revoke", else: "not authorized — click to grant")}
+        if(@authorized, do: "has access — click to revoke", else: "no access — click to add")}
       aria-label={"#{@user.username} on #{@host.name} as #{@matrix_login}: " <>
-        if(@authorized, do: "authorized — click to revoke", else: "not authorized — click to grant")}
+        if(@authorized, do: "has access — click to revoke", else: "no access — click to add")}
     >
       <.icon :if={@authorized} name="hero-check" class="size-3.5" />
       <.icon :if={!@authorized} name="hero-x-mark" class="size-3.5" />
@@ -1173,10 +1178,10 @@ defmodule SsmWeb.AuthorizationsLive do
       <div class="grid gap-4 sm:grid-cols-2">
         <div class="rounded-box bg-base-200 p-4">
           <h2 class="mb-2 text-sm font-semibold">Hosts by user access</h2>
-          <p :if={@stats.top_hosts == []} class="text-sm opacity-60">No grants yet.</p>
+          <p :if={@stats.top_hosts == []} class="text-sm opacity-60">No access yet.</p>
           <ol class="space-y-1 text-sm">
             <li :for={{name, host_id, count} <- @stats.top_hosts} class="flex justify-between">
-              <.link patch={~p"/authorizations?host_id=#{host_id}"} class="link link-hover">
+              <.link patch={~p"/access?host_id=#{host_id}"} class="link link-hover">
                 {name}
               </.link>
               <span class="tabular-nums opacity-70">{count} user(s)</span>
@@ -1185,10 +1190,10 @@ defmodule SsmWeb.AuthorizationsLive do
         </div>
         <div class="rounded-box bg-base-200 p-4">
           <h2 class="mb-2 text-sm font-semibold">Users by host access</h2>
-          <p :if={@stats.top_users == []} class="text-sm opacity-60">No grants yet.</p>
+          <p :if={@stats.top_users == []} class="text-sm opacity-60">No access yet.</p>
           <ol class="space-y-1 text-sm">
             <li :for={{name, user_id, count} <- @stats.top_users} class="flex justify-between">
-              <.link patch={~p"/authorizations?user_id=#{user_id}"} class="link link-hover">
+              <.link patch={~p"/access?user_id=#{user_id}"} class="link link-hover">
                 {name}
               </.link>
               <span class="tabular-nums opacity-70">{count} host(s)</span>
@@ -1218,7 +1223,7 @@ defmodule SsmWeb.AuthorizationsLive do
     }
   end
 
-  # Top 5 entities by how many distinct counterparts hold a grant with them.
+  # Top 5 entities by how many distinct counterparts have access through them.
   defp top_by(auths, entity_fun, counterpart_fun, name_fun) do
     auths
     |> Enum.reject(&is_nil(entity_fun.(&1)))
@@ -1300,11 +1305,11 @@ defmodule SsmWeb.AuthorizationsLive do
 
     ~H"""
     <.modal id="bulk-grant-modal" box_class="max-w-3xl" on_cancel={JS.push("cancel")}>
-      <:title>Bulk grant access</:title>
+      <:title>Bulk add access</:title>
 
       <p class="mb-3 text-sm opacity-70">
-        Grants the login to every selected user on every selected host.
-        Pairs that already hold this grant are skipped.
+        Adds access as the login for every selected user on every selected host.
+        Pairs that already have it are skipped.
       </p>
 
       <div class="grid gap-4 sm:grid-cols-2">
@@ -1450,7 +1455,7 @@ defmodule SsmWeb.AuthorizationsLive do
         <div class="modal-action">
           <button type="button" class="btn btn-ghost" phx-click="cancel">Cancel</button>
           <button type="submit" class="btn btn-primary" disabled={@bulk.new_count == 0}>
-            Grant access
+            Add access
           </button>
         </div>
       </form>

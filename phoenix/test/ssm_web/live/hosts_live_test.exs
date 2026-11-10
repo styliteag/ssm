@@ -145,7 +145,7 @@ defmodule SsmWeb.HostsLiveTest do
 
     assert has_element?(
              view,
-             "#hosts-#{host.id} a[href='/authorizations?host_id=#{host.id}']",
+             "#hosts-#{host.id} a[href='/access?host_id=#{host.id}']",
              "2"
            )
 
@@ -231,7 +231,7 @@ defmodule SsmWeb.HostsLiveTest do
       |> List.first("")
 
     assert confirm =~ "Delete host web1?"
-    assert confirm =~ "2 authorizations"
+    assert confirm =~ "2 access entries"
     assert confirm =~ "stay on the host"
     assert confirm =~ "ssm's own key"
   end

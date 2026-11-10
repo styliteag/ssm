@@ -160,7 +160,7 @@ defmodule SsmWeb.Layouts do
       {"Hosts", ~p"/hosts", "hero-server", :hosts},
       {"SSH users", ~p"/users", "hero-users", :users},
       {"SSH keys", ~p"/keys", "hero-key", :keys},
-      {"Access", ~p"/authorizations", "hero-shield-check", :authorizations},
+      {"Access", ~p"/access", "hero-shield-check", :access},
       {"Grants", ~p"/grants", "hero-user-group", :grants},
       {"Sync", ~p"/diff", "hero-arrows-right-left", :diff},
       {"Activity", ~p"/activities", "hero-clock", :activities}

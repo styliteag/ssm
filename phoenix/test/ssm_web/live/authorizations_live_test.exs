@@ -10,12 +10,12 @@ defmodule SsmWeb.AuthorizationsLiveTest do
 
   test "redirects anonymous visitors" do
     conn = Phoenix.ConnTest.build_conn()
-    assert {:error, {:redirect, %{to: "/sign-in"}}} = live(conn, ~p"/authorizations")
+    assert {:error, {:redirect, %{to: "/sign-in"}}} = live(conn, ~p"/access")
   end
 
   test "an event with a non-numeric id is a no-op, not a crash", %{conn: conn} do
     auth = authorization_fixture(user_fixture(), host_fixture())
-    {:ok, view, _html} = live(conn, ~p"/authorizations")
+    {:ok, view, _html} = live(conn, ~p"/access")
 
     for event <- ~w(edit delete), id <- ["abc", "1x", "", "-1", "99999999999999999999"] do
       render_click(view, event, %{"id" => id})
@@ -35,7 +35,7 @@ defmodule SsmWeb.AuthorizationsLiveTest do
     user = user_fixture(%{username: "alice"})
     host = host_fixture(%{name: "web1"})
 
-    {:ok, view, _html} = live(conn, ~p"/authorizations?view=matrix&login=all")
+    {:ok, view, _html} = live(conn, ~p"/access?view=matrix&login=all")
 
     html =
       render_click(view, "matrix-toggle", %{"user-id" => "#{user.id}", "host-id" => "#{host.id}"})
@@ -49,7 +49,7 @@ defmodule SsmWeb.AuthorizationsLiveTest do
     host = host_fixture(%{name: "web1"})
     auth = authorization_fixture(user, host, %{login: "deploy"})
 
-    {:ok, view, _html} = live(conn, ~p"/authorizations")
+    {:ok, view, _html} = live(conn, ~p"/access")
 
     assert has_element?(view, "#authorizations-#{auth.id}", "alice")
     assert has_element?(view, "#authorizations-#{auth.id}", "web1")
@@ -67,7 +67,7 @@ defmodule SsmWeb.AuthorizationsLiveTest do
     Ssm.Repo.query!("PRAGMA defer_foreign_keys = ON")
     Ssm.Repo.query!(~s(UPDATE "authorization" SET host_id = 999999 WHERE id = ?), [auth.id])
 
-    {:ok, view, _html} = live(conn, ~p"/authorizations")
+    {:ok, view, _html} = live(conn, ~p"/access")
 
     assert has_element?(view, "#authorizations-#{auth.id}", "alice")
     assert has_element?(view, "#authorizations-#{auth.id}", "missing host #999999")
@@ -80,7 +80,7 @@ defmodule SsmWeb.AuthorizationsLiveTest do
     alice_auth = authorization_fixture(alice, host, %{login: "zeta"})
     bob_auth = authorization_fixture(bob, host, %{login: "alpha"})
 
-    {:ok, view, _html} = live(conn, ~p"/authorizations")
+    {:ok, view, _html} = live(conn, ~p"/access")
 
     # id order: zeta first. Sort by login asc: alpha first, desc flips.
     assert render(view) =~ ~r/zeta.*alpha/s
@@ -102,7 +102,7 @@ defmodule SsmWeb.AuthorizationsLiveTest do
     authorization_fixture(alice, web, %{login: "root"})
     authorization_fixture(bob, db, %{login: "root"})
 
-    {:ok, view, _html} = live(conn, ~p"/authorizations?view=matrix")
+    {:ok, view, _html} = live(conn, ~p"/access?view=matrix")
 
     view |> element("#matrix-user-search-form") |> render_change(%{q: "ali"})
     assert has_element?(view, "#matrix-row-#{alice.id}")
@@ -120,7 +120,7 @@ defmodule SsmWeb.AuthorizationsLiveTest do
     h2 = host_fixture(%{name: "web2"})
     _existing = authorization_fixture(u1, h1, %{login: "root"})
 
-    {:ok, view, _html} = live(conn, ~p"/authorizations")
+    {:ok, view, _html} = live(conn, ~p"/access")
 
     view |> element("#bulk-grant") |> render_click()
 
@@ -150,7 +150,7 @@ defmodule SsmWeb.AuthorizationsLiveTest do
     db1 = host_fixture(%{name: "db1"})
     web2 = host_fixture(%{name: "web2", disabled: true})
 
-    {:ok, view, _html} = live(conn, ~p"/authorizations")
+    {:ok, view, _html} = live(conn, ~p"/access")
     view |> element("#bulk-grant") |> render_click()
 
     view |> element("#bulk-host-search") |> render_change(%{q: "web"})
@@ -169,7 +169,7 @@ defmodule SsmWeb.AuthorizationsLiveTest do
     web = host_fixture(%{name: "web1"})
     db = host_fixture(%{name: "db1"})
 
-    {:ok, view, _html} = live(conn, ~p"/authorizations")
+    {:ok, view, _html} = live(conn, ~p"/access")
 
     view |> element("#bulk-grant") |> render_click()
 
@@ -191,7 +191,7 @@ defmodule SsmWeb.AuthorizationsLiveTest do
     _enabled = user_fixture(%{username: "on"})
     {:ok, disabled} = Ssm.Users.create_user(%{username: "off", enabled: false})
 
-    {:ok, view, _html} = live(conn, ~p"/authorizations")
+    {:ok, view, _html} = live(conn, ~p"/access")
 
     view |> element("#bulk-grant") |> render_click()
 
@@ -210,7 +210,7 @@ defmodule SsmWeb.AuthorizationsLiveTest do
       authorization_fixture(bob, web, %{login: "deploy"})
       authorization_fixture(alice, db, %{login: "root"})
 
-      {:ok, view, _html} = live(conn, ~p"/authorizations?view=matrix")
+      {:ok, view, _html} = live(conn, ~p"/access?view=matrix")
 
       selector = view |> element("#matrix-login-form select") |> render()
       assert selector =~ "deploy (2)"
@@ -228,7 +228,7 @@ defmodule SsmWeb.AuthorizationsLiveTest do
       bob = user_fixture(%{username: "bob"})
       authorization_fixture(bob, host, %{login: "deploy"})
 
-      {:ok, view, _html} = live(conn, ~p"/authorizations?view=matrix&login=deploy")
+      {:ok, view, _html} = live(conn, ~p"/access?view=matrix&login=deploy")
 
       view |> element("#matrix-cell-#{alice.id}-#{host.id}") |> render_click()
       assert Ssm.Authorizations.exists?(alice.id, host.id, "deploy")
@@ -247,13 +247,13 @@ defmodule SsmWeb.AuthorizationsLiveTest do
       bob = user_fixture(%{username: "bob"})
       authorization_fixture(bob, host, %{login: "deploy"})
 
-      {:ok, view, _html} = live(conn, ~p"/authorizations?view=matrix&login=deploy")
+      {:ok, view, _html} = live(conn, ~p"/access?view=matrix&login=deploy")
       cell = "#matrix-cell-#{alice.id}-#{host.id}"
 
       # granting only adds access: no question
       assert has_element?(view, "#{cell}:not([data-confirm])")
       html = view |> element(cell) |> render_click()
-      assert html =~ "Granted alice on web1 as deploy"
+      assert html =~ "Added access: alice on web1 as deploy"
       assert html =~ "next sync"
 
       assert has_element?(
@@ -263,7 +263,7 @@ defmodule SsmWeb.AuthorizationsLiveTest do
 
       assert has_element?(view, ~s(#{cell}[data-confirm*="next sync"]))
       html = view |> element(cell) |> render_click()
-      assert html =~ "Revoked alice on web1 as deploy"
+      assert html =~ "Revoked access: alice on web1 as deploy"
     end
 
     test "the all login is view-only counts", %{conn: conn} do
@@ -272,7 +272,7 @@ defmodule SsmWeb.AuthorizationsLiveTest do
       authorization_fixture(alice, host, %{login: "root"})
       authorization_fixture(alice, host, %{login: "deploy"})
 
-      {:ok, view, _html} = live(conn, ~p"/authorizations?view=matrix&login=all")
+      {:ok, view, _html} = live(conn, ~p"/access?view=matrix&login=all")
 
       assert has_element?(view, "span#matrix-cell-#{alice.id}-#{host.id}", "2")
       refute has_element?(view, "button#matrix-cell-#{alice.id}-#{host.id}")
@@ -284,7 +284,7 @@ defmodule SsmWeb.AuthorizationsLiveTest do
       host = host_fixture(%{name: "web1"})
       authorization_fixture(alice, host, %{login: "root"})
 
-      {:ok, view, _html} = live(conn, ~p"/authorizations?view=matrix&login=root")
+      {:ok, view, _html} = live(conn, ~p"/access?view=matrix&login=root")
 
       assert has_element?(view, "#matrix-row-#{idle.id}")
 
@@ -307,7 +307,7 @@ defmodule SsmWeb.AuthorizationsLiveTest do
     authorization_fixture(alice, db, %{login: "deploy"})
     authorization_fixture(off, db, %{login: "root"})
 
-    {:ok, view, _html} = live(conn, ~p"/authorizations?view=stats")
+    {:ok, view, _html} = live(conn, ~p"/access?view=stats")
 
     assert has_element?(view, "#stat-auth-total", "4")
     assert has_element?(view, "#stat-auth-active", "3")
@@ -326,7 +326,7 @@ defmodule SsmWeb.AuthorizationsLiveTest do
     auth_a = authorization_fixture(user, host_a)
     auth_b = authorization_fixture(user, host_b)
 
-    {:ok, view, _html} = live(conn, ~p"/authorizations?host_id=#{host_a.id}")
+    {:ok, view, _html} = live(conn, ~p"/access?host_id=#{host_a.id}")
 
     assert has_element?(view, "#authorizations-#{auth_a.id}")
     refute has_element?(view, "#authorizations-#{auth_b.id}")
@@ -336,7 +336,7 @@ defmodule SsmWeb.AuthorizationsLiveTest do
     user = user_fixture(%{username: "alice"})
     host = host_fixture(%{name: "web1"})
 
-    {:ok, view, _html} = live(conn, ~p"/authorizations")
+    {:ok, view, _html} = live(conn, ~p"/access")
 
     view |> element("#new-authorization") |> render_click()
 
@@ -360,7 +360,7 @@ defmodule SsmWeb.AuthorizationsLiveTest do
     host = host_fixture()
     _ = authorization_fixture(user, host, %{login: "deploy"})
 
-    {:ok, view, _html} = live(conn, ~p"/authorizations")
+    {:ok, view, _html} = live(conn, ~p"/access")
 
     view |> element("#new-authorization") |> render_click()
 
@@ -380,7 +380,7 @@ defmodule SsmWeb.AuthorizationsLiveTest do
     host = host_fixture()
     auth = authorization_fixture(user, host, %{login: "deploy"})
 
-    {:ok, view, _html} = live(conn, ~p"/authorizations")
+    {:ok, view, _html} = live(conn, ~p"/access")
 
     view |> element("#edit-authorization-#{auth.id}") |> render_click()
 
@@ -398,7 +398,7 @@ defmodule SsmWeb.AuthorizationsLiveTest do
     host = host_fixture()
     auth = authorization_fixture(user, host)
 
-    {:ok, view, _html} = live(conn, ~p"/authorizations")
+    {:ok, view, _html} = live(conn, ~p"/access")
 
     view |> element("#delete-authorization-#{auth.id}") |> render_click()
 

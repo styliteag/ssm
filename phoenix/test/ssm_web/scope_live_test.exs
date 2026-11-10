@@ -20,7 +20,7 @@ defmodule SsmWeb.ScopeLiveTest do
   # Every LiveView route of the router, classified. Host-bearing pages show
   # host data and must apply the scope; catalog pages show the SSH user
   # catalog (all users, ADR-0012 §3) and must not leak host data either.
-  @host_bearing ~w(/dashboard /hosts /authorizations /diff /activities)
+  @host_bearing ~w(/dashboard /hosts /access /diff /activities)
   @catalog ~w(/users /keys /grants)
   @no_host_data ~w(/sign-in /settings/api-tokens)
   # one SSH user; host data through the scope, tested below
@@ -263,9 +263,9 @@ defmodule SsmWeb.ScopeLiveTest do
       provider: p,
       out_host: out
     } do
-      {:ok, _lv, html} = live(scoped(conn, p), ~p"/authorizations?host_id=#{out.id}")
+      {:ok, _lv, html} = live(scoped(conn, p), ~p"/access?host_id=#{out.id}")
       refute html =~ "out-login"
-      {:ok, _lv, html} = live(scoped(build_conn(), p), ~p"/authorizations?view=matrix")
+      {:ok, _lv, html} = live(scoped(build_conn(), p), ~p"/access?view=matrix")
       refute html =~ @out_host
     end
 
@@ -276,14 +276,14 @@ defmodule SsmWeb.ScopeLiveTest do
       out_auth: out_auth,
       in_host: in_host
     } do
-      {:ok, lv, _} = live(scoped(conn, p), ~p"/authorizations")
+      {:ok, lv, _} = live(scoped(conn, p), ~p"/access")
       bob = Ssm.Users.get_user(out_auth.user_id)
 
       assert render_click(lv, "edit", %{"id" => to_string(out_auth.id)}) =~
-               "Authorization not found"
+               "Access entry not found"
 
       assert render_click(lv, "delete", %{"id" => to_string(out_auth.id)}) =~
-               "Authorization not found"
+               "Access entry not found"
 
       assert Authorizations.get_authorization(out_auth.id)
 
@@ -305,7 +305,7 @@ defmodule SsmWeb.ScopeLiveTest do
       render_click(lv, "bulk-toggle-host", %{"id" => to_string(in_host.id)})
       render_change(lv, "bulk-change", %{"bulk" => %{"login" => "bulk"}})
       # an out-of-scope host id from the client is dropped, never granted
-      assert render_click(lv, "bulk-save", %{}) =~ "1 authorization(s) created"
+      assert render_click(lv, "bulk-save", %{}) =~ "1 access entry created"
       refute Authorizations.exists?(bob.id, out.id, "bulk")
       assert Authorizations.exists?(bob.id, in_host.id, "bulk")
 
@@ -335,7 +335,7 @@ defmodule SsmWeb.ScopeLiveTest do
       out_host: out,
       out_auth: out_auth
     } do
-      {:ok, lv, _} = live(scoped(conn, p), ~p"/authorizations?view=matrix&login=out-login")
+      {:ok, lv, _} = live(scoped(conn, p), ~p"/access?view=matrix&login=out-login")
 
       render_click(lv, "matrix-toggle", %{
         "user-id" => to_string(out_auth.user_id),
@@ -351,7 +351,7 @@ defmodule SsmWeb.ScopeLiveTest do
       in_host: host,
       in_auth: in_auth
     } do
-      {:ok, lv, _} = live(scoped(conn, p), ~p"/authorizations")
+      {:ok, lv, _} = live(scoped(conn, p), ~p"/access")
       render_click(lv, "new", %{})
 
       render_submit(lv, "save", %{
@@ -368,7 +368,7 @@ defmodule SsmWeb.ScopeLiveTest do
 
     test "the CSV export is scoped", %{conn: conn, provider: p, out_host: out} do
       conn = scoped(conn, p)
-      body = conn |> recycle() |> get(~p"/authorizations/export") |> response(200)
+      body = conn |> recycle() |> get(~p"/access/export") |> response(200)
       assert body =~ "in-login"
       refute body =~ "out-login"
 
@@ -376,7 +376,7 @@ defmodule SsmWeb.ScopeLiveTest do
         build_conn()
         |> scoped(p)
         |> recycle()
-        |> get(~p"/authorizations/export?host_id=#{out.id}")
+        |> get(~p"/access/export?host_id=#{out.id}")
         |> response(200)
 
       refute body =~ "out-login"

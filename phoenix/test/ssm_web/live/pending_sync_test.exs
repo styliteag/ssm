@@ -28,7 +28,7 @@ defmodule SsmWeb.PendingSyncTest do
     :ok = Revocations.mark(web1.id, "test")
     :ok = Revocations.mark(web2.id, "test")
 
-    for path <- [~p"/dashboard", ~p"/users", ~p"/authorizations", ~p"/diff"] do
+    for path <- [~p"/dashboard", ~p"/users", ~p"/access", ~p"/diff"] do
       {:ok, view, _html} = live(conn, path)
 
       assert has_element?(view, ~s(#pending-sync[href="/hosts?filter=pending"]), "2")
@@ -41,7 +41,7 @@ defmodule SsmWeb.PendingSyncTest do
     host = host_fixture(%{name: "web1"})
     authorization_fixture(alice, host, %{login: "deploy"})
 
-    {:ok, view, _html} = live(conn, ~p"/authorizations?view=matrix&login=deploy")
+    {:ok, view, _html} = live(conn, ~p"/access?view=matrix&login=deploy")
     refute has_element?(view, "#pending-sync")
 
     view |> element("#matrix-cell-#{alice.id}-#{host.id}") |> render_click()

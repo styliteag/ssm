@@ -74,7 +74,7 @@ defmodule SsmWeb.ReadOnlyTest do
       conn = login_as(conn, p, "viewer")
       {:ok, users, _} = live(conn, ~p"/users")
       assert render_click(users, "bulk-delete-confirm", %{}) =~ "read-only"
-      {:ok, auths, _} = live(conn, ~p"/authorizations")
+      {:ok, auths, _} = live(conn, ~p"/access")
       assert render_click(auths, "bulk-save", %{}) =~ "read-only"
       {:ok, keys, _} = live(conn, ~p"/keys")
 

@@ -27,7 +27,7 @@ defmodule SsmWeb.AuthorizationExportController do
       |> then(&[@columns | &1])
       |> Enum.map_join("\n", &csv_line/1)
 
-    filename = "authorizations-#{Date.utc_today()}.csv"
+    filename = "access-#{Date.utc_today()}.csv"
 
     conn
     |> put_resp_content_type("text/csv")

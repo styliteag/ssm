@@ -11,7 +11,7 @@ defmodule SsmWeb.GrantsLive do
   any target, scoped operators only targets in their scope (the grant keeps
   their scope), viewers none (also refused by `SsmWeb.ReadOnly`). A scoped
   operator sees only grants that stay inside its scope. Grant-made
-  authorization rows are read-only on the Authorizations page.
+  access entries are read-only on the Access page, with a link back here.
   """
 
   use SsmWeb, :live_view
@@ -237,7 +237,7 @@ defmodule SsmWeb.GrantsLive do
         {@heading}
         <:subtitle>
           SSH access per customer or host group. Every host of the target gets an
-          authorization; removed access leaves a host at the next sync.
+          access entry (see Access); removed access leaves a host at the next sync.
         </:subtitle>
         <:actions>
           <.button :if={@writer} id="new-grant" variant="primary" phx-click="new">
@@ -316,10 +316,10 @@ defmodule SsmWeb.GrantsLive do
           </:col>
           <:action :let={grant}>
             <.link
-              navigate={~p"/authorizations?user_id=#{grant.ssh_user_id}"}
+              navigate={~p"/access?user_id=#{grant.ssh_user_id}"}
               class="btn btn-ghost btn-xs"
-              title="Authorizations of this user"
-              aria-label="Authorizations of this user"
+              title="Access of this user"
+              aria-label="Access of this user"
             >
               <.icon name="hero-shield-check" class="size-4" />
             </.link>

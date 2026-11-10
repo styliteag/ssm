@@ -136,7 +136,14 @@ defmodule SsmWeb.Router do
   scope "/", SsmWeb do
     pipe_through [:browser, :require_authenticated_user]
 
-    get "/authorizations/export", AuthorizationExportController, :export
+    get "/access/export", AuthorizationExportController, :export
+  end
+
+  # The pages were called "Authorizations" before ADR-0014 phase 1: old
+  # bookmarks and links keep working (permanent, query string kept).
+  scope "/", SsmWeb do
+    get "/authorizations", LegacyRedirectController, :access
+    get "/authorizations/export", LegacyRedirectController, :access_export
   end
 
   scope "/", SsmWeb do
@@ -148,7 +155,7 @@ defmodule SsmWeb.Router do
       live "/users", UsersLive
       live "/users/:id", UserLive
       live "/keys", KeysLive
-      live "/authorizations", AuthorizationsLive
+      live "/access", AuthorizationsLive
       live "/grants", GrantsLive
       live "/diff", DiffLive
       live "/activities", ActivitiesLive

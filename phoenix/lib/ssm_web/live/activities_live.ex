@@ -146,7 +146,7 @@ defmodule SsmWeb.ActivitiesLive do
   defp target_path(%{target: t}) when t in [nil, ""], do: nil
   defp target_path(%{activity_type: "user", target: t}), do: ~p"/users?q=#{t}"
   defp target_path(%{activity_type: "key", target: t}), do: ~p"/keys?q=#{t}"
-  defp target_path(%{activity_type: "auth", target: t}), do: ~p"/authorizations?q=#{t}"
+  defp target_path(%{activity_type: "auth", target: t}), do: ~p"/access?q=#{t}"
   defp target_path(_entry), do: nil
 
   @impl true
@@ -181,7 +181,7 @@ defmodule SsmWeb.ActivitiesLive do
             value={@filter_type}
             label="Filter by type"
             prompt="All types"
-            options={[{"Host", "host"}, {"User", "user"}, {"Key", "key"}, {"Authorization", "auth"}]}
+            options={[{"Host", "host"}, {"User", "user"}, {"Key", "key"}, {"Access", "auth"}]}
           />
         </div>
         <div class="min-w-48">

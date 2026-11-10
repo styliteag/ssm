@@ -7,7 +7,7 @@ defmodule SsmWeb.AuthorizationExportControllerTest do
 
   test "redirects anonymous visitors" do
     conn = Phoenix.ConnTest.build_conn()
-    conn = get(conn, ~p"/authorizations/export")
+    conn = get(conn, ~p"/access/export")
     assert redirected_to(conn) == ~p"/sign-in"
   end
 
@@ -16,12 +16,12 @@ defmodule SsmWeb.AuthorizationExportControllerTest do
     host = host_fixture(%{name: "web1", address: "10.0.0.1"})
     _auth = authorization_fixture(user, host, %{login: "deploy", options: ~s(no-pty,from="x")})
 
-    conn = get(conn, ~p"/authorizations/export")
+    conn = get(conn, ~p"/access/export")
 
     assert response_content_type(conn, :csv) =~ "text/csv"
 
     assert get_resp_header(conn, "content-disposition") == [
-             ~s(attachment; filename="authorizations-#{Date.utc_today()}.csv")
+             ~s(attachment; filename="access-#{Date.utc_today()}.csv")
            ]
 
     [header, line] = String.split(response(conn, 200), "\n")
@@ -35,7 +35,7 @@ defmodule SsmWeb.AuthorizationExportControllerTest do
     _auth = authorization_fixture(user, host, %{login: "deploy"})
     {:ok, _} = Ssm.Users.update_user(user, %{username: "-2+3"})
 
-    conn = get(conn, ~p"/authorizations/export")
+    conn = get(conn, ~p"/access/export")
     [_header, line] = String.split(response(conn, 200), "\n")
     assert line == ~s("'-2+3","'+cmd","deploy","","Yes","#{host.address}")
   end
@@ -43,7 +43,7 @@ defmodule SsmWeb.AuthorizationExportControllerTest do
   test "a filter of the wrong type is ignored, not a crash", %{conn: conn} do
     _auth = authorization_fixture(user_fixture(), host_fixture())
 
-    conn = get(conn, "/authorizations/export?user_id[]=1&host_id[x]=2")
+    conn = get(conn, "/access/export?user_id[]=1&host_id[x]=2")
     assert [_header, _line] = String.split(response(conn, 200), "\n")
   end
 
@@ -54,7 +54,7 @@ defmodule SsmWeb.AuthorizationExportControllerTest do
     _a = authorization_fixture(alice, host, %{login: "a"})
     _b = authorization_fixture(bob, host, %{login: "b"})
 
-    conn = get(conn, ~p"/authorizations/export?user_id=#{alice.id}")
+    conn = get(conn, ~p"/access/export?user_id=#{alice.id}")
 
     body = response(conn, 200)
     assert body =~ "alice"

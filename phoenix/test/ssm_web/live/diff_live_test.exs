@@ -379,7 +379,7 @@ defmodule SsmWeb.DiffLiveTest do
     render_async(view)
 
     assert Ssm.Authorizations.exists?(roamer.id, host.id, "deploy")
-    assert render(view) =~ "Authorized roamer for deploy on web1."
+    assert render(view) =~ "roamer now has access as deploy on web1."
 
     assert Enum.any?(Ssm.Activity.list(), fn entry ->
              entry.activity_type == "auth" and entry.target == "roamer@web1:deploy"

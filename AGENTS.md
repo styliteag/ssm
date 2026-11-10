@@ -247,6 +247,12 @@ with `:role`/`:actor`) also refuse an SSH user holding a grant with admin-only o
 `admin_only_refused`). `test/ssm_web/scope_live_test.exs`
 enumerates every LiveView route: a new page fails the suite until it is classified there.
 
+**Vocabulary** (ADR-0014): *Access* = an SSH user may log in as a login on a host (an `authorization`
+row, page `/access`, `SsmWeb.AuthorizationsLive`); *Grant* = the rule that creates such rows for all hosts of
+a customer or host group (page `/grants`). The UI never says "authorization"; `/authorizations` and its
+export redirect (301, query kept) to `/access` (`SsmWeb.LegacyRedirectController`). The JSON API,
+module names and tables keep the old name (external contract).
+
 **Navigation**: `SsmWeb.Links` (imported in every LiveView) holds the cross-link paths
 (`host_path/1` → diff, `user_path/1` → `/users/:id` `SsmWeb.UserLive`, `keys_path/1`, `grants_path/1`),
 `host_link`/`user_link`/`copy_text` components, `short_key_line/1`, and `list_search` + `query_params/2`

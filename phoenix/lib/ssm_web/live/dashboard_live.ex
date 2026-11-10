@@ -161,7 +161,7 @@ defmodule SsmWeb.DashboardLive do
         />
         <.stat_card
           id="stat-authorizations"
-          navigate={~p"/authorizations"}
+          navigate={~p"/access"}
           icon="hero-shield-check"
           title="Access entries"
           value={@authorization_count}

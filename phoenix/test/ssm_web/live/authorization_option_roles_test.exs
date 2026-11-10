@@ -32,7 +32,7 @@ defmodule SsmWeb.AuthorizationOptionRolesTest do
   test "an operator's permissive option is refused with a form error", %{conn: conn, provider: p} do
     user = user_fixture()
     host = host_fixture()
-    {:ok, lv, _} = live(login_as(conn, p, "operator"), ~p"/authorizations")
+    {:ok, lv, _} = live(login_as(conn, p, "operator"), ~p"/access")
 
     html = save(lv, user, host, "agent-forwarding")
     assert html =~ "may be set by an admin only"
@@ -46,7 +46,7 @@ defmodule SsmWeb.AuthorizationOptionRolesTest do
        %{conn: conn, provider: p} do
     user = user_fixture()
     host = host_fixture()
-    {:ok, lv, _} = live(login_as(conn, p, "operator"), ~p"/authorizations")
+    {:ok, lv, _} = live(login_as(conn, p, "operator"), ~p"/access")
 
     render_click(lv, "bulk-open", %{})
     render_click(lv, "bulk-toggle-user", %{"id" => to_string(user.id)})
@@ -60,7 +60,7 @@ defmodule SsmWeb.AuthorizationOptionRolesTest do
   test "an admin may set permissive options", %{conn: conn, provider: p} do
     user = user_fixture()
     host = host_fixture()
-    {:ok, lv, _} = live(login_as(conn, p, "admin"), ~p"/authorizations")
+    {:ok, lv, _} = live(login_as(conn, p, "admin"), ~p"/access")
 
     save(lv, user, host, "agent-forwarding")
     assert Authorizations.exists?(user.id, host.id, "deploy")

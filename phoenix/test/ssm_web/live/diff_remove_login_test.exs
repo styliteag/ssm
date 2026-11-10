@@ -55,7 +55,7 @@ defmodule SsmWeb.DiffRemoveLoginTest do
              ~s(#remove-login-tm[data-confirm*="Remove login tm from web1?"])
            )
 
-    assert has_element?(view, ~s(#remove-login-tm[data-confirm*="1 authorization"]))
+    assert has_element?(view, ~s(#remove-login-tm[data-confirm*="1 access entry"]))
     assert has_element?(view, ~s(#remove-login-tm[data-confirm*="directory outage"]))
 
     view |> element("#remove-login-tm") |> render_click()

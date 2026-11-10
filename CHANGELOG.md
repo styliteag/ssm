@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- One vocabulary: **Access** is an SSH user's right to log in as a login on a host (one row or matrix
+  cell), a **Grant** is the rule that gives access on all hosts of a customer or host group. "Authorization"
+  is gone from the pages, flash messages, confirm dialogs and the CSV file name; "New authorization" is
+  "New access", "Bulk grant" is "Bulk add". Rows made by a grant say "from grant customer Acme" and link
+  to the grants of that user. The JSON API is unchanged.
+- The Access page moved from `/authorizations` to `/access` (CSV export `/access/export`). The old
+  addresses redirect permanently and keep their query string, so saved links still work.
+
 ## [4.15.0] - 2026-11-11
 
 ### Added

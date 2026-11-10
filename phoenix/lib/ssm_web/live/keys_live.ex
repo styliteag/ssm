@@ -653,7 +653,7 @@ defmodule SsmWeb.KeysLive do
           </div>
           <div class="mt-1 flex flex-wrap gap-x-3 text-xs opacity-70">
             <.user_link id={key.user_id} name={key.user.username} />
-            <span title="Distinct hosts the owner has authorizations for">
+            <span title="Distinct hosts the owner has access to">
               {Map.get(@hosts_by_user, key.user_id, 0)} host(s)
             </span>
           </div>
@@ -694,7 +694,7 @@ defmodule SsmWeb.KeysLive do
           </:col>
           <:col :let={{_id, key}} label="Comment" sort="comment">{key.extra_comment || "—"}</:col>
           <:col :let={{_id, key}} label="Host access via owner" sort="access">
-            <span class="tabular-nums" title="Distinct hosts the owner has authorizations for">
+            <span class="tabular-nums" title="Distinct hosts the owner has access to">
               {Map.get(@hosts_by_user, key.user_id, 0)}
             </span>
           </:col>

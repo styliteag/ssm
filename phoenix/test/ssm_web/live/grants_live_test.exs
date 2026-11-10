@@ -1,7 +1,7 @@
 defmodule SsmWeb.GrantsLiveTest do
   @moduledoc """
   ADR-0012 phase 2 UI: grants per SSH user and per customer/group, grant
-  rows read-only on the Authorizations page ("via customer X"), revocation
+  rows read-only on the Access page ("via customer X"), revocation
   pending on the Hosts page.
   """
   use SsmWeb.ConnCase, async: false
@@ -109,12 +109,12 @@ defmodule SsmWeb.GrantsLiveTest do
     assert Grants.list_grants(Scope.global()) == []
   end
 
-  test "grant rows are read-only on the Authorizations page", %{conn: conn} = ctx do
+  test "grant rows are read-only on the Access page", %{conn: conn} = ctx do
     admin_grant(ctx)
     row = Repo.get_by!(Authorization, host_id: ctx.host.id)
 
-    {:ok, lv, _} = live(conn, ~p"/authorizations")
-    assert has_element?(lv, "#via-grant-#{row.id}", "via customer Acme")
+    {:ok, lv, _} = live(conn, ~p"/access")
+    assert has_element?(lv, "#via-grant-#{row.id}", "from grant customer Acme")
     refute has_element?(lv, "#edit-authorization-#{row.id}")
     refute has_element?(lv, "#delete-authorization-#{row.id}")
 
@@ -127,7 +127,7 @@ defmodule SsmWeb.GrantsLiveTest do
     manual = authorization_fixture(ctx.alice, ctx.host, %{login: "deploy"})
     admin_grant(ctx)
 
-    {:ok, lv, _} = live(conn, ~p"/authorizations")
+    {:ok, lv, _} = live(conn, ~p"/access")
     lv |> element("#delete-authorization-#{manual.id}") |> render_click()
 
     [entry] = Repo.all(from l in Ssm.Activity.ActivityLog, where: l.action == "grant_add")

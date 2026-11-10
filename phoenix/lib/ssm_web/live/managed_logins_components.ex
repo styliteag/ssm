@@ -2,7 +2,7 @@ defmodule SsmWeb.ManagedLoginsComponents do
   @moduledoc """
   The hosts page's "Managed logins" dialog (admin only, `SsmWeb.HostsLive`):
   the logins ssm keeps writing on a host (`managed_logins`) with their
-  number of authorizations, and "Forget" for one without authorizations.
+  number of access entries, and "Forget" for one without access entries.
   Whether the host still has a file for it is asked when forgetting
   (`Ssm.Hosts.ManagedLogins.forget/4`).
   """
@@ -17,8 +17,8 @@ defmodule SsmWeb.ManagedLoginsComponents do
       <:title>Managed logins on {@managed.host.name}</:title>
 
       <p class="mb-3 text-sm opacity-70">
-        A sync keeps writing the authorized_keys of every login that ever held a grant here,
-        so a revocation reaches the host. Forget a login only when it has no authorizations
+        A sync keeps writing the authorized_keys of every login that ever had access here,
+        so a revocation reaches the host. Forget a login only when it has no access entries
         and its file is gone from the host; ssm checks the host first.
       </p>
 
@@ -32,7 +32,7 @@ defmodule SsmWeb.ManagedLoginsComponents do
         >
           <span class="font-mono text-sm">{entry.login}</span>
           <span class="badge badge-ghost badge-sm tabular-nums">
-            {entry.authorizations} authorization(s)
+            {access_entries(entry.authorizations)}
           </span>
           <button
             id={"forget-login-#{entry.login}"}
@@ -44,12 +44,12 @@ defmodule SsmWeb.ManagedLoginsComponents do
             data-confirm={"Forget login #{entry.login} on #{@managed.host.name}? A sync no longer writes its authorized_keys."}
             title={
               if entry.authorizations > 0,
-                do: "Revoke its authorizations first",
+                do: "Revoke its access entries first",
                 else: "Stop managing this login (checks the host first)"
             }
             aria-label={
               if entry.authorizations > 0,
-                do: "Revoke its authorizations first",
+                do: "Revoke its access entries first",
                 else: "Stop managing this login (checks the host first)"
             }
           >

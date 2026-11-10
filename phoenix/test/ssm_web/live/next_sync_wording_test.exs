@@ -61,7 +61,7 @@ defmodule SsmWeb.NextSyncWordingTest do
   test "deleting an authorization", %{conn: conn} do
     %{auth: auth} = granted_user("alice")
 
-    {:ok, view, _html} = live(conn, ~p"/authorizations")
+    {:ok, view, _html} = live(conn, ~p"/access")
 
     assert confirm(view, "#delete-authorization-#{auth.id}") =~ "next sync"
 

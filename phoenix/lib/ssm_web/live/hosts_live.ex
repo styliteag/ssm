@@ -316,7 +316,7 @@ defmodule SsmWeb.HostsLive do
          put_flash(
            socket,
            :error,
-           "Cannot delete this host: it is still referenced (authorizations or jump chains)."
+           "Cannot delete this host: it is still referenced (access entries or jump chains)."
          )}
     end
   end
@@ -539,9 +539,6 @@ defmodule SsmWeb.HostsLive do
      |> put_flash(:error, ErrorText.crashed("The connection test", reason))}
   end
 
-  defp access_entries(1), do: "1 access entry"
-  defp access_entries(n), do: "#{n} access entries"
-
   # Deleting a host only forgets it: ssm never connects again, so whatever
   # it placed there (the authorized key lines, its own key) stays.
   defp delete_confirm(host, 0),
@@ -549,11 +546,11 @@ defmodule SsmWeb.HostsLive do
       "Delete host #{host.name}? ssm never connects to it again; ssm's own key stays on the host until someone removes it there."
 
   defp delete_confirm(host, count) do
-    entries = if count == 1, do: "1 authorization goes", else: "#{count} authorizations go"
+    entries = if count == 1, do: "1 access entry goes", else: "#{count} access entries go"
 
     "Delete host #{host.name}? Its #{entries} with it, but ssm never connects to it again: " <>
       "the key lines it placed and ssm's own key stay on the host. " <>
-      "To take access away, delete the authorizations and sync first, then delete the host."
+      "To take access away, delete the access entries and sync first, then delete the host."
   end
 
   defp open_managed(socket, host),
@@ -898,10 +895,10 @@ defmodule SsmWeb.HostsLive do
               {checked_label(host.id, @tested_at, @stored_checks)}
             </span>
             <.link
-              navigate={~p"/authorizations?host_id=#{host.id}"}
+              navigate={~p"/access?host_id=#{host.id}"}
               class="link link-hover"
-              title="Authorizations on this host"
-              aria-label="Authorizations on this host"
+              title="Access on this host"
+              aria-label="Access on this host"
             >
               {access_entries(Map.get(@auth_counts, host.id, 0))}
             </.link>
@@ -947,10 +944,10 @@ defmodule SsmWeb.HostsLive do
           </:col>
           <:col :let={host} label="Access" sort="access">
             <.link
-              navigate={~p"/authorizations?host_id=#{host.id}"}
+              navigate={~p"/access?host_id=#{host.id}"}
               class="link link-hover tabular-nums"
-              title="Authorizations on this host"
-              aria-label="Authorizations on this host"
+              title="Access on this host"
+              aria-label="Access on this host"
             >
               {Map.get(@auth_counts, host.id, 0)}
             </.link>

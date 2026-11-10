@@ -30,8 +30,8 @@ defmodule SsmWeb.PickersAndMergeTest do
       host_fixture(%{name: "web2"})
       host_fixture(%{name: "db1"})
 
-      {:ok, view, _html} = live(conn, ~p"/authorizations")
-      view |> element("button", "New authorization") |> render_click()
+      {:ok, view, _html} = live(conn, ~p"/access")
+      view |> element("button", "New access") |> render_click()
 
       assert has_element?(view, ~s([phx-hook="Combobox"] input[data-combobox-input]))
 

@@ -236,7 +236,7 @@ defmodule SsmWeb.DiffLive do
           put_flash(
             socket,
             :error,
-            "Authorizations of #{login} removed, but ssm still manages the login: " <>
+            "Access of #{login} removed, but ssm still manages the login: " <>
               ErrorText.reason(reason)
           )
       end
@@ -702,11 +702,11 @@ defmodule SsmWeb.DiffLive do
 
           {:noreply,
            socket
-           |> put_flash(:info, "Authorized #{user.username} for #{login} on #{host.name}.")
+           |> put_flash(:info, "#{user.username} now has access as #{login} on #{host.name}.")
            |> start_detail_async(host)}
 
         {:error, _changeset} ->
-          {:noreply, put_flash(socket, :error, "Could not create the authorization.")}
+          {:noreply, put_flash(socket, :error, "Could not create the access entry.")}
       end
     end
   end
@@ -894,7 +894,7 @@ defmodule SsmWeb.DiffLive do
                 "remove the restrictions first or delete the grant."}}
 
           {:error, _} ->
-            {:halt, {:error, "Could not delete the authorizations of #{login}."}}
+            {:halt, {:error, "Could not delete the access entries of #{login}."}}
         end
       end)
     end
@@ -902,7 +902,7 @@ defmodule SsmWeb.DiffLive do
 
   defp remove_login_confirm(host, login, host_auths) do
     count = Enum.count(host_auths, fn {{_user_id, l}, _auth} -> l == login end)
-    entries = if count == 1, do: "1 authorization", else: "#{count} authorizations"
+    entries = if count == 1, do: "1 access entry", else: "#{count} access entries"
 
     "Remove login #{login} from #{host.name}? ssm deletes its #{entries} here and stops " <>
       "managing #{login} on this host. The host says it does not know #{login}. " <>
@@ -1350,8 +1350,8 @@ defmodule SsmWeb.DiffLive do
                 phx-click="remove-login"
                 phx-value-login={login.login}
                 data-confirm={remove_login_confirm(@selected, login.login, @host_auths)}
-                title={"Delete #{login.login}'s authorizations on this host and stop managing it"}
-                aria-label={"Delete #{login.login}'s authorizations on this host and stop managing it"}
+                title={"Delete #{login.login}'s access entries on this host and stop managing it"}
+                aria-label={"Delete #{login.login}'s access entries on this host and stop managing it"}
               >
                 <.icon name="hero-user-minus" class="size-4" /> Remove login from host
               </button>
@@ -1603,8 +1603,8 @@ defmodule SsmWeb.DiffLive do
       phx-click="allow-key"
       phx-value-login={@login}
       phx-value-index={@index}
-      title={"Authorize #{elem(@info, 1).username} for #{@login} (database only)"}
-      aria-label={"Authorize #{elem(@info, 1).username} for #{@login} (database only)"}
+      title={"Give #{elem(@info, 1).username} access as #{@login} (database only)"}
+      aria-label={"Give #{elem(@info, 1).username} access as #{@login} (database only)"}
     >
       <.icon name="hero-check-circle" class="size-4" /> Allow ({elem(@info, 1).username})
     </button>

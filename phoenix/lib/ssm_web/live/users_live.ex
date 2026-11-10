@@ -443,12 +443,12 @@ defmodule SsmWeb.UsersLive do
 
   defp split_summary(result) do
     "Created #{result.new_user.username} with #{result.moved_keys} key(s) " <>
-      "and #{result.copied_authorizations} copied authorization(s)."
+      "and #{access_entries(result.copied_authorizations)} copied."
   end
 
   defp merge_summary(result) do
     "Merged #{length(result.deleted_users)} user(s) into #{result.target.username}: " <>
-      "#{result.moved_keys} key(s) moved, #{result.copied_authorizations} authorization(s) " <>
+      "#{result.moved_keys} key(s) moved, #{access_entries(result.copied_authorizations)} " <>
       "copied, #{result.skipped_authorizations} duplicate(s) skipped."
   end
 
@@ -472,7 +472,7 @@ defmodule SsmWeb.UsersLive do
 
     "Not merged: the users have different key options for the same host and login " <>
       "(#{places}). Merging would give the other user's keys those options; make the " <>
-      "options equal or remove one of the authorizations first."
+      "options equal or remove one of the access entries first."
   end
 
   defp bulk_error({:user_not_found, username}),
@@ -622,7 +622,7 @@ defmodule SsmWeb.UsersLive do
             <.link navigate={~p"/keys?user_id=#{row.id}"} class="link link-hover">
               {row.key_count} key(s)
             </.link>
-            <.link navigate={~p"/authorizations?user_id=#{row.id}"} class="link link-hover">
+            <.link navigate={~p"/access?user_id=#{row.id}"} class="link link-hover">
               {row.authorization_count} access entr{if row.authorization_count == 1,
                 do: "y",
                 else: "ies"}
@@ -679,7 +679,7 @@ defmodule SsmWeb.UsersLive do
             </.link>
           </:col>
           <:col :let={row} label="Access" sort="access">
-            <.link navigate={~p"/authorizations?user_id=#{row.user.id}"} class="link link-hover">
+            <.link navigate={~p"/access?user_id=#{row.user.id}"} class="link link-hover">
               {row.authorization_count}
             </.link>
           </:col>
@@ -764,7 +764,7 @@ defmodule SsmWeb.UsersLive do
       class="btn btn-ghost btn-xs text-error"
       phx-click="delete"
       phx-value-id={@row.id}
-      data-confirm={"Delete user #{@row.user.username}? Their keys and authorizations go with them; the keys leave the hosts at the next sync."}
+      data-confirm={"Delete user #{@row.user.username}? Their keys and access entries go with them; the keys leave the hosts at the next sync."}
       title="Delete user"
       aria-label="Delete user"
     >
@@ -781,7 +781,7 @@ defmodule SsmWeb.UsersLive do
       <:title>Split keys from {@splitting.user.username}</:title>
 
       <p class="mb-2 text-sm opacity-70">
-        Moves the selected keys to a new user and copies all of {@splitting.user.username}'s authorizations to it. The original user keeps
+        Moves the selected keys to a new user and copies all of {@splitting.user.username}'s access entries to it. The original user keeps
         the unselected keys.
       </p>
 
@@ -957,12 +957,12 @@ defmodule SsmWeb.UsersLive do
       <:title>Delete {length(@rows)} users</:title>
 
       <p class="mb-2 text-sm">
-        This permanently removes <strong>{length(@rows)} user(s)</strong>, <strong>{@key_total} SSH key(s)</strong>, and <strong>{@auth_total} authorization(s)</strong>.
+        This permanently removes <strong>{length(@rows)} user(s)</strong>, <strong>{@key_total} SSH key(s)</strong>, and <strong>{access_entries(@auth_total)}</strong>.
       </p>
 
       <ul class="mb-2 max-h-40 list-inside list-disc overflow-auto text-sm opacity-80">
         <li :for={row <- @rows}>
-          {row.user.username} — {row.key_count} key(s), {row.authorization_count} authorization(s)
+          {row.user.username} — {row.key_count} key(s), {access_entries(row.authorization_count)}
         </li>
       </ul>
 

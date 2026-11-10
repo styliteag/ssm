@@ -27,6 +27,11 @@ defmodule SsmWeb.Links do
   @doc "Path of an SSH user's grants."
   def grants_path(user_id), do: ~p"/grants?user_id=#{user_id}"
 
+  @doc ~S|"1 access entry" / "3 access entries": the count of an SSH user's rows on hosts.|
+  @spec access_entries(non_neg_integer()) :: String.t()
+  def access_entries(1), do: "1 access entry"
+  def access_entries(count), do: "#{count} access entries"
+
   attr :id, :any, required: true, doc: "host id"
   attr :name, :string, required: true
   attr :class, :any, default: nil
