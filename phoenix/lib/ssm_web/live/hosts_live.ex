@@ -46,6 +46,8 @@ defmodule SsmWeb.HostsLive do
   @outside_scope "Not available: your account is limited to some customers or host groups, " <>
                    "and this would act outside your scope."
 
+  @page_size 100
+
   @impl true
   def mount(_params, _session, socket) do
     {:ok,
@@ -53,6 +55,7 @@ defmodule SsmWeb.HostsLive do
      |> assign(page_title: "Hosts")
      |> assign(form: nil, editing: nil, testing_id: nil, pinning: false)
      |> assign(filter: "active", q: nil, conn_results: %{}, sort: nil, view: "list")
+     |> assign(limit: @page_size, page_size: @page_size, shown: [])
      |> assign(:refilter_queued, false)
      |> assign(refreshing: false, refresh_done: 0, refresh_total: 0, refresh_ids: [])
      |> assign(:tested_at, %{})
@@ -67,7 +70,12 @@ defmodule SsmWeb.HostsLive do
 
     {:noreply,
      socket
-     |> assign(filter: filter, q: params["q"], sort: parse_sort(params["sort"]))
+     |> assign(
+       filter: filter,
+       q: params["q"],
+       sort: parse_sort(params["sort"]),
+       limit: @page_size
+     )
      |> refilter()}
   end
 
@@ -140,6 +148,7 @@ defmodule SsmWeb.HostsLive do
     socket
     |> assign(:statuses, statuses)
     |> assign(:rows, rows)
+    |> assign(:shown, Enum.take(rows, socket.assigns.limit))
     |> assign(:host_count, length(hosts))
   end
 
@@ -194,6 +203,9 @@ defmodule SsmWeb.HostsLive do
   def handle_event("search", params, socket) do
     {:noreply, patch_query(socket, %{"q" => params["q"]})}
   end
+
+  def handle_event("more", _params, socket),
+    do: {:noreply, socket |> assign(:limit, socket.assigns.limit + @page_size) |> refilter()}
 
   def handle_event("sort", %{"key" => key}, socket) do
     sort = SsmWeb.TableSort.toggle(socket.assigns.sort, key)
@@ -861,7 +873,7 @@ defmodule SsmWeb.HostsLive do
 
       <ul :if={@view == "cards" and @rows != []} class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         <li
-          :for={host <- @rows}
+          :for={host <- @shown}
           id={"host-card-#{host.id}"}
           class="rounded-box bg-base-200 px-4 py-3"
         >
@@ -906,10 +918,17 @@ defmodule SsmWeb.HostsLive do
         </li>
       </ul>
 
+      <div :if={length(@rows) > @page_size} class="flex items-center gap-3 text-sm">
+        <span id="hosts-position" class="opacity-70">{length(@shown)} of {length(@rows)}</span>
+        <.button :if={length(@shown) < length(@rows)} id="hosts-more" phx-click="more">
+          Show {min(@page_size, length(@rows) - length(@shown))} more
+        </.button>
+      </div>
+
       <div :if={@view == "list" and @rows != []} class="overflow-x-auto">
         <.table
           id="hosts"
-          rows={@rows}
+          rows={@shown}
           sort={@sort}
           row_id={&"hosts-#{&1.id}"}
           row_item={&Function.identity/1}

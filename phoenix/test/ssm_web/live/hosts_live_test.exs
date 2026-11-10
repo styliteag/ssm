@@ -19,6 +19,19 @@ defmodule SsmWeb.HostsLiveTest do
     assert {:error, {:redirect, %{to: "/sign-in"}}} = live(conn, ~p"/hosts")
   end
 
+  test "a long host list shows 100 rows and a Show more button", %{conn: conn} do
+    for n <- 1..120, do: host_fixture(%{name: "bulk#{String.pad_leading("#{n}", 3, "0")}"})
+
+    {:ok, view, _html} = live(conn, ~p"/hosts")
+    assert has_element?(view, "#hosts-position", "100 of 120")
+    assert has_element?(view, "#hosts", "bulk001")
+    refute has_element?(view, "#hosts", "bulk120")
+
+    view |> element("#hosts-more") |> render_click()
+    assert has_element?(view, "#hosts-position", "120 of 120")
+    assert has_element?(view, "#hosts", "bulk120")
+  end
+
   test "the column sort lives in the URL and survives a reload", %{conn: conn} do
     host_fixture(%{name: "b-host"})
     host_fixture(%{name: "a-host"})
