@@ -758,30 +758,28 @@ defmodule SsmWeb.CoreComponents do
   end
 
   @doc """
-  Renders a UTC timestamp that the browser rewrites into the viewer's local
-  zone (app.js rewrites the text of `time[data-localtime]` elements; the
-  `datetime` attribute is never mutated — it stays the canonical value the
-  next LiveView patch re-reads). With JS disabled the UTC text stays visible.
+  Renders a UTC timestamp in the viewer's time zone (`SsmWeb.TimeZone`, the
+  `:time_zone` assign of every LiveView) as `DD.MM.YYYY HH:MM`. The `title`
+  carries the UTC value in ISO 8601.
 
   Accepts a `DateTime`, `NaiveDateTime` (assumed UTC), or unix seconds
   (the activity_log timestamp column).
   """
   attr :at, :any, required: true, doc: "DateTime | NaiveDateTime | unix seconds"
+  attr :zone, :string, required: true, doc: "the viewer's zone, `@time_zone`"
   attr :fmt, :string, default: "datetime", values: ~w(datetime datetime-sec time-sec date)
   attr :class, :string, default: nil
 
   def local_time(assigns) do
-    datetime = to_utc_datetime(assigns.at)
-    assigns = assign(assigns, :datetime, datetime)
+    assigns = assign(assigns, :datetime, to_utc_datetime(assigns.at))
 
     ~H"""
     <time
       :if={@datetime}
       datetime={DateTime.to_iso8601(@datetime)}
-      data-localtime
-      data-fmt={@fmt}
+      title={DateTime.to_iso8601(@datetime)}
       class={@class}
-    >{utc_text(@datetime, @fmt)}</time>
+    >{SsmWeb.TimeZone.format(@datetime, @zone, @fmt)}</time>
     """
   end
 
@@ -789,9 +787,4 @@ defmodule SsmWeb.CoreComponents do
   defp to_utc_datetime(%NaiveDateTime{} = ndt), do: DateTime.from_naive!(ndt, "Etc/UTC")
   defp to_utc_datetime(unix) when is_integer(unix), do: DateTime.from_unix!(unix)
   defp to_utc_datetime(_), do: nil
-
-  defp utc_text(dt, "date"), do: Calendar.strftime(dt, "%Y-%m-%d")
-  defp utc_text(dt, "time-sec"), do: Calendar.strftime(dt, "%H:%M:%S UTC")
-  defp utc_text(dt, "datetime-sec"), do: Calendar.strftime(dt, "%Y-%m-%d %H:%M:%S UTC")
-  defp utc_text(dt, _), do: Calendar.strftime(dt, "%Y-%m-%d %H:%M UTC")
 end

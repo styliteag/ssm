@@ -284,23 +284,13 @@ window.addEventListener("click", e => {
 // fresh chance for the WebSocket. (Lesson from ../dashboard 4.2.13.)
 sessionStorage.removeItem("phx:fallback:LongPoll")
 
-// Local-time rendering: the server emits <time datetime="<UTC ISO>"
-// data-localtime data-fmt="…">UTC text</time>; we rewrite textContent only,
-// never the datetime attribute (canonical value LiveView patches re-read).
-// Locale sv-SE yields ISO-ish output; timeZoneName appends CEST/CET etc.
-const TIME_FMT = {
-  "datetime": {year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", timeZoneName: "short"},
-  "datetime-sec": {year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", timeZoneName: "short"},
-  "time-sec": {hour: "2-digit", minute: "2-digit", second: "2-digit"},
-  "date": {year: "numeric", month: "2-digit", day: "2-digit"},
+// The viewer's time zone (ADR-0014): the server formats and parses all times
+// in it. Sent as LiveSocket connect param `tz`; the cookie `tz` serves the
+// first (dead) render. The server validates both and falls back silently.
+const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
+if (timeZone) {
+  document.cookie = `tz=${encodeURIComponent(timeZone)}; path=/; SameSite=Lax; max-age=31536000`
 }
-const localizeTime = el => {
-  const d = new Date(el.getAttribute("datetime"))
-  if (isNaN(d)) return
-  el.textContent = d.toLocaleString("sv-SE", TIME_FMT[el.dataset.fmt] || TIME_FMT["datetime"])
-}
-const localizeTimes = (root = document) =>
-  root.querySelectorAll("time[data-localtime]").forEach(localizeTime)
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
@@ -308,26 +298,9 @@ const liveSocket = new LiveSocket("/live", Socket, {
   // 30s default is exactly the idle timeout many proxies ship with — every
   // heartbeat would race the proxy's timer (../dashboard 4.0.8).
   heartbeatIntervalMs: 20000,
-  params: {_csrf_token: csrfToken},
+  params: {_csrf_token: csrfToken, tz: timeZone},
   hooks: {...colocatedHooks, CopyToClipboard, SelectSearch, Combobox},
-  // Localize timestamps in LiveView-patched DOM without flashing UTC.
-  dom: {
-    onNodeAdded(node) {
-      if (node.nodeType === 1) {
-        if (node.matches?.("time[data-localtime]")) localizeTime(node)
-        localizeTimes(node)
-      }
-      return node
-    },
-    onBeforeElUpdated(_from, to) {
-      if (to.matches?.("time[data-localtime]")) localizeTime(to)
-      return true
-    },
-  },
 })
-
-localizeTimes()
-window.addEventListener("phx:page-loading-stop", () => localizeTimes())
 
 // Show progress bar on live navigation and form submits
 topbar.config({barColors: {0: "#29d"}, shadowColor: "rgba(0, 0, 0, .3)"})

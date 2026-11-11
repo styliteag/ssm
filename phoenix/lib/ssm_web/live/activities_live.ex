@@ -59,7 +59,7 @@ defmodule SsmWeb.ActivitiesLive do
   defp blank_to_nil(value) when is_binary(value) and value != "", do: value
   defp blank_to_nil(_value), do: nil
 
-  # ?from= / ?to= are UTC calendar days (YYYY-MM-DD); anything else is no bound
+  # ?from= / ?to= are calendar days (YYYY-MM-DD) in the viewer's zone; anything else is no bound
   @doc false
   def parse_date(value) when is_binary(value) do
     case Date.from_iso8601(value) do
@@ -70,15 +70,12 @@ defmodule SsmWeb.ActivitiesLive do
 
   def parse_date(_value), do: nil
 
-  @doc false
-  def day_start(nil), do: nil
+  # unix seconds (UTC) of the first / last second of the local day
+  defp day_start(nil, _zone), do: nil
+  defp day_start(%Date{} = date, zone), do: date |> SsmWeb.TimeZone.day_range(zone) |> elem(0)
 
-  def day_start(%Date{} = d),
-    do: d |> DateTime.new!(~T[00:00:00], "Etc/UTC") |> DateTime.to_unix()
-
-  @doc false
-  def day_end(nil), do: nil
-  def day_end(%Date{} = d), do: d |> DateTime.new!(~T[23:59:59], "Etc/UTC") |> DateTime.to_unix()
+  defp day_end(nil, _zone), do: nil
+  defp day_end(%Date{} = date, zone), do: date |> SsmWeb.TimeZone.day_range(zone) |> elem(1)
 
   defp reload_entries(socket) do
     user = socket.assigns.current_user
@@ -91,8 +88,8 @@ defmodule SsmWeb.ActivitiesLive do
         activity_type: socket.assigns.filter_type,
         search: socket.assigns.search,
         actor_name: socket.assigns.actor_name,
-        from: day_start(socket.assigns.from),
-        to: day_end(socket.assigns.to)
+        from: day_start(socket.assigns.from, socket.assigns.time_zone),
+        to: day_end(socket.assigns.to, socket.assigns.time_zone)
       )
 
     {visible, more} = Enum.split(entries, socket.assigns.limit)
@@ -197,10 +194,10 @@ defmodule SsmWeb.ActivitiesLive do
           />
         </div>
         <div>
-          <.input type="date" name="from" value={@from} label="From (UTC)" />
+          <.input type="date" name="from" value={@from} label={"From (#{@time_zone})"} />
         </div>
         <div>
-          <.input type="date" name="to" value={@to} label="To (UTC)" />
+          <.input type="date" name="to" value={@to} label={"To (#{@time_zone})"} />
         </div>
       </form>
 
@@ -232,7 +229,8 @@ defmodule SsmWeb.ActivitiesLive do
             </.link>
             <span :if={!target_path(entry)} class="truncate opacity-75">{entry.target}</span>
             <span class="ml-auto flex-none text-xs opacity-60">
-              <.local_time at={entry.timestamp} fmt="datetime-sec" /> · {entry.actor_username}
+              <.local_time at={entry.timestamp} zone={@time_zone} fmt="datetime-sec" />
+              · {entry.actor_username}
             </span>
           </div>
 

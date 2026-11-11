@@ -83,6 +83,8 @@ defmodule Ssm.MixProject do
       {:bcrypt_elixir, "~> 3.0"},
       # Generic OIDC login for the web UI (ADR-0011, oidc-client-v1 spec)
       {:oidcc, "~> 3.9"},
+      # IANA time zone database: the UI shows and accepts the viewer's zone
+      {:tz, "~> 0.28"},
       # mctl contract v1 (/api/mctl/v1): plug, tokens, jobs, conformance tests
       {:mctl_contract, path: System.get_env("MCTL_CONTRACT_PATH", "vendor/mctl_contract")}
     ]

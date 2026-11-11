@@ -253,6 +253,16 @@ a customer or host group (page `/grants`). The UI never says "authorization"; `/
 export redirect (301, query kept) to `/access` (`SsmWeb.LegacyRedirectController`). The JSON API,
 module names and tables keep the old name (external contract).
 
+**Time zones** (ADR-0014): storage, `/api/v2`, CSV and outgoing payloads are UTC; the web UI shows and
+accepts the viewer's zone. `app.js` sends the browser zone as LiveSocket connect param `tz` and cookie `tz`;
+`SsmWeb.TimeZonePlug` copies the cookie into the session, `SsmWeb.TimeZoneHook` (on_mount of both
+live_sessions) assigns `:time_zone` (connect param, else session, else `Europe/Berlin`, invalid values
+silently dropped). `SsmWeb.TimeZone` (database `Tz.TimeZoneDatabase`, config `:elixir, :time_zone_database`)
+formats `DD.MM.YYYY HH:MM` and turns local input into UTC (`local_to_utc/2`: a time in the spring-forward
+gap moves forward by the gap, an ambiguous one is the first occurrence; `day_range/2` for day filters).
+`<.local_time at zone={@time_zone}>` formats on the server; a new date/time input is read with
+`local_to_utc/2` and shows `@time_zone` in its label. Deliberate UTC in the UI: none.
+
 **Navigation**: `SsmWeb.Links` (imported in every LiveView) holds the cross-link paths
 (`host_path/1` → diff, `user_path/1` → `/users/:id` `SsmWeb.UserLive`, `keys_path/1`, `grants_path/1`),
 `host_link`/`user_link`/`copy_text` components, `short_key_line/1`, and `list_search` + `query_params/2`

@@ -72,8 +72,8 @@ defmodule SsmWeb.ApiTokensLive do
   defp can_create?(nil), do: true
   defp can_create?(%{state: state}), do: state != "active"
 
-  defp format_time(nil), do: "never"
-  defp format_time(%DateTime{} = dt), do: Calendar.strftime(dt, "%Y-%m-%d %H:%M UTC")
+  defp format_time(nil, _zone), do: "never"
+  defp format_time(%DateTime{} = dt, zone), do: SsmWeb.TimeZone.format(dt, zone, "datetime")
 
   @impl true
   def render(assigns) do
@@ -98,7 +98,7 @@ defmodule SsmWeb.ApiTokensLive do
             token set by the environment is separate.
           </p>
 
-          <.status_line status={@status} />
+          <.status_line status={@status} zone={@time_zone} />
 
           <.secret_box :if={@secret} secret={@secret} />
 
@@ -148,6 +148,7 @@ defmodule SsmWeb.ApiTokensLive do
   end
 
   attr :status, :any, required: true
+  attr :zone, :string, required: true
 
   defp status_line(%{status: nil} = assigns) do
     ~H"""
@@ -165,8 +166,8 @@ defmodule SsmWeb.ApiTokensLive do
         {String.capitalize(@status.state)}
       </span>
       Prefix <code>{@status.prefix}</code>, scopes {Enum.join(@status.scopes, ", ")}.
-      Last used {format_time(@status.last_used_at)}{if @status.last_used_ip,
-        do: " from #{@status.last_used_ip}"}. Updated {format_time(@status.updated_at)}.
+      Last used {format_time(@status.last_used_at, @zone)}{if @status.last_used_ip,
+        do: " from #{@status.last_used_ip}"}. Updated {format_time(@status.updated_at, @zone)}.
     </p>
     """
   end

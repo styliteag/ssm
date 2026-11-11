@@ -137,7 +137,7 @@ defmodule SsmWeb.ActivitiesLiveTest do
     assert :sys.get_state(view.pid).socket.assigns.limit == 1000
   end
 
-  test "filters by actor and UTC day range", %{conn: conn} do
+  test "filters by actor and day range", %{conn: conn} do
     a = log_entry(%{target: "by-alice", actor_username: "alice"})
     b = log_entry(%{target: "by-bob", actor_username: "bob"})
 
@@ -162,5 +162,45 @@ defmodule SsmWeb.ActivitiesLiveTest do
     # garbage dates are ignored
     {:ok, view, _} = live(conn, ~p"/activities?from=nope")
     assert has_element?(view, "#activities-#{a.id}")
+  end
+
+  describe "date filter in the viewer's time zone" do
+    # 2026-06-30 21:30 UTC = 23:30 in Berlin (June 30), 22:30 UTC = 00:30 (July 1)
+    setup %{conn: conn} do
+      before_midnight = log_entry(%{target: "before-midnight"})
+      after_midnight = log_entry(%{target: "after-midnight"})
+      set_timestamp(before_midnight, ~U[2026-06-30 21:30:00Z])
+      set_timestamp(after_midnight, ~U[2026-06-30 22:30:00Z])
+
+      %{conn: conn, before: before_midnight, after: after_midnight}
+    end
+
+    defp set_timestamp(entry, utc) do
+      Ssm.Repo.update_all(
+        from(l in Ssm.Activity.ActivityLog, where: l.id == ^entry.id),
+        set: [timestamp: DateTime.to_unix(utc)]
+      )
+    end
+
+    defp live_in(conn, zone, path),
+      do: live(put_connect_params(conn, %{"tz" => zone}), path)
+
+    test "Europe/Berlin: July 1 starts at 22:00 UTC", ctx do
+      {:ok, view, html} = live_in(ctx.conn, "Europe/Berlin", ~p"/activities?from=2026-07-01")
+      assert html =~ "From (Europe/Berlin)"
+      assert has_element?(view, "#activities-#{ctx.after.id}")
+      refute has_element?(view, "#activities-#{ctx.before.id}")
+
+      {:ok, view, _} = live_in(ctx.conn, "Europe/Berlin", ~p"/activities?to=2026-06-30")
+      assert has_element?(view, "#activities-#{ctx.before.id}")
+      refute has_element?(view, "#activities-#{ctx.after.id}")
+    end
+
+    test "the same day in another zone is another UTC range", ctx do
+      # Tokyo (UTC+9): July 1 starts at 15:00 UTC on June 30, both entries are in
+      {:ok, view, _} = live_in(ctx.conn, "Asia/Tokyo", ~p"/activities?from=2026-07-01")
+      assert has_element?(view, "#activities-#{ctx.before.id}")
+      assert has_element?(view, "#activities-#{ctx.after.id}")
+    end
   end
 end

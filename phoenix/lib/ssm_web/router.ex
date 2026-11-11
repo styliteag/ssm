@@ -80,6 +80,7 @@ defmodule SsmWeb.Router do
   pipeline :browser do
     plug :accepts, ["html"]
     plug :fetch_session
+    plug SsmWeb.TimeZonePlug
     plug :fetch_live_flash
     plug :put_root_layout, html: {SsmWeb.Layouts, :root}
     plug :protect_from_forgery
@@ -120,7 +121,7 @@ defmodule SsmWeb.Router do
     post "/design", DesignController, :design
     post "/design/mode", DesignController, :mode
 
-    live_session :auth, on_mount: [{SsmWeb.UserAuth, :live_no_user}] do
+    live_session :auth, on_mount: [SsmWeb.TimeZoneHook, {SsmWeb.UserAuth, :live_no_user}] do
       live "/sign-in", LoginLive
     end
   end
@@ -149,7 +150,8 @@ defmodule SsmWeb.Router do
   scope "/", SsmWeb do
     pipe_through :browser
 
-    live_session :authenticated, on_mount: [{SsmWeb.UserAuth, :live_user_required}] do
+    live_session :authenticated,
+      on_mount: [SsmWeb.TimeZoneHook, {SsmWeb.UserAuth, :live_user_required}] do
       live "/dashboard", DashboardLive
       live "/hosts", HostsLive
       live "/users", UsersLive

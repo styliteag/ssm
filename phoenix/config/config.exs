@@ -16,6 +16,9 @@ config :mctl_contract, repo: Ssm.Repo, token_prefix: "ssm_"
 # authorized on the host, for at most `timeout_ms`.
 config :ssm, :mctl_login_wait, timeout_ms: 600_000, first_delay_ms: 2_000, max_delay_ms: 30_000
 
+# IANA zones for the viewer's time zone (SsmWeb.TimeZone). Storage and API stay UTC.
+config :elixir, :time_zone_database, Tz.TimeZoneDatabase
+
 config :ssm,
   ecto_repos: [Ssm.Repo],
   generators: [timestamp_type: :utc_datetime]

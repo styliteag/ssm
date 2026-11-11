@@ -194,7 +194,7 @@ defmodule SsmWeb.DashboardLive do
               </span>
               <span class="opacity-75">{entry.target}</span>
               <span class="ml-auto flex-none text-xs opacity-60">
-                <.local_time at={entry.timestamp} /> · {entry.actor_username}
+                <.local_time at={entry.timestamp} zone={@time_zone} /> · {entry.actor_username}
               </span>
             </li>
           </ul>

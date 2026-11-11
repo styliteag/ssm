@@ -7,7 +7,7 @@
       "type": "application",
       "bom-ref": "stylite-ssm",
       "name": "stylite-ssm",
-      "version": "2.0.1"
+      "version": "4.15.0"
     }
   },
   "components": [
@@ -467,6 +467,20 @@
         {
           "license": {
             "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:hex/tz@0.28.4",
+      "name": "tz",
+      "version": "0.28.4",
+      "purl": "pkg:hex/tz@0.28.4",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
           }
         }
       ]

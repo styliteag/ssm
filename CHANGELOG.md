@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Times are shown and entered in your browser's time zone, written `DD.MM.YYYY HH:MM`; hovering a time
+  shows the UTC value. The Activity "From" and "To" days are days in your zone (the zone is named next
+  to the field), and the API tokens page shows local times. Storage, the JSON API and CSV files stay in
+  UTC. Without a usable browser zone the page uses Europe/Berlin. Adds the `tz` time zone database.
 - One vocabulary: **Access** is an SSH user's right to log in as a login on a host (one row or matrix
   cell), a **Grant** is the rule that gives access on all hosts of a customer or host group. "Authorization"
   is gone from the pages, flash messages, confirm dialogs and the CSV file name; "New authorization" is
