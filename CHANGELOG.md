@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.16.0] - 2026-11-11
+
 ### Added
 
 - Access matrix (ADR-0014): search users and filter hosts (name, address, customer), sort users and
