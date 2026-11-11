@@ -21,7 +21,8 @@ defmodule SsmWeb.AuthorizationsLiveTest do
       render_click(view, event, %{"id" => id})
     end
 
-    render_click(view, "matrix-login", %{"login" => "deploy"})
+    render_click(view, "matrix-hide", %{"axis" => "nonsense"})
+    render_click(view, "matrix-more", %{"axis" => "rows"})
     render_click(view, "matrix-toggle", %{"user-id" => "x", "host-id" => "1"})
     render_click(view, "bulk-open", %{})
     render_click(view, "bulk-toggle-user", %{"id" => "x"})
@@ -94,7 +95,12 @@ defmodule SsmWeb.AuthorizationsLiveTest do
     refute has_element?(view, "#authorizations-#{bob_auth.id}")
   end
 
-  test "matrix searches narrow users and hosts", %{conn: conn} do
+  # the query of the last push_patch, decoded
+  defp patched_params(view) do
+    view |> assert_patch() |> URI.parse() |> Map.fetch!(:query) |> Plug.Conn.Query.decode()
+  end
+
+  test "matrix search and host filter narrow the axes and live in the URL", %{conn: conn} do
     alice = user_fixture(%{username: "alice"})
     bob = user_fixture(%{username: "bob"})
     web = host_fixture(%{name: "web1"})
@@ -104,13 +110,76 @@ defmodule SsmWeb.AuthorizationsLiveTest do
 
     {:ok, view, _html} = live(conn, ~p"/access?view=matrix")
 
-    view |> element("#matrix-user-search-form") |> render_change(%{q: "ali"})
+    view |> element("#matrix-form") |> render_change(%{q: "ali"})
+    assert patched_params(view) == %{"view" => "matrix", "login" => "root", "q" => "ali"}
     assert has_element?(view, "#matrix-row-#{alice.id}")
     refute has_element?(view, "#matrix-row-#{bob.id}")
 
-    view |> element("#matrix-host-search-form") |> render_change(%{q: "db"})
+    view |> element("#matrix-form") |> render_change(%{q: "ali", host: "db"})
+
+    assert patched_params(view) == %{
+             "view" => "matrix",
+             "login" => "root",
+             "q" => "ali",
+             "f" => %{"host" => "db"}
+           }
+
     assert has_element?(view, "#matrix-cell-#{alice.id}-#{db.id}")
     refute has_element?(view, "#matrix-cell-#{alice.id}-#{web.id}")
+
+    view |> element("#matrix-clear") |> render_click()
+    assert has_element?(view, "#matrix-row-#{bob.id}")
+  end
+
+  describe "matrix totals, sort, hide and size" do
+    setup do
+      alice = user_fixture(%{username: "alice"})
+      bob = user_fixture(%{username: "bob"})
+      idle = user_fixture(%{username: "idle"})
+      web = host_fixture(%{name: "web1"})
+      db = host_fixture(%{name: "db1"})
+      spare = host_fixture(%{name: "spare"})
+      for host <- [web, db], do: authorization_fixture(alice, host, %{login: "root"})
+      authorization_fixture(bob, web, %{login: "root"})
+
+      %{alice: alice, bob: bob, idle: idle, web: web, db: db, spare: spare}
+    end
+
+    test "rows and columns show their totals", ctx do
+      {:ok, view, _} = live(ctx.conn, ~p"/access?view=matrix")
+
+      assert has_element?(view, "#matrix-row-#{ctx.alice.id} td", "2")
+      assert has_element?(view, "#matrix-position", "3 with access")
+    end
+
+    test "sort rows by total, hide empty rows and columns", ctx do
+      {:ok, view, _} = live(ctx.conn, ~p"/access?view=matrix&sort=row_total:desc,host:desc")
+
+      html = render(view)
+      assert html =~ ~r/alice.*bob.*idle/s
+      assert html =~ ~r/web1.*spare.*db1/s
+
+      view |> element("#matrix-hide-rows") |> render_click()
+
+      assert %{"hide" => "rows", "sort" => "row_total:desc,host:desc"} = patched_params(view)
+      refute has_element?(view, "#matrix-row-#{ctx.idle.id}")
+
+      view |> element("#matrix-hide-cols") |> render_click()
+      refute render(view) =~ "spare"
+    end
+
+    test "only a window of the axes is rendered, Show more adds the next page", ctx do
+      for n <- 1..60, do: user_fixture(%{username: "extra#{String.pad_leading("#{n}", 2, "0")}"})
+
+      {:ok, view, _} = live(ctx.conn, ~p"/access?view=matrix")
+
+      assert has_element?(view, "#matrix-position", "50 of 63 users")
+      refute has_element?(view, "#matrix-row-#{ctx.idle.id}")
+
+      view |> element("#matrix-more-rows") |> render_click()
+      assert has_element?(view, "#matrix-position", "63 of 63 users")
+      refute has_element?(view, "#matrix-more-rows")
+    end
   end
 
   test "bulk grant creates the cross product and skips existing grants", %{conn: conn} do
@@ -200,7 +269,8 @@ defmodule SsmWeb.AuthorizationsLiveTest do
   end
 
   describe "matrix view" do
-    test "defaults to root, sorts logins by usage, hides hosts without the login", %{conn: conn} do
+    test "defaults to root and sorts logins by usage; other hosts stay as empty columns",
+         %{conn: conn} do
       alice = user_fixture(%{username: "alice"})
       bob = user_fixture(%{username: "bob"})
       web = host_fixture(%{name: "web1"})
@@ -212,14 +282,14 @@ defmodule SsmWeb.AuthorizationsLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/access?view=matrix")
 
-      selector = view |> element("#matrix-login-form select") |> render()
+      selector = view |> element("#matrix-login") |> render()
       assert selector =~ "deploy (2)"
       assert selector =~ "root (1)"
       assert selector =~ ~s(<option selected="" value="root">)
 
-      # root grants exist only on db1 — web1 is not a column.
       assert has_element?(view, "#matrix-cell-#{alice.id}-#{db.id}.btn-success")
-      refute has_element?(view, "#matrix-cell-#{alice.id}-#{web.id}")
+      refute has_element?(view, "#matrix-cell-#{alice.id}-#{web.id}.btn-success")
+      assert has_element?(view, "#matrix-cell-#{alice.id}-#{web.id}")
     end
 
     test "cell click grants and revokes under the selected login", %{conn: conn} do
@@ -274,24 +344,8 @@ defmodule SsmWeb.AuthorizationsLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/access?view=matrix&login=all")
 
-      assert has_element?(view, "span#matrix-cell-#{alice.id}-#{host.id}", "2")
-      refute has_element?(view, "button#matrix-cell-#{alice.id}-#{host.id}")
-    end
-
-    test "show authorized only hides users without a grant", %{conn: conn} do
-      alice = user_fixture(%{username: "alice"})
-      idle = user_fixture(%{username: "idle"})
-      host = host_fixture(%{name: "web1"})
-      authorization_fixture(alice, host, %{login: "root"})
-
-      {:ok, view, _html} = live(conn, ~p"/access?view=matrix&login=root")
-
-      assert has_element?(view, "#matrix-row-#{idle.id}")
-
-      view |> element("#matrix-authorized-toggle") |> render_click()
-
-      assert has_element?(view, "#matrix-row-#{alice.id}")
-      refute has_element?(view, "#matrix-row-#{idle.id}")
+      assert has_element?(view, "#matrix-cell-#{alice.id}-#{host.id}", "2")
+      assert has_element?(view, "#matrix-mode", "View only")
     end
   end
 

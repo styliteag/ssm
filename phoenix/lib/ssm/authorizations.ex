@@ -36,6 +36,17 @@ defmodule Ssm.Authorizations do
     Repo.all(query)
   end
 
+  @doc """
+  `{user_id, host_id, login}` of every row on a host in `scope`, no preloads:
+  what the Access matrix needs (it can hold tens of thousands of rows).
+  """
+  @spec access_entries(Scope.t()) :: [{integer(), integer(), String.t()}]
+  def access_entries(%Scope{} = scope) do
+    from(a in Authorization, select: {a.user_id, a.host_id, a.login})
+    |> Scope.filter(scope)
+    |> Repo.all()
+  end
+
   @spec count_authorizations(Scope.t()) :: non_neg_integer()
   def count_authorizations(%Scope{} = scope \\ Scope.global()),
     do: Authorization |> Scope.filter(scope) |> Repo.aggregate(:count)

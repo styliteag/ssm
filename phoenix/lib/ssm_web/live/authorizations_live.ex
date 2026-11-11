@@ -24,6 +24,8 @@ defmodule SsmWeb.AuthorizationsLive do
   alias Ssm.Grants
   alias Ssm.Hosts
   alias Ssm.Users
+  alias SsmWeb.AccessMatrix
+  alias SsmWeb.AccessMatrixComponents
   alias SsmWeb.Layouts
 
   @impl true
@@ -34,8 +36,10 @@ defmodule SsmWeb.AuthorizationsLive do
        form: nil,
        editing: nil,
        bulk: nil,
-       matrix_user_search: "",
-       matrix_host_search: "",
+       matrix_opts: AccessMatrix.parse(%{}),
+       matrix_login: nil,
+       rows_limit: AccessMatrix.rows_page(),
+       cols_limit: AccessMatrix.cols_page(),
        auth_sort: nil,
        auth_search: ""
      )}
@@ -61,8 +65,10 @@ defmodule SsmWeb.AuthorizationsLive do
      |> assign(:filter_host_id, parse_id(params["host_id"]))
      |> assign(:users, Users.list_users())
      |> assign(:hosts, Hosts.list_hosts(scope(socket)))
-     |> assign(:show_authorized_only, params["authorized"] == "1")
      |> assign(:matrix_login_param, params["login"])
+     |> assign(:matrix_opts, AccessMatrix.parse(params))
+     |> assign(:rows_limit, AccessMatrix.rows_page())
+     |> assign(:cols_limit, AccessMatrix.cols_page())
      |> assign(:auth_search, params["q"] || "")
      |> assign(:query, params)
      |> reload_authorizations()}
@@ -87,6 +93,10 @@ defmodule SsmWeb.AuthorizationsLive do
     end
   end
 
+  # The matrix reads lean `{user, host, login}` entries; the list and stats
+  # views read the full rows (with user and host).
+  defp reload_authorizations(%{assigns: %{view: "matrix"}} = socket), do: reload_matrix(socket)
+
   defp reload_authorizations(socket) do
     opts =
       Enum.reject(
@@ -103,12 +113,12 @@ defmodule SsmWeb.AuthorizationsLive do
 
     socket
     |> assign(:authorization_count, length(authorizations))
+    |> assign(:all_authorizations, Authorizations.list_authorizations(scope(socket), []))
     |> assign(
       :grant_labels,
       Grants.labels(scope(socket), for(a <- authorizations, a.grant_id, do: a.grant_id))
     )
     |> stream(:authorizations, authorizations, reset: true)
-    |> reload_matrix()
   end
 
   defp search_authorizations(authorizations, search) do
@@ -135,21 +145,45 @@ defmodule SsmWeb.AuthorizationsLive do
   end
 
   defp reload_matrix(socket) do
-    all = Authorizations.list_authorizations(scope(socket), [])
-    accounts = login_accounts(all)
+    entries = Authorizations.access_entries(scope(socket))
+    accounts = login_accounts(entries)
     login = pick_login(socket.assigns.matrix_login_param, accounts)
 
     socket
-    |> assign(:all_authorizations, all)
+    |> assign(:authorization_count, length(entries))
+    |> assign(:matrix_entries, entries)
     |> assign(:login_accounts, accounts)
     |> assign(:matrix_login, login)
-    |> assign(:matrix, build_matrix(socket.assigns, all, login))
+    |> assign(:matrix_customers, customer_names(socket))
+    |> build_matrix()
+  end
+
+  # customer names of the hosts' customers, for the host filter (only those
+  # inside the user's scope are named)
+  defp customer_names(socket) do
+    socket |> scope() |> Grants.targets() |> Map.fetch!(:customers) |> Map.new(&{&1.id, &1.name})
+  end
+
+  defp build_matrix(socket) do
+    %{assigns: a} = socket
+
+    matrix =
+      AccessMatrix.build(
+        a.matrix_opts,
+        a.matrix_login,
+        a.users,
+        a.hosts,
+        a.matrix_entries,
+        a.matrix_customers
+      )
+
+    assign(socket, :matrix, matrix)
   end
 
   # Distinct logins with usage counts, most-used first.
-  defp login_accounts(authorizations) do
-    authorizations
-    |> Enum.frequencies_by(& &1.login)
+  defp login_accounts(entries) do
+    entries
+    |> Enum.frequencies_by(fn {_user_id, _host_id, login} -> login end)
     |> Enum.sort_by(fn {_login, count} -> -count end)
   end
 
@@ -163,55 +197,6 @@ defmodule SsmWeb.AuthorizationsLive do
       logins != [] -> hd(logins)
       true -> "all"
     end
-  end
-
-  defp build_matrix(assigns, authorizations, "all") do
-    counts = Enum.frequencies_by(authorizations, &{&1.user_id, &1.host_id})
-    authorized_users = MapSet.new(authorizations, & &1.user_id)
-
-    %{
-      mode: :all,
-      cells: counts,
-      hosts: matrix_hosts(assigns, assigns.hosts),
-      users: matrix_users(assigns, authorized_users)
-    }
-  end
-
-  defp build_matrix(assigns, authorizations, login) do
-    scoped = Enum.filter(authorizations, &(&1.login == login))
-    pairs = MapSet.new(scoped, &{&1.user_id, &1.host_id})
-    host_ids = MapSet.new(scoped, & &1.host_id)
-    authorized_users = MapSet.new(scoped, & &1.user_id)
-
-    %{
-      mode: :login,
-      cells: pairs,
-      hosts: matrix_hosts(assigns, Enum.filter(assigns.hosts, &MapSet.member?(host_ids, &1.id))),
-      users: matrix_users(assigns, authorized_users)
-    }
-  end
-
-  defp matrix_hosts(assigns, hosts) do
-    hosts
-    |> filter_by_name(assigns.matrix_host_search, &"#{&1.name} #{&1.address}")
-    |> Enum.sort_by(& &1.name)
-  end
-
-  defp matrix_users(assigns, authorized_users) do
-    assigns.users
-    |> Enum.filter(fn user ->
-      not assigns.show_authorized_only or MapSet.member?(authorized_users, user.id)
-    end)
-    |> filter_by_name(assigns.matrix_user_search, & &1.username)
-    |> Enum.sort_by(& &1.username)
-  end
-
-  defp rebuild_matrix(socket) do
-    assign(
-      socket,
-      :matrix,
-      build_matrix(socket.assigns, socket.assigns.all_authorizations, socket.assigns.matrix_login)
-    )
   end
 
   ## Events
@@ -319,14 +304,47 @@ defmodule SsmWeb.AuthorizationsLive do
 
   ## Events: matrix
 
-  def handle_event("matrix-login", %{"login" => login}, socket) do
-    {:noreply, push_patch(socket, to: ~p"/access?#{matrix_query(socket.assigns, login: login)}")}
+  # one form carries search, host filter, login and both sorts; the URL holds the state
+  def handle_event("matrix-params", params, socket) do
+    opts = socket.assigns.matrix_opts
+
+    sorts =
+      AccessMatrix.parse(%{"sort" => Enum.join([params["sort_rows"], params["sort_cols"]], ",")})
+
+    opts = %{
+      opts
+      | q: String.trim(params["q"] || ""),
+        host: String.trim(params["host"] || ""),
+        row_sort: sorts.row_sort,
+        col_sort: sorts.col_sort
+    }
+
+    login = params["login"] || socket.assigns.matrix_login
+    {:noreply, patch_matrix(socket, opts, login)}
   end
 
-  def handle_event("matrix-authorized", _params, socket) do
-    query = matrix_query(socket.assigns, authorized: not socket.assigns.show_authorized_only)
-    {:noreply, push_patch(socket, to: ~p"/access?#{query}")}
+  def handle_event("matrix-hide", %{"axis" => axis}, socket) do
+    opts = socket.assigns.matrix_opts
+
+    opts =
+      case axis do
+        "rows" -> %{opts | hide_rows: not opts.hide_rows}
+        "cols" -> %{opts | hide_cols: not opts.hide_cols}
+        _ -> opts
+      end
+
+    {:noreply, patch_matrix(socket, opts, socket.assigns.matrix_login)}
   end
+
+  def handle_event("matrix-more", %{"axis" => "rows"}, socket),
+    do:
+      {:noreply,
+       update(socket, :rows_limit, &min(&1 + AccessMatrix.rows_page(), AccessMatrix.rows_max()))}
+
+  def handle_event("matrix-more", %{"axis" => "cols"}, socket),
+    do:
+      {:noreply,
+       update(socket, :cols_limit, &min(&1 + AccessMatrix.cols_page(), AccessMatrix.cols_max()))}
 
   def handle_event("sort", %{"key" => key}, socket) do
     sort = SsmWeb.TableSort.toggle(socket.assigns.auth_sort, key)
@@ -341,14 +359,6 @@ defmodule SsmWeb.AuthorizationsLive do
       |> query_params(~w(view user_id host_id authorized login q))
 
     {:noreply, push_patch(socket, to: ~p"/access?#{params}")}
-  end
-
-  def handle_event("matrix-user-search", %{"q" => q}, socket) do
-    {:noreply, socket |> assign(:matrix_user_search, q) |> rebuild_matrix()}
-  end
-
-  def handle_event("matrix-host-search", %{"q" => q}, socket) do
-    {:noreply, socket |> assign(:matrix_host_search, q) |> rebuild_matrix()}
   end
 
   def handle_event("matrix-toggle", %{"user-id" => user_id, "host-id" => host_id}, socket) do
@@ -513,12 +523,12 @@ defmodule SsmWeb.AuthorizationsLive do
     "#{user_name} on #{host_name} as #{login}"
   end
 
-  defp matrix_query(assigns, overrides) do
-    login = Keyword.get(overrides, :login, assigns.matrix_login)
-    authorized = Keyword.get(overrides, :authorized, assigns.show_authorized_only)
+  defp patch_matrix(socket, opts, login),
+    do: push_patch(socket, to: ~p"/access?#{AccessMatrix.to_query(opts, login)}")
 
-    [view: "matrix", login: login] ++ if authorized, do: [authorized: "1"], else: []
-  end
+  # link of the "Matrix" tab: the current matrix state
+  defp matrix_path(assigns),
+    do: ~p"/access?#{AccessMatrix.to_query(assigns.matrix_opts, assigns.matrix_login)}"
 
   ## Bulk grant helpers
 
@@ -691,7 +701,7 @@ defmodule SsmWeb.AuthorizationsLive do
           List
         </.link>
         <.link
-          patch={~p"/access?#{matrix_query(assigns, [])}"}
+          patch={matrix_path(assigns)}
           class={["btn btn-sm join-item", @view == "matrix" && "btn-primary"]}
         >
           Matrix
@@ -704,14 +714,16 @@ defmodule SsmWeb.AuthorizationsLive do
         </.link>
       </div>
 
-      <.matrix_view
+      <AccessMatrixComponents.matrix_view
         :if={@view == "matrix"}
         matrix={@matrix}
-        matrix_login={@matrix_login}
+        opts={@matrix_opts}
+        login={@matrix_login}
         login_accounts={@login_accounts}
-        show_authorized_only={@show_authorized_only}
-        matrix_user_search={@matrix_user_search}
-        matrix_host_search={@matrix_host_search}
+        editable={@matrix_login != "all" and not read_only?(@current_user)}
+        read_only={read_only?(@current_user)}
+        rows_limit={@rows_limit}
+        cols_limit={@cols_limit}
       />
 
       <.stats_view
@@ -932,218 +944,12 @@ defmodule SsmWeb.AuthorizationsLive do
     """
   end
 
+  defp read_only?(%{role: "viewer"}), do: true
+  defp read_only?(_user), do: false
+
   defp export_query(assigns) do
     [user_id: assigns.filter_user_id, host_id: assigns.filter_host_id]
     |> Enum.reject(fn {_key, value} -> is_nil(value) end)
-  end
-
-  attr :matrix, :map, required: true
-  attr :matrix_login, :string, required: true
-  attr :login_accounts, :list, required: true
-  attr :show_authorized_only, :boolean, required: true
-  attr :matrix_user_search, :string, required: true
-  attr :matrix_host_search, :string, required: true
-
-  defp matrix_view(assigns) do
-    ~H"""
-    <div id="matrix" class="space-y-3">
-      <div class="flex flex-wrap items-end gap-3">
-        <form id="matrix-user-search-form" phx-change="matrix-user-search" class="w-56">
-          <label class="fieldset mb-2">
-            <span class="label mb-1">Search users</span>
-            <input
-              type="search"
-              name="q"
-              value={@matrix_user_search}
-              placeholder="Username…"
-              class="input input-sm w-full"
-              phx-debounce="150"
-              autocomplete="off"
-            />
-          </label>
-        </form>
-        <form id="matrix-host-search-form" phx-change="matrix-host-search" class="w-56">
-          <label class="fieldset mb-2">
-            <span class="label mb-1">Search hosts</span>
-            <input
-              type="search"
-              name="q"
-              value={@matrix_host_search}
-              placeholder="Name or address…"
-              class="input input-sm w-full"
-              phx-debounce="150"
-              autocomplete="off"
-            />
-          </label>
-        </form>
-        <form id="matrix-login-form" phx-change="matrix-login" class="w-56">
-          <.input
-            type="select"
-            name="login"
-            value={@matrix_login}
-            label="Target login"
-            options={
-              [{"all (view only)", "all"}] ++
-                Enum.map(@login_accounts, fn {login, count} -> {"#{login} (#{count})", login} end)
-            }
-          />
-        </form>
-        <button
-          id="matrix-authorized-toggle"
-          type="button"
-          class={["btn btn-sm mb-2", @show_authorized_only && "btn-primary"]}
-          phx-click="matrix-authorized"
-        >
-          <.icon name="hero-eye" class="size-4" /> Only users with access
-        </button>
-      </div>
-
-      <p :if={@matrix.hosts == []} class="text-sm opacity-60">
-        No host has access for this login yet.
-      </p>
-
-      <p
-        :if={length(@matrix.hosts) > 10}
-        id="matrix-many-hosts"
-        class="text-xs opacity-70"
-      >
-        {length(@matrix.hosts)} host columns. Use "Search hosts" to narrow them.
-      </p>
-
-      <div
-        :if={@matrix.hosts != []}
-        id="matrix-scroll"
-        class="max-h-[75vh] overflow-auto rounded-box border border-base-300"
-      >
-        <table class="table table-xs w-auto border-collapse">
-          <thead>
-            <tr>
-              <th class="sticky left-0 top-0 z-30 bg-base-200 align-bottom">Users / Hosts</th>
-              <th
-                :for={host <- @matrix.hosts}
-                class="sticky top-0 z-20 bg-base-200 px-1 pb-2 align-bottom"
-              >
-                <.link
-                  navigate={~p"/diff?host_id=#{host.id}"}
-                  class="link link-hover inline-block max-h-36 truncate whitespace-nowrap [writing-mode:vertical-rl] rotate-180"
-                  title={"#{host.name} (#{host.address}) — open in the diff viewer"}
-                  aria-label={"#{host.name} (#{host.address}) — open in the diff viewer"}
-                >
-                  {host.name}
-                </.link>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr :for={user <- @matrix.users} id={"matrix-row-#{user.id}"} class="hover:bg-base-200">
-              <th class="sticky left-0 z-10 max-w-56 bg-base-100 font-medium">
-                <.link
-                  patch={~p"/access?user_id=#{user.id}"}
-                  class="link link-hover block truncate"
-                  title={"#{user.username}#{if(user.enabled, do: "", else: " (disabled)")} — list this user's access"}
-                  aria-label={"#{user.username}#{if(user.enabled, do: "", else: " (disabled)")} — list this user's access"}
-                >
-                  {user.username}
-                </.link>
-              </th>
-              <td
-                :for={host <- @matrix.hosts}
-                class="border border-base-300/50 p-0.5 text-center"
-              >
-                <.matrix_cell
-                  matrix={@matrix}
-                  matrix_login={@matrix_login}
-                  user={user}
-                  host={host}
-                />
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <p
-        :if={@matrix.hosts != []}
-        id="matrix-legend"
-        class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs opacity-70"
-      >
-        <span :if={@matrix_login != "all"} class="inline-flex items-center gap-1">
-          <.icon name="hero-check" class="size-3.5 text-success" /> has access (click to revoke)
-        </span>
-        <span :if={@matrix_login != "all"} class="inline-flex items-center gap-1">
-          <.icon name="hero-x-mark" class="size-3.5" /> no access (click to add)
-        </span>
-        <span :if={@matrix_login == "all"} class="inline-flex items-center gap-1">
-          <span class="badge badge-info badge-xs">n</span> n access entries across all logins
-        </span>
-        <span :if={@matrix_login == "all"} class="inline-flex items-center gap-1">
-          <span class="badge badge-ghost badge-xs opacity-40">0</span> no access
-        </span>
-      </p>
-
-      <p :if={@matrix_login == "all"} class="text-xs opacity-60">
-        Counts show access entries across all login accounts — pick a login to edit.
-      </p>
-    </div>
-    """
-  end
-
-  attr :matrix, :map, required: true
-  attr :matrix_login, :string, required: true
-  attr :user, :any, required: true
-  attr :host, :any, required: true
-
-  defp matrix_cell(%{matrix: %{mode: :all}} = assigns) do
-    assigns =
-      assign(
-        assigns,
-        :count,
-        Map.get(assigns.matrix.cells, {assigns.user.id, assigns.host.id}, 0)
-      )
-
-    ~H"""
-    <span
-      id={"matrix-cell-#{@user.id}-#{@host.id}"}
-      class={["badge badge-sm", (@count > 0 && "badge-info") || "badge-ghost opacity-40"]}
-    >
-      {@count}
-    </span>
-    """
-  end
-
-  defp matrix_cell(assigns) do
-    assigns =
-      assign(
-        assigns,
-        :authorized,
-        MapSet.member?(assigns.matrix.cells, {assigns.user.id, assigns.host.id})
-      )
-
-    ~H"""
-    <button
-      id={"matrix-cell-#{@user.id}-#{@host.id}"}
-      type="button"
-      class={[
-        "btn btn-square btn-xs border-0",
-        (@authorized && "btn-success bg-success/20 text-success hover:bg-success/40") ||
-          "btn-ghost text-base-content/25 hover:text-error"
-      ]}
-      phx-click="matrix-toggle"
-      phx-value-user-id={@user.id}
-      phx-value-host-id={@host.id}
-      data-confirm={
-        @authorized &&
-          "Revoke #{@user.username} on #{@host.name} as #{@matrix_login}? The key lines leave the host at its next sync."
-      }
-      title={"#{@user.username} on #{@host.name} as #{@matrix_login}: " <>
-        if(@authorized, do: "has access — click to revoke", else: "no access — click to add")}
-      aria-label={"#{@user.username} on #{@host.name} as #{@matrix_login}: " <>
-        if(@authorized, do: "has access — click to revoke", else: "no access — click to add")}
-    >
-      <.icon :if={@authorized} name="hero-check" class="size-3.5" />
-      <.icon :if={!@authorized} name="hero-x-mark" class="size-3.5" />
-    </button>
-    """
   end
 
   attr :all_authorizations, :list, required: true

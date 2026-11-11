@@ -76,6 +76,12 @@ defmodule SsmWeb.ReadOnlyTest do
       assert render_click(users, "bulk-delete-confirm", %{}) =~ "read-only"
       {:ok, auths, _} = live(conn, ~p"/access")
       assert render_click(auths, "bulk-save", %{}) =~ "read-only"
+
+      # the matrix says it is view-only; its filters still work for a viewer
+      {:ok, matrix, _} = live(conn, ~p"/access?view=matrix")
+      assert has_element?(matrix, "#matrix-mode", "Your account cannot change access")
+      matrix |> element("#matrix-hide-rows") |> render_click()
+      assert has_element?(matrix, "#matrix-hide-rows.btn-primary")
       {:ok, keys, _} = live(conn, ~p"/keys")
 
       assert render_click(keys, "import", %{"import" => %{"user_id" => "1", "keys_text" => "x"}}) =~

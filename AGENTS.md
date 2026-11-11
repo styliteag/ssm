@@ -253,6 +253,15 @@ a customer or host group (page `/grants`). The UI never says "authorization"; `/
 export redirect (301, query kept) to `/access` (`SsmWeb.LegacyRedirectController`). The JSON API,
 module names and tables keep the old name (external contract).
 
+**Access matrix** (`SsmWeb.AccessMatrix` pure data and URL state, `SsmWeb.AccessMatrixComponents` markup):
+rows are SSH users, columns hosts, one login or `all` (view only counts). State in the URL: `q` (users),
+`f[host]` (name/address/customer), `sort=user|row_total|host|col_total:asc|desc`, `hide=rows,cols`;
+defaults are not written. Totals (hosts per user, users per host) are computed once in `build/6` over
+the filtered axes; hiding empty rows/columns follows from them. DOM bound: 50 users x 20 hosts, "Show
+more" up to 100 x 50 (`rows_max`/`cols_max`). The template must not read the big `cells` map through an
+assign (change tracking compares it per access: 450 ms at 2,000 x 500) - `grid/3` hands it plain
+visible data. Viewers may send `matrix-params|hide|more` (`SsmWeb.ReadOnly`); `matrix-toggle` is display only.
+
 **Time zones** (ADR-0014): storage, `/api/v2`, CSV and outgoing payloads are UTC; the web UI shows and
 accepts the viewer's zone. `app.js` sends the browser zone as LiveSocket connect param `tz` and cookie `tz`;
 `SsmWeb.TimeZonePlug` copies the cookie into the session, `SsmWeb.TimeZoneHook` (on_mount of both

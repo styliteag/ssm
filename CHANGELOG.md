@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Access matrix (ADR-0014): search users and filter hosts (name, address, customer), sort users and
+  hosts by name or by their total, "Hide empty rows" and "Hide empty columns", totals of hosts per
+  user and users per host, a "Clear filters" link. The state is in the URL (`?q=`, `?f[host]=`,
+  `?sort=`, `?hide=rows,cols`) so a view can be sent as a link. The legend says what a click on a cell
+  does and when the matrix is view only (all logins, or an account that cannot change access).
+- The matrix puts at most 50 users and 20 hosts in the page and shows how many there are; "Show more
+  users" and "Show more hosts" add pages up to 100 users and 50 hosts. At 2,000 users and 500 hosts a
+  sort or filter answers in about 130 ms. Host names are rotated only while 10 or fewer columns are
+  shown.
 - The header shows who is signed in and with which role (`e-mail · role`, for a viewer too) on every
   page, plus the customers and host groups of a scoped user.
 
@@ -18,6 +27,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   shows the UTC value. The Activity "From" and "To" days are days in your zone (the zone is named next
   to the field), and the API tokens page shows local times. Storage, the JSON API and CSV files stay in
   UTC. Without a usable browser zone the page uses Europe/Berlin. Adds the `tz` time zone database.
+- The access matrix lists every host as a column; a host without access under the chosen login is an
+  empty column (use "Hide empty columns"), so a login can be given on a host that has none yet. The
+  "Only users with access" button is now "Hide empty rows" (the old `?authorized=1` link still works).
+  Viewers can search, filter and sort the matrix.
 - One vocabulary: **Access** is an SSH user's right to log in as a login on a host (one row or matrix
   cell), a **Grant** is the rule that gives access on all hosts of a customer or host group. "Authorization"
   is gone from the pages, flash messages, confirm dialogs and the CSV file name; "New authorization" is
