@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Sync on OPNsense and pfSense firewalls. These boxes write `authorized_keys` from their own
+  configuration, so keys ssm wrote into the file did not last (OPNsense) or were refused (pfSense,
+  "Product is pfSense"). ssm now stores the keys in the firewall's configuration, for the user that
+  carries the login's keys (root on OPNsense, admin on pfSense), and the box writes the file. If the
+  box does not end up with the new keys, the keys from before are put back and the sync fails. The
+  keys from before the first sync are kept in `~/.ssh/authorized_keys.backup.<random>`. A login that
+  is not a user in the firewall's configuration is skipped ("not a user in the firewall's
+  configuration"). pfSense hosts that were readonly until now become writable by a Sync.
+
 ## [4.16.1] - 2026-11-12
 
 ### Changed

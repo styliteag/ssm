@@ -99,6 +99,21 @@ commits only the audit entry). SQLite `busy_timeout` is 15 s (`config/config.exs
 `Ssm.Grants.DriftCheck` logs drift every 15 min (`config :ssm, :grants_drift_check`, off in tests).
 Who may create: admin any; operator only targets in its scope (`{:error, :out_of_scope}`); others
 `{:error, :forbidden}`. Migration `20261109100000` has no `down` (SQLite cannot drop an FK column).
+Firewalls (`script.sh`, section "Firewalls"): OPNsense and pfSense write every `authorized_keys`
+from their configuration, so on a box with `php` a write (`set_authorized_keyfile`, after all its
+checks) stores the lines as the keys of the configuration's user with the login's name and uid (one
+exception: login root on pfSense is the uid-0 user, admin; a uid two users share is never mapped)
+through the box's own PHP code, run in `/` (pfSense's include path starts with `.`: never in a
+login's `~/.ssh`); OPNsense then runs `configctl auth sync user`. Only key lines are accepted, also
+for the keys read back from the configuration (`unsafe (firewall_lines)`); a linked or otherwise
+unsafe `authorized_keys` is refused (the box would write through it; a link put there in the instant
+of the box's write is still followed); the file must end up with exactly the
+new keys, else the keys from before are put back and the write fails. No ssm header is written: a
+marker `~/.ssh/.ssm_managed` makes the login "managed", the keys from before the first write stay in
+`authorized_keys.backup.<random>`. A login without a user in the configuration is readonly for that
+login only (`not a user in the firewall's configuration`, scope user); a firewall without `php`
+(OPNsense: or without `configctl`) is host-wide readonly (`Product is pfSense`, `Product is OPNsense`). Reads stay on the file. Tested against a simulated box
+(`test/ssm/ssh/script_firewall_test.exs`); on the real boxes only the read side was run.
 Sync and readonly markers (`Ssm.Diffs.sync_host/2`): a host-wide marker (`system_readonly`, vendor
 platform) stops a sync before any write; a login's own `~/.ssh/user_readonly` counts only when root
 owns it (`script.sh` `user_readonly_state`, `find -user 0`), inside a `~/.ssh` that root owns and

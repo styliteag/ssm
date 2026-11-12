@@ -78,6 +78,13 @@ check_keyfile_condition() {
         printf "user_readonly (root-owned)"
         return 0
     fi
+
+    # A firewall writes the file from its configuration: only a login that
+    # is a user there can be managed
+    if firewall_driver && [ -z "$(firewall_user "${login}")" ]; then
+        printf "%s" "${firewall_not_configured}"
+        return 0
+    fi
 }
 
 # Path of a login's user_readonly marker.
@@ -280,11 +287,292 @@ random_suffix() {
     printf "%s" "${suffix}"
 }
 
+# ---------------------------------------------------------------------------
+# Firewalls (OPNsense, pfSense). The box writes every authorized_keys from
+# its configuration (config.xml, field authorizedkeys of the user), so a
+# file ssm wrote would be replaced at the next change. There ssm writes the
+# field with the box's own PHP code and lets the box write the file:
+#   OPNsense  model OPNsense\Auth\User, then "configctl auth sync user"
+#   pfSense   system/user in the configuration, local_user_set, write_config
+# Reads stay on the file (it is what sshd uses). A login is managed only
+# when a user of the configuration has its uid (root on OPNsense; admin on
+# pfSense, whose keys the login root uses too); any other login is readonly.
+# ---------------------------------------------------------------------------
+
+firewall_marker=".ssm_managed"
+firewall_not_configured="not a user in the firewall's configuration"
+
+# "opnsense", "pfsense" or "". SSM_SYSROOT is a prefix for the tests.
+firewall_kind() {
+    sysroot="${SSM_SYSROOT:-}"
+    if [ -f "${sysroot}/usr/local/opnsense/version/core" ]; then
+        echo "opnsense"
+    elif grep -qs "pfSense" "${sysroot}/etc/platform"; then
+        echo "pfsense"
+    fi
+}
+
+# True on a firewall whose configuration ssm can change: php is there, on
+# OPNsense configctl too. php and configctl come from root's PATH, which
+# only root can change.
+firewall_driver() {
+    case "$(firewall_kind)" in
+        opnsense) command -v php >/dev/null 2>&1 && command -v configctl >/dev/null 2>&1 ;;
+        pfsense) command -v php >/dev/null 2>&1 ;;
+        *) return 1 ;;
+    esac
+}
+
+# firewall_php <op> [user] [keys]: the box's PHP code for "users" (lines
+# "uid:name"), "get" (the keys of the user, plain text) or "set" (keys
+# become the user's keys). Exit 3: no such user. Values travel in php's
+# environment (set on the php command itself: an assignment in front of a
+# shell function is not exported by every sh), never in the code. php runs
+# in "/", never in a login's ~/.ssh: it looks for its include files in the
+# current directory too, and a user could put one there. Its messages go to
+# stderr, so they never count as keys.
+firewall_php() {
+    case "$(firewall_kind)" in
+        opnsense)
+            (cd / && SSM_FW_OP="$1" SSM_FW_USER="${2:-}" SSM_FW_KEYS="${3:-}" \
+                php -d display_errors=stderr <<'PHP'
+<?php
+require_once("legacy_bindings.inc");
+use OPNsense\Core\Config;
+$op = (string)getenv("SSM_FW_OP");
+$name = (string)getenv("SSM_FW_USER");
+if ($op === "users") {
+    foreach (Config::getInstance()->object()->system->user as $u) {
+        echo (string)$u->uid . ":" . (string)$u->name . "\n";
+    }
+    exit(0);
+}
+if ($op === "set") {
+    Config::getInstance()->lock();
+}
+$mdl = new OPNsense\Auth\User();
+$user = $mdl->getUserByName($name);
+if (!$user) {
+    exit(3);
+}
+if ($op === "get") {
+    echo (string)$user->authorizedkeys;
+    exit(0);
+}
+if ($op === "set") {
+    // the model field is plain text and does the base64 itself
+    $user->authorizedkeys = (string)getenv("SSM_FW_KEYS");
+    $mdl->serializeToConfig(false, true);
+    Config::getInstance()->save();
+    exit(0);
+}
+exit(2);
+PHP
+            )
+            ;;
+        pfsense)
+            (cd / && SSM_FW_OP="$1" SSM_FW_USER="${2:-}" SSM_FW_KEYS="${3:-}" \
+                php -d display_errors=stderr <<'PHP'
+<?php
+require_once("globals.inc");
+require_once("config.inc");
+require_once("functions.inc");
+require_once("auth.inc");
+$op = (string)getenv("SSM_FW_OP");
+$name = (string)getenv("SSM_FW_USER");
+$users = config_get_path("system/user", []);
+if ($op === "users") {
+    foreach ($users as $u) {
+        echo ($u["uid"] ?? "") . ":" . ($u["name"] ?? "") . "\n";
+    }
+    exit(0);
+}
+foreach ($users as $i => $u) {
+    if (($u["name"] ?? "") !== $name) {
+        continue;
+    }
+    if ($op === "get") {
+        echo str_replace("\r", "", (string)base64_decode($u["authorizedkeys"] ?? ""));
+        exit(0);
+    }
+    if ($op === "set") {
+        // the field is base64 of the lines, joined with CRLF as the GUI does
+        $keys = str_replace("\n", "\r\n", str_replace("\r", "", (string)getenv("SSM_FW_KEYS")));
+        $users[$i]["authorizedkeys"] = base64_encode($keys);
+        config_set_path("system/user", $users);
+        local_user_set($users[$i]);
+        write_config("ssm: SSH keys of " . $name);
+        exit(0);
+    }
+    exit(2);
+}
+exit(3);
+PHP
+            )
+            ;;
+        *) return 2 ;;
+    esac
+}
+
+# Sets FW_USERS ("uid:name" lines of the configuration) once, in the main
+# shell, before any $(...) asks firewall_user. Empty when it cannot be read:
+# then every login is readonly.
+FW_USERS=""
+firewall_load() {
+    if firewall_driver; then
+        FW_USERS=$(firewall_php users 2>/dev/null) || FW_USERS=""
+    fi
+}
+
+# The configuration's user that carries a login's keys ("" when there is
+# none): the user with the login's name and uid. One exception: on pfSense
+# the login root has no user of its own, its keys are those of the uid-0
+# user (admin). A uid that two users of the configuration share is never
+# mapped, and neither is a name outside [A-Za-z0-9._-] (it is handed to
+# configctl). uid and name are compared as text.
+firewall_user() {
+    uid=$(do_getent_passwd "$1" | cut -d: -f3) || uid=""
+    case "${uid}" in
+        ""|*[!0-9]*) return 0 ;;
+    esac
+    name=$(printf "%s\n" "${FW_USERS}" | ssm_uid="${uid}" LC_ALL=C awk '
+        {
+            colon = index($0, ":")
+            if (colon == 0) next
+            if ((substr($0, 1, colon - 1) "") == (ENVIRON["ssm_uid"] "")) {
+                n++
+                name = substr($0, colon + 1)
+            }
+        }
+        END { if (n == 1) print name }')
+    case "${name}" in
+        ""|*[!A-Za-z0-9._-]*) return 0 ;;
+    esac
+    login_ok "${name}" || return 0
+    if [ "${name}" = "$1" ] \
+        || { [ "$1" = "root" ] && [ "${uid}" = "0" ] && [ "$(firewall_kind)" = "pfsense" ]; }; then
+        printf "%s" "${name}"
+    fi
+}
+
+# The key material (base64 blobs) of the lines on stdin, sorted.
+key_blobs() {
+    tr -d '\r' | LC_ALL=C awk '{
+        for (i = 1; i <= NF; i++) if ($i ~ /^AAAA[A-Za-z0-9+\/=]+$/) { print $i; break }
+    }' | LC_ALL=C sort -u
+}
+
+# True when every non-empty line on stdin is a key line: a known key type
+# followed by its base64 blob (options may stand before it). Anything else
+# must never reach the configuration: an unusable value there locks every
+# key of the user out.
+firewall_lines_ok() {
+    tr -d '\r' | LC_ALL=C awk '
+        /^[ \t]*$/ { next }
+        {
+            ok = 0
+            for (i = 1; i < NF; i++) {
+                if ($i ~ /^(ssh-rsa|ssh-dss|ssh-ed25519|ecdsa-sha2-nistp(256|384|521)|sk-ssh-ed25519@openssh\.com|sk-ecdsa-sha2-nistp256@openssh\.com)$/ \
+                    && $(i + 1) ~ /^AAAA[A-Za-z0-9+\/=]+$/) { ok = 1; break }
+            }
+            if (!ok) { bad = 1; exit }
+        }
+        END { exit bad ? 1 : 0 }'
+}
+
+# Write $2 as the keys of the configuration's user $1 and let the box
+# write the file.
+firewall_write() {
+    firewall_php set "$1" "$2" >/dev/null 2>&1 || return 1
+    if [ "$(firewall_kind)" = "opnsense" ]; then
+        configctl auth sync user "$1" >/dev/null 2>&1 || return 1
+    fi
+}
+
+# True when ./authorized_keys holds exactly the keys of $1 (the box writes
+# the file itself: give it a moment).
+firewall_file_has() {
+    wanted=$(printf "%s\n" "$1" | key_blobs)
+    for _try in 1 2 3 4 5; do
+        found=""
+        if [ -e authorized_keys ] || [ -h authorized_keys ]; then
+            if content=$(read_keyfile authorized_keys); then
+                found=$(printf "%s\n" "${content}" | key_blobs)
+            else
+                found="unreadable"
+            fi
+        fi
+        [ "${found}" = "${wanted}" ] && return 0
+        sleep 1
+    done
+    return 1
+}
+
+# set_authorized_keyfile on a firewall, called in the login's real ~/.ssh
+# after every check of the plain write: stdin becomes the keys of the
+# login's user in the configuration. The keys from before are kept in a
+# backup file at the first write, and put back when the box does not end up
+# with the new ones in the file (ssm would lose its own access otherwise).
+# The box writes the file by its path and follows a link there, so a linked
+# or otherwise unsafe authorized_keys ($2, keyfile_unsafe) is refused here
+# (the plain write replaces such an entry; the box cannot). A link put
+# there between this check and the box's write is still followed.
+firewall_set_keys() {
+    fw_user=$(firewall_user "$1")
+    if [ -z "${fw_user}" ]; then
+        echo "Keyfile is readonly, aborting."
+        exit 1
+    fi
+    if [ -n "$2" ]; then
+        echo "Keyfile is unsafe ($2), aborting: the firewall would write through it."
+        exit 1
+    fi
+    new=$(cat -)
+    if ! printf "%s\n" "${new}" | firewall_lines_ok; then
+        echo "Keyfile is unsafe (firewall_lines), aborting: a line is not a key line."
+        exit 1
+    fi
+    if ! old=$(firewall_php get "${fw_user}" 2>/dev/null); then
+        echo "Couldn't read the keys of '${fw_user}' from the firewall's configuration"
+        exit 1
+    fi
+    # the keys from before must be fit to be put back
+    if ! printf "%s\n" "${old}" | firewall_lines_ok; then
+        echo "Keyfile is unsafe (firewall_lines), aborting: the configuration holds a line that is not a key line."
+        exit 1
+    fi
+    if [ -h authorized_keys ] || { [ -e authorized_keys ] && ! plain_entry authorized_keys; }; then
+        echo "Keyfile is unsafe (race), aborting."
+        exit 1
+    fi
+    if [ ! -e "${firewall_marker}" ] && [ ! -h "${firewall_marker}" ] && [ -n "${old}" ]; then
+        suffix=$(random_suffix) || { echo "No random name available (od failed), aborting."; exit 1; }
+        if ! (umask 077 && set -C && printf "%s\n" "${old}" > "authorized_keys.backup.${suffix}"); then
+            echo "Couldn't keep a backup of the firewall's keys, aborting."
+            exit 1
+        fi
+    fi
+    if ! firewall_write "${fw_user}" "${new}" || ! firewall_file_has "${new}"; then
+        firewall_write "${fw_user}" "${old}" || true
+        echo "The firewall did not take the keys of '${fw_user}' (keys from before put back), aborting."
+        exit 1
+    fi
+    if [ ! -e "${firewall_marker}" ] && [ ! -h "${firewall_marker}" ]; then
+        (umask 077 && set -C && : > "${firewall_marker}") 2>/dev/null || true
+    fi
+    exit 0
+}
+
 # Vendor platforms whose authorized_keys ssm must not manage (host-wide).
 platform_condition() {
-    # PfSense
-    if grep -qs "pfSense" "/etc/platform"; then
-        echo "Product is pfSense"
+    # A firewall without php: nothing ssm could write the configuration
+    # with, and a file ssm wrote would be replaced by the box
+    if [ -n "$(firewall_kind)" ] && ! firewall_driver; then
+        if [ "$(firewall_kind)" = "pfsense" ]; then
+            echo "Product is pfSense"
+        else
+            echo "Product is OPNsense"
+        fi
         return 0
     fi
 
@@ -402,6 +690,7 @@ login_ok() {
 
 handle_set_authorized_keyfile() {
     login="${1:-}"
+    firewall_load
 
     if ! login_ok "${login}"; then
         echo "Keyfile is unsafe (invalid_login), aborting."
@@ -486,6 +775,11 @@ handle_set_authorized_keyfile() {
         fi
     fi
 
+    # a firewall writes the file itself, from its configuration
+    if firewall_driver; then
+        firewall_set_keys "${login}" "${unsafe}"
+    fi
+
     # every name ssm creates here must be unpredictable
     suffix=$(random_suffix) || { echo "No random name available (od failed), aborting."; exit 1; }
     tmp_suffix=$(random_suffix) || { echo "No random name available (od failed), aborting."; exit 1; }
@@ -559,8 +853,9 @@ json_escape() {
 
 # Which marker makes a login readonly, checked in the order of
 # check_keyfile_condition: "system" (system_readonly, host-wide), "platform"
-# (pfSense, TrueNAS, Sophos; host-wide), "user" (the login's own
-# user_readonly, root-owned) or "".
+# (pfSense without php, TrueNAS, Sophos; host-wide), "user" (the login's own
+# user_readonly, root-owned, or a login a firewall's configuration does not
+# know) or "".
 keyfile_condition_scope() {
     login="$1"
     if [ -f "${HOME}/.ssh/system_readonly" ]; then
@@ -572,6 +867,10 @@ keyfile_condition_scope() {
         return 0
     fi
     if [ "$(user_readonly_state "${login}")" = "root" ]; then
+        echo "user"
+        return 0
+    fi
+    if firewall_driver && [ -z "$(firewall_user "${login}")" ]; then
         echo "user"
     fi
 }
@@ -595,6 +894,7 @@ home_state() {
 # entry with "home_state" for each given login whose home is not there, so
 # an unreachable home never reads as "no keys".
 handle_get_ssh_keyfiles() {
+    firewall_load
     isFirst=true
     printf "["
     for login in "$@"; do
@@ -625,6 +925,10 @@ handle_get_ssh_keyfiles() {
             else
                 head=$(printf "%s" "${keyfile}" | head -n1)
                 [ "${head}" = "${keyfile_head}" ] && has_pragma="true"
+                # a firewall's file has no header: ssm leaves a marker
+                if firewall_driver && plain_entry "$(login_home "${login}")/.ssh/${firewall_marker}"; then
+                    has_pragma="true"
+                fi
             fi
 
             readonly_scope=$(keyfile_condition_scope "${login}")
