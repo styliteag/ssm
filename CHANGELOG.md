@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.17.0] - 2026-11-12
+
 ### Fixed
 
 - Adding a host through Mission Control no longer trips the host's login guard. ssm tried to log in
