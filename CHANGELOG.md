@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.16.1] - 2026-11-12
+
 ### Changed
 
 - Mission Control contract: mctl_contract vendored at v0.8.0. `GET /me` lists the host mode ssm
