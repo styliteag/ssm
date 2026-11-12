@@ -40,6 +40,10 @@ defmodule SsmWeb.MctlProvider do
   @impl true
   def attributes_schema, do: HostParams.attributes_schema()
 
+  # ssm connects to the host itself: pull only (others are refused with 422)
+  @impl true
+  def modes, do: ["pull"]
+
   ## Hosts
 
   @impl true

@@ -90,7 +90,16 @@ defmodule MctlContract.Plug.Handlers do
   # `PATCH /hosts/{id}` checks `attributes` against the provider's
   # updatable keys (capability `update_attributes`); the rest by shape only
   defp params(:host_update, body, provider),
-    do: Params.host_update(body, Capabilities.updatable_attributes(provider))
+    do:
+      Params.host_update(
+        body,
+        Capabilities.updatable_attributes(provider),
+        Capabilities.modes(provider)
+      )
+
+  # the provider's modes (`modes/0`): another mode is 422 on `mode`
+  defp params(:host_create, body, provider),
+    do: Params.host_create(body, Capabilities.modes(provider))
 
   defp params(check, body, _provider), do: apply(Params, check, [body])
 

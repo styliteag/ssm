@@ -267,7 +267,8 @@ defmodule SsmWeb.MctlSummariesTest do
                "merge_customer",
                "delete_group",
                "delete_customer",
-               "probe_ssh"
+               "probe_ssh",
+               "mode:pull"
              ]
 
     assert P.cursor_types("host_summaries") == [:integer]

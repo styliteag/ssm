@@ -280,6 +280,27 @@ defmodule MctlContract.Provider do
   """
   @callback updatable_attributes() :: [String.t()]
 
+  @doc """
+  Optional: the host modes this tool accepts in `POST /hosts` and
+  `PATCH /hosts/{id}` (a subset of `MctlContract.Params.modes/0`, e.g.
+  `["pull", "push", "relay", "snmp"]`). The library refuses any other mode
+  with `422 validation_failed` on `mode` ("not supported by this tool (it
+  accepts …)") before the provider runs; `GET /me` lists one capability
+  `mode:<m>` per mode. Without it the provider checks the mode itself and
+  `/me` lists no modes.
+  """
+  @callback modes() :: [String.t()]
+
+  @doc """
+  Optional: tool facts a client needs before a write, listed in `GET /me`
+  `capabilities` after the library's own (e.g. the dashboard's
+  `relay_device:<device_type>`: device types whose hosts can relay
+  Checkmk data). Each entry is `<prefix>:<value>` (`^[a-z][a-z0-9_]{0,31}`
+  `:[a-z0-9][a-z0-9_.-]{0,63}$`); malformed entries and the reserved
+  prefixes `mode`, `attribute` and `action` are dropped.
+  """
+  @callback extra_capabilities() :: [String.t()]
+
   @optional_callbacks cursor_types: 1,
                       attributes_schema: 0,
                       list_host_summaries: 2,
@@ -297,5 +318,7 @@ defmodule MctlContract.Provider do
                       delete_group: 2,
                       delete_customer: 2,
                       probe_ssh: 2,
-                      updatable_attributes: 0
+                      updatable_attributes: 0,
+                      modes: 0,
+                      extra_capabilities: 0
 end

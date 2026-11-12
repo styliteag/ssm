@@ -42,6 +42,10 @@ defmodule MctlContract.ConformanceCase do
         – `{key, value}` of a host attribute the tool accepts in
         `PATCH /hosts/{id}` for any freshly created host (e.g.
         `{"folder", ""}`), or nil to skip the happy path
+      * `mode_host_params(mode)` (optional, `mode:<m>` capabilities) – the
+        extra `POST /hosts` params a listed mode needs (e.g. for `relay`
+        `%{"attributes" => %{"relay_ref" => "…"}}`; `%{}` when none), or
+        nil to skip that mode's happy path
     """
     @callback setup(map()) :: :ok | keyword() | map()
     @callback token([String.t()]) :: String.t()
@@ -52,13 +56,15 @@ defmodule MctlContract.ConformanceCase do
     @callback bound_token([String.t()]) :: String.t() | nil
     @callback ssh_probe_target() :: {String.t(), pos_integer()} | nil
     @callback updatable_attribute() :: {String.t(), term()} | nil
+    @callback mode_host_params(String.t()) :: map() | nil
     @optional_callbacks setup: 1,
                         unsupported_mode: 0,
                         cleanup: 0,
                         person_key: 0,
                         bound_token: 1,
                         ssh_probe_target: 0,
-                        updatable_attribute: 0
+                        updatable_attribute: 0,
+                        mode_host_params: 1
   end
 
   using opts do
@@ -296,6 +302,11 @@ defmodule MctlContract.ConformanceCase do
       # contract section 16: host attributes in PATCH /hosts/{id}
       test "conformance: PATCH /hosts/{id} attributes follow update_attributes", %{mctl: c} do
         MctlContract.ConformanceCase.UpdateAttributes.check(c)
+      end
+
+      # contract section 17: the modes a tool lists (mode:<m>) and no others
+      test "conformance: POST /hosts accepts exactly the modes /me lists", %{mctl: c} do
+        MctlContract.ConformanceCase.Modes.check(c)
       end
 
       test "conformance: Idempotency-Key replays the first response", %{mctl: c} do

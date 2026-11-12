@@ -108,6 +108,15 @@ lists the keys it accepts in `updatable_attributes/0` (capability
 the provider checks the values (e.g. omon's `folder`, a subfolder below
 the customer's folder).
 
+Since 0.8.0 the host modes are `push`, `pull`, `relay` (the Orbit
+dashboard forwards the agent data) and `snmp`. A provider may list the
+modes it accepts in `modes/0`: `GET /me` then shows `mode:<m>` per mode,
+and the library refuses any other mode with 422 on `mode` before the
+provider runs. `GET /me` also shows `attribute:<key>` per updatable
+attribute key, so a client can tell before a write which keys a tool
+takes. The optional `extra_capabilities/0` adds tool facts of the form
+`<prefix>:<value>` (for example the dashboard's `relay_device:linux`).
+
 ## Conformance
 
 Every tool runs the same requests and assertions against its own endpoint:

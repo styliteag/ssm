@@ -9,7 +9,8 @@ defmodule MctlContract.Params do
   # gets the ECMA form `^…$` (`slug_pattern/0`).
   @slug_source "[a-z0-9][a-z0-9-]{0,62}"
   @slug Regex.compile!("\\A#{@slug_source}\\z")
-  @modes ~w(push pull snmp)
+  # relay: the Orbit dashboard forwards the agent data (contract section 17)
+  @modes ~w(push pull relay snmp)
   @max_name 255
   @max_addresses 32
   @max_id 255
@@ -40,12 +41,17 @@ defmodule MctlContract.Params do
 
   def path_id(_v), do: {:error, "id must be 1 to #{@max_id} bytes"}
 
-  @spec host_create(term()) :: {:ok, map()} | {:error, map()}
-  def host_create(body) do
+  @doc """
+  `POST /hosts`. `modes`: the modes the provider accepts (`modes/0`,
+  capability `mode:<m>`); nil (no callback): every contract mode, the
+  provider decides.
+  """
+  @spec host_create(term(), [String.t()] | nil) :: {:ok, map()} | {:error, map()}
+  def host_create(body, modes \\ nil) do
     check(body, %{
       "name" => {:required, &name/1},
       "addresses" => {:optional, &addresses/1},
-      "mode" => {:optional, &mode/1},
+      "mode" => {:optional, &mode(&1, modes)},
       "customer" => {:optional, &nullable_slug/1},
       "groups" => {:optional, &slugs/1},
       "attributes" => {:optional, &create_attributes/1}
@@ -68,13 +74,14 @@ defmodule MctlContract.Params do
   most, and only keys of `updatable`. `updatable` nil (no capability):
   `attributes` are not supported.
   """
-  @spec host_update(term(), [String.t()] | nil) :: {:ok, map()} | {:error, map()}
-  def host_update(body, updatable \\ nil) do
+  @spec host_update(term(), [String.t()] | nil, [String.t()] | nil) ::
+          {:ok, map()} | {:error, map()}
+  def host_update(body, updatable \\ nil, modes \\ nil) do
     check(body, %{
       "name" => {:optional, &name/1},
       "customer" => {:optional, &nullable_slug/1},
       "groups" => {:optional, &slugs/1},
-      "mode" => {:optional, &mode/1},
+      "mode" => {:optional, &mode(&1, modes)},
       "attributes" => {:optional, &updatable_attributes(&1, updatable)}
     })
   end
@@ -408,6 +415,17 @@ defmodule MctlContract.Params do
 
   defp mode(v) when v in @modes or is_nil(v), do: :ok
   defp mode(_v), do: {:error, "must be one of #{Enum.join(@modes, ", ")} or null"}
+
+  # a contract mode the provider does not list in modes/0
+  defp mode(v, nil), do: mode(v)
+
+  defp mode(v, modes) do
+    cond do
+      mode(v) != :ok -> mode(v)
+      is_nil(v) or v in modes -> :ok
+      true -> {:error, "not supported by this tool (it accepts #{Enum.join(modes, ", ")})"}
+    end
+  end
 
   defp action(v) when is_binary(v) and v != "" do
     if String.length(v) <= @max_action and not control?(v),

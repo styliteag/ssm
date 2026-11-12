@@ -120,7 +120,7 @@ defmodule MctlContract.ConformanceCase.Helpers do
     assert Enum.sort(Map.keys(h)) == Enum.sort(@host_keys)
     assert is_binary(h["id"]) and is_binary(h["name"])
     assert is_list(h["addresses"]) and is_list(h["groups"])
-    assert h["mode"] in ["push", "pull", "snmp", nil]
+    assert h["mode"] in ["push", "pull", "relay", "snmp", nil]
     assert h["kind"] in ~w(linux freebsd windows firewall snmp other)
     assert is_map(h["attributes"])
     assert_time(h["updated_at"])

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Mission Control contract: mctl_contract vendored at v0.8.0. `GET /me` lists the host mode ssm
+  accepts (`mode:pull`); any other mode is refused with a validation error before ssm runs.
+
 ## [4.16.0] - 2026-11-11
 
 ### Added

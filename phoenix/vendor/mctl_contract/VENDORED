@@ -1,7 +1,7 @@
-tag: v0.7.0
-commit: 6258e71eae48712a66da8a78ee51731399788aca
-sha256: be626cedbd1f3a945dcfc4afd8c63684777f0c85ef8af4d4dba5b84872c0b625
-vendored: 2026-11-08
+tag: v0.8.0
+commit: 029aa8dae4790db3574beef893bda269e638d926
+sha256: 33748667840ea75924b9d509806285c75a7c8057826c3fc208aaf8383dca5178
+vendored: 2026-11-12
 
 Copied by mctl_contract/scripts/vendor.sh. Do not edit: change mctl_contract,
 tag it and vendor again (test/mctl_contract_vendored_test.exs checks both).

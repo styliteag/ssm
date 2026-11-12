@@ -5,6 +5,28 @@ versions: [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-12
+
+### Added
+
+- Host mode `relay` (contract section 17): the Orbit dashboard forwards
+  the host's Checkmk agent data to the monitoring tool. `Params.modes/0`
+  and the OpenAPI enums list it.
+- Optional Provider callback `modes/0`: the host modes the tool accepts.
+  `GET /me` lists one capability `mode:<m>` per mode, and the library
+  refuses any other mode in `POST /hosts` and `PATCH /hosts/{id}` with
+  `422 validation_failed` on `mode` ("not supported by this tool (it
+  accepts …)") before the provider runs. Without the callback nothing
+  changes: the provider checks the mode itself.
+- `GET /me` lists `attribute:<key>` per key of `updatable_attributes/0`.
+- Optional Provider callback `extra_capabilities/0`: tool facts of the
+  form `<prefix>:<value>` appended to `GET /me` `capabilities` (e.g. the
+  dashboard's `relay_device:<device_type>`). Malformed entries and the
+  reserved prefixes `mode`, `attribute` and `action` are dropped.
+- ConformanceCase: new case `MctlContract.ConformanceCase.Modes` and
+  optional fixture `mode_host_params/1`; the host shape check accepts
+  mode `relay`.
+
 ## [0.7.0] - 2026-11-08
 
 ### Security
