@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Adding a host through Mission Control no longer trips the host's login guard. ssm tried to log in
+  before Mission Control had authorized its key; on pfSense two such failed logins were enough for
+  sshguard to block ssm's address, and the step failed with "the host refused the SSH connection".
+  ssm now waits 5 seconds before its first login, and a refused connection after a failed login is
+  retried until the block is over (within the 10 minutes the step may take). A refused first
+  connection (wrong port) still fails at once.
+
 ### Added
 
 - Sync on OPNsense and pfSense firewalls. These boxes write `authorized_keys` from their own

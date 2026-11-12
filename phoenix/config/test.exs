@@ -48,7 +48,12 @@ config :ssm, :ssh_client, Ssm.Ssh.MockClient
 # mctl create_host: ssm's own public key without a key file, and a short
 # login wait (production: 10 minutes, see config.exs).
 config :ssm, :own_key, Ssm.Test.OwnKeyStub
-config :ssm, :mctl_login_wait, timeout_ms: 300, first_delay_ms: 1, max_delay_ms: 20
+
+config :ssm, :mctl_login_wait,
+  timeout_ms: 300,
+  initial_wait_ms: 0,
+  first_delay_ms: 1,
+  max_delay_ms: 20
 
 # mctl boot work (service token from MCTL_TOKEN_FILE, failing stale jobs)
 # would race the SQL sandbox; tests call it explicitly.

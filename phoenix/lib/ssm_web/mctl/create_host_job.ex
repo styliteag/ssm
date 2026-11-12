@@ -5,12 +5,19 @@ defmodule SsmWeb.Mctl.CreateHostJob do
     1. Put `ssm_public_key` (the key ssm logs in with), `username` and
        `limited` (not root, `Ssm.Hosts.limited?/1`) into the job result at once, while the job is `running` — mctl then
        authorizes the key on the host through the dashboard.
-    2. Probe the host key and log in (`Ssm.Hosts.HostKeys.pin/2`; the probe
-       authenticates). A pre-seeded `key_fingerprint` is verified, never
-       trusted on first use: a different key fails at once with
-       `host_key_changed`. A failed login (`auth_failed`) or a timeout is
-       retried with exponential backoff until `config :ssm,
-       :mctl_login_wait` `timeout_ms` (default 10 minutes) is used up.
+    2. Wait `initial_wait_ms` (default 5 s), so mctl can authorize the key
+       before the first login: a login that fails counts as an attack for a
+       host's login guard (sshguard on pfSense blocks the address after
+       three). Then probe the host key and log in
+       (`Ssm.Hosts.HostKeys.pin/2`; the probe authenticates). A pre-seeded
+       `key_fingerprint` is verified, never trusted on first use: a
+       different key fails at once with `host_key_changed`. A failed login
+       (`auth_failed`) or a timeout is retried with exponential backoff
+       until `config :ssm, :mctl_login_wait` `timeout_ms` (default 10
+       minutes) is used up. A refused connection is retried too, but only
+       after a failed login of this job: the port was open then, so the
+       host has most likely blocked ssm for a while. A refused first
+       connection (wrong port) still fails at once.
     3. Learn the machine-id HMAC (`Ssm.Hosts.MachineId`; never fails the job).
 
   A disabled host is not contacted: the job succeeds with `pin:
@@ -88,9 +95,10 @@ defmodule SsmWeb.Mctl.CreateHostJob do
       }
 
       deadline = now_ms() + ctx.wait[:timeout_ms]
+      initial_wait(ctx)
 
-      host
-      |> attempt(ctx, deadline, 1, ctx.wait[:first_delay_ms])
+      host.id
+      |> retry(ctx, deadline, 1, ctx.wait[:first_delay_ms], false)
       |> finish(base, ctx)
     end
   end
@@ -106,9 +114,26 @@ defmodule SsmWeb.Mctl.CreateHostJob do
     end
   end
 
+  # mctl authorizes the key right after it shows up in the job result
+  defp initial_wait(ctx) do
+    case Keyword.get(ctx.wait, :initial_wait_ms, 0) do
+      ms when ms > 0 ->
+        Jobs.progress(
+          ctx.job_id,
+          "waiting for ssm_public_key to be authorized for #{ctx.username}"
+        )
+
+        Process.sleep(ms)
+
+      _ ->
+        :ok
+    end
+  end
+
   # One login attempt; retryable failures sleep and try again until the
   # deadline. The host is re-read each time (deleted or disabled meanwhile).
-  defp attempt(host, ctx, deadline, n, delay) do
+  # `auth_failed?`: a login of this job has failed before.
+  defp attempt(host, ctx, deadline, n, delay, auth_failed?) do
     if n > 1 do
       Jobs.progress(
         ctx.job_id,
@@ -120,11 +145,14 @@ defmodule SsmWeb.Mctl.CreateHostJob do
 
     case HostKeys.pin(host, ctx.pin_opts) do
       {:error, reason} = error ->
-        if retry?(reason) and now_ms() + delay <= deadline do
+        retry? = retry?(reason, auth_failed?)
+
+        if retry? and now_ms() + delay <= deadline do
           Process.sleep(delay)
-          retry(host.id, ctx, deadline, n + 1, min(delay * 2, ctx.wait[:max_delay_ms]))
+          failed? = auth_failed? or code(reason) == "auth_failed"
+          retry(host.id, ctx, deadline, n + 1, min(delay * 2, ctx.wait[:max_delay_ms]), failed?)
         else
-          if retry?(reason), do: {:error, {:gave_up, reason, n}}, else: error
+          if retry?, do: {:error, {:gave_up, reason, n}}, else: error
         end
 
       ok ->
@@ -132,15 +160,26 @@ defmodule SsmWeb.Mctl.CreateHostJob do
     end
   end
 
-  defp retry(host_id, ctx, deadline, n, delay) do
+  defp retry(host_id, ctx, deadline, n, delay, auth_failed?) do
     case Hosts.get_host(host_id) do
       nil -> {:error, :deleted}
-      host -> attempt(host, ctx, deadline, n, delay)
+      host -> attempt(host, ctx, deadline, n, delay, auth_failed?)
     end
   end
 
-  defp retry?({:host_key_changed, _}), do: false
-  defp retry?(reason), do: elem(ErrorCode.classify(reason), 0) in @retry_codes
+  @doc """
+  Is a failed attempt worth another one? A failed login and a timeout
+  always; a refused connection only after a failed login of the same job
+  (`auth_failed?`): the port was open, so the host blocks ssm for a while.
+  """
+  def retry?({:host_key_changed, _}, _auth_failed?), do: false
+
+  def retry?(reason, auth_failed?) do
+    code = code(reason)
+    code in @retry_codes or (auth_failed? and code == "connect_refused")
+  end
+
+  defp code(reason), do: elem(ErrorCode.classify(reason), 0)
 
   defp finish({:ok, status, host}, base, _ctx) do
     # identity-claims-v1: learn the machine-id HMAC now that the key is
@@ -164,11 +203,18 @@ defmodule SsmWeb.Mctl.CreateHostJob do
     waited = "#{attempts} attempts in #{duration(ctx.wait[:timeout_ms])}"
 
     message =
-      if code == "auth_failed",
-        do:
+      case code do
+        "auth_failed" ->
           "SSH login as #{ctx.username} still failed after #{waited}: #{text}. " <>
-            "Authorize ssm_public_key for #{ctx.username} on the host, then add the host again",
-        else: "#{text} (#{waited})"
+            "Authorize ssm_public_key for #{ctx.username} on the host, then add the host again"
+
+        "connect_refused" ->
+          "#{text} after failed logins (#{waited}): the host may block ssm's address " <>
+            "(login guard); add the host again later"
+
+        _ ->
+          "#{text} (#{waited})"
+      end
 
     {:error, code, message}
   end
