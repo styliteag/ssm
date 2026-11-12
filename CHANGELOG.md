@@ -25,7 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   box does not end up with the new keys, the keys from before are put back and the sync fails. The
   keys from before the first sync are kept in `~/.ssh/authorized_keys.backup.<random>`. A login that
   is not a user in the firewall's configuration is skipped ("not a user in the firewall's
-  configuration"). pfSense hosts that were readonly until now become writable by a Sync.
+  configuration"). pfSense hosts that were readonly until now become writable by a Sync. On pfSense
+  root and admin are one account: ssm may connect as either, and the access goes to that login.
 
 ## [4.16.1] - 2026-11-12
 

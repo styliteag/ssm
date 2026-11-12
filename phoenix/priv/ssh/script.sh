@@ -810,9 +810,26 @@ handle_set_authorized_keyfile() {
     exit 0
 }
 
+# The login ssm connected with (sshd sets LOGNAME), when it is one account
+# with root on pfSense: there root and admin share uid 0 and /root, root
+# comes first in the passwd file, and ssm may connect as either. "" else.
+pfsense_ssh_login() {
+    [ "$(firewall_kind)" = "pfsense" ] || return 0
+    name="${LOGNAME:-}"
+    login_ok "${name}" || return 0
+    entry=$(do_getent_passwd "${name}") || return 0
+    if [ "$(printf "%s" "${entry}" | cut -d: -f3)" = "0" ] \
+        && [ "$(printf "%s" "${entry}" | cut -d: -f6)" = "${HOME:-}" ]; then
+        printf "%s" "${name}"
+    fi
+}
+
 # Logins with an authorized_keys, the first one per home only. The homes
-# seen are kept in a variable (no temp file: this runs as root).
+# seen are kept in a variable (no temp file: this runs as root). On pfSense
+# the file in $HOME is listed under the login ssm connected with (admin or
+# root: one account), so it is the file of ssm's SSH user either way.
 get_ssh_users() {
+    own_login=$(pfsense_ssh_login)
     do_getent_passwd_all | {
         seen="
 "
@@ -822,7 +839,13 @@ get_ssh_users() {
                     *"
 ${home}
 "*) ;;
-                    *) echo "${name}"; seen="${seen}${home}
+                    *)
+                        if [ -n "${own_login}" ] && [ "${home}" = "${HOME:-}" ]; then
+                            echo "${own_login}"
+                        else
+                            echo "${name}"
+                        fi
+                        seen="${seen}${home}
 " ;;
                 esac
             fi

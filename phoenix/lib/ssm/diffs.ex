@@ -392,13 +392,27 @@ defmodule Ssm.Diffs do
 
   defp unsafe_reason(message) do
     case Regex.run(~r/unsafe \(([^)]+)\)/, message) do
-      [_, "ssh_dir"] -> @ssh_dir_blocked
-      [_, "home"] -> "no usable home (missing or a symlink)"
-      [_, "ssh_user"] -> "the SSH user is unknown on the host; nothing written"
-      [_, "shared_home"] -> "not managed: shares the SSH user's home (ssm's own key)"
-      [_, "invalid_login"] -> @invalid_login
-      [_, kind] -> "unsafe: " <> kind
-      nil -> "unsafe"
+      [_, "ssh_dir"] ->
+        @ssh_dir_blocked
+
+      [_, "home"] ->
+        "no usable home (missing or a symlink)"
+
+      [_, "ssh_user"] ->
+        "the SSH user is unknown on the host; nothing written"
+
+      [_, "shared_home"] ->
+        "not managed: shares the SSH user's home (ssm's own key); " <>
+          "give the access to the SSH user's login instead"
+
+      [_, "invalid_login"] ->
+        @invalid_login
+
+      [_, kind] ->
+        "unsafe: " <> kind
+
+      nil ->
+        "unsafe"
     end
   end
 

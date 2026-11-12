@@ -64,7 +64,7 @@ defmodule Ssm.Diffs.WriteRefusalsTest do
     assert {{:error, {:ssh_readonly, message}}, report} =
              Diffs.sync_host_reported(MockClient, host.id)
 
-    assert [{"toor", "not managed: shares the SSH user's home (ssm's own key)"}] =
+    assert [{"toor", "not managed: shares the SSH user's home (ssm's own key)" <> _}] =
              report.skipped
 
     assert message =~ "shares the SSH user's home"

@@ -169,6 +169,29 @@ defmodule Ssm.Ssh.ScriptFirewallTest do
              out |> Jason.decode!() |> Enum.find(&(&1["login"] == "root"))
   end
 
+  test "pfSense: root's file is listed under the login ssm connected with", ctx do
+    File.rm_rf!(Path.join(ctx.dir, "usr"))
+    File.mkdir_p!(Path.join(ctx.dir, "etc"))
+    File.write!(Path.join(ctx.dir, "etc/platform"), "pfSense\n")
+    # root and admin are one account: uid 0, one home, root first
+    passwd_entry(ctx, "admin", 0, 0, Path.join(ctx.dir, "root"))
+    File.write!(Path.join(ctx.conf, "users"), "0:admin\n")
+    File.write!(Path.join(ctx.conf, "admin"), @old <> "\n" <> @ssm)
+
+    list = fn logname ->
+      {out, 0} =
+        System.cmd("sh", [ctx.script, "get_ssh_keyfiles"],
+          env: [{"LOGNAME", logname} | fw_env(ctx)],
+          stderr_to_stdout: true
+        )
+
+      out |> Jason.decode!() |> Enum.map(&{&1["login"], &1["readonly_condition"]})
+    end
+
+    assert list.("admin") == [{"admin", ""}]
+    assert list.("root") == [{"root", ""}]
+  end
+
   test "pfSense without php stays readonly for the whole host", ctx do
     File.rm_rf!(Path.join(ctx.dir, "usr"))
     File.mkdir_p!(Path.join(ctx.dir, "etc"))

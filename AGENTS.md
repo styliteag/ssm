@@ -112,7 +112,10 @@ new keys, else the keys from before are put back and the write fails. No ssm hea
 marker `~/.ssh/.ssm_managed` makes the login "managed", the keys from before the first write stay in
 `authorized_keys.backup.<random>`. A login without a user in the configuration is readonly for that
 login only (`not a user in the firewall's configuration`, scope user); a firewall without `php`
-(OPNsense: or without `configctl`) is host-wide readonly (`Product is pfSense`, `Product is OPNsense`). Reads stay on the file. Tested against a simulated box
+(OPNsense: or without `configctl`) is host-wide readonly (`Product is pfSense`, `Product is OPNsense`). pfSense: root and admin are one
+account (uid 0, `/root`); the listing names the file in `$HOME` after the login ssm connected with
+(`LOGNAME`, `pfsense_ssh_login`), so the host's SSH user may be `admin` or `root` and the access goes
+to that login; the other name is refused as `unsafe (shared_home)`. Reads stay on the file. Tested against a simulated box
 (`test/ssm/ssh/script_firewall_test.exs`); on the real boxes only the read side was run.
 Sync and readonly markers (`Ssm.Diffs.sync_host/2`): a host-wide marker (`system_readonly`, vendor
 platform) stops a sync before any write; a login's own `~/.ssh/user_readonly` counts only when root
