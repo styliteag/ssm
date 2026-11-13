@@ -441,7 +441,7 @@ machine is the only quality gate that exists. Treat it as mandatory, not advisor
    check or readonly markers. *Rule: every new SSH path refuses disabled hosts and
    readonly-marked targets — with a test proving it.*
 7. **The Version Hand-Bump.** Editing `VERSION` or tagging manually. *Rule: only
-   `./release.sh` (interactive — it prompts; never run it headless or unasked).*
+   `./release.sh` (it prompts unless given `--yes`; never run it headless or unasked).*
 8. **The Trusting-CI Fallacy.** Seeing green GitHub checks and assuming tests passed.
    CI runs security scans only. *Rule: quality is proven exclusively by local
    `just verify`.*
@@ -620,8 +620,7 @@ removed with `.mcp.json` — explore with Grep/Glob/Read; if graph output surfac
 anywhere, trust files over the graph on any disagreement.
 
 **Skills**: `verify` (run the gate), `ship` (package a correct commit), `release`
-(user-invoked only). The python-era `db-migration` and `add-endpoint` skills were
-removed with the python stack.
+(user-invoked only).
 
 **History docs**: `docs/elixir-phoenix-rewrite.md` is the rewrite plan (historical,
 kept for the record — its "SSM today" sections describe the deleted python stack).

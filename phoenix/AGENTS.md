@@ -2,7 +2,7 @@ This is a web application written using the Phoenix web framework.
 
 ## Project guidelines
 
-- Use `mix precommit` alias when you are done with all changes and fix any pending issues
+- Run `just verify` (runs `mix precommit` in the dev container; no local Elixir) when you are done with all changes and fix any pending issues
 - Use the already included and available `:req` (`Req`) library for HTTP requests, **avoid** `:httpoison`, `:tesla`, and `:httpc`. Req is included by default and is the preferred HTTP client for Phoenix apps
 
 ### Phoenix v1.8 guidelines
@@ -30,7 +30,7 @@ custom classes must fully style the input
 
 - **Always use and maintain this import syntax** in the app.css file for projects generated with `phx.new`
 - **Never** use `@apply` when writing raw css
-- **Always** manually write your own tailwind-based components instead of using daisyUI for a unique, world-class design
+- daisyUI is vendored (`assets/vendor/daisyui*.js`) and supplies the theme and component classes such as `btn`; use them the way existing templates do
 - Out of the box **only the app.js and app.css bundles are supported**
   - You cannot reference an external vendor'd script `src` or link `href` in the layouts
   - You must import the vendor deps into app.js and app.css to use them
@@ -38,10 +38,7 @@ custom classes must fully style the input
 
 ### UI/UX & design guidelines
 
-- **Produce world-class UI designs** with a focus on usability, aesthetics, and modern design principles
-- Implement **subtle micro-interactions** (e.g., button hover effects, and smooth transitions)
-- Ensure **clean typography, spacing, and layout balance** for a refined, premium look
-- Focus on **delightful details** like hover effects, loading states, and smooth page transitions
+- Follow the house style in `../AGENTS.md` §4 (existing LiveView patterns; four themes × light/dark)
 
 
 <!-- usage-rules-start -->

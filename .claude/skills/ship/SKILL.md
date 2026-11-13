@@ -21,7 +21,7 @@ commits (each with its own CHANGELOG entry).
 
 ```bash
 # Ecto schema change without migration? → STOP, write the migration first
-git diff --staged --name-only | grep -qE 'phoenix/lib/ssm/.*/(host|user|user_key|authorization|activity_log)\.ex' && \
+git diff --staged --name-only -- 'phoenix/lib/*.ex' | xargs -r grep -l 'use Ecto.Schema' | grep -q . && \
   { git diff --staged --name-only | grep -q 'priv/repo/migrations/' || echo 'GUARD FAIL: schema module staged without a migration'; }
 
 # Version fields are release.sh territory → STOP if present
