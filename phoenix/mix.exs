@@ -10,6 +10,7 @@ defmodule Ssm.MixProject do
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
       deps: deps(),
+      usage_rules: usage_rules(),
       compilers: [:phoenix_live_view] ++ Mix.compilers(),
       listeners: [Phoenix.CodeReloader]
     ]
@@ -47,6 +48,20 @@ defmodule Ssm.MixProject do
     end
   end
 
+  # Dependency rules for coding agents: `mix usage_rules.sync` writes them into
+  # the managed section of AGENTS.md (CLAUDE.md imports it via @AGENTS.md).
+  defp usage_rules do
+    [file: "AGENTS.md", usage_rules: :all]
+  end
+
+  # `mix deps.update` keeps the AGENTS.md rules in step with the new versions.
+  # Calls the task module directly (an alias of the same name would not re-run
+  # through Mix.Task.run); usage_rules is a dev-only dependency.
+  defp update_deps_and_rules(args) do
+    Mix.Tasks.Deps.Update.run(args)
+    if Mix.env() == :dev, do: Mix.Task.run("usage_rules.sync", ["--yes"])
+  end
+
   # Specifies which paths to compile per environment.
   defp elixirc_paths(:test), do: ["lib", "test/support"]
   defp elixirc_paths(_), do: ["lib"]
@@ -56,6 +71,7 @@ defmodule Ssm.MixProject do
   # Type `mix help deps` for examples and options.
   defp deps do
     [
+      {:usage_rules, "~> 1.3", only: [:dev], runtime: false},
       {:phoenix, "~> 1.8.9"},
       {:phoenix_ecto, "~> 4.5"},
       {:ecto_sql, "~> 3.13"},
@@ -98,6 +114,7 @@ defmodule Ssm.MixProject do
   # See the documentation for `Mix` for more info on aliases.
   defp aliases do
     [
+      "deps.update": &update_deps_and_rules/1,
       setup: ["deps.get", "ecto.setup", "assets.setup", "assets.build"],
       "ecto.setup": ["ecto.create", "ecto.migrate", "run priv/repo/seeds.exs"],
       "ecto.reset": ["ecto.drop", "ecto.setup"],
