@@ -13,6 +13,19 @@ defmodule SsmWeb.Router do
     get "/health", HealthController, :show
   end
 
+  # Key check export for STYLiTE Orbit Monitor's special agent: `ssm_`
+  # service token with scope read (the contract's token store and limits).
+  pipeline :service_token do
+    plug :accepts, ["json"]
+    plug SsmWeb.Plugs.ServiceTokenAuth, scope: "read"
+  end
+
+  scope "/api/export", SsmWeb do
+    pipe_through :service_token
+
+    get "/checkmk", CheckmkExportController, :show
+  end
+
   # mctl contract v1 (mctl-docs contract-v1.md): the shared library plug
   # brings its own bearer auth (`ssm_` service tokens with scopes, SHA-256
   # only), envelope `{data, meta}` / `{error}` and OpenAPI. `/api/v2` and its

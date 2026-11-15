@@ -55,6 +55,10 @@ defmodule Ssm.Activity.Actions do
     mctl_connect_create: "mctl.connect.create",
     mctl_connect_rotate: "mctl.connect.rotate",
     mctl_connect_revoke: "mctl.connect.revoke",
+    # Orbit Monitor export token (Ssm.OrbitMonitor.Connect)
+    omon_connect_create: "omon.connect.create",
+    omon_connect_rotate: "omon.connect.rotate",
+    omon_connect_revoke: "omon.connect.revoke",
     # web login (OIDC)
     oidc_login: "oidc.login",
     oidc_backchannel_logout: "oidc.backchannel_logout",

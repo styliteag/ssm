@@ -153,6 +153,22 @@ defmodule Ssm.Diffs.HostChecks do
     end
   end
 
+  @doc """
+  Every enabled host with its stored result or nil, `%{id, name, check}`,
+  by name (`Ssm.Diffs.CheckmkExport`).
+  """
+  @spec export_rows() :: [map()]
+  def export_rows do
+    from(h in Host,
+      left_join: c in HostCheck,
+      on: c.host_id == h.id,
+      where: h.disabled == false,
+      order_by: [asc: h.name, asc: h.id],
+      select: %{id: h.id, name: h.name, check: c}
+    )
+    |> Repo.all()
+  end
+
   @doc "One host with its stored result, or nil."
   @spec get_summary_row(integer()) :: map() | nil
   def get_summary_row(host_id), do: base() |> where([h], h.id == ^host_id) |> Repo.one()

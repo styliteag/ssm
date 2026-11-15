@@ -17,6 +17,7 @@ defmodule Ssm.Activity.ActionsTest do
     admin_only_refused login_locked pin_host_key accept_host_key
     create_rolled_back customer_merge customer_delete group_delete probe_ssh mctl_remove_person
     mctl_auth_failed mctl_auth_locked mctl.connect.create mctl.connect.rotate mctl.connect.revoke
+    omon.connect.create omon.connect.rotate omon.connect.revoke
     oidc.login oidc.backchannel_logout oidc.login_refused
   )
 

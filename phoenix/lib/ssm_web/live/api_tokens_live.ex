@@ -1,14 +1,16 @@
 defmodule SsmWeb.ApiTokensLive do
   @moduledoc """
-  Setup → API tokens → "Connect Mission Control" (US-API-09). Admin only,
-  checked on mount and in every event. The token is shown once in the
-  `:secret` assign (cleared by "Done"); it is never persisted, logged,
-  flashed or put in the URL.
+  Setup → API tokens → "Connect Mission Control" (US-API-09) and
+  "Connect Orbit Monitor" (`Ssm.OrbitMonitor.Connect`, the key check
+  export token). Admin only, checked on mount and in every event. A token
+  is shown once in the `:secret` / `:monitor_secret` assign (cleared by
+  "Done"); it is never persisted, logged, flashed or put in the URL.
   """
 
   use SsmWeb, :live_view
 
   alias Ssm.Mctl.Connect
+  alias Ssm.OrbitMonitor.Connect, as: Monitor
   alias SsmWeb.Layouts
 
   @not_admin "Only administrators can manage API tokens."
@@ -16,7 +18,10 @@ defmodule SsmWeb.ApiTokensLive do
   @impl true
   def mount(_params, _session, socket) do
     if admin?(socket) do
-      {:ok, socket |> assign(page_title: "API tokens", secret: nil) |> load_status()}
+      {:ok,
+       socket
+       |> assign(page_title: "API tokens", secret: nil, monitor_secret: nil)
+       |> load_status()}
     else
       {:ok, socket |> put_flash(:error, @not_admin) |> redirect(to: ~p"/dashboard")}
     end
@@ -56,6 +61,21 @@ defmodule SsmWeb.ApiTokensLive do
   end
 
   defp act("done", _params, socket), do: assign(socket, secret: nil)
+
+  defp act("monitor-create", _params, socket),
+    do: monitor_secret(socket, Monitor.create(actor(socket)), "Could not create the token.")
+
+  defp act("monitor-rotate", _params, socket),
+    do: monitor_secret(socket, Monitor.rotate(actor(socket)), "No token to rotate.")
+
+  defp act("monitor-revoke", _params, socket) do
+    case Monitor.revoke(actor(socket)) do
+      :revoked -> socket |> assign(monitor_secret: nil) |> load_status()
+      :none -> put_flash(socket, :error, "No active token to revoke.")
+    end
+  end
+
+  defp act("monitor-done", _params, socket), do: assign(socket, monitor_secret: nil)
   defp act(_event, _params, socket), do: socket
 
   defp show_secret(socket, plain) do
@@ -64,7 +84,16 @@ defmodule SsmWeb.ApiTokensLive do
     |> load_status()
   end
 
-  defp load_status(socket), do: assign(socket, status: Connect.status())
+  defp monitor_secret(socket, {:ok, plain}, _error) do
+    socket
+    |> assign(monitor_secret: %{token: plain, base_url: Monitor.base_url()})
+    |> load_status()
+  end
+
+  defp monitor_secret(socket, {:error, _reason}, error), do: put_flash(socket, :error, error)
+
+  defp load_status(socket),
+    do: assign(socket, status: Connect.status(), monitor_status: Monitor.status())
 
   defp admin?(socket), do: match?(%{role: "admin"}, socket.assigns[:current_user])
   defp actor(socket), do: socket.assigns.current_user.actor
@@ -86,7 +115,7 @@ defmodule SsmWeb.ApiTokensLive do
     >
       <.header>
         API tokens
-        <:subtitle>Tokens other tools use to call ssm (Mission Control)</:subtitle>
+        <:subtitle>Tokens other tools use to call ssm (Mission Control, Orbit Monitor)</:subtitle>
       </.header>
 
       <section id="connect-mctl" class="card border border-base-300 bg-base-100">
@@ -98,7 +127,7 @@ defmodule SsmWeb.ApiTokensLive do
             token set by the environment is separate.
           </p>
 
-          <.status_line status={@status} zone={@time_zone} />
+          <.status_line id="connect-status" status={@status} zone={@time_zone} />
 
           <.secret_box :if={@secret} secret={@secret} />
 
@@ -143,22 +172,114 @@ defmodule SsmWeb.ApiTokensLive do
           </div>
         </div>
       </section>
+
+      <.monitor_section status={@monitor_status} secret={@monitor_secret} zone={@time_zone} />
     </Layouts.app>
     """
   end
 
   attr :status, :any, required: true
+  attr :secret, :map, default: nil
+  attr :zone, :string, required: true
+
+  defp monitor_section(assigns) do
+    ~H"""
+    <section id="connect-monitor" class="card mt-6 border border-base-300 bg-base-100">
+      <div class="card-body gap-4">
+        <h2 class="card-title">Connect Orbit Monitor</h2>
+        <p class="text-sm opacity-75">
+          Creates the service token <code>{Monitor.name()}</code>
+          (scope <code>read</code>) for Orbit Monitor's SSH Manager special agent. It reads the
+          result of the periodic key check: drift and a changed host key alert as critical, an
+          unreachable host as warning. Without this token nothing reads it.
+        </p>
+
+        <.status_line id="monitor-status" status={@status} zone={@zone} />
+
+        <div
+          :if={@secret}
+          id="monitor-secret-box"
+          class="space-y-3 rounded-box border border-warning p-4"
+        >
+          <p class="text-sm font-medium">
+            This token is shown once; enter it in Orbit Monitor's special agent. It cannot be
+            displayed again.
+          </p>
+          <div>
+            <div class="text-xs opacity-60">Token</div>
+            <code id="monitor-secret" class="break-all">{@secret.token}</code>
+            <.copy id="copy-monitor-token" text={@secret.token} />
+          </div>
+          <div>
+            <div class="text-xs opacity-60">ssm base URL (special agent URL)</div>
+            <code id="monitor-base-url">{@secret.base_url}</code>
+            <.copy id="copy-monitor-url" text={@secret.base_url} />
+          </div>
+          <div>
+            <div class="text-xs opacity-60">Export it reads</div>
+            <code id="monitor-export-url">{Monitor.export_url()}</code>
+          </div>
+          <button
+            id="monitor-done"
+            type="button"
+            phx-click="monitor-done"
+            class="btn btn-sm btn-primary"
+            data-confirm="Did you copy the token? It is shown only once; after this it can only be rotated."
+            data-confirm-label="Close, I copied it"
+          >
+            Done
+          </button>
+        </div>
+
+        <div :if={can_create?(@status)}>
+          <button
+            id="monitor-create"
+            type="button"
+            phx-click="monitor-create"
+            class="btn btn-primary btn-sm"
+          >
+            Connect Orbit Monitor
+          </button>
+        </div>
+
+        <div :if={@status && @status.state == "active"} class="flex gap-2">
+          <button
+            id="monitor-rotate"
+            type="button"
+            phx-click="monitor-rotate"
+            class="btn btn-sm"
+            data-confirm="Rotate the token? The current secret stops working at once."
+          >
+            Rotate
+          </button>
+          <button
+            id="monitor-revoke"
+            type="button"
+            phx-click="monitor-revoke"
+            class="btn btn-error btn-outline btn-sm"
+            data-confirm="Revoke the token? Orbit Monitor can no longer read the key check."
+          >
+            Revoke
+          </button>
+        </div>
+      </div>
+    </section>
+    """
+  end
+
+  attr :id, :string, required: true
+  attr :status, :any, required: true
   attr :zone, :string, required: true
 
   defp status_line(%{status: nil} = assigns) do
     ~H"""
-    <p id="connect-status" class="text-sm">No token yet.</p>
+    <p id={@id} class="text-sm">No token yet.</p>
     """
   end
 
   defp status_line(assigns) do
     ~H"""
-    <p id="connect-status" class="text-sm">
+    <p id={@id} class="text-sm">
       <span class={[
         "badge badge-sm",
         if(@status.state == "active", do: "badge-success", else: "badge-warning")

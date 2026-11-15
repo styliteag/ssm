@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Key check alerts through STYLiTE Orbit Monitor. Setup → API tokens → "Connect Orbit Monitor"
+  creates a read-only service token; with it, Orbit Monitor's SSH Manager special agent reads
+  `GET /api/export/checkmk`, the result of the periodic key check for every enabled host, and
+  alerts with its own notifications: key drift and a changed host key are critical, an unreachable
+  host or a refused login is a warning, and a check older than three check intervals is unknown.
+  The export reads only stored results (no SSH connection) and holds counts and fixed sentences,
+  never keys or host addresses. Without the token nothing is exported.
+
 ## [4.17.0] - 2026-11-12
 
 ### Fixed

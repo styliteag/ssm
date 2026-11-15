@@ -348,6 +348,16 @@ rotates or revokes the UI-managed service token `mission-control` (library modul
 audit actions `mctl.connect.create|rotate|revoke` (type `auth`, never the token). The
 env-managed `mission-control-env` token (`Ssm.Mctl.Boot`) is separate and never touched.
 
+**Connect Orbit Monitor** (`Ssm.OrbitMonitor.Connect`, same page): service token `orbit-monitor`,
+scope `read` only, create/rotate/revoke, audit `omon.connect.create|rotate|revoke`. It opens
+`GET /api/export/checkmk` (`SsmWeb.CheckmkExportController`, pipeline `:service_token` →
+`SsmWeb.Plugs.ServiceTokenAuth`: the contract library's auth step with `SsmWeb.MctlAuthHooks`, so the
+same 401/403/429 and limits as `/api/mctl/v1`; a `read` token also reads the contract). Body: the
+Orbit Dashboard export shape v1 from `Ssm.Diffs.CheckmkExport` — one instance per enabled host
+(`name`/`host` = host name, never the address), one check `ssh_keys`: synced 0, drift 2,
+`host_key_changed` 2, any other error 1 (stored fixed sentence), checked longer ago than 3 ×
+`SSM_SYNC_INTERVAL` 3, never checked no check. Reads `HostChecks.export_rows/0` only, no SSH.
+
 **Request paths**: UI — session cookie (htpasswd login) → LiveView. API — Bearer JWT
 (`AuthPlug`) → controller → envelope `{success, data, error{code,message,details},
 meta}`. SSH goes through the `Ssm.Ssh.Client` behaviour (mock in tests), never
