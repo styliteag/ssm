@@ -208,6 +208,24 @@ defmodule SsmWeb.DiffLiveTest do
     assert %{state: "drift"} = Ssm.Diffs.HostChecks.stored()[host.id]
   end
 
+  test "Sync is highlighted only when the host drifts", %{conn: conn} do
+    host = synced_setup()
+    {:ok, view, _html} = live(conn, ~p"/diff?host_id=#{host.id}")
+    render_async(view)
+
+    assert has_element?(view, "#sync-host")
+    refute has_element?(view, "#sync-host.btn-primary")
+
+    user = user_fixture()
+    key_fixture(user, %{key_type: "ssh-ed25519", key_base64: "NEW", name: "new"})
+    authorization_fixture(user, host, %{login: "ops"})
+
+    view |> element("#refresh-diff") |> render_click()
+    render_async(view)
+
+    assert has_element?(view, "#sync-host.btn-primary")
+  end
+
   test "sync pushes the expected keys and logs the action", %{conn: conn} do
     host = synced_setup()
     MockClient.set_default_exec(%Result{exit_code: 0})

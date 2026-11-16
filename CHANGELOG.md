@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The export reads only stored results (no SSH connection) and holds counts and fixed sentences,
   never keys or host addresses. Without the token nothing is exported.
 
+### Changed
+
+- Sync page, host detail: the Sync button is highlighted only when the last read found differences.
+  In sync, not checked yet or failed, it is a plain button like "Read again" and still works.
+
 ## [4.17.0] - 2026-11-12
 
 ### Fixed

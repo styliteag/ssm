@@ -1013,6 +1013,9 @@ defmodule SsmWeb.DiffLive do
   defp diff_status_rank(:disabled), do: 4
   defp diff_status_rank({_error, _message}), do: 0
 
+  # Sync is the call to action only when the last read found something to write
+  defp drift?(status), do: match?({:drift, _, _}, status)
+
   defp diff_count({:drift, missing, extra}), do: missing + extra
   defp diff_count(:synced), do: 0
   defp diff_count(_status), do: nil
@@ -1266,7 +1269,10 @@ defmodule SsmWeb.DiffLive do
               </button>
               <button
                 id="sync-host"
-                class="btn btn-primary btn-sm"
+                class={[
+                  "btn btn-sm",
+                  if(drift?(@statuses[@selected.id]), do: "btn-primary", else: "btn-ghost")
+                ]}
                 phx-click="sync"
                 disabled={@selected.disabled || @syncing || @detail_loading}
                 data-confirm={SyncConfirm.host(@selected, @statuses[@selected.id])}
