@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.18.1] - 2026-11-20
+
 ### Changed
 
 - Browser tabs show the app and the suite first ("SSM · Orbit · <page>"), so they stay visible
