@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- Phoenix 1.8.17 (CVE-2026-128361, CVE-2026-129344: crafted channel input could crash the
+  presence tracker or the broadcast dispatch) and Phoenix LiveView 1.2.15 (CVE-2026-126334: a
+  LiveView joined without a URL skipped its session hooks), with Bandit 1.15.0.
+
 ## [4.18.1] - 2026-11-20
 
 ### Changed
