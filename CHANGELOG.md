@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.18.2] - 2026-11-21
+
 ### Security
 
 - Phoenix 1.8.17 (CVE-2026-128361, CVE-2026-129344: crafted channel input could crash the
